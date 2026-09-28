@@ -1,44 +1,6 @@
 (function () {
-  const MAX_CONCURRENT_FETCHES = 5;
-  const FETCH_TIMEOUT_MS = 30000;
-  let activeFetches = 0;
-  const fetchQueue = [];
-
-  function scheduleFetch(taskFn) {
-    return new Promise((resolve, reject) => {
-      const run = () => {
-        activeFetches++;
-        taskFn().then(resolve, reject).finally(() => {
-          activeFetches--;
-          if (fetchQueue.length) fetchQueue.shift()();
-        });
-      };
-      if (activeFetches < MAX_CONCURRENT_FETCHES) run();
-      else fetchQueue.push(run);
-    });
-  }
-
-  // Con muchos widgets en un tablero, pedir datos de todos apenas carga la página es lento
-  // (N requests + N renders de golpe). En vez de eso, cada widget se monta con su mockup y
-  // solo pide sus datos reales cuando entra al viewport — ver observeForLazyLoad()/
-  // fetchAndRender() más abajo. El widget queda observado toda su vida (no solo hasta la
-  // primera carga) para poder trackear _inViewport y volver a fetchear si un filtro lo
-  // marca como stale estando fuera de pantalla.
-  const _lazyLoadObserver = ('IntersectionObserver' in window)
-    ? new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-          const widget = entry.target._widgetInstance;
-          if (!widget) continue;
-          widget._inViewport = entry.isIntersecting;
-          if (entry.isIntersecting && !widget._loaded) widget.fetchAndRender();
-        }
-      }, { threshold: 0.1 })
-    : null;
-
   class BaseWidget {
     static type = null;
-    // FilterWidget no tiene lugar en su layout para el pie de resumen (lo desactiva).
-    static supportsSummary = true;
     static palette = {
       icon: '❔',
       label: 'Widget',
@@ -60,11 +22,17 @@
       generatable: true,
     };
 
-    static FIELD_CODE = {
-      key: 'code',
-      label: 'Código generado',
-      type: 'code',
-    };
+    // Constructor estructurado (dimensión, pivote, métricas, apiladas): edita data_spec sin IA.
+    static FIELD_BUILDER = { key: 'builder', label: 'Datos', type: 'builder' };
+
+    // Capacidades del builder por tipo (las reglas reales las valida el backend).
+    // Solo las barras tienen "apiladas", y solo con pivote.
+    static supportsStacked = false;
+    // El KPI no agrupa: su builder no muestra dimensión ni pivote.
+    static supportsDimension = true;
+    static supportsPivot = true;
+    static pivotLabel = 'Dividir en series por';
+    static maxMetrics = 5;
 
     static FIELD_WIDTH = {
       key: 'width',
@@ -106,7 +74,7 @@
 
     static get drawerFields() {
       return [
-        this.FIELD_TITLE, this.FIELD_PROMPT, this.FIELD_CODE,
+        this.FIELD_TITLE, this.FIELD_PROMPT, this.FIELD_BUILDER,
         this.FIELD_WIDTH, this.FIELD_START_COL,
       ];
     }
@@ -195,46 +163,56 @@
       </div>`;
     }
 
-    // Pie de resumen no técnico (generado por IA), mostrado al fondo de la tarjeta del
-    // widget cuando hay uno guardado. Fondo sutil + separador para diferenciarlo del
-    // contenido del widget. Altura FIJA (2 líneas siempre, sin importar el largo real del
-    // texto): así SUMMARY_FOOTER_HEIGHT puede sumarse a la altura de la tarjeta de forma
-    // exacta sin robarle espacio al gráfico (que rompía el resize de ApexCharts al
-    // encogerse después de que este ya midió su contenedor).
-    static SUMMARY_FOOTER_HEIGHT = 50;
-
-    static summaryFooterHTML(summary) {
-      if (!summary) return '';
-      return `<div class="widget-summary-footer mt-2 -mx-4 -mb-4 px-4 pt-2 pb-3 border-t border-line bg-black/[0.065] rounded-b-xl flex items-start gap-1.5" style="height:${BaseWidget.SUMMARY_FOOTER_HEIGHT}px; box-sizing:border-box;">
-        <p class="text-[11px] text-black/[0.55] m-0" style="line-height:14px; height:28px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${BaseWidget.escapeHTML(summary)}</p>
-      </div>`;
-    }
-
-    static heightWithSummaryFooter(height, summary) {
-      return height + (summary ? BaseWidget.SUMMARY_FOOTER_HEIGHT : 0);
-    }
-
+    // `raw` son las preferencias de UI (view_spec.display) más title/width/height/startCol/order;
+    // ver BaseWidget.fromServer para el mapeo desde el widget serializado por el backend.
     constructor(raw = {}) {
       const defaults = this.constructor.defaults;
       this.id = raw.id;
-      this.title = raw.title ?? defaults.title;
+      this.title = raw.title || defaults.title;
       this.chart_type = this.constructor.type;
-      this.prompt = raw.prompt || '';
-      this.code = raw.code || '';
-      this.summary = raw.summary || '';
+      this.prompt = '';
+      this.data_spec = raw.data_spec || null;
+      this.view_spec = raw.view_spec || null;
+      this.source_prompt = raw.source_prompt || '';
       this.width = raw.width || defaults.width;
       this.height = raw.height ?? defaults.height;
-      this.startCol = raw.startCol
-        ? (raw.startCol.startsWith('md:') ? raw.startCol : 'md:' + raw.startCol)
-        : '';
+      this.startCol = raw.startCol || '';
       this.order = raw.order ?? 0;
       this._dirty = raw._dirty ?? false;
       this._loading = false;
-      this._loaded = false;
-      this._inViewport = false;
-      this._fetchToken = 0;
       this.el = null;
       this._chart = null;
+    }
+
+    // Widget serializado por el backend ({id, type, position, data_spec, view_spec, ...}) ->
+    // instancia de la clase registrada para `type`.
+    static fromServer(w) {
+      const pos = w.position || {};
+      const view = w.view_spec || {};
+      return WidgetRegistry.create(w.type, {
+        ...(view.display || {}),
+        id: w.id,
+        title: view.title,
+        data_spec: w.data_spec,
+        view_spec: w.view_spec,
+        source_prompt: w.source_prompt,
+        width: `md:col-span-${pos.w || 6}`,
+        startCol: pos.x ? `md:col-start-${pos.x}` : '',
+        height: pos.h,
+        order: pos.y ?? 0,
+      });
+    }
+
+    // Actualiza el widget con la versión que devolvió el backend (tras generar/editar el spec).
+    applyServerState(w) {
+      this.data_spec = w.data_spec;
+      this.view_spec = w.view_spec;
+      this.source_prompt = w.source_prompt || '';
+      if (w.view_spec && w.view_spec.title) this.title = w.view_spec.title;
+    }
+
+    get hasSpec() {
+      return !!this.data_spec;
     }
 
     buildElement() {
@@ -257,18 +235,17 @@
     buildStandardCardElement() {
       const el = document.createElement('div');
       el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded-xl shadow-sm p-4 flex flex-col justify-between relative group`;
-      el.style.height = BaseWidget.heightWithSummaryFooter(this.height, this.summary) + 'px';
+      el.style.height = this.height + 'px';
       el.style.setProperty('--ghost-span', this._ghostSpanFromWidth());
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       el.innerHTML = `
         ${BaseWidget.dragHandleHTML()}
         <div class="flex justify-between items-center border-line pb-2 mb-2 select-none">
-          <span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40">${this.title}</span>
+          <span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40">${BaseWidget.escapeHTML(this.title)}</span>
         </div>
         <div id="chart-${this.id}" class="flex-1 w-full min-h-0"></div>
         ${this.loaderOverlayHTML()}
-        ${BaseWidget.summaryFooterHTML(this.summary)}
         ${BaseWidget.actionButtonsHTML()}
         <div class="resize-handle absolute bottom-1 right-1 w-4 h-4 cursor-se-resize z-10 opacity-60 hover:opacity-100 transition">
           <svg viewBox="0 0 10 10" class="w-full h-full text-ink/30" fill="none">
@@ -282,34 +259,27 @@
     mount() {
       this.el = this.buildElement();
       this._attachCommonEvents();
-      this._attachFiltersListener();
-      const container = this.getContentContainer();
-      if (container) {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => this.renderContent(container));
-        });
-      }
+      this.setLoading(this.hasSpec);
+      if (!this.hasSpec) this.renderPlaceholder();
       return this.el;
     }
 
     buildReadOnlyElement() {
       const el = document.createElement('div');
       el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded-xl shadow-sm p-4 flex flex-col justify-between relative`;
-      el.style.height = BaseWidget.heightWithSummaryFooter(this.height, this.summary) + 'px';
+      el.style.height = this.height + 'px';
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       const titleHTML = this.title
         ? `<div class="flex items-center border-line pb-2 mb-2"><span class="text-[10px] font-bold uppercase tracking-wider text-ink/40">${BaseWidget.escapeHTML(this.title)}</span></div>`
         : '';
       el.innerHTML = `${titleHTML}<div id="chart-${this.id}" class="flex-1 w-full min-h-0"></div>${this.loaderOverlayHTML()}
-        ${BaseWidget.summaryFooterHTML(this.summary)}
         <div class="actions-slot absolute top-2 right-2 z-30 flex items-center gap-1"></div>`;
       return el;
     }
 
     mountReadOnly() {
       this.el = this.buildReadOnlyElement();
-      this._attachFiltersListener();
       this.setLoading(true);
       return this.el;
     }
@@ -322,26 +292,6 @@
       this._loading = isLoading;
       const loader = this.el && this.el.querySelector('.widget-loader');
       if (loader) loader.classList.toggle('hidden', !isLoading);
-    }
-
-    // Aplica un `summary` recién llegado en la respuesta de datos (generado en background
-    // por _spawn_summary_backfill del lado del servidor, ver widget_dispatcher.py). El pie
-    // se "horneó" en el HTML de la tarjeta con el `summary` que tenía la lista inicial de
-    // widgets al cargar la página -- si en ese momento todavía no existía (primera vez que
-    // se ve este widget, o llegó por lazy-load después de esa lista), esto lo agrega/actualiza
-    // sin esperar a un reload completo.
-    _applySummary(summary) {
-      if (!this.constructor.supportsSummary || !summary || summary === this.summary || !this.el) return;
-      this.summary = summary;
-      const footerHTML = BaseWidget.summaryFooterHTML(summary);
-      const existingFooter = this.el.querySelector('.widget-summary-footer');
-      if (existingFooter) {
-        existingFooter.outerHTML = footerHTML;
-      } else {
-        this.el.insertAdjacentHTML('beforeend', footerHTML);
-      }
-      this.el.style.height = BaseWidget.heightWithSummaryFooter(this.height, this.summary) + 'px';
-      window.dispatchEvent(new Event('resize'));
     }
 
     updateChrome() {
@@ -358,19 +308,23 @@
       window.dispatchEvent(new Event('resize'));
     }
 
+    // Preferencias puramente visuales del frontend; se guardan en view_spec.display.
     getProperties() {
-      return { width: this.width, height: this.height, startCol: this.startCol };
+      return {};
+    }
+
+    getPosition() {
+      const startMatch = /md:col-start-(\d+)/.exec(this.startCol || '');
+      return {
+        x: startMatch ? parseInt(startMatch[1], 10) : 0,
+        y: this.order,
+        w: BaseWidget._parseSpan(this.width),
+        h: this.height,
+      };
     }
 
     toPayload() {
-      return {
-        title: this.title,
-        chart_type: this.chart_type,
-        prompt: this.prompt,
-        code: this.code,
-        properties: this.getProperties(),
-        order: this.order,
-      };
+      return { title: this.title, position: this.getPosition(), display: this.getProperties() };
     }
 
     renderApexChart(container, options) {
@@ -403,68 +357,30 @@
         </div>
       `;
       if (retryable) {
-        container.querySelector('.retry-widget-btn').addEventListener('click', () => this.fetchAndRender());
+        container.querySelector('.retry-widget-btn').addEventListener('click', () => Alpine.store('dashboard').refreshData());
       }
     }
-    observeForLazyLoad() {
-      if (!_lazyLoadObserver || !this.el) {
-        this._inViewport = true;
-        this.fetchAndRender();
-        return;
-      }
-      this.el._widgetInstance = this;
-      _lazyLoadObserver.observe(this.el);
+    renderPlaceholder() {
+      const container = this.getContentContainer();
+      if (!container) return;
+      container.innerHTML = `
+        <div class="h-full w-full flex flex-col items-center justify-center text-center gap-1 px-4">
+          <i class="ti ti-sparkles text-xl text-moss-500" aria-hidden="true"></i>
+          <span class="text-xs text-ink/50">Abre el panel de edición para elegir columnas y métricas, o descríbelo con IA.</span>
+        </div>`;
     }
 
-    async fetchAndRender() {
-      if (this.id < 0) return;
-      const token = ++this._fetchToken;
-      this._loaded = true;
-      if (!this.code) {
-        // Widget sin código (ej. un futuro tipo de contenido estático que no hace fetch):
-        // apaga el loader que mountReadOnly() prendió, si no queda pegado.
-        this.setLoading(false);
-        const container = this.getContentContainer();
-        if (container) this.renderContent(container);
+    // `entry` es el item de este widget en la respuesta de /render/ (o de generar/editar el
+    // spec): {data} ya compilado por el backend, o {error}.
+    applyRender(entry) {
+      this.setLoading(false);
+      if (!entry) return;
+      if (entry.error) {
+        this.renderError(entry.error);
         return;
       }
-      this.setLoading(true);
-      try {
-        const { r, data } = await scheduleFetch(async () => {
-          if (token !== this._fetchToken) return { r: null, data: null }; // superado mientras esperaba en cola
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-          try {
-            const url = apiUrl(`/api/widget/${this.id}/data/`);
-            const filterQs = Alpine.store('dashboard').getFilterQueryString
-              ? Alpine.store('dashboard').getFilterQueryString()
-              : '';
-            const finalUrl = filterQs ? url + '?' + filterQs : url;
-            const res = await fetch(finalUrl, { signal: controller.signal });
-            const json = await res.json().catch(() => null);
-            return { r: res, data: json };
-          } finally {
-            clearTimeout(timeoutId);
-          }
-        });
-        if (token !== this._fetchToken || !r) return; // una llamada más nueva ya se hizo cargo
-        if (!r.ok) {
-          this.renderError(data && data.error ? data.error : `Error ${r.status} al cargar los datos`);
-          return;
-        }
-        if (data && typeof data === 'object' && !Array.isArray(data) && data.summary) {
-          this._applySummary(data.summary);
-        }
-        const container = this.getContentContainer();
-        if (container) this.renderContent(container, data);
-      } catch (e) {
-        // Cubre tanto fallas de red (sin conexión, servidor caído) como el abort por
-        // FETCH_TIMEOUT_MS de arriba (fetch nunca falla solo, sigue esperando indefinidamente).
-        if (token !== this._fetchToken) return;
-        this.renderError('No se pudo conectar con el servidor', { retryable: true });
-      } finally {
-        if (token === this._fetchToken) this.setLoading(false);
-      }
+      const container = this.getContentContainer();
+      if (container && entry.data) this.renderContent(container, entry.data);
     }
 
     _attachCommonEvents() {
@@ -483,28 +399,7 @@
       if (resizeHandle) resizeHandle.addEventListener('mousedown', (e) => this._onResizeStart(e));
     }
 
-    _attachFiltersListener() {
-      this._onFiltersChanged = () => {
-        // Si el widget todavía no cargó datos reales (sigue con el mockup, fuera del
-        // viewport), no hace falta invalidar nada: se piden ya filtrados cuando
-        // observeForLazyLoad() dispare su fetch al entrar en pantalla por primera vez.
-        if (!this._loaded) return;
-        this._loaded = false; // stale, sin importar si está visible ahora mismo
-        if (this._inViewport) {
-          this.fetchAndRender();
-        } else {
-          // Fuera de pantalla: no pedir datos todavía, solo tapar el contenido viejo para
-          // que no se muestre como si fuera actual. El propio observer lo va a refetchear
-          // (rama `!widget._loaded` de arriba) apenas vuelva a entrar en viewport.
-          this.setLoading(true);
-        }
-      };
-      window.addEventListener('dashboard:filters-changed', this._onFiltersChanged);
-    }
-
     destroy() {
-      window.removeEventListener('dashboard:filters-changed', this._onFiltersChanged);
-      if (this.el && _lazyLoadObserver) _lazyLoadObserver.unobserve(this.el);
       if (this._chart) {
         this._chart.destroy();
         this._chart = null;
@@ -532,12 +427,8 @@
 
       const onMouseUp = () => {
         el.classList.add('is-snapping');
-        // el.offsetHeight incluye el pie de resumen (si hay uno) sumado en buildElement();
-        // hay que descontarlo antes de guardar this.height, o se acumularía +SUMMARY_FOOTER_HEIGHT
-        // en this.height cada vez que se redimensiona un widget con resumen.
-        const footerOffset = this.summary ? BaseWidget.SUMMARY_FOOTER_HEIGHT : 0;
-        this.height = clamp(Math.round((el.offsetHeight - footerOffset)/stepHeight)*stepHeight, minHeight, 3000);//Max height 3000px
-        el.style.height = BaseWidget.heightWithSummaryFooter(this.height, this.summary) + 'px';
+        this.height = clamp(Math.round(el.offsetHeight/stepHeight)*stepHeight, minHeight, 3000);//Max height 3000px
+        el.style.height = this.height + 'px';
         this._dirty = true;
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);

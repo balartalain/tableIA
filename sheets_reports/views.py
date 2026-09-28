@@ -1,479 +1,522 @@
 import json
 import logging
-import threading
+import re
 
-from django.db import IntegrityError
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils.timesince import timesince
+from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from jsonschema import Draft202012Validator
 
-from sheets_reports.models import CalculatedColumn, Dashboard, DashboardUtilFunction, WidgetInstance
-from sheets_reports.utils.cache import get_cached_tables
-from sheets_reports.utils.generate_widget_ia import generate_widget_code as generate_code_from_prompt
-from sheets_reports.utils.generate_widget_ia import generate_custom_util as generate_custom_util_from_prompt
-from sheets_reports.utils.generate_widget_ia import generate_calculated_column as generate_calculated_column_from_prompt
-from sheets_reports.utils.registry import get_available_utils
-from sheets_reports.utils.widget_dispatcher import dispatch_widget, execute_widget_code, _sync_filter_field
+from sheets_reports.models import Dashboard, Widget, default_position
+from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_spec
+from sheets_reports.services.apex_compiler import compile_view
+from sheets_reports.services.query_engine import run_data_spec
+from sheets_reports.services.sheets import (
+    SheetError,
+    get_dimension_fields,
+    get_field_samples,
+    get_sheet_dataframe,
+    get_sheet_schema,
+    invalidate_sheet_cache,
+)
+from sheets_reports.services.spec_validation import (
+    WIDGET_TYPES,
+    build_view_spec,
+    filter_schema,
+    validate_widget_spec,
+)
 
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Páginas
+# ---------------------------------------------------------------------------
+
 def home(request):
-    return render(request, 'home.html')
+    return render(request, "home.html")
 
 
-def board_editor(request, board_slug):
-    dashboard = get_object_or_404(Dashboard, slug=board_slug)
-    return render(request, 'board_editor.html', {'board_id': dashboard.id, 'dashboard': dashboard})
+def board_editor(request, dashboard_id):
+    dashboard = get_object_or_404(Dashboard, id=dashboard_id)
+    return render(request, "board_editor.html", {
+        "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
+    })
 
 
-def board_view(request, board_slug):
-    dashboard = get_object_or_404(Dashboard, slug=board_slug)
-    return render(request, 'board_view.html', {'board_id': dashboard.id, 'dashboard': dashboard})
+def board_view(request, dashboard_id):
+    dashboard = get_object_or_404(Dashboard, id=dashboard_id)
+    return render(request, "board_view.html", {
+        "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
+    })
 
 
-def widget_data(request, widget_id):
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_user(request):
+    # Todavía no hay login en la app: sin sesión se usa el primer superusuario.
+    if request.user.is_authenticated:
+        return request.user
+    User = get_user_model()
+    return User.objects.filter(is_superuser=True).first() or User.objects.first()
+
+
+def _json_body(request) -> dict:
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        raise ValueError("JSON inválido")
+    if not isinstance(data, dict):
+        raise ValueError("Se esperaba un objeto JSON")
+    return data
+
+
+NO_USER_MESSAGE = "No hay ningún usuario. Crea uno con: python manage.py createsuperuser"
+
+
+def _error(message, status=400, **extra):
+    return JsonResponse({"error": message, **extra}, status=status)
+
+
+def _owned_dashboard(request, dashboard_id):
+    return Dashboard.objects.filter(id=dashboard_id, owner=_get_user(request)).first()
+
+
+def _owned_widget(request, widget_id):
+    return Widget.objects.select_related("dashboard").filter(
+        id=widget_id, dashboard__owner=_get_user(request)
+    ).first()
+
+
+def _gid_from_url(url: str) -> str | None:
+    m = re.search(r"[#&?]gid=(\d+)", url or "")
+    return m.group(1) if m else None
+
+
+def _load_sheet(dashboard):
+    """(df, schema) de la hoja del tablero, desde la caché."""
+    df = get_sheet_dataframe(dashboard.sheet_id, dashboard.sheet_gid)
+    return df, get_sheet_schema(df)
+
+
+def _serialize_dashboard(dashboard):
+    return {
+        "id": dashboard.id,
+        "nombre": dashboard.nombre,
+        "sheet_url": dashboard.sheet_url,
+        "sheet_gid": dashboard.sheet_gid,
+        "cardCount": dashboard.widgets.count(),
+        "created_at": dashboard.created_at.isoformat(),
+        "updated": timesince(dashboard.created_at, now()),
+    }
+
+
+def _serialize_widget(widget):
+    return {
+        "id": widget.id,
+        "type": widget.type,
+        "position": widget.position,
+        "data_spec": widget.data_spec,
+        "view_spec": widget.view_spec,
+        "source_prompt": widget.source_prompt,
+    }
+
+
+def _clean_position(value, fallback=None) -> dict:
+    position = dict(fallback or default_position())
+    if isinstance(value, dict):
+        for key in ("x", "y", "w", "h"):
+            if isinstance(value.get(key), (int, float)) and not isinstance(value.get(key), bool):
+                position[key] = int(value[key])
+    position["w"] = min(max(position["w"], 1), 12)
+    position["x"] = min(max(position["x"], 0), 12)
+    position["h"] = min(max(position["h"], 100), 3000)
+    return position
+
+
+def _render_widget(widget, df, extra_filters=None) -> dict:
+    """Ejecuta y compila un widget. Un error en un widget no tumba el tablero."""
+    spec = widget.data_spec
+    if extra_filters:
+        spec = {**spec, "filters": [*(spec.get("filters") or []), *extra_filters]}
+    try:
+        result = run_data_spec(df, spec)
+        return {"data": compile_view(widget.type, result, widget.view_spec)}
+    except KeyError as e:
+        # La hoja cambió y ya no tiene una columna que el spec usa.
+        return {"error": f"La columna {e} ya no existe en la hoja. Edita el widget."}
+    except Exception:
+        logger.exception("Error renderizando el widget %s", widget.id)
+        return {"error": "No se pudo calcular este widget."}
+
+
+def _board_filters(request, schema) -> list[dict]:
     """
-    Endpoint AJAX que retorna los datos procesados para un widget específico.
-    Delega en el dispatcher que importa el módulo de vistas del tablero
-    y ejecuta la función correspondiente.
+    Filtros del tablero, desde la query string:
+      ?filters=[{"field": ..., "op": ..., "value": ...}]   (JSON)
+      ?filtro_<columna>=<valor>                             (atajo: eq)
+    Se validan con el mismo sub-schema `filter` que el data_spec.
     """
-    return dispatch_widget(request, widget_id)
-
-
-def _get_request_data(request):
-    """Extrae datos del request sin importar el método HTTP o content-type."""
-    if request.content_type and "application/json" in request.content_type:
+    filters = []
+    raw = request.GET.get("filters")
+    if raw:
         try:
-            return json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, AttributeError):
-            return {}
-    if request.method == "POST":
-        return request.POST
-    if request.method == "PUT":
-        try:
-            return json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, AttributeError):
-            return {}
-    return request.GET
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError("El parámetro 'filters' no es JSON válido.")
+        if not isinstance(parsed, list):
+            raise ValueError("El parámetro 'filters' debe ser una lista.")
+        filters.extend(parsed)
+    for key, value in request.GET.items():
+        if key.startswith("filtro_") and value != "":
+            field = key[len("filtro_"):]
+            if field in schema["numeric_fields"]:
+                try:
+                    value = float(value)
+                except ValueError:
+                    pass
+            filters.append({"field": field, "op": "eq", "value": value})
+
+    validator = Draft202012Validator(filter_schema(schema))
+    for f in filters:
+        errors = list(validator.iter_errors(f))
+        if errors:
+            raise ValueError(f"Filtro inválido {json.dumps(f, ensure_ascii=False)}: {errors[0].message}")
+    return filters
 
 
-def _pre_warm_dashboard_cache(dashboard) -> None:
-    """
-    Inicializa en background la base DuckDB persistente del origen de datos del tablero,
-    para que cuando los widgets pidan datos por primera vez no tengan que esperar el fetch
-    a Google Sheets ni la inicialización de DuckDB. Best-effort: si falla silenciosamente,
-    el primer widget que se renderice hará la inicialización bajo el lock distribuido.
-    """
-    from sheets_reports.utils.duckdb_query import get_query_connection
-
-    def _warm():
-        try:
-            con = get_query_connection(dashboard)
-            con.close()
-        except Exception:
-            pass
-
-    t = threading.Thread(target=_warm, daemon=True)
-    t.start()
-
+# ---------------------------------------------------------------------------
+# Dashboards
+# ---------------------------------------------------------------------------
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
-def dashboard_widgets(request, dashboard_id):
-    """GET: lista widgets de un dashboard. POST: crea un widget."""
-    try:
-        dashboard = Dashboard.objects.get(id=dashboard_id)
-    except Dashboard.DoesNotExist:
-        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
+def dashboard_list(request):
+    user = _get_user(request)
+    if not user:
+        return _error(NO_USER_MESSAGE, status=401)
 
     if request.method == "GET":
-        # No se incluye "prompt": es de un solo uso (se limpia tras generar, ver
-        # generateWidgetCode en dashboard-store.js) y el drawer nunca lo muestra al abrir.
-        widgets = dashboard.widgets.all().values(
-            "id", "title", "chart_type", "code", "summary", "properties", "order"
-        )
-        response = JsonResponse(list(widgets), safe=False)
-
-        # Pre-warm: inicializar la base DuckDB persistente en background,
-        # para que cuando los widgets pidan datos ya esté lista.
-        _pre_warm_dashboard_cache(dashboard)
-
-        return response
+        dashboards = Dashboard.objects.filter(owner=user).prefetch_related("widgets")
+        return JsonResponse([_serialize_dashboard(d) for d in dashboards], safe=False)
 
     try:
-        data = _get_request_data(request)
-        widget = WidgetInstance.objects.create(
-            dashboard=dashboard,
-            title=data.get("title", ""),
-            chart_type=data.get("chart_type", "bar"),
-            code=data.get("code", ""),
-            prompt=data.get("prompt", ""),
-            properties=data.get("properties", {}),
-            order=data.get("order", 0),
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    nombre = (data.get("nombre") or "").strip()
+    sheet_url = (data.get("sheet_url") or "").strip()
+    if not nombre:
+        return _error("El nombre es obligatorio")
+    dashboard = Dashboard(
+        nombre=nombre,
+        owner=user,
+        sheet_url=sheet_url,
+        sheet_gid=str(data.get("sheet_gid") or _gid_from_url(sheet_url) or "0"),
+    )
+    if not dashboard.sheet_id:
+        return _error("La URL no parece de una hoja de Google Sheets")
+    dashboard.save()
+    return JsonResponse(_serialize_dashboard(dashboard), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["PUT", "DELETE"])
+def dashboard_detail(request, dashboard_id):
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+
+    if request.method == "DELETE":
+        dashboard.delete()
+        return JsonResponse({"deleted": True})
+
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    if "nombre" in data:
+        nombre = (data["nombre"] or "").strip()
+        if not nombre:
+            return _error("El nombre no puede estar vacío")
+        dashboard.nombre = nombre
+    if "sheet_url" in data:
+        dashboard.sheet_url = (data["sheet_url"] or "").strip()
+        dashboard.sheet_gid = str(data.get("sheet_gid") or _gid_from_url(dashboard.sheet_url) or "0")
+        if not dashboard.sheet_id:
+            return _error("La URL no parece de una hoja de Google Sheets")
+    dashboard.save()
+    return JsonResponse(_serialize_dashboard(dashboard))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dashboard_duplicate(request, dashboard_id):
+    original = _owned_dashboard(request, dashboard_id)
+    if not original:
+        return _error("Dashboard no encontrado", status=404)
+    with transaction.atomic():
+        copy = Dashboard.objects.create(
+            nombre=f"{original.nombre} (copia)",
+            owner=original.owner,
+            sheet_url=original.sheet_url,
+            sheet_gid=original.sheet_gid,
         )
-        return JsonResponse({
-            "id": widget.id,
-            "title": widget.title,
-            "chart_type": widget.chart_type,
-            "code": widget.code,
-            "prompt": widget.prompt,
-            "summary": widget.summary,
-            "properties": widget.properties,
-            "order": widget.order,
-        }, status=201)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        Widget.objects.bulk_create([
+            Widget(
+                dashboard=copy,
+                type=w.type,
+                position=w.position,
+                data_spec=w.data_spec,
+                view_spec=w.view_spec,
+                source_prompt=w.source_prompt,
+            )
+            for w in original.widgets.all()
+        ])
+    return JsonResponse(_serialize_dashboard(copy), status=201)
+
+
+@require_http_methods(["GET"])
+def dashboard_schema(request, dashboard_id):
+    """Columnas de la hoja (chips del frontend y selects del builder)."""
+    dashboard = get_object_or_404(Dashboard, id=dashboard_id)
+    if request.GET.get("refresh"):
+        invalidate_sheet_cache(dashboard.sheet_id, dashboard.sheet_gid)
+    try:
+        df, schema = _load_sheet(dashboard)
+    except SheetError as e:
+        return _error(str(e), status=502)
+    return JsonResponse({**schema, "dimension_fields": get_dimension_fields(df)})
+
+
+@require_http_methods(["GET"])
+def dashboard_render(request, dashboard_id):
+    """
+    Datos listos para dibujar todos los widgets del tablero. NUNCA llama a la IA: es puro
+    cálculo sobre la hoja cacheada, para que el refresco periódico del frontend sea barato.
+    Es de solo lectura y sirve también a la vista compartida (board_view).
+    """
+    dashboard = get_object_or_404(Dashboard, id=dashboard_id)
+    try:
+        df, schema = _load_sheet(dashboard)
+    except SheetError as e:
+        return _error(str(e), status=502)
+    try:
+        filters = _board_filters(request, schema)
+    except ValueError as e:
+        return _error(str(e))
+
+    widgets = sorted(dashboard.widgets.all(), key=lambda w: (w.position.get("y", 0), w.id))
+    return JsonResponse({
+        "dashboard": _serialize_dashboard(dashboard),
+        "widgets": [{**_serialize_widget(w), **_render_widget(w, df, filters)} for w in widgets],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Widgets
+# ---------------------------------------------------------------------------
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def generate_widget(request, dashboard_id):
+    """
+    POST {prompt, widget_type?, widget_id?, position?, title?}
+    Genera el spec con IA y lo guarda: crea un widget nuevo, o reemplaza el spec de
+    `widget_id` (conservando su tipo, posición y preferencias de UI).
+    """
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return _error("El prompt es obligatorio")
+
+    widget = None
+    widget_type = data.get("widget_type") or None
+    if data.get("widget_id"):
+        widget = Widget.objects.filter(id=data["widget_id"], dashboard=dashboard).first()
+        if not widget:
+            return _error("Widget no encontrado", status=404)
+        widget_type = widget.type
+    if widget_type is not None and widget_type not in WIDGET_TYPES:
+        return _error(f"Tipo de widget desconocido: {widget_type}")
+
+    try:
+        df, schema = _load_sheet(dashboard)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    try:
+        spec = generate_widget_spec(
+            prompt, widget_type, {**schema, "sample_values": get_field_samples(df)}, source=dashboard.sheet_gid,
+        )
+    except SpecGenerationError as e:
+        return _error(str(e), status=422)
+    except Exception:
+        logger.exception("Falló la generación de widget por IA")
+        return _error("La IA no respondió correctamente. Intenta de nuevo.", status=502)
+
+    view_spec = spec["view_spec"]
+    if widget:
+        view_spec["display"] = (widget.view_spec or {}).get("display") or {}
+        widget.data_spec = spec["data_spec"]
+        widget.view_spec = view_spec
+        widget.source_prompt = prompt
+        widget.save()
+    else:
+        widget = Widget.objects.create(
+            dashboard=dashboard,
+            type=spec["widget_type"],
+            position=_clean_position(data.get("position")),
+            data_spec=spec["data_spec"],
+            view_spec=view_spec,
+            source_prompt=prompt,
+        )
+    return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)}, status=201)
+
+
+def _builder_data_spec(data: dict, dashboard, widget_type: str, schema: dict, previous: dict | None):
+    """
+    data_spec a partir de los controles del builder ({dimensions, pivot, metrics, sort?,
+    filters?}). Retorna (data_spec, errores). Mismas validaciones que el camino de IA.
+    """
+    previous = previous or {}
+    dimensions = data.get("dimensions") or []
+    if isinstance(dimensions, str):
+        dimensions = [dimensions]
+    metrics = data.get("metrics") or []
+    if not isinstance(metrics, list):
+        return None, ["metrics debe ser una lista."]
+    # count cuenta filas: si el builder no manda campo, se usa la dimensión (o la primera
+    # columna en un KPI), como indica la semántica del DSL.
+    for m in metrics:
+        if isinstance(m, dict) and m.get("agg") == "count" and not m.get("field"):
+            m["field"] = dimensions[0] if dimensions else (schema["all_fields"] or [""])[0]
+    data_spec = {
+        "source": dashboard.sheet_gid,
+        "dimensions": dimensions,
+        "pivot": data.get("pivot") or None,
+        "metrics": metrics,
+        "filters": data["filters"] if "filters" in data else previous.get("filters") or [],
+        "sort": data["sort"] if "sort" in data else previous.get("sort"),
+    }
+    return data_spec, validate_widget_spec(widget_type, data_spec, schema, dashboard.sheet_gid)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_widget(request, dashboard_id):
+    """
+    POST {type, dimensions, pivot, metrics, stacked, sort?, title?, position?}
+    Crea un widget desde el builder (el usuario elige columnas y métricas). NUNCA llama a la IA.
+    """
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    widget_type = data.get("type")
+    if widget_type not in WIDGET_TYPES:
+        return _error(f"Tipo de widget desconocido: {widget_type}")
+
+    try:
+        df, schema = _load_sheet(dashboard)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    data_spec, errors = _builder_data_spec(data, dashboard, widget_type, schema, None)
+    if errors:
+        return _error(errors[0], status=422, errors=errors)
+
+    display = data.get("display") if isinstance(data.get("display"), dict) else {}
+    widget = Widget.objects.create(
+        dashboard=dashboard,
+        type=widget_type,
+        position=_clean_position(data.get("position")),
+        data_spec=data_spec,
+        view_spec=build_view_spec(widget_type, data_spec, {
+            "title": data.get("title"), "stacked": bool(data.get("stacked")), "display": display,
+        }),
+    )
+    return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)}, status=201)
+
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def update_widget_spec(request, widget_id):
+    """
+    PUT {dimensions, pivot, metrics, stacked, sort?, filters?}
+    Edición manual desde el builder: aplica las mismas validaciones que el camino de IA,
+    reconstruye view_spec y guarda. Este camino NUNCA llama a la IA.
+    """
+    widget = _owned_widget(request, widget_id)
+    if not widget:
+        return _error("Widget no encontrado", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+
+    try:
+        df, schema = _load_sheet(widget.dashboard)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    data_spec, errors = _builder_data_spec(data, widget.dashboard, widget.type, schema, widget.data_spec)
+    if errors:
+        return _error(errors[0], status=422, errors=errors)
+
+    previous = widget.view_spec or {}
+    widget.data_spec = data_spec
+    widget.view_spec = build_view_spec(widget.type, data_spec, {
+        "title": data.get("title", previous.get("title")),
+        "labels": previous.get("labels"),
+        "stacked": bool(data.get("stacked", previous.get("stacked", False))),
+        "display": previous.get("display"),
+    })
+    widget.save()
+    return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)})
 
 
 @csrf_exempt
 @require_http_methods(["PUT", "DELETE"])
 def widget_detail(request, widget_id):
-    """PUT: actualiza un widget. DELETE: elimina un widget."""
-    try:
-        widget = WidgetInstance.objects.get(id=widget_id)
-    except WidgetInstance.DoesNotExist:
-        return JsonResponse({"error": "Widget no encontrado"}, status=404)
+    """PUT {position?, title?, display?}: solo presentación, no toca data_spec. DELETE: borra."""
+    widget = _owned_widget(request, widget_id)
+    if not widget:
+        return _error("Widget no encontrado", status=404)
 
     if request.method == "DELETE":
         widget.delete()
         return JsonResponse({"deleted": True})
 
     try:
-        data = _get_request_data(request)
-        for field in ("title", "chart_type", "code", "prompt", "properties", "order"):
-            if field in data:
-                if field == "code" and data["code"] != widget.code:
-                    widget.summary = ""
-                setattr(widget, field, data[field])
-        widget.save()
-        return JsonResponse({
-            "id": widget.id,
-            "title": widget.title,
-            "chart_type": widget.chart_type,
-            "code": widget.code,
-            "prompt": widget.prompt,
-            "summary": widget.summary,
-            "properties": widget.properties,
-            "order": widget.order,
-        })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def generate_widget_code(request, dashboard_id):
-    """POST: genera código Python para un widget a partir de un prompt en lenguaje natural, vía Gemini."""
-    try:
-        dashboard = Dashboard.objects.get(id=dashboard_id)
-    except Dashboard.DoesNotExist:
-        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
-
-    data = _get_request_data(request)
-    prompt = (data.get("prompt") or "").strip()
-    if not prompt:
-        return JsonResponse({"error": "prompt requerido"}, status=400)
-
-    # El chart_type se saca de la BD cuando el widget ya existe (fuente de verdad); si es un
-    # widget nuevo que aún no se guardó, no hay fila en la BD y se usa el que mande el frontend.
-    chart_type = data.get("chart_type", "")
-    widget_id = data.get("widget_id")
-    widget = None
-    if widget_id:
-        widget = WidgetInstance.objects.filter(id=widget_id, dashboard_id=dashboard_id).first()
-        if widget:
-            chart_type = widget.chart_type
-
-    existing_code = data.get("existing_code", "")
-
-    try:
-        code = generate_code_from_prompt(prompt, dashboard, chart_type=chart_type, existing_code=existing_code)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-    response = {"code": code}
-
-    if chart_type == "filter":
-        # Corremos el código una vez acá mismo para poder mostrar "field" en el drawer de
-        # inmediato, sin esperar a que el widget se renderice en el lienzo (que es donde
-        # dispatch_widget lo sincronizaría normalmente). Best-effort: si falla, no rompe la
-        # generación de código — queda pendiente para cuando el widget corra más adelante.
-        try:
-            probe_widget = widget or WidgetInstance(dashboard=dashboard, chart_type=chart_type, properties={})
-            probe_response = execute_widget_code(code, request, probe_widget)
-            if probe_response.status_code == 200:
-                probe_data = json.loads(probe_response.content)
-                if isinstance(probe_data, dict) and probe_data.get("field"):
-                    response["field"] = probe_data["field"]
-                    if widget:
-                        _sync_filter_field(widget, probe_response)
-        except Exception:
-            logger.exception("No se pudo detectar el field del widget filtro %s al generarlo", widget_id)
-
-    return JsonResponse(response)
-
-
-def _serialize_util(u):
-    return {
-        "id": u.id,
-        "name": u.name,
-        "signature": u.signature,
-        "description": u.description,
-        "category": u.category,
-        "source_code": u.source_code,
-        "created_from_prompt": u.created_from_prompt,
-        "is_active": u.is_active,
-        "origin": "custom",
-        "editable": True,
-    }
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def dashboard_util_functions(request, dashboard_id):
-    """GET: lista las utilidades disponibles para el tablero (del sistema + personalizadas).
-    POST: guarda una función utilitaria personalizada nueva (ya generada y revisada)."""
-    try:
-        dashboard = Dashboard.objects.get(id=dashboard_id)
-    except Dashboard.DoesNotExist:
-        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
-
-    if request.method == "GET":
-        return JsonResponse(get_available_utils(dashboard), safe=False)
-
-    data = _get_request_data(request)
-    try:
-        util_fn = DashboardUtilFunction.objects.create(
-            dashboard=dashboard,
-            name=data.get("name", ""),
-            signature=data.get("signature", ""),
-            description=data.get("description", ""),
-            category=data.get("category") or "Personalizada",
-            source_code=data.get("source_code", ""),
-            created_from_prompt=data.get("prompt", ""),
-        )
-    except IntegrityError:
-        return JsonResponse({"error": f"Ya existe una función llamada '{data.get('name', '')}' en este tablero."}, status=400)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-    return JsonResponse(_serialize_util(util_fn), status=201)
-
-
-@csrf_exempt
-@require_http_methods(["PUT", "DELETE"])
-def util_function_detail(request, util_id):
-    """PUT: actualiza una función utilitaria personalizada. DELETE: la elimina."""
-    try:
-        util_fn = DashboardUtilFunction.objects.get(id=util_id)
-    except DashboardUtilFunction.DoesNotExist:
-        return JsonResponse({"error": "Función no encontrada"}, status=404)
-
-    if request.method == "DELETE":
-        util_fn.delete()
-        return JsonResponse({"deleted": True})
-
-    data = _get_request_data(request)
-    for field in ("name", "signature", "description", "category", "source_code", "is_active"):
-        if field in data:
-            setattr(util_fn, field, data[field])
-    try:
-        util_fn.save()
-    except IntegrityError:
-        return JsonResponse({"error": f"Ya existe una función llamada '{util_fn.name}' en este tablero."}, status=400)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-    return JsonResponse(_serialize_util(util_fn))
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def generate_custom_util(request, dashboard_id):
-    """POST: genera (o modifica) una función utilitaria personalizada a partir de un prompt,
-    vía Gemini. No la guarda: la retorna para que el usuario la revise antes de guardarla."""
-    try:
-        dashboard = Dashboard.objects.get(id=dashboard_id)
-    except Dashboard.DoesNotExist:
-        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
-
-    data = _get_request_data(request)
-    prompt = (data.get("prompt") or "").strip()
-    if not prompt:
-        return JsonResponse({"error": "prompt requerido"}, status=400)
-    existing_util = data.get("existing_util")
-
-    try:
-        util_data = generate_custom_util_from_prompt(prompt, dashboard, existing_util=existing_util)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-    return JsonResponse(util_data)
-
-
-def _serialize_calculated_column(cc):
-    return {
-        "id": cc.id,
-        "table_name": cc.table_name,
-        "column_name": cc.column_name,
-        "expression": cc.expression,
-        "description": cc.description,
-        "created_from_prompt": cc.created_from_prompt,
-        "is_active": cc.is_active,
-    }
-
-
-def _validate_calculated_column(dashboard, table_name: str, expression: str) -> str | None:
-    """Prueba la expresión contra los datos reales antes de guardar. Retorna un mensaje de
-    error si falla, o None si es válida."""
-    from sheets_reports.utils.duckdb_query import get_query_connection
-
-    try:
-        con = get_query_connection(dashboard)
-    except Exception as e:
-        return str(e)
-    try:
-        con.execute(f'SELECT ({expression}) FROM "{table_name}" LIMIT 1')
-    except Exception as e:
-        return str(e)
-    finally:
-        con.close()
-    return None
-
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def dashboard_tables(request, dashboard_id):
-    """GET: lista las tablas del origen de datos del tablero (nombre calificado + columnas),
-    para poblar el selector de tabla al crear una columna calculada."""
-    try:
-        dashboard = Dashboard.objects.get(id=dashboard_id)
-    except Dashboard.DoesNotExist:
-        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
-
-    connector = dashboard.data_source.get_connector()
-    alias = dashboard.data_source.source_type
-    try:
-        tables = get_cached_tables(dashboard)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-
-    return JsonResponse([
-        {"table_name": connector.qualified_table_name(t, alias), "columns": t.columns}
-        for t in tables
-    ], safe=False)
-
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def dashboard_calculated_columns(request, dashboard_id):
-    """GET: lista las columnas calculadas del origen de datos del tablero. POST: guarda una
-    columna calculada nueva (ya generada y revisada), validándola contra los datos reales."""
-    try:
-        dashboard = Dashboard.objects.get(id=dashboard_id)
-    except Dashboard.DoesNotExist:
-        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
-
-    if request.method == "GET":
-        columns = dashboard.data_source.calculated_columns.all()
-        return JsonResponse([_serialize_calculated_column(c) for c in columns], safe=False)
-
-    data = _get_request_data(request)
-    table_name = data.get("table_name", "")
-    expression = data.get("expression", "")
-
-    error = _validate_calculated_column(dashboard, table_name, expression)
-    if error:
-        return JsonResponse({"error": f"La expresión no es válida: {error}"}, status=400)
-
-    try:
-        cc = CalculatedColumn.objects.create(
-            data_source=dashboard.data_source,
-            table_name=table_name,
-            column_name=data.get("column_name", ""),
-            expression=expression,
-            description=data.get("description", ""),
-            created_from_prompt=data.get("prompt", ""),
-        )
-    except IntegrityError:
-        return JsonResponse({
-            "error": f"Ya existe una columna calculada llamada '{data.get('column_name', '')}' en esta tabla."
-        }, status=400)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-
-    from sheets_reports.utils.duckdb_query import invalidate_database
-    invalidate_database(dashboard.data_source)
-
-    return JsonResponse(_serialize_calculated_column(cc), status=201)
-
-
-@csrf_exempt
-@require_http_methods(["PUT", "DELETE"])
-def calculated_column_detail(request, cc_id):
-    """PUT: actualiza una columna calculada (revalidándola). DELETE: la elimina. En ambos
-    casos invalida la caché DuckDB del origen para que el cambio se vea en el próximo pedido."""
-    try:
-        cc = CalculatedColumn.objects.get(id=cc_id)
-    except CalculatedColumn.DoesNotExist:
-        return JsonResponse({"error": "Columna calculada no encontrada"}, status=404)
-
-    from sheets_reports.utils.duckdb_query import invalidate_database
-
-    if request.method == "DELETE":
-        cc.delete()
-        invalidate_database(cc.data_source)
-        return JsonResponse({"deleted": True})
-
-    data = _get_request_data(request)
-    table_name = data.get("table_name", cc.table_name)
-    expression = data.get("expression", cc.expression)
-
-    if "table_name" in data or "expression" in data:
-        dashboard = cc.data_source.dashboards.first()
-        if dashboard is None:
-            return JsonResponse({"error": "El origen de datos no tiene ningún tablero asociado para validar la expresión."}, status=400)
-        error = _validate_calculated_column(dashboard, table_name, expression)
-        if error:
-            return JsonResponse({"error": f"La expresión no es válida: {error}"}, status=400)
-
-    for field in ("table_name", "column_name", "expression", "description", "is_active"):
-        if field in data:
-            setattr(cc, field, data[field])
-    try:
-        cc.save()
-    except IntegrityError:
-        return JsonResponse({"error": f"Ya existe una columna calculada llamada '{cc.column_name}' en esta tabla."}, status=400)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
-
-    invalidate_database(cc.data_source)
-    return JsonResponse(_serialize_calculated_column(cc))
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def generate_calculated_column(request, dashboard_id):
-    """POST: genera (o modifica) la expresión SQL de una columna calculada a partir de un
-    prompt, vía Gemini. No la guarda: la retorna para que el usuario la revise antes de
-    guardarla."""
-    try:
-        dashboard = Dashboard.objects.get(id=dashboard_id)
-    except Dashboard.DoesNotExist:
-        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
-
-    data = _get_request_data(request)
-    prompt = (data.get("prompt") or "").strip()
-    table_name = (data.get("table_name") or "").strip()
-    if not prompt:
-        return JsonResponse({"error": "prompt requerido"}, status=400)
-    if not table_name:
-        return JsonResponse({"error": "table_name requerido"}, status=400)
-    existing = data.get("existing")
-
-    try:
-        column_data = generate_calculated_column_from_prompt(prompt, dashboard, table_name, existing=existing)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-    return JsonResponse(column_data)
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    if "position" in data:
+        widget.position = _clean_position(data["position"], fallback=widget.position)
+    view_spec = dict(widget.view_spec)
+    if "title" in data:
+        view_spec["title"] = str(data["title"] or "").strip() or view_spec.get("title", "")
+    if isinstance(data.get("display"), dict):
+        view_spec["display"] = data["display"]
+    widget.view_spec = view_spec
+    widget.save()
+    return JsonResponse(_serialize_widget(widget))

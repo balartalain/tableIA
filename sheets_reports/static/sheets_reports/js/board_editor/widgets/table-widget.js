@@ -27,6 +27,7 @@
       descClass: 'text-amber-700/80',
     };
     static defaults = { title: 'Tabla', width: 'md:col-span-6', height: 300 };
+    static pivotLabel = 'Agregar columnas por';
     static help = 'Muestra datos en filas y columnas, como una hoja de cálculo (ej. listado de ' +
       'participantes con sus notas, detalle de transacciones). Útil cuando el detalle fila por ' +
       'fila importa más que una comparación visual, y permite descargar los datos como CSV.';
@@ -45,9 +46,9 @@
     static mockData() {
       return {
         columns: [
-          { title: 'Producto', field: 'Producto' },
-          { title: 'Vendedor', field: 'Vendedor' },
-          { title: 'Ventas', field: 'Ventas' },
+          { header: 'Producto', field: 'Producto' },
+          { header: 'Vendedor', field: 'Vendedor' },
+          { header: 'Ventas', field: 'Ventas' },
         ],
         rows: [
           { Producto: 'Producto A', Vendedor: 'Cajero 1', Ventas: 14200 },
@@ -82,15 +83,13 @@
       return el;
     }
     applyFormatter(fieldName, tipoFormato) {
-      let cols = this._table.getColumnDefinitions();
-
-      cols = cols.map(col => {
-          if (col.field === fieldName) {
-              const config = formattersMap[tipoFormato] || formattersMap["text"];
-              return { ...col, ...config }; // Mantiene las propiedades anteriores y actualiza el formato
-          }
+      const config = formattersMap[tipoFormato] || formattersMap["text"];
+      const update = (cols) => cols.map(col => {
+          if (col.columns) return { ...col, columns: update(col.columns) }; // grupo de pivote
+          if (col.field === fieldName) return { ...col, ...config };
           return col;
       });
+      const cols = update(this._table.getColumnDefinitions());
       this.formattersMap[fieldName] = tipoFormato; // Guarda el formato aplicado para persistencia
       this._table.setColumns(cols); // Re-renderiza las columnas instantáneamente
       this._dirty = true;
@@ -114,21 +113,27 @@
       container.innerHTML = '';
       container.style.backgroundColor = '#fff';
       let columns = payload.columns || [];
-      if (this.columnOrder && this.columnOrder.length) {
+      const hasGroups = columns.some(c => c.children);
+      if (!hasGroups && this.columnOrder && this.columnOrder.length) {
         const byField = new Map(columns.map(c => [c.field, c]));
         const ordered = this.columnOrder.map(f => byField.get(f)).filter(Boolean);
         const remaining = columns.filter(c => !this.columnOrder.includes(c.field));
         columns = [...ordered, ...remaining];
       }
-      columns = columns.map(col => {
+      // {header, field} / {header, children} (formato de compile_view) -> columnas de Tabulator.
+      const toTabulator = (col) => {
+        if (col.children) return { title: col.header, columns: col.children.map(toTabulator) };
         const formatterConfig = formattersMap[this.formattersMap[col.field]] || formattersMap["text"];
-        const result = { ...col, ...formatterConfig };
+        const result = { title: col.header, field: col.field, ...formatterConfig };
         if (!this._readOnly) result.headerMenu = this.menuFormatter;
         return result;
-      });
+      };
+      columns = columns.map(toTabulator);
       this._table = new Tabulator(container, {
         data: payload.rows || [],
-        movableColumns: true,
+        // Los campos del pivote ("__pivots.Ene.total_ventas") son claves planas, no rutas.
+        nestedFieldSeparator: false,
+        movableColumns: !hasGroups,
         columns,
         layout: 'fitDataStretch',
         pagination: this.showPagination,

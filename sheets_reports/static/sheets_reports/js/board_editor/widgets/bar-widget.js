@@ -26,13 +26,13 @@
       'de categorías. Ideal para comparar magnitudes entre grupos, no para ver tendencias continuas. ' +
       'Con más de una serie, puedes arrastrar los ítems de la leyenda para reordenarlas.';
 
+    static supportsStacked = true;
     static FIELD_HORIZONTAL = { key: 'horizontal', label: 'Horizontal', type: 'checkbox' };
 
     static get drawerFields() {
       return [...super.drawerFields,
         this.FIELD_HORIZONTAL,
         { key: 'yAxisWidth', label: 'Ancho del Eje Y (px)', type: 'number', min: 100, step: 10 },
-        { key: 'stacked', label: 'Apilado', type: 'checkbox' },
         { key: 'barWidth', label: 'Ancho de barra', type: 'range', min: 20, max: 90, step: 5 },
         { key: 'dataLabelFormatter', label: 'Formato de Etiquetas de Datos. Ej. {value} %', type: 'text' },
         { key: 'chartWidth', label: 'Forzar ancho de gráfico', type: 'number', min: 100, step: 50 },
@@ -51,7 +51,6 @@
       super(raw);
       this.horizontal = raw.horizontal ?? false;
       this.yAxisWidth = raw.yAxisWidth;
-      this.stacked = raw.stacked ?? false;
       this.barWidth = raw.barWidth ?? 70;
       this.dataLabelFormatter = raw.dataLabelFormatter;
       this.chartWidth = raw.chartWidth;
@@ -79,7 +78,6 @@
       return { ...super.getProperties(),
         horizontal: this.horizontal,
         yAxisWidth: this.yAxisWidth,
-        stacked: this.stacked,
         barWidth: this.barWidth,
         dataLabelFormatter: this.dataLabelFormatter,
         chartWidth: this.chartWidth,
@@ -108,7 +106,7 @@
       }
 
       const options = {
-        chart: { type: 'bar', stacked: this.stacked, height: '90%', width: this.chartWidth || '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
+        chart: { type: 'bar', stacked: !!payload.stacked, height: '90%', width: this.chartWidth || '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
         colors: series.map((s, i) => this._seriesColors.get(s.name) || COLOR_PALETTE[i % COLOR_PALETTE.length]),
         series,
         xaxis: {
@@ -138,8 +136,8 @@
             return this.dataLabelFormatter ? this.dataLabelFormatter.replace('{value}', val) : val;
           },
           //crop: false,
-          offsetY: !this.horizontal ? -20 : 0,
-          offsetX: this.horizontal ? 20 : 0,
+          offsetY: !this.horizontal && !payload.stacked ? -20 : 0,
+          offsetX: this.horizontal && !payload.stacked ? 20 : 0,
           // background: {
           //     enabled: true,
           //     foreColor: '#fff',     // Color del texto DENTRO del fondo (Blanco)

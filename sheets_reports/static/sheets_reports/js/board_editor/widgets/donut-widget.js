@@ -10,15 +10,15 @@
       descClass: 'text-rose-700/80',
     };
     static defaults = { title: 'Gráfico de Dona', width: 'md:col-span-4', height: 300 };
+    // Reparte UNA métrica entre las categorías: sin pivote.
+    static supportsPivot = false;
+    static maxMetrics = 1;
     static help = 'Muestra cómo se reparte un total entre categorías, como porciones de un ' +
       'círculo (ej. participantes por sede, presupuesto por rubro). Útil para ver proporciones ' +
       'de un conjunto pequeño de categorías; con muchas categorías es mejor usar una tabla o barras.';
 
     static mockData() {
-      return {
-        series: [{ name: 'Ventas', data: [44, 55, 13, 33] }],
-        categories: ['Norte', 'Sur', 'Este', 'Oeste'],
-      };
+      return { series: [44, 55, 13, 33], labels: ['Norte', 'Sur', 'Este', 'Oeste'] };
     }
 
     buildElement() {
@@ -27,23 +27,11 @@
 
     renderContent(container, data) {
       const payload = data || this.constructor.mockData();
-      const series = (payload.series && payload.series[0] && payload.series[0].data) || [];
-      const labels = payload.categories || [];
+      // Formato nativo de ApexCharts para donut (ver apex_compiler._compile_donut).
+      const series = (payload.series || []).map(v => v ?? 0);
+      const labels = payload.labels || [];
       const options = {
-        chart: { type: 'donut', height: '90%', width: '100%', fontFamily: 'inherit',
-          toolbar: {
-            show: true, // Muestra el toolbar
-            tools: {
-              download: true,  // Botón de descargar (SVG, PNG, CSV)
-              selection: true, // Herramienta de selección
-              zoom: true,      // Zoom por selección
-              zoomin: true,    // Acercar
-              zoomout: true,   // Alejar
-              pan: true,       // Desplazamiento (Pan)
-              reset: true      // Reiniciar zoom
-            }
-          }
-        },
+        chart: { type: 'donut', height: '90%', width: '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
         colors: ['#2563eb', '#f5a623', '#1F8A5F', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'],
         series,
         labels,

@@ -83,7 +83,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': dj_database_url.config(
         # Si no encuentra DATABASE_URL en el entorno, usa SQLite local por defecto
-        default=config('DATABASE_URL', default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"),
+        default=config('DATABASE_URL', default=f"sqlite:///{BASE_DIR / 'db.tableia.sqlite3'}"),
         conn_max_age=600,
         ssl_require=False
     )
@@ -91,9 +91,8 @@ DATABASES = {
 
 # Caché compartida entre workers (Gunicorn corre varios procesos en producción).
 # Respaldada en la misma base de datos: sin esto, Django usa por defecto
-# LocMemCache (memoria local a cada proceso), lo que rompe el candado de
-# sheets_reports/utils/cache.py y hace que cada worker golpee la API de Google
-# Sheets por su cuenta, agotando la cuota de lectura.
+# LocMemCache (memoria local a cada proceso) y cada worker leería la hoja de
+# Google Sheets por su cuenta (ver sheets_reports/services/sheets.py).
 # Requiere correr `python manage.py createcachetable` una vez por base de datos.
 CACHES = {
     'default': {
@@ -157,8 +156,40 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Google Sheets
 GOOGLE_SHEETS_CREDENTIALS_PATH = config("GOOGLE_SHEETS_CREDENTIALS_PATH", default="")
 
-# Gemini (generación de código de widgets vía IA)
+# Segundos que se cachea el DataFrame de cada hoja (services/sheets.get_sheet_dataframe).
+SHEET_CACHE_TTL = config("SHEET_CACHE_TTL", default=300, cast=int)
+
+# Cada cuántos minutos el frontend refresca los datos del tablero (endpoint render, sin IA).
+WIDGET_REFRESH_MINUTES = config("WIDGET_REFRESH_MINUTES", default=5, cast=int)
+
+# Gemini (generación de specs JSON de widgets vía IA; ver services/ai_spec.py)
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
+GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
+
+# Auditoría de cada spec generado por IA junto al prompt que lo originó (logger
+# "tableia.ai_audit"), para revisar y mejorar el system prompt con el tiempo.
+AI_AUDIT_LOG_FILE = config("AI_AUDIT_LOG_FILE", default="") or str(BASE_DIR / "ai_audit.log")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "audit": {"format": "%(asctime)s %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+        "ai_audit_file": {
+            "class": "logging.handlers.WatchedFileHandler",
+            "filename": AI_AUDIT_LOG_FILE,
+            "formatter": "audit",
+            "encoding": "utf-8",
+        },
+    },
+    "loggers": {
+        "tableia.ai_audit": {"handlers": ["ai_audit_file"], "level": "INFO", "propagate": False},
+    },
+    "root": {"handlers": ["console"], "level": "WARNING"},
+}
 
 # Configuración para GUNICON - APACHE
 USE_X_FORWARDED_HOST = True

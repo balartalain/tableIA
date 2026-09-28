@@ -79,17 +79,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupHeaderAutoHide();
   renderPalette(sidebarEl);
 
-  await store.loadWidgetsFromServer();
-  store.widgets.forEach(w => {
-    canvasEl.appendChild(w.mount());
-  });
-  store.widgets.forEach(w => w.observeForLazyLoad());
+  store.loadSchema();
 
-  store.loadUtils();
+  let entries = {};
+  try {
+    entries = await store.loadBoard();
+  } catch (e) {
+    canvasEl.insertAdjacentHTML('beforebegin', `<p class="text-sm text-red-600 mb-3">${BaseWidget.escapeHTML(e.message)}</p>`);
+  }
+  store.widgets.forEach(w => canvasEl.appendChild(w.mount()));
+  // Doble rAF: ApexCharts necesita que el contenedor ya tenga su tamaño final al montar.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    store.widgets.forEach(w => w.applyRender(entries[w.id]));
+  }));
 
-  requestAnimationFrame(() => {
-    window.dispatchEvent(new Event('resize'));
-  });
+  window.addEventListener('dashboard:filters-changed', () => store.refreshData());
+  if (window.REFRESH_MINUTES > 0) {
+    setInterval(() => store.refreshData(), window.REFRESH_MINUTES * 60 * 1000);
+  }
 
   new Sortable(sidebarEl, {
     group: { name: 'shared', pull: 'clone', put: false },
@@ -107,11 +114,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       const type = evt.item.getAttribute('data-type');
       const widget = store.addWidget(type);
       const widgetEl = widget.mount();
-      widget.observeForLazyLoad();
       evt.item.replaceWith(widgetEl);
+      store.reorderWidgets();
       requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
       });
+      // Un widget nuevo no tiene datos todavía: abrir el panel para describirlo.
+      store.openDrawer(widget.id);
     },
 
     onEnd: function () {
@@ -125,7 +134,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     for (const w of store.widgets) {
       if (w._dirty) await store._saveWidget(w);
     }
-    alert('Widgets guardados en la base de datos.');
+    const pending = store.widgets.filter(w => w.id < 0).length;
+    showToast(pending
+      ? `Diseño guardado. ${pending} widget(s) sin generar no se guardaron.`
+      : 'Diseño guardado');
   });
 
   document.getElementById('share-btn').addEventListener('click', async () => {

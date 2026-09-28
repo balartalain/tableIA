@@ -44,7 +44,7 @@
             }
           }
         },
-        colors: ['#7c3aed'],
+        colors: ['#7c3aed', '#2563eb', '#f5a623', '#10b981', '#ef4444', '#0ea5e9'],
         stroke: { curve: 'smooth', width: 3 },
         series,
         xaxis: { categories, labels: { style: { fontSize: '11px' } } },

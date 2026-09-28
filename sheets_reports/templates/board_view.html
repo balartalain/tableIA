@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ dashboard.title }} — Report IA{% endblock %}
+{% block title %}{{ dashboard.nombre }} — Report IA{% endblock %}
 
 {% block header %}
 <header class="border-b border-line bg-header text-white">
   <div class="mx-auto px-6 h-16 flex items-center justify-between">
     <div class="flex items-center gap-2">
-      <span class="font-sans font-semibold text-lg tracking-tight">{{ dashboard.title }}</span>
+      <span class="font-sans font-semibold text-lg tracking-tight">{{ dashboard.nombre }}</span>
     </div>
   </div>
 </header>
@@ -21,7 +21,8 @@
 </div>
 
 <script>
-  window.DASHBOARD_ID = {{ board_id }};
+  window.DASHBOARD_ID = {{ dashboard.id }};
+  window.REFRESH_MINUTES = {{ refresh_minutes|default:0 }};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@6.4.0/dist/apexcharts.min.js"></script>
 <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
@@ -35,7 +36,6 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/line-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/donut-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/kpi-widget.js' %}"></script>
-<script src="{% static 'sheets_reports/js/board_editor/widgets/filter-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/table-widget.js' %}"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/board-view-init.js' %}"></script>

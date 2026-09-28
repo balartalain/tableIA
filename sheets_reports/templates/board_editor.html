@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Report IA — Editor de tablero{% endblock %}
+{% block title %}{{ dashboard.nombre }} — Editor de tablero{% endblock %}
 
 {% block header_actions %}{% endblock %}
 
@@ -26,14 +26,6 @@
     opacity: 0.5;
     min-height: 10px !important;
     grid-column: span var(--ghost-span, 6) / span var(--ghost-span, 6) !important;
-  }
-  pre[class*="language-"] {
-    margin: 0;
-    padding: 0.5rem 0.75rem;
-    background: transparent;
-  }
-  code[class*="language-"] {
-    text-shadow: none;
   }
  .toolbar-sticky {
   background: rgba(255, 255, 255, 0.75);
@@ -72,14 +64,6 @@
         <i class="ti ti-logout" aria-hidden="true"></i>
         Salir del editor
       </button>
-      <button onclick="Alpine.store('dashboard').openUtilsPanel()" class="bg-white border border-line hover:bg-paper text-ink/70 py-2.5 px-4 rounded-xl font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
-        <i class="ti ti-code text-sm" aria-hidden="true"></i>
-        Funciones utilitarias
-      </button>
-      <button onclick="Alpine.store('dashboard').openCalcColsPanel()" class="bg-white border border-line hover:bg-paper text-ink/70 py-2.5 px-4 rounded-xl font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
-        <i class="ti ti-table-plus text-sm" aria-hidden="true"></i>
-        Columnas calculadas
-      </button>
       <button id="share-btn" class="bg-white border border-line hover:bg-paper text-ink/70 py-2.5 px-4 rounded-xl font-medium text-sm transition cursor-pointer">
         Compartir
       </button>
@@ -106,11 +90,17 @@
       <button x-on:click="$store.dashboard.closeDrawer()" class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
     </div>
 
+    <div x-show="$store.dashboard.drawerSpecError" x-cloak role="alert"
+         class="mb-4 flex items-start gap-2 rounded-lg border border-clay-300 bg-clay-50 px-3 py-2 text-xs text-clay-600">
+      <i class="ti ti-alert-triangle text-sm mt-px" aria-hidden="true"></i>
+      <span x-text="$store.dashboard.drawerSpecError"></span>
+    </div>
+
     <div class="grid grid-cols-2 gap-x-3 gap-y-4">
       <template x-for="field in $store.dashboard.drawerFields" :key="field.key">
-        <template x-if="field.key !== 'code'">
-          <div x-bind:class="(field.key === 'title' || field.type === 'textarea') ? 'col-span-2' : 'col-span-1'">
-            <template x-if="field.type !== 'textarea'">
+        <template x-if="field.type !== 'builder' || $store.dashboard.drawerDraft.builder">
+          <div x-bind:class="(field.key === 'title' || field.type === 'textarea' || field.type === 'builder') ? 'col-span-2' : 'col-span-1'">
+            <template x-if="field.type !== 'textarea' && field.type !== 'builder'">
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs font-semibold text-ink/70" x-text="field.label"></label>
               </div>
@@ -139,61 +129,155 @@
             </template>
 
             <template x-if="field.type === 'textarea'">
-              <div class="rounded-xl border border-moss-100 bg-moss-tint p-3 space-y-3">
+              <div class="rounded-xl border border-moss-100 bg-moss-tint p-3 space-y-2">
                 <div class="flex items-center gap-1.5 text-xs font-semibold text-moss-700">
                   <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
-                  <span>Generado con IA</span>
+                  <span x-text="$store.dashboard.drawerDraft.builder ? 'Regenerar con IA' : 'Generar con IA'"></span>
                 </div>
+                <textarea x-model="$store.dashboard.drawerDraft[field.key]" rows="3"
+                          placeholder="Describe qué debe mostrar este widget (ej. total de ventas por categoría y por mes, solo 2026)"
+                          class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500"></textarea>
+                <button type="button" x-show="field.generatable"
+                        x-on:click="$store.dashboard.generateWidgetSpec()"
+                        x-bind:disabled="$store.dashboard.drawerGenerating || !$store.dashboard.drawerDraft[field.key]"
+                        class="w-full text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
+                  <i class="ti text-base" x-bind:class="$store.dashboard.drawerGenerating ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
+                  <span x-text="$store.dashboard.drawerGenerating ? 'Generando…' : 'Generar con IA'"></span>
+                </button>
+                <p x-show="$store.dashboard.drawerGenerateError" x-text="$store.dashboard.drawerGenerateError"
+                   class="text-xs text-red-600"></p>
+                <p x-show="$store.dashboard.editingWidget && $store.dashboard.editingWidget.source_prompt" class="text-[11px] text-ink/50">
+                  Último pedido: <span class="italic" x-text="$store.dashboard.editingWidget && $store.dashboard.editingWidget.source_prompt"></span>
+                </p>
+              </div>
+            </template>
 
-                <div>
-                  <label class="block text-xs font-semibold text-ink/70 mb-1" x-text="field.label"></label>
-                  <textarea x-model="$store.dashboard.drawerDraft[field.key]" rows="4"
-                            placeholder="Describe qué debe mostrar este widget (ej. gráfico de barras con el total de ventas por mes, usando la pestaña 'Ventas')"
-                            class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500"></textarea>
-                  <button type="button" x-show="field.generatable"
-                          x-on:click="$store.dashboard.generateWidgetCode()"
-                          x-bind:disabled="$store.dashboard.drawerGenerating || !$store.dashboard.drawerDraft[field.key]"
-                          class="mt-2 w-full text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
-                    <i class="ti text-base" x-bind:class="$store.dashboard.drawerGenerating ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
-                    <span x-text="$store.dashboard.drawerGenerating ? 'Generando…' : 'Generar con IA'"></span>
-                  </button>
-                  <p x-show="$store.dashboard.drawerGenerateError" x-text="$store.dashboard.drawerGenerateError"
-                     class="mt-1 text-xs text-red-600"></p>
+            <template x-if="field.type === 'builder'">
+              <div class="rounded-xl border border-line p-3 space-y-3">
+                <div class="flex items-center gap-1.5 text-xs font-semibold text-ink/70">
+                  <i class="ti ti-adjustments-horizontal text-sm" aria-hidden="true"></i>
+                  <span>Constructor de datos (sin IA)</span>
+                </div>
+                <p x-show="$store.dashboard.schemaError" x-text="$store.dashboard.schemaError" class="text-[11px] text-red-600"></p>
+                <p x-show="!$store.dashboard.schemaError && !($store.dashboard.schema.all_fields || []).length" class="text-[11px] text-ink/50">
+                  Cargando columnas de la hoja…
+                </p>
 
-                  <div class="mt-2">
-                    <button type="button" x-on:click="$store.dashboard.drawerUtilsOpen = !$store.dashboard.drawerUtilsOpen"
-                            class="w-full flex items-center justify-between text-xs font-medium text-moss-700 hover:text-moss-800 py-1 cursor-pointer">
-                      <span class="flex items-center gap-1">
-                        <i class="ti ti-list-details text-sm" aria-hidden="true"></i>
-                        Funciones disponibles
-                      </span>
-                      <i class="ti text-sm" x-bind:class="$store.dashboard.drawerUtilsOpen ? 'ti-chevron-up' : 'ti-chevron-down'" aria-hidden="true"></i>
-                    </button>
-                    <div x-show="$store.dashboard.drawerUtilsOpen" class="space-y-1.5 mt-2 max-h-48 overflow-auto">
-                      <template x-for="u in $store.dashboard.availableUtils" :key="u.origin + ':' + u.name">
-                        <div class="border border-line rounded-lg p-2 bg-white">
-                          <div class="flex items-center gap-2 flex-wrap">
-                            <span class="text-xs font-mono font-semibold text-ink" x-text="u.name + u.signature"></span>
-                            <span class="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0"
-                                  x-bind:class="u.origin === 'custom' ? 'text-moss-700 bg-moss-tint' : 'text-ink/50 bg-line'"
-                                  x-text="u.category"></span>
-                          </div>
-                          <p class="text-[11px] text-ink/50 mt-0.5" x-text="u.description"></p>
-                        </div>
+                <!-- 1-2. Agrupación y pivote (el KPI es un único total: no agrupa) -->
+                <div class="grid grid-cols-2 gap-2" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
+                  <div>
+                    <label class="block text-[11px] font-semibold text-ink/60 mb-1">Agrupar por</label>
+                    <select x-model="$store.dashboard.drawerDraft.builder.dimension" x-on:change="$store.dashboard.onDimensionChange()"
+                            class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                      <template x-for="f in $store.dashboard.dimensionOptions" :key="f">
+                        <option x-bind:value="f" x-text="f" x-bind:selected="f === $store.dashboard.drawerDraft.builder.dimension"></option>
                       </template>
-                      <p x-show="!$store.dashboard.availableUtils.length" class="text-xs text-ink/40 italic">
-                        No hay funciones disponibles todavía.
-                      </p>
-                    </div>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-text="$store.dashboard.pivotLabel"></label>
+                    <select x-model="$store.dashboard.drawerDraft.builder.pivot" x-bind:disabled="!$store.dashboard.drawerWidgetClass.supportsPivot"
+                            class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                      <option value="">Sin agrupar</option>
+                      <template x-for="f in $store.dashboard.pivotOptions" :key="f">
+                        <option x-bind:value="f" x-text="f" x-bind:selected="f === $store.dashboard.drawerDraft.builder.pivot"></option>
+                      </template>
+                    </select>
                   </div>
                 </div>
 
+                <!-- 3. Apiladas: solo barras con pivote -->
+                <label x-show="$store.dashboard.showStacked" class="flex items-center gap-2 text-xs font-semibold text-ink/70">
+                  <input type="checkbox" x-model="$store.dashboard.drawerDraft.builder.stacked" class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+                  Apiladas en vez de lado a lado
+                </label>
+
+                <!-- 4. Métricas -->
                 <div>
-                  <label class="block text-xs font-semibold text-ink/70 mb-1">Código generado</label>
-                  <pre class="w-full text-xs font-mono border border-line rounded-lg bg-white max-h-64 overflow-auto"><code
-                      class="language-python"
-                      x-effect="$el.textContent = $store.dashboard.drawerDraft.code || ''; Prism.highlightElement($el)"></code></pre>
+                  <label class="block text-[11px] font-semibold text-ink/60 mb-1">Métricas</label>
+                  <div class="space-y-1.5">
+                    <template x-for="(m, i) in $store.dashboard.drawerDraft.builder.metrics" :key="i">
+                      <div class="flex items-center gap-1.5">
+                        <select x-model="m.agg" class="w-28 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                          <template x-for="a in $store.dashboard.aggOptions" :key="a.value">
+                            <option x-bind:value="a.value" x-text="a.label" x-bind:selected="a.value === m.agg"></option>
+                          </template>
+                        </select>
+                        <template x-if="m.agg !== 'count'">
+                          <select x-model="m.field" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                            <option value="">Elige una columna numérica…</option>
+                            <template x-for="f in $store.dashboard.numericFieldOptions(m.field)" :key="f">
+                              <option x-bind:value="f" x-text="f" x-bind:selected="f === m.field"></option>
+                            </template>
+                          </select>
+                        </template>
+                        <template x-if="m.agg === 'count'">
+                          <span class="flex-1 min-w-0 text-sm text-ink/60 border border-dashed border-line rounded-lg px-2 py-1.5">Cantidad de filas</span>
+                        </template>
+                        <button type="button" x-on:click="$store.dashboard.removeBuilderMetric(i)"
+                                x-bind:disabled="$store.dashboard.drawerDraft.builder.metrics.length <= 1"
+                                class="text-ink/40 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-ink/40 transition cursor-pointer px-1.5 text-base leading-none"
+                                title="Quitar métrica" aria-label="Quitar métrica">×</button>
+                      </div>
+                    </template>
+                  </div>
+                  <button type="button" x-show="$store.dashboard.maxMetrics > 1"
+                          x-on:click="$store.dashboard.addBuilderMetric()"
+                          x-bind:disabled="$store.dashboard.drawerDraft.builder.metrics.length >= $store.dashboard.maxMetrics"
+                          class="mt-1.5 text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1">
+                    <i class="ti ti-plus text-sm" aria-hidden="true"></i>
+                    <span x-text="$store.dashboard.drawerDraft.builder.metrics.length >= $store.dashboard.maxMetrics ? `Máximo ${$store.dashboard.maxMetrics} métricas` : 'Agregar métrica'"></span>
+                  </button>
                 </div>
+
+                <div class="grid grid-cols-2 gap-2" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
+                  <div>
+                    <label class="block text-[11px] font-semibold text-ink/60 mb-1">Ordenar por</label>
+                    <select x-model="$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                      <option value="">Orden de la hoja</option>
+                      <template x-for="o in $store.dashboard.sortOptions" :key="o.value">
+                        <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.drawerDraft.builder.sortBy"></option>
+                      </template>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold text-ink/60 mb-1">Dirección</label>
+                    <select x-model="$store.dashboard.drawerDraft.builder.sortDir" x-bind:disabled="!$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                      <option value="desc">Mayor a menor</option>
+                      <option value="asc">Menor a mayor</option>
+                    </select>
+                  </div>
+                </div>
+
+                <p x-show="($store.dashboard.drawerSpecs.data_spec?.filters || []).length" class="text-[11px] text-ink/50">
+                  Filtros del widget:
+                  <span x-text="($store.dashboard.drawerSpecs.data_spec?.filters || []).map(f => `${f.field} ${f.op} ${JSON.stringify(f.value)}`).join(' · ')"></span>
+                </p>
+
+                <!-- 5. Aplicar: PUT /api/widget/<id>/spec/, nunca llama a la IA -->
+                <button type="button" x-on:click="$store.dashboard.applyBuilder()"
+                        x-bind:disabled="$store.dashboard.drawerApplying || !$store.dashboard.builderDirty"
+                        class="w-full text-sm font-medium text-moss-700 border border-moss-300 hover:bg-moss-tint disabled:opacity-40 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
+                  <i class="ti text-base" x-bind:class="$store.dashboard.drawerApplying ? 'ti-loader-2 animate-spin' : 'ti-check'" aria-hidden="true"></i>
+                  <span x-text="$store.dashboard.drawerApplying ? 'Aplicando…' : ($store.dashboard.editingId < 0 ? 'Crear widget con estos datos' : 'Aplicar al widget seleccionado')"></span>
+                </button>
+
+                <!-- 7. Visor JSON de solo lectura -->
+                <details class="text-[11px]">
+                  <summary class="cursor-pointer text-ink/50 hover:text-ink/70 select-none">Ver JSON del widget</summary>
+                  <div class="mt-2 space-y-2">
+                    <div>
+                      <div class="font-semibold text-ink/60 mb-0.5">data_spec</div>
+                      <pre class="font-mono text-[11px] bg-paper border border-line rounded-lg p-2 max-h-56 overflow-auto whitespace-pre"
+                           x-text="JSON.stringify($store.dashboard.drawerSpecs.data_spec, null, 2)"></pre>
+                    </div>
+                    <div>
+                      <div class="font-semibold text-ink/60 mb-0.5">view_spec</div>
+                      <pre class="font-mono text-[11px] bg-paper border border-line rounded-lg p-2 max-h-56 overflow-auto whitespace-pre"
+                           x-text="JSON.stringify($store.dashboard.drawerSpecs.view_spec, null, 2)"></pre>
+                    </div>
+                  </div>
+                </details>
               </div>
             </template>
 
@@ -231,291 +315,26 @@
       </template>
     </div>
 
+    <p x-show="$store.dashboard.drawerSaveError" x-text="$store.dashboard.drawerSaveError" class="mt-4 text-xs text-red-600"></p>
     <div class="pt-4 border-t border-line mt-6 flex space-x-2">
       <button x-on:click="$store.dashboard.closeDrawer()" class="flex-1 text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-lg py-2 transition cursor-pointer">Cancelar</button>
-      <button x-on:click="$store.dashboard.saveDrawer()" class="flex-1 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-lg py-2 transition cursor-pointer">Guardar</button>
+      <button x-on:click="$store.dashboard.saveDrawer()" x-bind:disabled="$store.dashboard.drawerSaving"
+              class="flex-1 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-lg py-2 transition cursor-pointer"
+              x-text="$store.dashboard.drawerSaving ? 'Guardando…' : 'Guardar'"></button>
     </div>
-  </div>
-</div>
-
-<div id="utils-overlay" x-data x-show="$store.dashboard.utilsOpen" x-on:click="$store.dashboard.closeUtilsPanel()" x-cloak
-     class="fixed inset-0 bg-ink/20 z-40" x-transition.opacity></div>
-
-<div id="utils-drawer" x-data
-     x-bind:class="$store.dashboard.utilsOpen ? 'translate-x-0' : 'translate-x-full'"
-     class="fixed top-0 right-0 h-full w-[34rem] max-w-[90vw] bg-white shadow-xl border-l border-line z-50 transition-transform duration-300 overflow-y-auto">
-  <div class="p-5">
-    <div class="flex justify-between items-center mb-6">
-      <h3 class="text-sm font-bold text-ink">Funciones utilitarias del tablero</h3>
-      <button x-on:click="$store.dashboard.closeUtilsPanel()" class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
-    </div>
-
-    <p class="text-xs text-ink/50 mb-4">
-      Funciones reutilizables (filtros, columnas calculadas, formato) que el código de
-      cualquier widget de este tablero puede llamar directamente por su nombre.
-    </p>
-
-    <h4 class="text-[11px] font-semibold text-ink/40 uppercase tracking-wide mb-2">Personalizadas</h4>
-    <div class="space-y-2 mb-3">
-      <template x-for="u in $store.dashboard.customUtils" :key="u.id">
-        <div class="border border-line rounded-lg p-3">
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-sm font-mono font-semibold text-ink" x-text="u.name"></span>
-                <span class="text-[10px] uppercase tracking-wide text-moss-700 bg-moss-tint px-1.5 py-0.5 rounded"
-                      x-text="u.category"></span>
-              </div>
-              <p class="text-xs text-ink/60 mt-1" x-text="u.description"></p>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <button type="button" x-on:click="$store.dashboard.editUtilDraft(u)"
-                      class="text-ink/40 hover:text-moss-600 transition cursor-pointer" title="Editar">
-                <i class="ti ti-pencil text-sm" aria-hidden="true"></i>
-              </button>
-              <button type="button" x-on:click="$store.dashboard.deleteUtil(u)"
-                      class="text-ink/40 hover:text-red-600 transition cursor-pointer" title="Eliminar">
-                <i class="ti ti-trash text-sm" aria-hidden="true"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-      </template>
-      <p x-show="!$store.dashboard.customUtils.length" class="text-xs text-ink/40 italic">
-        Todavía no hay funciones personalizadas en este tablero.
-      </p>
-    </div>
-
-    <button type="button" x-show="!$store.dashboard.utilDraft" x-on:click="$store.dashboard.newUtilDraft()"
-            class="w-full text-sm font-medium text-moss-700 border border-dashed border-moss-300 hover:bg-moss-tint rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5 mb-4">
-      <i class="ti ti-plus text-base" aria-hidden="true"></i>
-      Nueva función
-    </button>
-
-    <template x-if="$store.dashboard.utilDraft">
-      <div class="rounded-xl border border-moss-100 bg-moss-tint p-3 space-y-3 mb-4">
-        <div class="flex items-center gap-1.5 text-xs font-semibold text-moss-700">
-          <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
-          <span>Generado con IA</span>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-ink/70 mb-1">Descripción para IA</label>
-          <textarea x-model="$store.dashboard.utilDraft.prompt" rows="3"
-                    placeholder="Describe la función (ej. add_nivel_column(df) que agregue la columna Nivel a partir de 'Período que está cursando')"
-                    class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500"></textarea>
-          <button type="button"
-                  x-on:click="$store.dashboard.generateUtil()"
-                  x-bind:disabled="$store.dashboard.utilGenerating || !$store.dashboard.utilDraft.prompt"
-                  class="mt-2 w-full text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
-            <i class="ti text-base" x-bind:class="$store.dashboard.utilGenerating ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
-            <span x-text="$store.dashboard.utilGenerating ? 'Generando…' : 'Generar con IA'"></span>
-          </button>
-          <p x-show="$store.dashboard.utilGenerateError" x-text="$store.dashboard.utilGenerateError"
-             class="mt-1 text-xs text-red-600"></p>
-        </div>
-
-        <template x-if="$store.dashboard.utilDraft.source_code">
-          <div class="space-y-2">
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="block text-xs font-semibold text-ink/70 mb-1">Nombre</label>
-                <input type="text" x-model="$store.dashboard.utilDraft.name"
-                       class="w-full text-sm font-mono border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
-              </div>
-              <div>
-                <label class="block text-xs font-semibold text-ink/70 mb-1">Categoría</label>
-                <input type="text" x-model="$store.dashboard.utilDraft.category"
-                       class="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-ink/70 mb-1">Descripción</label>
-              <textarea x-model="$store.dashboard.utilDraft.description" rows="2"
-                        class="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500"></textarea>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-ink/70 mb-1">Código generado</label>
-              <pre class="w-full text-xs font-mono border border-line rounded-lg bg-white max-h-56 overflow-auto"><code
-                  class="language-python"
-                  x-effect="$el.textContent = $store.dashboard.utilDraft.source_code || ''; Prism.highlightElement($el)"></code></pre>
-            </div>
-          </div>
-        </template>
-
-        <div class="flex gap-2 pt-1">
-          <button type="button" x-on:click="$store.dashboard.cancelUtilDraft()"
-                  class="flex-1 text-sm font-medium text-ink/60 bg-white border border-line hover:bg-paper rounded-lg py-2 transition cursor-pointer">Cancelar</button>
-          <button type="button" x-on:click="$store.dashboard.saveUtilDraft()"
-                  x-bind:disabled="!$store.dashboard.utilDraft.source_code"
-                  class="flex-1 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer">Guardar</button>
-        </div>
-      </div>
-    </template>
-
-    <div class="pt-4 border-t border-line">
-      <button type="button" x-on:click="$store.dashboard.systemUtilsOpen = !$store.dashboard.systemUtilsOpen"
-              class="w-full flex items-center justify-between text-[11px] font-semibold text-ink/40 uppercase tracking-wide py-1 cursor-pointer">
-        <span>Sistema (siempre disponibles, no editables)</span>
-        <i class="ti text-sm normal-case" x-bind:class="$store.dashboard.systemUtilsOpen ? 'ti-chevron-up' : 'ti-chevron-down'" aria-hidden="true"></i>
-      </button>
-      <div x-show="$store.dashboard.systemUtilsOpen" class="space-y-2 mt-2">
-        <template x-for="u in $store.dashboard.systemUtils" :key="u.name">
-          <div class="border border-line rounded-lg p-3 bg-paper/50">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-sm font-mono font-semibold text-ink" x-text="u.name"></span>
-              <span class="text-[10px] uppercase tracking-wide text-ink/50 bg-line px-1.5 py-0.5 rounded"
-                    x-text="u.category"></span>
-            </div>
-            <p class="text-xs text-ink/60 mt-1" x-text="u.description"></p>
-          </div>
-        </template>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="calc-cols-overlay" x-data x-show="$store.dashboard.calcColsOpen" x-on:click="$store.dashboard.closeCalcColsPanel()" x-cloak
-     class="fixed inset-0 bg-ink/20 z-40" x-transition.opacity></div>
-
-<div id="calc-cols-drawer" x-data
-     x-bind:class="$store.dashboard.calcColsOpen ? 'translate-x-0' : 'translate-x-full'"
-     class="fixed top-0 right-0 h-full w-[34rem] max-w-[90vw] bg-white shadow-xl border-l border-line z-50 transition-transform duration-300 overflow-y-auto">
-  <div class="p-5">
-    <div class="flex justify-between items-center mb-6">
-      <h3 class="text-sm font-bold text-ink">Columnas calculadas</h3>
-      <button x-on:click="$store.dashboard.closeCalcColsPanel()" class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
-    </div>
-
-    <p class="text-xs text-ink/50 mb-4">
-      Columnas derivadas de otra columna mediante una expresión SQL (ej. clasificar un texto
-      libre en categorías). Se agregan automáticamente a los datos de la tabla elegida —
-      visibles para <strong>todos los tableros</strong> que usen el mismo origen de datos, no
-      solo este.
-    </p>
-
-    <div class="space-y-4 mb-3" x-show="Object.keys($store.dashboard.calculatedColumnsByTable).length">
-      <template x-for="tableName in Object.keys($store.dashboard.calculatedColumnsByTable)" :key="tableName">
-        <div>
-          <h4 class="text-[11px] font-semibold text-ink/40 uppercase tracking-wide mb-2" x-text="tableName"></h4>
-          <div class="space-y-2">
-            <template x-for="cc in $store.dashboard.calculatedColumnsByTable[tableName]" :key="cc.id">
-              <div class="border border-line rounded-lg p-3" x-bind:class="!cc.is_active ? 'opacity-50' : ''">
-                <div class="flex items-start justify-between gap-2">
-                  <div class="min-w-0">
-                    <span class="text-sm font-mono font-semibold text-ink" x-text="cc.column_name"></span>
-                    <p class="text-xs text-ink/60 mt-1" x-text="cc.description"></p>
-                  </div>
-                  <div class="flex items-center gap-2 shrink-0">
-                    <button type="button" x-on:click="$store.dashboard.editCalcColDraft(cc)"
-                            class="text-ink/40 hover:text-moss-600 transition cursor-pointer" title="Editar">
-                      <i class="ti ti-pencil text-sm" aria-hidden="true"></i>
-                    </button>
-                    <button type="button" x-on:click="$store.dashboard.deleteCalcCol(cc)"
-                            class="text-ink/40 hover:text-red-600 transition cursor-pointer" title="Eliminar">
-                      <i class="ti ti-trash text-sm" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </template>
-    </div>
-    <p x-show="!Object.keys($store.dashboard.calculatedColumnsByTable).length" class="text-xs text-ink/40 italic mb-3">
-      Todavía no hay columnas calculadas en el origen de datos de este tablero.
-    </p>
-
-    <button type="button" x-show="!$store.dashboard.calcColDraft" x-on:click="$store.dashboard.newCalcColDraft()"
-            class="w-full text-sm font-medium text-moss-700 border border-dashed border-moss-300 hover:bg-moss-tint rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5 mb-4">
-      <i class="ti ti-plus text-base" aria-hidden="true"></i>
-      Nueva columna calculada
-    </button>
-
-    <template x-if="$store.dashboard.calcColDraft">
-      <div class="rounded-xl border border-moss-100 bg-moss-tint p-3 space-y-3 mb-4">
-        <div class="flex items-center gap-1.5 text-xs font-semibold text-moss-700">
-          <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
-          <span>Generado con IA</span>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-ink/70 mb-1">Tabla</label>
-          <select x-model="$store.dashboard.calcColDraft.table_name"
-                  x-bind:disabled="!!$store.dashboard.calcColDraft.id"
-                  class="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-60">
-            <option value="">Elegí una tabla…</option>
-            <template x-for="t in $store.dashboard.availableTables" :key="t.table_name">
-              <option x-bind:value="t.table_name" x-text="t.table_name"></option>
-            </template>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-ink/70 mb-1">Descripción para IA</label>
-          <textarea x-model="$store.dashboard.calcColDraft.prompt" rows="3"
-                    placeholder="Describe la columna (ej. Nivel: clasificar 'Período que está cursando' en Nuevo Ingreso/Regular/Termino)"
-                    class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500"></textarea>
-          <button type="button"
-                  x-on:click="$store.dashboard.generateCalcCol()"
-                  x-bind:disabled="$store.dashboard.calcColGenerating || !$store.dashboard.calcColDraft.prompt || !$store.dashboard.calcColDraft.table_name"
-                  class="mt-2 w-full text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
-            <i class="ti text-base" x-bind:class="$store.dashboard.calcColGenerating ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
-            <span x-text="$store.dashboard.calcColGenerating ? 'Generando…' : 'Generar con IA'"></span>
-          </button>
-          <p x-show="$store.dashboard.calcColGenerateError" x-text="$store.dashboard.calcColGenerateError"
-             class="mt-1 text-xs text-red-600"></p>
-        </div>
-
-        <template x-if="$store.dashboard.calcColDraft.expression">
-          <div class="space-y-2">
-            <div>
-              <label class="block text-xs font-semibold text-ink/70 mb-1">Nombre de la columna</label>
-              <input type="text" x-model="$store.dashboard.calcColDraft.column_name"
-                     class="w-full text-sm font-mono border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-ink/70 mb-1">Descripción</label>
-              <textarea x-model="$store.dashboard.calcColDraft.description" rows="2"
-                        class="w-full text-sm border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500"></textarea>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-ink/70 mb-1">Expresión SQL generada</label>
-              <pre class="w-full text-xs font-mono border border-line rounded-lg bg-white max-h-56 overflow-auto"><code
-                  class="language-sql"
-                  x-effect="$el.textContent = $store.dashboard.calcColDraft.expression || ''; Prism.highlightElement($el)"></code></pre>
-            </div>
-          </div>
-        </template>
-
-        <div class="flex gap-2 pt-1">
-          <button type="button" x-on:click="$store.dashboard.cancelCalcColDraft()"
-                  class="flex-1 text-sm font-medium text-ink/60 bg-white border border-line hover:bg-paper rounded-lg py-2 transition cursor-pointer">Cancelar</button>
-          <button type="button" x-on:click="$store.dashboard.saveCalcColDraft()"
-                  x-bind:disabled="!$store.dashboard.calcColDraft.expression"
-                  class="flex-1 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer">Guardar</button>
-        </div>
-      </div>
-    </template>
   </div>
 </div>
 
 <script>
-  window.DASHBOARD_ID = {{ board_id }};
-  window.DASHBOARD_SLUG = "{{ dashboard.slug }}";
-  window.SHARE_PATH = "{% url 'board_view' board_slug=dashboard.slug %}";
+  window.DASHBOARD_ID = {{ dashboard.id }};
+  window.SHARE_PATH = "{% url 'board_view' dashboard_id=dashboard.id %}";
+  window.REFRESH_MINUTES = {{ refresh_minutes|default:0 }};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@6.4.0/dist/apexcharts.min.js"></script>
 <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
 <link href="{% static 'sheets_reports/css/tabulator.css' %}" rel="stylesheet">
 <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
-
-<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/base-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widget-registry.js' %}"></script>
@@ -524,7 +343,6 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/line-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/donut-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/kpi-widget.js' %}"></script>
-<script src="{% static 'sheets_reports/js/board_editor/widgets/filter-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/table-widget.js' %}"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>

@@ -6,7 +6,7 @@
 
 <script>
   window.URLS = {
-    boardEditor: "{% url 'board_editor' board_slug='__SLUG__' %}",
+    boardEditor: "{% url 'board_editor' dashboard_id=0 %}",
   };
 </script>
 
@@ -19,31 +19,7 @@
       <p class="text-sm text-ink/60 mt-1">Reportes conectados a tus hojas de cálculo de Google Sheets.</p>
     </div>
 
-    <section class="bg-white border border-moss-500 rounded-xl p-5 sm:p-6 shadow-sm">
-        <textarea id="prompt-input" rows="4" placeholder="Ej: Crea un dashboard de ventas con un gráfico de barras por región, un KPI de total vendido y una tabla con el detalle por vendedor." class="w-full resize-none border-0 px-1 pt-1 text-base text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-0"></textarea>
-
-        <div class="flex items-center justify-between mt-2 flex-wrap gap-3">
-          <div class="flex items-center gap-3">
-            <button id="link-btn" @click="showConnectSheetModal = true; connectSheetUrl = connectedSheetUrl || ''"
-                    :title="connectedSheetUrl"
-                    class="inline-flex items-center gap-2 text-sm font-medium rounded-full px-4 py-2 transition"
-                    :class="connectedSheetUrl ? 'text-moss-700 bg-moss-tint hover:bg-moss-100' : 'text-slate-600 bg-slate-100 hover:bg-slate-200'">
-              <svg x-show="!connectedSheetUrl" viewBox="0 0 24 24" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-              <i x-show="connectedSheetUrl" x-cloak class="ti ti-circle-check-filled text-base text-moss-600" aria-hidden="true"></i>
-              <span id="link-btn-text" x-text="connectedSheetUrl ? 'Hoja conectada' : 'Conectar hoja'"></span>
-            </button>
-            <span x-show="generating" x-cloak class="text-sm text-moss-600 font-medium animate-pulse" x-text="generationStatus"></span>
-          </div>
-
-          <button id="run" @click="generateBoard" :disabled="generating" aria-label="Generar tablero" class="w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition shadow-sm"
-            :class="generating ? 'bg-moss-400 cursor-wait' : 'bg-moss-500 hover:bg-moss-600 text-white'">
-            <svg x-show="!generating" viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
-            <svg x-show="generating" x-cloak class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-          </button>
-        </div>
-    </section>
-
-    <div class="mt-auto pt-8">
+    <div>
 
     <div class="flex items-center justify-between mb-4">
       <div class="relative">
@@ -51,7 +27,13 @@
         <input x-model="search" type="text" placeholder="Buscar tablero..."
                class="w-56 border border-line rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
       </div>
+      <button @click="showNewDashboardModal = true"
+              class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-2 transition">
+        <i class="ti ti-plus text-base" aria-hidden="true"></i>Nuevo tablero
+      </button>
     </div>
+
+    <div x-show="loadError" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3" x-text="loadError"></div>
 
     <div x-show="filteredDashboards.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
@@ -63,7 +45,7 @@
 
       <template x-for="d in filteredDashboards" :key="d.id">
         <div class="bg-white border border-line rounded-xl p-5 hover:border-moss-300 hover:shadow-sm transition group relative">
-          <a :href="window.URLS.boardEditor.replace('__SLUG__', d.slug)" class="block">
+          <a :href="boardUrl(d)" class="block">
             <div class="flex items-start justify-between mb-4">
               <div class="w-9 h-9 rounded-lg bg-moss-50 flex items-center justify-center">
                 <i class="ti ti-layout-dashboard text-moss-600 text-lg" aria-hidden="true"></i>
@@ -72,10 +54,10 @@
                 <i class="ti ti-dots text-base" aria-hidden="true"></i>
               </button>
             </div>
-    <h3 class="font-sans font-semibold text-base mb-1 group-hover:text-moss-600 truncate" x-text="d.title"></h3>
+    <h3 class="font-sans font-semibold text-base mb-1 group-hover:text-moss-600 truncate" x-text="d.nombre"></h3>
     <p class="text-xs text-ink/50 mb-3" x-text="d.cardCount + ' tarjetas · editado ' + d.updated"></p>
     <span class="inline-flex items-center gap-1.5 text-[11px] font-mono text-ink/50 bg-paper px-2 py-1 rounded border border-line">
-      <i class="ti ti-table text-sm" aria-hidden="true"></i><span x-text="d.sheetName"></span>
+      <i class="ti ti-table text-sm" aria-hidden="true"></i><span x-text="sheetLabel(d)"></span>
     </span>
           </a>
 
@@ -96,7 +78,7 @@
 
     </div>
 
-    <div x-show="dashboards.length === 0" x-cloak class="text-center py-20">
+    <div x-show="dashboards.length === 0 && !loadError" x-cloak class="text-center py-20">
       <div class="w-14 h-14 rounded-2xl bg-moss-50 flex items-center justify-center mx-auto mb-4">
         <i class="ti ti-layout-dashboard text-moss-600 text-2xl" aria-hidden="true"></i>
       </div>
@@ -116,37 +98,6 @@
 
   </main>
 
-  <div x-show="showConnectSheetModal" x-cloak
-       class="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
-       style="display:none;">
-    <div @click.outside="showConnectSheetModal = false"
-         x-show="showConnectSheetModal" x-transition
-         class="bg-white rounded-2xl w-full max-w-md border border-line shadow-xl">
-
-      <div class="px-6 pt-6 pb-4 border-b border-line">
-        <h2 class="font-sans text-lg font-semibold">Conectar hoja de Google Sheets</h2>
-        <p class="text-sm text-ink/50 mt-0.5">Pega el enlace de la hoja que quieres usar como fuente de datos.</p>
-      </div>
-
-      <div class="px-6 py-5">
-        <label class="block text-xs font-medium text-ink/60 mb-1.5">URL de Google Sheets</label>
-        <input x-model="connectSheetUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."
-               class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
-      </div>
-
-      <div class="px-6 py-4 border-t border-line flex justify-end gap-2">
-        <button @click="showConnectSheetModal = false"
-                class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-lg transition">Cancelar</button>
-        <button @click="confirmConnectSheet()"
-                :disabled="!connectSheetUrl"
-                :class="!connectSheetUrl ? 'opacity-40 cursor-not-allowed' : 'hover:bg-moss-600'"
-                class="px-4 py-2 text-sm font-medium text-white bg-moss-500 rounded-lg transition">
-          Conectar
-        </button>
-      </div>
-    </div>
-  </div>
-
   <div x-show="showNewDashboardModal" x-cloak
        class="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
        style="display:none;">
@@ -156,7 +107,7 @@
 
       <div class="px-6 pt-6 pb-4 border-b border-line">
         <h2 class="font-sans text-lg font-semibold">Nuevo tablero</h2>
-        <p class="text-sm text-ink/50 mt-0.5">Conecta una hoja de cálculo para empezar.</p>
+        <p class="text-sm text-ink/50 mt-0.5">Conecta una pestaña de una hoja de cálculo para empezar.</p>
       </div>
 
       <div class="px-6 py-5 space-y-5">
@@ -171,7 +122,10 @@
           <label class="block text-xs font-medium text-ink/60 mb-1.5">URL de Google Sheets</label>
           <input x-model="newDashboardUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."
                  class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
+          <p class="text-[11px] text-ink/50 mt-1">Abre la pestaña que quieres usar y copia la URL: incluye su <span class="font-mono">#gid=</span>.</p>
         </div>
+
+        <p x-show="formError" x-text="formError" class="text-xs text-red-600"></p>
 
       </div>
 
@@ -179,8 +133,8 @@
         <button @click="showNewDashboardModal = false; resetNewDashboardForm()"
                 class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-lg transition">Cancelar</button>
         <button @click="createDashboard()"
-                :disabled="!newDashboardName"
-                :class="!newDashboardName ? 'opacity-40 cursor-not-allowed' : 'hover:bg-moss-600'"
+                :disabled="!newDashboardName || !newDashboardUrl"
+                :class="!newDashboardName || !newDashboardUrl ? 'opacity-40 cursor-not-allowed' : 'hover:bg-moss-600'"
                 class="px-4 py-2 text-sm font-medium text-white bg-moss-500 rounded-lg transition">
           Crear tablero
         </button>
@@ -205,16 +159,17 @@
 
         <div>
           <label class="block text-xs font-medium text-ink/60 mb-1.5">Nombre del tablero</label>
-          <input x-model="editingDashboard.title" type="text" placeholder="Ej. Ventas región norte"
+          <input x-model="editingDashboard.nombre" type="text" placeholder="Ej. Ventas región norte"
                  class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
         </div>
 
         <div>
           <label class="block text-xs font-medium text-ink/60 mb-1.5">URL de Google Sheets</label>
-          <input x-model="editingDashboard.source_url" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."
+          <input x-model="editingDashboard.sheet_url" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."
                  class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
         </div>
 
+        <p x-show="formError" x-text="formError" class="text-xs text-red-600"></p>
       </div>
       </template>
 
@@ -222,8 +177,8 @@
         <button @click="showEditModal = false; editingDashboard = null"
                 class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-lg transition">Cancelar</button>
         <button @click="saveEdit()"
-                :disabled="!editingDashboard || !editingDashboard.title"
-                :class="!editingDashboard || !editingDashboard.title ? 'opacity-40 cursor-not-allowed' : 'hover:bg-moss-600'"
+                :disabled="!editingDashboard || !editingDashboard.nombre"
+                :class="!editingDashboard || !editingDashboard.nombre ? 'opacity-40 cursor-not-allowed' : 'hover:bg-moss-600'"
                 class="px-4 py-2 text-sm font-medium text-white bg-moss-500 rounded-lg transition">
           Guardar cambios
         </button>
@@ -234,50 +189,52 @@
 </div>
 
 <script>
-  // Generación de tableros con IA: cada cuánto se consulta el avance y cuánto se espera como
-  // máximo antes de darla por perdida (ej. si el servidor se reinició a mitad de camino).
-  const GENERATION_POLL_INTERVAL_MS = 2000;
-  const GENERATION_MAX_WAIT_MS = 10 * 60 * 1000;
-
   function homeApp() {
     return {
       search: '',
-      generating: false,
-      generationStatus: '',
       showNewDashboardModal: false,
       newDashboardName: '',
       newDashboardUrl: '',
+      formError: '',
+      loadError: '',
       openMenuId: null,
       dashboards: [],
 
       showEditModal: false,
       editingDashboard: null,
 
-      showConnectSheetModal: false,
-      connectSheetUrl: '',
-      connectedSheetUrl: null,
-
       get filteredDashboards() {
         if (!this.search.trim()) return this.dashboards;
         const q = this.search.toLowerCase();
-        return this.dashboards.filter(d => d.title.toLowerCase().includes(q));
+        return this.dashboards.filter(d => d.nombre.toLowerCase().includes(q));
       },
 
-      init() {
-        fetch(apiUrl('/api/dashboards/'))
-          .then(r => r.json())
-          .then(data => { this.dashboards = data; })
-          .catch(() => {});
+      async init() {
+        try {
+          const r = await fetch(apiUrl('/api/dashboards/'));
+          const data = await r.json().catch(() => null);
+          if (r.ok && Array.isArray(data)) {
+            this.dashboards = data;
+          } else {
+            this.loadError = (data && data.error) || 'No se pudieron cargar los tableros.';
+          }
+        } catch (e) {
+          this.loadError = 'No se pudo conectar con el servidor.';
+        }
+      },
+
+      boardUrl(d) {
+        return window.URLS.boardEditor.replace('/0/', `/${d.id}/`);
+      },
+
+      sheetLabel(d) {
+        const m = /\/spreadsheets\/d\/([^/]+)/.exec(d.sheet_url || '');
+        const id = m ? m[1] : d.sheet_url;
+        return `${id.slice(0, 12)}… · gid ${d.sheet_gid}`;
       },
 
       openMenu(id) {
         this.openMenuId = this.openMenuId === id ? null : id;
-      },
-
-      confirmConnectSheet() {
-        if (!this.connectSheetUrl.trim()) return;
-        this.connectedSheetUrl = this.connectSheetUrl.trim();
-        this.showConnectSheetModal = false;
       },
 
       deleteDashboard(id) {
@@ -301,109 +258,50 @@
       resetNewDashboardForm() {
         this.newDashboardName = '';
         this.newDashboardUrl = '';
+        this.formError = '';
       },
 
-      async generateBoard() {
-        if (!this.connectedSheetUrl) {
-          this.showConnectSheetModal = true;
-          return;
-        }
-        const promptEl = document.getElementById('prompt-input');
-        const prompt = (promptEl.value || '').trim();
-        if (!prompt) return;
-
-        this.generating = true;
-        this.generationStatus = 'La IA está diseñando tu tablero…';
-        try {
-          const r = await fetch(apiUrl('/api/dashboards/generate-from-prompt/'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, source_url: this.connectedSheetUrl }),
-          });
-          const startData = await r.json().catch(() => ({}));
-          if (!r.ok || !startData.job_id) {
-            throw new Error(startData.error || 'Error generando tablero');
-          }
-
-          // La generación corre en segundo plano en el servidor (puede tardar minutos, más de
-          // lo que aguanta una petición HTTP detrás del proxy), así que consultamos su avance
-          // con peticiones cortas hasta que termine.
-          const statusUrl = apiUrl(`/api/dashboards/generate-from-prompt/${startData.job_id}/`);
-          const deadline = Date.now() + GENERATION_MAX_WAIT_MS;
-          let finalDashboard = null;
-
-          while (!finalDashboard) {
-            if (Date.now() > deadline) throw new Error('La generación del tablero tardó demasiado. Intentá de nuevo.');
-            await new Promise(resolve => setTimeout(resolve, GENERATION_POLL_INTERVAL_MS));
-
-            let sr;
-            try {
-              sr = await fetch(statusUrl);
-            } catch (e) {
-              continue;  // falla de red puntual: reintentar en el próximo ciclo
-            }
-            if (sr.status === 404) throw new Error('Se perdió el estado de la generación del tablero');
-            const data = sr.ok ? await sr.json().catch(() => null) : null;
-            if (!data) continue;  // error puntual del servidor/proxy: reintentar en el próximo ciclo
-
-            if (data.event === 'plan') {
-              this.generationStatus = `Generando ${data.total} widget${data.total === 1 ? '' : 's'}…`;
-            } else if (data.event === 'widget_done') {
-              this.generationStatus = `Generando widgets… ${data.done}/${data.total} listos`;
-            } else if (data.event === 'done') {
-              finalDashboard = data.dashboard;
-            } else if (data.event === 'error') {
-              throw new Error(data.message || 'Error generando tablero');
-            }
-          }
-
-          window.location.href = window.URLS.boardEditor.replace('__SLUG__', finalDashboard.slug);
-        } catch (e) {
-          alert('Error: ' + e.message);
-        } finally {
-          this.generating = false;
-          this.generationStatus = '';
-        }
-      },
-
-      createDashboard() {
+      async createDashboard() {
         if (!this.newDashboardName.trim()) return;
-        fetch(apiUrl('/api/dashboards/'), {
+        this.formError = '';
+        const r = await fetch(apiUrl('/api/dashboards/'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: this.newDashboardName, source_url: this.newDashboardUrl }),
-        })
-          .then(r => r.json())
-          .then(d => {
-            this.dashboards.unshift(d);
-            this.showNewDashboardModal = false;
-            this.resetNewDashboardForm();
-          })
-          .catch(() => {});
+          body: JSON.stringify({ nombre: this.newDashboardName, sheet_url: this.newDashboardUrl }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          this.formError = d.error || 'No se pudo crear el tablero';
+          return;
+        }
+        window.location.href = this.boardUrl(d);
       },
 
       editDashboard(d) {
         this.editingDashboard = { ...d };
+        this.formError = '';
         this.showEditModal = true;
         this.openMenuId = null;
       },
 
-      saveEdit() {
+      async saveEdit() {
         const d = this.editingDashboard;
-        if (!d || !d.title.trim()) return;
-        fetch(apiUrl(`/api/dashboards/${d.id}/`), {
+        if (!d || !d.nombre.trim()) return;
+        this.formError = '';
+        const r = await fetch(apiUrl(`/api/dashboards/${d.id}/`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: d.title, source_url: d.source_url }),
-        })
-          .then(r => r.json())
-          .then(updated => {
-            const idx = this.dashboards.findIndex(x => x.id === updated.id);
-            if (idx !== -1) this.dashboards[idx] = updated;
-            this.showEditModal = false;
-            this.editingDashboard = null;
-          })
-          .catch(() => {});
+          body: JSON.stringify({ nombre: d.nombre, sheet_url: d.sheet_url }),
+        });
+        const updated = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          this.formError = updated.error || 'No se pudo guardar';
+          return;
+        }
+        const idx = this.dashboards.findIndex(x => x.id === updated.id);
+        if (idx !== -1) this.dashboards[idx] = updated;
+        this.showEditModal = false;
+        this.editingDashboard = null;
       },
     }
   }

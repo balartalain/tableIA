@@ -1,0 +1,26 @@
+Widget 1:
+ Usa los datos de la pestaña 'Respuestas de formulario 1'.
+ Crea una tabla agrupada por la columna 'Recinto:' (una fila por cada recinto) con dos columnas:
+   1. 'Recinto' con el nombre del recinto.
+   2. 'Cantidad' con el conteo de registros de ese recinto.
+   3. 'Porciento'con el porciento(valor entero) que ocupa cada valor del total
+ Agrega un fila Total con la suma de 'Cantidad' y otra columna con la suma de los porcientos
+ Ignora los registros con 'Recinto:' vacío o nulo.
+ 
+Widget 2:
+Usa los datos de la pestaña 'Respuestas de formulario 1'.
+ Gráfica de dona que meustre el porciento(valor entero) de cada recinto agrupando por la columna 'Recinto:'
+ Ignora los registros con 'Recinto:' vacío o nulo.
+  
+Widget 3
+Usa los datos de la pestaña 'xxx', crea una tabla dinámica agrupada por la columna 'Categoria' (una fila por cada categoría).
+ Por cada valor distinto de la columna 'Respuesta', agrega DOS columnas, una seguida de la otra:
+   1. Una columna cuyo title sea el nombre de esa respuesta, con el conteo de registros de esa respuesta en la categoría.
+   2. Inmediatamente después, una columna con título '%'(Respeta esto) que muestre el porcentaje de esa respuesta
+      sobre el total de respuestas de esa categoría, redondeado a número entero (sin decimales, sin el símbolo %).
+ Los 'field' de las columnas deben ser únicos (por ejemplo 'Excelente' y 'Excelente_pct'), aunque el title de todas las columnas de porcentaje sea '%'.
+ La primera columna es 'Categoria'. Al final agrega una columna 'Total' con el conteo total de la categoría.
+ Si una categoría no tiene una respuesta, muestra 0 en el conteo y 0 en el %.
+ 
+ Widget 4
+ Usa los datos de la pestaña 'xxx' para generar una grafica tipo bar q muestre el porciento(valores enteros) de cada valor de Respuesta de la columna 'Respuesta' agrupando por la columna 'Categoria'

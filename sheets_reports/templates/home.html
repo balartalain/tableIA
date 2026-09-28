@@ -84,7 +84,7 @@
             <button @click="editDashboard(d)" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink/70 hover:bg-paper text-left">
               <i class="ti ti-pencil text-sm" aria-hidden="true"></i>Editar
             </button>
-            <button class="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink/70 hover:bg-paper text-left">
+            <button @click="duplicateDashboard(d)" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink/70 hover:bg-paper text-left">
               <i class="ti ti-copy text-sm" aria-hidden="true"></i>Duplicar
             </button>
             <button @click="deleteDashboard(d.id)" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 text-left">
@@ -288,6 +288,14 @@
             this.openMenuId = null;
           })
           .catch(() => {});
+      },
+
+      duplicateDashboard(d) {
+        this.openMenuId = null;
+        fetch(apiUrl(`/api/dashboards/${d.id}/duplicate/`), { method: 'POST' })
+          .then(r => r.ok ? r.json() : Promise.reject())
+          .then(copy => { this.dashboards.unshift(copy); })
+          .catch(() => alert('No se pudo duplicar el tablero'));
       },
 
       resetNewDashboardForm() {

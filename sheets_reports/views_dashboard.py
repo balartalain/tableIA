@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import threading
@@ -6,14 +7,14 @@ from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db import connection
+from django.db import connection, transaction
 from django.http import JsonResponse
 from django.utils.timesince import timesince
 from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from sheets_reports.models import Dashboard, DataSource
+from sheets_reports.models import CalculatedColumn, Dashboard, DashboardUtilFunction, DataSource, WidgetInstance
 from sheets_reports.utils.generate_dashboard_ia import generate_board_from_prompt
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,80 @@ def dashboard_detail(request, dashboard_id):
             )
     dashboard.save()
     return JsonResponse(_serialize(dashboard))
+
+
+def _clone_data_source(data_source, user):
+    """Copia una DataSource junto con sus columnas calculadas. Se clona en vez de compartirla
+    porque dashboard_detail edita `config` in place al cambiar la URL de la hoja: si la copia
+    compartiera la DataSource, cambiar la hoja de un tablero cambiaría también la del otro."""
+    clone = DataSource.objects.create(
+        name=f"{data_source.name} (copia)",
+        source_type=data_source.source_type,
+        config=copy.deepcopy(data_source.config),
+        owner=user,
+    )
+    CalculatedColumn.objects.bulk_create([
+        CalculatedColumn(
+            data_source=clone,
+            table_name=cc.table_name,
+            column_name=cc.column_name,
+            expression=cc.expression,
+            description=cc.description,
+            created_from_prompt=cc.created_from_prompt,
+            is_active=cc.is_active,
+        )
+        for cc in data_source.calculated_columns.all()
+    ])
+    return clone
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dashboard_duplicate(request, dashboard_id):
+    """POST: clona un tablero completo (origen de datos, widgets y funciones utilitarias)."""
+    try:
+        original = Dashboard.objects.select_related("data_source").get(id=dashboard_id)
+    except Dashboard.DoesNotExist:
+        return JsonResponse({"error": "Dashboard no encontrado"}, status=404)
+
+    user = _get_user(request) or original.user
+
+    with transaction.atomic():
+        data_source = _clone_data_source(original.data_source, user) if original.data_source else None
+        dashboard = Dashboard.objects.create(
+            title=f"{original.title} (copia)",
+            source_url=original.source_url,
+            data_source=data_source,
+            user=user,
+        )
+        WidgetInstance.objects.bulk_create([
+            WidgetInstance(
+                dashboard=dashboard,
+                title=w.title,
+                chart_type=w.chart_type,
+                code=w.code,
+                prompt=w.prompt,
+                summary=w.summary,
+                properties=copy.deepcopy(w.properties),
+                order=w.order,
+            )
+            for w in original.widgets.all()
+        ])
+        DashboardUtilFunction.objects.bulk_create([
+            DashboardUtilFunction(
+                dashboard=dashboard,
+                name=u.name,
+                signature=u.signature,
+                description=u.description,
+                category=u.category,
+                source_code=u.source_code,
+                created_from_prompt=u.created_from_prompt,
+                is_active=u.is_active,
+            )
+            for u in original.custom_utils.all()
+        ])
+
+    return JsonResponse(_serialize(dashboard), status=201)
 
 
 def _get_request_data(request):

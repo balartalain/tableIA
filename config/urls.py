@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/dashboards/generate-from-prompt/<str:job_id>/', views_dashboard.generate_dashboard_status, name='generate_dashboard_status'),
     path('api/dashboards/', views_dashboard.dashboard_list, name='dashboard_list'),
     path('api/dashboards/<int:dashboard_id>/', views_dashboard.dashboard_detail, name='dashboard_detail'),
+    path('api/dashboards/<int:dashboard_id>/duplicate/', views_dashboard.dashboard_duplicate, name='dashboard_duplicate'),
     path('api/dashboard/<int:dashboard_id>/widgets/', views.dashboard_widgets, name='dashboard_widgets'),
     path('api/widget/<int:widget_id>/', views.widget_detail, name='widget_detail'),
     path('api/widget/<int:widget_id>/data/', views.widget_data, name='widget_data'),

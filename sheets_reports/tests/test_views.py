@@ -33,6 +33,16 @@ class ViewsTests(TestCase):
         self.assertEqual(data["categories"], ["Hogar", "Electrónica"])
         self.assertEqual(data["series"][0]["data"], [175.0, 500.0])
 
+    def test_kpi_porcentaje_usa_como_universo_los_filtros_del_tablero(self, _df):
+        data_spec = spec(dimensions=[], metrics=[{"field": "categoria", "agg": "pct_count", "as": "porcentaje"}],
+                         filters=[{"field": "categoria", "op": "eq", "value": "Hogar"}])
+        Widget.objects.create(dashboard=self.dashboard, type="kpi",
+                              data_spec=data_spec, view_spec=build_view_spec("kpi", data_spec))
+        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filtro_anio=2026")
+        kpi = next(w for w in r.json()["widgets"] if w["type"] == "kpi")
+        # 3 filas de Hogar entre las 5 de 2026 (no entre las 6 de la hoja).
+        self.assertEqual(kpi["data"]["value"], 60.0)
+
     def test_render_rechaza_filtro_de_columna_inexistente(self, _df):
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filtro_pais=DO")
         self.assertEqual(r.status_code, 400)
@@ -92,6 +102,30 @@ class ViewsTests(TestCase):
         self.assertIsNone(widget.source_prompt)
         self.assertEqual(widget.position, {"x": 0, "y": 3, "w": 12, "h": 400})
         self.assertEqual(r.json()["data"]["columns"][1]["children"][0]["header"], "Ene")
+
+    def test_crear_tabla_dinamica_con_varios_niveles(self, _df):
+        r = self.client.post(
+            f"/api/dashboard/{self.dashboard.id}/widgets/",
+            json.dumps({"type": "table", "dimensions": ["anio", "categoria"], "pivot": ["mes"],
+                        "metrics": [{"field": "", "agg": "count", "as": "cantidad"},
+                                    {"field": "", "agg": "count", "as": "pct", "show_as": "pct_row"}]}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        data = r.json()["data"]
+        self.assertEqual(data["rowFields"], ["anio", "categoria"])
+        subtotal = next(row for row in data["rows"] if row.get("__subtotal"))
+        self.assertEqual(subtotal["anio"], "Total 2026")
+        self.assertEqual(subtotal["__total.cantidad"], 5)
+
+    def test_tabla_demasiado_grande_muestra_mensaje(self, _df):
+        data_spec = spec(pivot="mes")
+        Widget.objects.create(dashboard=self.dashboard, type="table",
+                              data_spec=data_spec, view_spec=build_view_spec("table", data_spec))
+        with mock.patch("sheets_reports.services.query_engine.MAX_TABLE_CELLS", 5):
+            r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/")
+        table = next(w for w in r.json()["widgets"] if w["type"] == "table")
+        self.assertIn("celdas", table["error"])
 
     def test_crear_widget_invalido_no_guarda_nada(self, _df):
         r = self.client.post(

@@ -28,8 +28,32 @@ class ValidateWidgetSpecTests(SimpleTestCase):
             filters=[{"field": "pais", "op": "eq", "value": "DO"}],
         ))[0])
 
+    def test_tabla_con_pivote_admite_varias_metricas(self):
+        self.assertEqual(errors_for("table", spec(pivot="mes", metrics=[
+            {"field": "ventas", "agg": "sum", "as": "total_ventas"},
+            {"field": "categoria", "agg": "count", "as": "cantidad", "show_as": "pct_row"},
+        ])), [])
+
+    def test_tabla_admite_varias_filas_y_dos_pivotes(self):
+        self.assertEqual(errors_for("table", spec(dimensions=["anio", "categoria"], pivot=["mes"])), [])
+        self.assertEqual(errors_for("table", spec(dimensions=["categoria"], pivot=["anio", "mes"])), [])
+
+    def test_graficos_admiten_una_fila_y_un_pivote(self):
+        self.assertIn("solo se admite una dimensión", errors_for("bar", spec(dimensions=["anio", "categoria"]))[0])
+        self.assertIn("un solo pivote", errors_for("bar", spec(pivot=["anio", "mes"]))[0])
+
+    def test_limites_de_filas_y_pivotes(self):
+        self.assertTrue(errors_for("table", spec(dimensions=["anio", "categoria", "mes", "ventas"])))
+        self.assertTrue(errors_for("table", spec(pivot=["anio", "mes", "ventas"])))
+
+    def test_columnas_repetidas_entre_filas_y_pivotes(self):
+        self.assertIn("pivot: no puede ser la misma columna que la dimensión.",
+                      errors_for("table", spec(dimensions=["anio", "categoria"], pivot=["mes", "anio"])))
+        self.assertIn("dimensions: no se puede repetir una columna.",
+                      errors_for("table", spec(dimensions=["anio", "anio"])))
+
     def test_pivote_con_varias_metricas_da_mensaje_claro(self):
-        errors = errors_for("table", spec(pivot="mes", metrics=[
+        errors = errors_for("bar", spec(pivot="mes", metrics=[
             {"field": "ventas", "agg": "sum", "as": "total_ventas"},
             {"field": "categoria", "agg": "count", "as": "cantidad"},
         ]))
@@ -43,6 +67,20 @@ class ValidateWidgetSpecTests(SimpleTestCase):
 
     def test_count_acepta_columna_no_numerica(self):
         self.assertEqual(errors_for("bar", spec(metrics=[{"field": "mes", "agg": "count", "as": "cantidad"}])), [])
+
+    def test_agregaciones_numericas_rechazan_columna_no_numerica(self):
+        for agg in ("min", "max", "median"):
+            errors = errors_for("bar", spec(metrics=[{"field": "mes", "agg": agg, "as": "valor"}]))
+            self.assertIn("no es numérica", errors[0], agg)
+
+    def test_count_distinct_acepta_columna_no_numerica(self):
+        self.assertEqual(errors_for("bar", spec(metrics=[{"field": "mes", "agg": "count_distinct", "as": "meses"}])), [])
+
+    def test_show_as_solo_acepta_valores_conocidos(self):
+        ok = spec(pivot="mes", metrics=[{"field": "ventas", "agg": "sum", "as": "pct", "show_as": "pct_column"}])
+        self.assertEqual(errors_for("table", ok), [])
+        bad = spec(pivot="mes", metrics=[{"field": "ventas", "agg": "sum", "as": "pct", "show_as": "pct_fila"}])
+        self.assertTrue(errors_for("table", bad))
 
     def test_comparacion_de_orden_sobre_columna_no_numerica(self):
         errors = errors_for("bar", spec(filters=[{"field": "mes", "op": "gt", "value": 3}]))
@@ -117,3 +155,11 @@ class BuildViewSpecTests(SimpleTestCase):
     def test_kpi(self):
         view = build_view_spec("kpi", spec(dimensions=[]), {"labels": {"total_ventas": "Total de ventas"}})
         self.assertEqual((view["widget"], view["metric"], view["label"]), ("kpi", "total_ventas", "Total de ventas"))
+
+    def test_marca_las_metricas_de_porcentaje(self):
+        view = build_view_spec("table", spec(metrics=[
+            {"field": "ventas", "agg": "sum", "as": "total_ventas"},
+            {"field": "ventas", "agg": "sum", "as": "porcentaje", "show_as": "pct_column"},
+            {"field": "ventas", "agg": "pct_sum", "as": "legacy"},
+        ]))
+        self.assertEqual(view["percent"], ["porcentaje", "legacy"])

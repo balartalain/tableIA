@@ -15,18 +15,71 @@ async function fetchJsonSafe(url, options = {}, timeoutMs = AI_FETCH_TIMEOUT_MS)
   }
 }
 
+// "Resumir por" (como en las tablas dinámicas de Sheets).
 const AGG_OPTIONS = [
   { value: 'sum', label: 'Suma' },
-  { value: 'avg', label: 'Promedio' },
   { value: 'count', label: 'Conteo' },
+  { value: 'count_distinct', label: 'Contar únicos' },
+  { value: 'avg', label: 'Promedio' },
+  { value: 'min', label: 'Mínimo' },
+  { value: 'max', label: 'Máximo' },
+  { value: 'median', label: 'Mediana' },
 ];
+
+// "Mostrar como". Qué opciones tienen sentido depende de si hay dimensión y pivote.
+const SHOW_AS_LABELS = {
+  value: 'Valor',
+  pct_row: '% de la fila',
+  pct_column: '% de la columna',
+  pct_total: '% del total general',
+};
+
+// Formato anterior de porcentajes (agg pct_* + of): se traduce al abrir un widget guardado,
+// igual que normalize_metric en el backend.
+const LEGACY_PERCENT_AGGS = { pct_count: 'count', pct_sum: 'sum' };
+
+// Filas y columnas elegidas en el builder, sin vacíos ni repetidos (una columna usada como
+// fila no puede ser además columna de pivote).
+function chosen(list) {
+  return [...new Set((list || []).filter(Boolean))];
+}
+
+function builderDims(b) {
+  return chosen(b.dimensions);
+}
+
+function builderPivots(b) {
+  const dims = new Set(builderDims(b));
+  return chosen(b.pivots).filter(p => !dims.has(p));
+}
+
+// `pivot` del spec como lista (null, "mes" o ["anio", "mes"]), como pivots_of del backend.
+function pivotsOf(spec) {
+  if (!spec.pivot) return [];
+  return Array.isArray(spec.pivot) ? [...spec.pivot] : [spec.pivot];
+}
+
+// count cuenta filas y no usa campo.
+function isCountAgg(agg) {
+  return agg === 'count';
+}
+
+function normalizeMetric(m, spec) {
+  if (!(m.agg in LEGACY_PERCENT_AGGS)) return { ...m, show_as: m.show_as || 'value' };
+  let showAs = 'pct_total';
+  if (m.of !== 'total' && (spec.dimensions || []).length) showAs = spec.pivot ? 'pct_row' : 'pct_column';
+  return { ...m, agg: LEGACY_PERCENT_AGGS[m.agg], show_as: showAs };
+}
 
 // Nombre de columna resultante ("as") para una métrica del builder: snake_case ASCII, como
 // exige el schema (^[a-z][a-z0-9_]{0,62}$). count no depende del campo: siempre "cantidad".
-function metricAlias(agg, field) {
-  if (agg === 'count') return 'cantidad';
-  const prefix = agg === 'avg' ? 'promedio' : 'total';
-  const slug = `${prefix}_${field}`
+function metricAlias(agg, field, showAs) {
+  const pct = showAs && showAs !== 'value' ? 'pct_' : '';
+  if (agg === 'count') return `${pct}cantidad`;
+  const prefix = {
+    avg: 'promedio', min: 'minimo', max: 'maximo', median: 'mediana', count_distinct: 'unicos',
+  }[agg] || 'total';
+  const slug = `${pct}${prefix}_${field}`
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   return (/^[a-z]/.test(slug) ? slug : `m_${slug}`).slice(0, 63);
@@ -37,18 +90,44 @@ function metricAlias(agg, field) {
 function builderFromSpec(spec, view) {
   if (!spec) return null;
   return {
-    dimension: (spec.dimensions || [])[0] || '',
-    pivot: spec.pivot || '',
-    metrics: (spec.metrics || []).map(m => ({
-      field: m.agg === 'count' ? '' : m.field,
-      agg: m.agg,
-      as: m.as,
-      _origAs: m.as, _origField: m.agg === 'count' ? '' : m.field, _origAgg: m.agg,
-    })),
+    // Siempre al menos un select visible por lista ('' = sin elegir).
+    dimensions: (spec.dimensions || []).length ? [...spec.dimensions] : [''],
+    pivots: pivotsOf(spec).length ? pivotsOf(spec) : [''],
+    metrics: (spec.metrics || []).map(raw => {
+      const m = normalizeMetric(raw, spec);
+      const field = isCountAgg(m.agg) ? '' : m.field;
+      return {
+        field, agg: m.agg, as: m.as, show_as: m.show_as,
+        _origAs: m.as, _origField: field, _origAgg: m.agg, _origShowAs: m.show_as,
+      };
+    }),
     stacked: !!(view && view.stacked),
     sortBy: spec.sort ? spec.sort.by : '',
     sortDir: spec.sort ? spec.sort.dir : 'desc',
   };
+}
+
+// "Mostrar como" disponibles: en un KPI el % es contra la hoja sin los filtros del widget;
+// sin pivote, % de la fila siempre sería 100 y % de la columna = % del total.
+function showAsOptions(b) {
+  const hasDim = builderDims(b).length > 0;
+  const hasPivot = builderPivots(b).length > 0;
+  let values = ['value', 'pct_row', 'pct_column', 'pct_total'];
+  if (!hasDim) values = ['value', 'pct_total'];
+  else if (!hasPivot) values = ['value', 'pct_column'];
+  return values.map(value => ({
+    value,
+    label: !hasDim && value === 'pct_total' ? '% del total (sin filtros del widget)'
+      : !hasPivot && value === 'pct_column' ? '% del total' : SHOW_AS_LABELS[value],
+  }));
+}
+
+// Lleva `show_as` a una opción válida para la forma actual (ej. se quitó el pivote).
+function effectiveShowAs(b, showAs) {
+  if (!showAs || showAs === 'value') return 'value';
+  if (!builderDims(b).length) return 'pct_total';
+  if (!builderPivots(b).length) return 'pct_column';
+  return showAs;
 }
 
 // Body de PUT /api/widget/<id>/spec/. Las métricas count van sin campo: el backend usa la
@@ -57,22 +136,28 @@ function builderToPayload(b) {
   const metrics = [];
   const used = new Set();
   for (const m of b.metrics) {
-    if (!m.agg || (m.agg !== 'count' && !m.field)) continue;
+    if (!m.agg || (!isCountAgg(m.agg) && !m.field)) continue;
+    const showAs = effectiveShowAs(b, m.show_as);
     // Conserva el alias existente si la métrica no cambió (así se conservan sus etiquetas).
-    const alias = m.as && m.as === m._origAs && m.field === m._origField && m.agg === m._origAgg
-      ? m.as
-      : metricAlias(m.agg, m.field);
+    const unchanged = m.as && m.as === m._origAs && m.field === m._origField
+      && m.agg === m._origAgg && showAs === m._origShowAs;
+    const alias = unchanged ? m.as : metricAlias(m.agg, m.field, showAs);
     let candidate = alias;
     for (let i = 2; used.has(candidate); i++) candidate = `${alias}_${i}`.slice(0, 63);
     used.add(candidate);
-    metrics.push({ field: m.agg === 'count' ? '' : m.field, agg: m.agg, as: candidate });
+    const metric = { field: isCountAgg(m.agg) ? '' : m.field, agg: m.agg, as: candidate };
+    if (showAs !== 'value') metric.show_as = showAs;
+    metrics.push(metric);
   }
-  const sortTargets = new Set([b.dimension, ...metrics.map(m => m.as)]);
+  const dimensions = builderDims(b);
+  const pivots = builderPivots(b);
+  const sortTargets = new Set([...dimensions, ...metrics.map(m => m.as)]);
   return {
-    dimensions: b.dimension ? [b.dimension] : [],
-    pivot: b.pivot || null,
+    dimensions,
+    // Una columna como texto (compatible con los gráficos); varias, como lista.
+    pivot: pivots.length > 1 ? pivots : (pivots[0] || null),
     metrics,
-    stacked: !!(b.stacked && b.pivot),
+    stacked: !!(b.stacked && pivots.length),
     sort: b.sortBy && sortTargets.has(b.sortBy) ? { by: b.sortBy, dir: b.sortDir || 'desc' } : null,
   };
 }
@@ -102,6 +187,7 @@ document.addEventListener('alpine:init', () => {
     drawerSpecs: { data_spec: null, view_spec: null },
     schema: { all_fields: [], numeric_fields: [], dimension_fields: [] },
     aggOptions: AGG_OPTIONS,
+    isCountAgg,
     _nextId: -1,
 
     schemaError: '',
@@ -221,15 +307,65 @@ document.addEventListener('alpine:init', () => {
       return this.drawerDraft.builder || null;
     },
 
-    get dimensionOptions() {
-      return withCurrent(this.schema.dimension_fields || [], this.builder && this.builder.dimension);
-    },
-
-    // Mismas columnas que "Agrupar por", sin la dimensión elegida (el backend también lo valida).
-    get pivotOptions() {
+    // Columnas agrupables para la fila `i`, sin las ya usadas en otras filas o en columnas
+    // (el backend también lo valida).
+    dimensionOptionsAt(i) {
       const b = this.builder;
       if (!b) return [];
-      return withCurrent(this.schema.dimension_fields || [], b.pivot).filter(f => f !== b.dimension);
+      const current = b.dimensions[i];
+      const used = new Set([...b.dimensions, ...b.pivots]);
+      return withCurrent(this.schema.dimension_fields || [], current).filter(f => f === current || !used.has(f));
+    },
+
+    pivotOptionsAt(i) {
+      const b = this.builder;
+      if (!b) return [];
+      const current = b.pivots[i];
+      const used = new Set([...b.dimensions, ...b.pivots]);
+      return withCurrent(this.schema.dimension_fields || [], current).filter(f => f === current || !used.has(f));
+    },
+
+    get dimensionLabel() {
+      return this.drawerWidgetClass.dimensionLabel;
+    },
+
+    get maxDimensions() {
+      return this.drawerWidgetClass.maxDimensions;
+    },
+
+    get maxPivots() {
+      return this.drawerWidgetClass.maxPivots;
+    },
+
+    // Se agrega un nivel solo cuando el anterior ya tiene columna elegida.
+    get canAddDimension() {
+      const b = this.builder;
+      return !!b && b.dimensions.length < this.maxDimensions && b.dimensions.every(Boolean);
+    },
+
+    get canAddPivot() {
+      const b = this.builder;
+      return !!b && b.pivots.length < this.maxPivots && b.pivots.every(Boolean);
+    },
+
+    addDimension() {
+      if (this.canAddDimension) this.builder.dimensions.push('');
+    },
+
+    removeDimension(i) {
+      const b = this.builder;
+      if (b && b.dimensions.length > 1) b.dimensions.splice(i, 1);
+    },
+
+    addPivot() {
+      if (this.canAddPivot) this.builder.pivots.push('');
+    },
+
+    removePivot(i) {
+      const b = this.builder;
+      if (!b) return;
+      if (b.pivots.length > 1) b.pivots.splice(i, 1);
+      else b.pivots[0] = '';
     },
 
     get pivotLabel() {
@@ -241,12 +377,22 @@ document.addEventListener('alpine:init', () => {
     },
 
     get showStacked() {
-      return this.drawerWidgetClass.supportsStacked && !!(this.builder && this.builder.pivot);
+      return this.drawerWidgetClass.supportsStacked && !!(this.builder && builderPivots(this.builder).length);
     },
 
-    // Campos para suma/promedio: solo numéricos (count no usa campo).
-    numericFieldOptions(current) {
-      return withCurrent(this.schema.numeric_fields || [], current);
+    // Campos según la función: contar únicos acepta cualquier columna; el resto de las
+    // funciones que resumen una columna, solo numéricas (count no usa campo).
+    fieldOptionsFor(agg, current) {
+      const fields = agg === 'count_distinct' ? this.schema.all_fields : this.schema.numeric_fields;
+      return withCurrent(fields || [], current);
+    },
+
+    get showAsOptions() {
+      return this.builder ? showAsOptions(this.builder) : [];
+    },
+
+    showAsValue(m) {
+      return this.builder ? effectiveShowAs(this.builder, m.show_as) : 'value';
     },
 
     get sortOptions() {
@@ -254,17 +400,21 @@ document.addEventListener('alpine:init', () => {
       if (!b) return [];
       const payload = builderToPayload(b);
       const opts = [];
-      if (b.dimension) opts.push({ value: b.dimension, label: b.dimension });
+      for (const d of payload.dimensions) opts.push({ value: d, label: d });
       for (const m of payload.metrics) {
         const agg = AGG_OPTIONS.find(a => a.value === m.agg)?.label || m.agg;
-        opts.push({ value: m.as, label: m.agg === 'count' ? 'Conteo de filas' : `${agg} de ${m.field}` });
+        const base = m.agg === 'count' ? 'Conteo de filas' : `${agg} de ${m.field}`;
+        const showAs = m.show_as ? ` (${SHOW_AS_LABELS[m.show_as]})` : '';
+        opts.push({ value: m.as, label: base + showAs });
       }
       return opts;
     },
 
     onDimensionChange() {
+      // Una columna elegida como fila deja de ser columna de pivote.
       const b = this.builder;
-      if (b && b.pivot && b.pivot === b.dimension) b.pivot = '';
+      if (!b) return;
+      b.pivots = b.pivots.map(p => (b.dimensions.includes(p) ? '' : p));
     },
 
     openDrawer(id) {
@@ -303,11 +453,11 @@ document.addEventListener('alpine:init', () => {
       const dims = this.schema.dimension_fields || [];
       const numeric = this.schema.numeric_fields || [];
       return {
-        dimension: this.drawerWidgetClass.supportsDimension ? (dims[0] || '') : '',
-        pivot: '',
+        dimensions: [this.drawerWidgetClass.supportsDimension ? (dims[0] || '') : ''],
+        pivots: [''],
         metrics: [numeric.length
-          ? { field: numeric[0], agg: 'sum', as: '' }
-          : { field: '', agg: 'count', as: '' }],
+          ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value' }
+          : { field: '', agg: 'count', as: '', show_as: 'value' }],
         stacked: false,
         sortBy: '',
         sortDir: 'desc',
@@ -336,8 +486,8 @@ document.addEventListener('alpine:init', () => {
       if (!b || b.metrics.length >= this.maxMetrics) return;
       const numeric = this.schema.numeric_fields || [];
       b.metrics.push(numeric.length
-        ? { field: numeric[0], agg: 'sum', as: '' }
-        : { field: '', agg: 'count', as: '' });
+        ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value' }
+        : { field: '', agg: 'count', as: '', show_as: 'value' });
     },
 
     removeBuilderMetric(index) {
@@ -468,6 +618,9 @@ document.addEventListener('alpine:init', () => {
         Object.assign(w, presentation);
         await this._saveWidget(w);
         w.updateChrome();
+        // Opciones de presentación que cambian el contenido (ej. totales de la tabla): se
+        // redibuja con los datos ya calculados, sin volver a pedirlos.
+        if (w._lastEntry) w.applyRender(w._lastEntry);
         this.closeDrawer();
       } catch (e) {
         this.drawerSaveError = e.message;

@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator
 from sheets_reports.models import Dashboard, Widget, default_position
 from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_spec
 from sheets_reports.services.apex_compiler import compile_view
-from sheets_reports.services.query_engine import run_data_spec
+from sheets_reports.services.query_engine import ResultTooLargeError, apply_filters, run_data_spec
 from sheets_reports.services.sheets import (
     SheetError,
     get_dimension_fields,
@@ -144,12 +144,16 @@ def _clean_position(value, fallback=None) -> dict:
 
 def _render_widget(widget, df, extra_filters=None) -> dict:
     """Ejecuta y compila un widget. Un error en un widget no tumba el tablero."""
-    spec = widget.data_spec
-    if extra_filters:
-        spec = {**spec, "filters": [*(spec.get("filters") or []), *extra_filters]}
     try:
-        result = run_data_spec(df, spec)
+        # Los filtros del tablero se aplican antes: definen el universo del widget (el
+        # denominador de sus porcentajes), mientras que los del propio widget lo recortan.
+        if extra_filters:
+            df = apply_filters(df, extra_filters)
+        layout = "table" if widget.type == "table" else "auto"
+        result = run_data_spec(df, widget.data_spec, layout=layout)
         return {"data": compile_view(widget.type, result, widget.view_spec)}
+    except ResultTooLargeError as e:
+        return {"error": str(e)}
     except KeyError as e:
         # La hoja cambió y ya no tiene una columna que el spec usa.
         return {"error": f"La columna {e} ya no existe en la hoja. Edita el widget."}

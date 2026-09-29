@@ -48,6 +48,10 @@
         stroke: { curve: 'smooth', width: 3 },
         series,
         xaxis: { categories, labels: { style: { fontSize: '11px' } } },
+        tooltip: { y: { formatter: BaseWidget.percentAwareFormatter(payload.percent) } },
+        ...(BaseWidget.allSeriesPercent(payload, series) && {
+          yaxis: { labels: { formatter: (val) => `${Math.round(val)}%` } },
+        }),
         grid: { padding: { bottom: 25 } },
       };
       this.renderApexChart(container, options);

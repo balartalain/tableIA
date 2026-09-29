@@ -32,6 +32,11 @@
 .tabulator .tabulator-header .tabulator-col {
   background: #fff;
   border-right: none;
+}
+
+/* El padding va en el contenido, no en la columna: en encabezados anidados cada nivel de
+   grupo lo sumaría otra vez. */
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
   padding: 8px 10px;
 }
 
@@ -42,10 +47,7 @@
   text-transform: none;
 }
 .tabulator-col .tabulator-col-content .tabulator-col-title {
-      white-space: normal !important;
-}
-.tabulator .tabulator-header .tabulator-col {
-    height: auto !important;
+  white-space: normal !important;
 }
 .tabulator .tabulator-row.tabulator-row-bold {
   font-weight: bold;
@@ -53,6 +55,28 @@
 }
 .tabulator .tabulator-row.tabulator-row-bold .tabulator-cell{
   color: #fff;
+}
+/* Números: cifras del mismo ancho para que encolumnen */
+.tabulator .tb-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Menú de formato de la columna (⋮): solo al pasar por el encabezado o con foco.
+   Tabulator lo mete al inicio del título; si ocupara lugar (aunque sea invisible) correría
+   el texto del encabezado respecto de las celdas y de la fila de totales. Por eso va
+   posicionado sobre el margen izquierdo de la columna, fuera del flujo. */
+.tabulator .tabulator-col .tabulator-header-popup-button {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0 3px;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.tabulator .tabulator-col:hover > .tabulator-col-content .tabulator-header-popup-button,
+.tabulator .tabulator-col .tabulator-header-popup-button:focus-visible {
+  opacity: 1;
 }
 /* Flechitas de orden — apagadas por defecto, visibles al hover/activo */
 .tabulator .tabulator-col-sorter {
@@ -93,10 +117,38 @@
 }
 
 /* ---------- Footer / paginación ---------- */
+/* Sin padding en el footer: ahí vive también la fila de totales (bottomCalc), y Tabulator
+   solo compensa su padding por defecto; con otro valor los totales quedan corridos
+   respecto de las columnas. El espacio va en el paginador. */
 .tabulator .tabulator-footer {
   background: #fff;
   border-top: 1px solid var(--tb-line);
+  padding: 0;
+}
+
+.tabulator .tabulator-footer .tabulator-footer-contents {
   padding: 8px 10px;
+}
+
+/* ---------- Fila de totales (bottomCalc) ---------- */
+/* El holder ocupa todo el ancho del footer: sin fondo propio, así la franja de totales
+   llega solo hasta la última columna (el fondo lo llevan las celdas). */
+.tabulator .tabulator-footer .tabulator-calcs-holder {
+  margin: 0;
+  width: 100%;
+  border: none;
+  background: transparent !important;
+}
+
+.tabulator .tabulator-row.tabulator-calcs {
+  background: transparent !important;
+  border-top: 2px solid var(--tb-ink);
+  border-bottom: none;
+}
+
+.tabulator .tabulator-row.tabulator-calcs .tabulator-cell {
+  font-weight: 700;
+  background: var(--tb-paper);
 }
 
 .tabulator .tabulator-footer .tabulator-paginator {
@@ -152,4 +204,107 @@
 .tabulator .tabulator-placeholder {
   color: var(--tb-ink-muted);
   font-size: 13px;
+}
+/* ============================================================
+   Tabla dinámica (.tb-pivot): columnas anidadas y/o varios niveles de filas
+   ============================================================ */
+
+/* Separadores verticales. Cada columna dibuja SOLO su borde izquierdo: así el inicio de un
+   grupo lo engrosa en vez de sumar un segundo borde junto al derecho de la columna anterior
+   (eso producía bordes dobles). */
+.tabulator.tb-pivot .tabulator-header .tabulator-col,
+.tabulator.tb-pivot .tabulator-row .tabulator-cell {
+  border-right: none;
+  border-left: 1px solid var(--tb-line);
+}
+
+/* La primera columna no lleva separador (borde de la tabla) */
+.tabulator.tb-pivot .tabulator-headers > .tabulator-col:first-child,
+.tabulator.tb-pivot .tabulator-row .tabulator-cell:first-child {
+  border-left: none;
+}
+
+/* Inicio de un grupo de columnas ("2026", "Total general"). El borde lo lleva la primera
+   columna hoja del grupo (.tb-group-start), igual en encabezado y celdas: un borde en el
+   propio grupo del encabezado se sumaría por fuera del ancho de sus hijos y correría las
+   cabeceras respecto de las celdas. El título del grupo se marca con una sombra interna,
+   que no ocupa lugar y cae sobre ese mismo borde. */
+.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group {
+  border-left: none;
+  box-shadow: inset 2px 0 0 var(--tb-line);
+}
+.tabulator.tb-pivot .tabulator-header .tabulator-col.tb-group-start:not(.tabulator-col-group) {
+  border-left: 2px solid var(--tb-line);
+}
+
+.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group .tabulator-col-group-cols {
+  border-top: 1px solid var(--tb-line);
+}
+
+.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group > .tabulator-col-content .tabulator-col-title {
+  color: var(--tb-ink);
+}
+
+/* Mismo grosor que el borde del grupo en el encabezado: si difieren, las celdas quedan
+   corridas respecto de las cabeceras. */
+.tabulator.tb-pivot .tabulator-row .tabulator-cell.tb-group-start {
+  border-left: 2px solid var(--tb-line);
+}
+
+/* Más compacta: las tablas dinámicas suelen tener muchas columnas */
+.tabulator.tb-pivot .tabulator-row {
+  min-height: 34px;
+}
+.tabulator.tb-pivot .tabulator-row .tabulator-cell {
+  padding: 6px 10px;
+}
+
+/* Columnas "Total <valor>" (subtotal de un pivote) y "Total general" */
+.tabulator.tb-pivot .tabulator-row .tabulator-cell.tb-subtotal-col {
+  background: var(--tb-paper);
+  font-weight: 600;
+}
+.tabulator.tb-pivot .tb-total-col {
+  font-weight: 700;
+}
+/* "Total general": separador más marcado, solo al inicio del bloque (su grupo en el
+   encabezado, o la columna marcada tb-group-start); no en cada subcolumna. */
+.tabulator.tb-pivot .tabulator-header .tabulator-col.tb-total-col.tb-group-start:not(.tabulator-col-group),
+.tabulator.tb-pivot .tabulator-row .tabulator-cell.tb-total-col.tb-group-start {
+  border-left: 2px solid var(--tb-ink);
+}
+.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group.tb-total-col {
+  box-shadow: inset 2px 0 0 var(--tb-ink);
+}
+
+/* Filas de subtotal ("Total Norte"): se distinguen del hover y de las filas normales */
+.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal,
+.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal:hover {
+  background: var(--color-moss-tint);
+  border-top: 1px solid var(--color-moss-100);
+}
+.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal .tabulator-cell {
+  font-weight: 600;
+  background: transparent;
+}
+
+/* Columnas de filas fijas al hacer scroll horizontal: fondo opaco y separador */
+.tabulator.tb-pivot .tabulator-cell.tabulator-frozen,
+.tabulator.tb-pivot .tabulator-col.tabulator-frozen {
+  background: #fff;
+}
+.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal .tabulator-cell.tabulator-frozen {
+  background: var(--color-moss-tint);
+}
+.tabulator.tb-pivot .tabulator-row.tabulator-calcs .tabulator-cell.tabulator-frozen {
+  background: var(--tb-paper);
+}
+/* Tabulator pone por defecto un borde derecho gris de 2px en CADA columna fija, que se sumaba
+   al separador de la columna siguiente. Se reemplaza por una sombra de 1px: sin scroll cae
+   exactamente sobre el borde izquierdo de la columna siguiente (se ve una sola línea) y, al
+   desplazar, separa las columnas fijas del contenido que pasa por debajo. */
+.tabulator.tb-pivot .tabulator-header .tabulator-frozen.tabulator-frozen-left,
+.tabulator.tb-pivot .tabulator-row .tabulator-cell.tabulator-frozen.tabulator-frozen-left {
+  border-right: none;
+  box-shadow: 1px 0 0 var(--tb-line);
 }

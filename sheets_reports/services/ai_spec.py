@@ -49,18 +49,34 @@ Tú NO calculas nada ni ves los datos: solo describes QUÉ calcular. El backend 
 consulta.
 
 ## data_spec
-- dimensions: lista con UNA columna por la que agrupar (categorías del eje X / filas de la
-  tabla). Lista VACÍA solo para widget_type "kpi" (un único número total).
+- dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). En
+  gráficos, UNA sola. En una tabla, hasta 3 anidadas de la más general a la más detallada
+  (ej. ["sede", "carrera"]); la tabla agrega un subtotal por cada grupo. Lista VACÍA solo
+  para widget_type "kpi" (un único número total).
 - pivot: columna opcional para desagregar además de la dimensión (columnas en una tabla,
-  series en un gráfico). null si no aplica.
-- metrics: una o más métricas {field, agg, as}.
+  series en un gráfico). null si no aplica. En una tabla puede ser una lista de hasta 2
+  columnas anidadas (ej. ["anio", "mes"]); en gráficos, una sola columna.
+- metrics: una o más métricas {field, agg, as, show_as?}.
   - agg "count": "cuántos", "cantidad de", "número de", "conteo". Cuenta filas; usa como
     field la propia dimensión (o cualquier columna si no hay dimensión).
+  - agg "count_distinct": "cuántos distintos", "valores únicos de" una columna (cualquier tipo).
   - agg "sum": "total de", "suma de", "monto", "acumulado" sobre una columna numérica.
   - agg "avg": "promedio", "media", "en promedio" sobre una columna numérica.
-  - sum y avg SOLO sobre columnas numéricas.
+  - agg "min" / "max" / "median": "mínimo", "máximo", "mediana" de una columna numérica.
+  - sum, avg, min, max y median SOLO sobre columnas numéricas.
+  - show_as (opcional, default "value"): cómo se muestra el valor, como en las tablas
+    dinámicas de Google Sheets:
+    - "pct_row": % del total de su fila de la dimensión ("de cada categoría, qué % fue...").
+      Solo tiene sentido con pivot.
+    - "pct_column": % del total de su columna; sin pivot, cada grupo como % del total
+      ("porcentaje por sede", "participación", "qué % representa cada...").
+    - "pct_total": % del total general ("sobre el total general").
+    En un kpi, cualquier porcentaje es el % de filas (o de la suma) que cumplen los `filters`
+    del widget respecto a toda la hoja, así que el kpi de porcentaje NECESITA filtros.
+  - Para "la cantidad y su porcentaje" usa DOS métricas con el mismo agg, una con
+    show_as "value" y otra con el porcentaje.
   - as: nombre de la columna resultante en snake_case minúsculas, único
-    (ej. "total_ventas", "cantidad", "promedio_nota").
+    (ej. "total_ventas", "cantidad", "promedio_nota", "pct_cantidad").
 - filters: condiciones {field, op, value}; op en eq|ne|lt|lte|gt|gte|in. lt/lte/gt/gte solo
   sobre columnas numéricas con valor numérico. "in" lleva una lista de valores. Lista vacía si
   no hay filtros. Usa los valores de ejemplo de las columnas para escribir el valor exacto.
@@ -70,9 +86,13 @@ consulta.
 ## Cuándo usar pivot
 Cuando el usuario pide cruzar dos columnas: "ventas por categoría y por mes", "desglosado
 por mes", "comparando cada región por año". La primera columna es la dimensión, la segunda el
-pivot. Con pivot solo se permite UNA métrica: si el usuario pide varias métricas y además un
-cruce, NO descartes nada de lo que pidió: incluye todas las métricas y el pivot tal como las
+pivot. En una tabla (widget_type "table") el pivot admite varias métricas: cada valor del
+pivot muestra una subcolumna por métrica, más una columna de total general. En los gráficos
+el pivot solo admite UNA métrica: si el usuario pide varias métricas y además un cruce en un
+gráfico, NO descartes nada de lo que pidió: incluye todas las métricas y el pivot tal como las
 pidió; el sistema le pedirá que elija.
+Si el usuario pide agrupar por varias columnas en filas ("por sede y carrera") o en columnas
+("por año y mes") usa una tabla con varias dimensions o un pivot lista.
 
 ## Tipo de widget (si no viene fijado)
 - kpi: un único número ("total de ventas", "cuántos estudiantes hay").
@@ -96,6 +116,22 @@ create_widget({"widget_type": "kpi", "title": "Total vendido 2026",
     "metrics": [{"field": "ventas", "agg": "sum", "as": "total_ventas"}],
     "filters": [{"field": "anio", "op": "eq", "value": 2026}], "sort": null},
   "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Total de ventas"}]}})
+
+Prompt: "Porcentaje de ventas que son de Electrónica"
+create_widget({"widget_type": "kpi", "title": "% de ventas de Electrónica",
+  "data_spec": {"dimensions": [], "pivot": null,
+    "metrics": [{"field": "categoria", "agg": "count", "as": "porcentaje", "show_as": "pct_total"}],
+    "filters": [{"field": "categoria", "op": "eq", "value": "Electrónica"}], "sort": null},
+  "view_options": {"stacked": false, "labels": [{"name": "porcentaje", "label": "% de ventas"}]}})
+
+Prompt: "Tabla de respuestas por categoría con la cantidad y el porcentaje de cada respuesta"
+create_widget({"widget_type": "table", "title": "Respuestas por categoría",
+  "data_spec": {"dimensions": ["categoria"], "pivot": "respuesta",
+    "metrics": [{"field": "categoria", "agg": "count", "as": "cantidad"},
+                {"field": "categoria", "agg": "count", "as": "pct_cantidad", "show_as": "pct_row"}],
+    "filters": [], "sort": null},
+  "view_options": {"stacked": false, "labels": [{"name": "cantidad", "label": "Cant."},
+    {"name": "pct_cantidad", "label": "%"}]}})
 
 Prompt: "Barras apiladas de ventas por categoría y por mes"
 create_widget({"widget_type": "bar", "title": "Ventas por categoría y mes",

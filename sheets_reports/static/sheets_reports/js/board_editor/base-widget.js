@@ -32,6 +32,10 @@
     static supportsDimension = true;
     static supportsPivot = true;
     static pivotLabel = 'Dividir en series por';
+    static dimensionLabel = 'Agrupar por';
+    // Niveles anidados de filas/columnas: solo la tabla admite más de uno.
+    static maxDimensions = 1;
+    static maxPivots = 1;
     static maxMetrics = 5;
 
     static FIELD_WIDTH = {
@@ -96,6 +100,23 @@
       const div = document.createElement('div');
       div.textContent = str;
       return div.innerHTML;
+    }
+
+    // Formateador de ApexCharts que agrega "%" a las series de métricas pct_* (payload.percent
+    // trae sus nombres). `fallback(val)` formatea el resto de las series.
+    static percentAwareFormatter(percentNames, fallback = (val) => val) {
+      const names = new Set(percentNames || []);
+      return (val, opts) => {
+        const name = opts && opts.w ? opts.w.globals.seriesNames[opts.seriesIndex] : null;
+        if (val == null || !names.has(name)) return fallback(val);
+        return `${Number(val).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+      };
+    }
+
+    // true si todas las series del gráfico son porcentajes (el eje Y puede llevar "%").
+    static allSeriesPercent(payload, series) {
+      const names = new Set(payload.percent || []);
+      return series.length > 0 && series.every(s => names.has(s.name));
     }
 
     static DOWNLOAD_ICON_SVG = `<svg viewBox="0 0 14 14" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -375,6 +396,7 @@
     applyRender(entry) {
       this.setLoading(false);
       if (!entry) return;
+      this._lastEntry = entry;
       if (entry.error) {
         this.renderError(entry.error);
         return;

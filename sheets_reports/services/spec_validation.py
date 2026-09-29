@@ -10,8 +10,13 @@ llamada, nunca de una lista fija.
 from jsonschema import Draft202012Validator
 
 WIDGET_TYPES = ["kpi", "bar", "line", "donut", "table"]
-AGGS = ["sum", "avg", "count"]
-NUMERIC_AGGS = ["sum", "avg"]
+AGGS = ["sum", "avg", "count", "count_distinct", "min", "max", "median"]
+NUMERIC_AGGS = ["sum", "avg", "min", "max", "median"]
+# "Mostrar como" de Sheets: el valor, o su % del total de la fila, la columna o el general.
+SHOW_AS = ["value", "pct_row", "pct_column", "pct_total"]
+# Formato anterior de los porcentajes (agg pct_* + of): se sigue aceptando al leer un widget
+# guardado, pero normalize_metric lo traduce a agg + show_as.
+LEGACY_PERCENT_AGGS = {"pct_count": "count", "pct_sum": "sum"}
 FILTER_OPS = ["eq", "ne", "lt", "lte", "gt", "gte", "in"]
 ORDER_OPS = ["lt", "lte", "gt", "gte"]
 AS_PATTERN = "^[a-z][a-z0-9_]{0,62}$"
@@ -19,7 +24,13 @@ MAX_METRICS = 5
 MAX_FILTERS = 20
 MAX_IN_VALUES = 200
 
+# Tablas dinámicas: filas y columnas anidadas. Los gráficos usan una sola de cada una.
+MAX_DIMENSIONS = 3
+MAX_PIVOTS = 2
+
 PIVOT_MULTIMETRIC_MSG = "Con pivote solo se permite una métrica"
+# Solo la tabla admite varias métricas con pivote (una subcolumna por métrica en cada valor).
+PIVOT_MULTIMETRIC_TYPES = ["table"]
 
 SCALAR = {"type": ["string", "number", "boolean"]}
 
@@ -43,10 +54,11 @@ def metric_schema(schema: dict) -> dict:
             "field": _field_enum(schema["all_fields"]),
             "agg": {"enum": AGGS},
             "as": {"type": "string", "pattern": AS_PATTERN},
+            "show_as": {"enum": SHOW_AS},
         },
         "allOf": [
             {
-                "$comment": "sum/avg solo sobre columnas numéricas; count acepta cualquier campo.",
+                "$comment": "sum/avg/min/max/median solo sobre columnas numéricas; count y count_distinct aceptan cualquier campo.",
                 "if": {"properties": {"agg": {"enum": NUMERIC_AGGS}}},
                 "then": {"properties": {"field": _field_enum(schema["numeric_fields"])}},
             }
@@ -107,8 +119,13 @@ def build_data_spec_schema(schema: dict, source: str | None) -> dict:
     """
     fields = schema["all_fields"]
     properties = {
-        "dimensions": {"type": "array", "items": _field_enum(fields), "minItems": 0, "maxItems": 1},
-        "pivot": {"anyOf": [{"type": "null"}, _field_enum(fields)]},
+        "dimensions": {"type": "array", "items": _field_enum(fields), "minItems": 0, "maxItems": MAX_DIMENSIONS},
+        # Una columna, o (solo tablas) una lista de columnas anidadas.
+        "pivot": {"anyOf": [
+            {"type": "null"},
+            _field_enum(fields),
+            {"type": "array", "items": _field_enum(fields), "minItems": 1, "maxItems": MAX_PIVOTS},
+        ]},
         "metrics": {"type": "array", "minItems": 1, "maxItems": MAX_METRICS, "items": metric_schema(schema)},
         "filters": {"type": "array", "maxItems": MAX_FILTERS, "items": filter_schema(schema)},
         "sort": {"anyOf": [{"type": "null"}, sort_schema()]},
@@ -125,9 +142,9 @@ def build_data_spec_schema(schema: dict, source: str | None) -> dict:
         "properties": properties,
         "allOf": [
             {
-                "$comment": "Regla de negocio: con pivote, exactamente 1 métrica y 1 dimensión.",
-                "if": {"properties": {"pivot": {"type": "string"}}, "required": ["pivot"]},
-                "then": {"properties": {"metrics": {"maxItems": 1}, "dimensions": {"minItems": 1}}},
+                "$comment": "Con pivote hace falta una dimensión (el límite de métricas depende del widget).",
+                "if": {"properties": {"pivot": {"type": ["string", "array"]}}, "required": ["pivot"]},
+                "then": {"properties": {"dimensions": {"minItems": 1}}},
             }
         ],
     }
@@ -160,6 +177,14 @@ def build_envelope_schema(schema: dict, source: str | None) -> dict:
                 "then": {"properties": {"data_spec": {"properties": {"dimensions": {"minItems": 1}}}}},
             },
             {
+                "$comment": "Solo la tabla anida varias filas o columnas; los gráficos usan una de cada.",
+                "if": {"properties": {"widget_type": {"enum": ["bar", "line", "donut"]}}},
+                "then": {"properties": {"data_spec": {"properties": {
+                    "dimensions": {"maxItems": 1},
+                    "pivot": {"type": ["null", "string"]},
+                }}}},
+            },
+            {
                 "$comment": "La dona reparte UNA métrica entre las categorías de la dimensión: sin pivote.",
                 "if": {"properties": {"widget_type": {"const": "donut"}}},
                 "then": {"properties": {"data_spec": {"properties": {
@@ -185,20 +210,27 @@ def _readable(error, schema: dict) -> str:
     """Traduce un error de jsonschema a un mensaje entendible por el usuario (y por la IA en
     el reintento)."""
     path = _path(error)
-    is_column = path.endswith(("field", "pivot")) or "dimensions[" in path
+    is_column = path.endswith(("field", "pivot")) or "dimensions[" in path or "pivot[" in path
     if error.validator == "enum" and is_column:
         value = error.instance
         if value in schema["all_fields"] and value not in schema["numeric_fields"]:
             return (f"{path}: la columna '{value}' no es numérica; solo se puede usar con "
-                    f"agg 'count' o en filtros eq/ne/in.")
+                    f"agg 'count'/'count_distinct' o en filtros eq/ne/in.")
         return f"{path}: la columna '{value}' no existe en la hoja."
     if error.validator == "maxItems" and path.endswith("dimensions"):
-        return f"{path}: este tipo de widget no admite dimensión." if error.validator_value == 0 \
-            else f"{path}: solo se admite una dimensión."
+        if error.validator_value == 0:
+            return f"{path}: este tipo de widget no admite dimensión."
+        if error.validator_value == 1:
+            return f"{path}: solo se admite una dimensión (las tablas admiten hasta {MAX_DIMENSIONS})."
+        return f"{path}: se admiten como máximo {error.validator_value} dimensiones."
     if error.validator == "minItems" and path.endswith("dimensions"):
         return f"{path}: se requiere una dimensión (campo por el que agrupar)."
     if error.validator == "type" and error.validator_value == "null" and path.endswith("pivot"):
         return f"{path}: este tipo de widget no admite pivote."
+    if error.validator == "type" and error.validator_value == ["null", "string"] and path.endswith("pivot"):
+        return f"{path}: los gráficos admiten un solo pivote (las tablas hasta {MAX_PIVOTS})."
+    if error.validator == "maxItems" and path.endswith("pivot"):
+        return f"{path}: se admiten como máximo {error.validator_value} columnas de pivote."
     if error.validator == "maxItems" and path.endswith("metrics"):
         return f"{path}: se permiten como máximo {error.validator_value} métricas aquí."
     if error.validator == "pattern" and path.endswith(".as"):
@@ -206,8 +238,10 @@ def _readable(error, schema: dict) -> str:
     return f"{path}: {error.message}"
 
 
-def _pivot_multimetric_error(data_spec: dict) -> str | None:
-    pivot = data_spec.get("pivot") if isinstance(data_spec, dict) else None
+def _pivot_multimetric_error(widget_type: str, data_spec: dict) -> str | None:
+    if widget_type in PIVOT_MULTIMETRIC_TYPES:
+        return None
+    pivot = ", ".join(pivots_of(data_spec)) if isinstance(data_spec, dict) else None
     metrics = data_spec.get("metrics") if isinstance(data_spec, dict) else None
     if pivot and isinstance(metrics, list) and len(metrics) > 1:
         return (f"{PIVOT_MULTIMETRIC_MSG}. Elige entre desagregar por «{pivot}» "
@@ -218,19 +252,23 @@ def _pivot_multimetric_error(data_spec: dict) -> str | None:
 def _semantic_errors(data_spec: dict) -> list[str]:
     errors = []
     dimensions = data_spec["dimensions"]
-    pivot = data_spec["pivot"]
+    pivots = pivots_of(data_spec)
     names = [m["as"] for m in data_spec["metrics"]]
 
     duplicated = sorted({n for n in names if names.count(n) > 1})
     if duplicated:
         errors.append(f"metrics: nombres 'as' repetidos: {', '.join(duplicated)}.")
 
-    reserved = set(dimensions) | ({pivot} if pivot else set())
+    reserved = set(dimensions) | set(pivots)
     for n in names:
         if n in reserved:
             errors.append(f"metrics: el nombre '{n}' choca con el nombre de la dimensión o del pivote.")
 
-    if pivot and dimensions and pivot == dimensions[0]:
+    if len(set(dimensions)) < len(dimensions):
+        errors.append("dimensions: no se puede repetir una columna.")
+    if len(set(pivots)) < len(pivots):
+        errors.append("pivot: no se puede repetir una columna.")
+    if set(pivots) & set(dimensions):
         errors.append("pivot: no puede ser la misma columna que la dimensión.")
 
     sort = data_spec["sort"]
@@ -245,7 +283,7 @@ def validate_widget_spec(widget_type: str, data_spec: dict, schema: dict, source
     Valida `data_spec` para un `widget_type` contra el schema construido desde la hoja real.
     Retorna la lista de errores legibles (vacía si es válido). Nunca lanza.
     """
-    friendly = _pivot_multimetric_error(data_spec)
+    friendly = _pivot_multimetric_error(widget_type, data_spec)
     if friendly:
         return [friendly]
 
@@ -275,6 +313,30 @@ def assert_valid_widget_spec(widget_type: str, data_spec: dict, schema: dict, so
     errors = validate_widget_spec(widget_type, data_spec, schema, source)
     if errors:
         raise SpecValidationError(errors)
+
+
+def pivots_of(data_spec: dict) -> list[str]:
+    """`pivot` como lista: null -> [], "mes" -> ["mes"], ["anio", "mes"] -> igual."""
+    pivot = data_spec.get("pivot")
+    if not pivot:
+        return []
+    return [pivot] if isinstance(pivot, str) else list(pivot)
+
+
+def normalize_metric(metric: dict, data_spec: dict) -> dict:
+    """Métrica con `show_as` explícito, traduciendo el formato anterior de porcentajes
+    (agg pct_count/pct_sum + of) al actual: el % era por fila con pivote, sobre el total con
+    of="total", y sin pivote cada grupo sobre el total de los grupos."""
+    metric = dict(metric)
+    legacy_of = metric.pop("of", None)
+    if metric["agg"] in LEGACY_PERCENT_AGGS:
+        metric["agg"] = LEGACY_PERCENT_AGGS[metric["agg"]]
+        if legacy_of == "total" or not data_spec.get("dimensions"):
+            metric["show_as"] = "pct_total"
+        else:
+            metric["show_as"] = "pct_row" if data_spec.get("pivot") else "pct_column"
+    metric.setdefault("show_as", "value")
+    return metric
 
 
 def humanize(name: str) -> str:
@@ -314,7 +376,7 @@ def build_view_spec(widget_type: str, data_spec: dict, options: dict | None = No
     elif widget_type == "donut":
         view = {"widget": "donut", "x": dimension, "metric": metric_names[0]}
     elif widget_type == "table":
-        columns = [{"header": label(dimension), "field": dimension}]
+        columns = [{"header": label(d), "field": d} for d in data_spec["dimensions"]]
         if pivot:
             # Los valores del pivote solo se conocen al ejecutar: compile_view expande
             # `pivotOf` en `children` en cada render.
@@ -325,6 +387,10 @@ def build_view_spec(widget_type: str, data_spec: dict, options: dict | None = No
     else:
         raise ValueError(f"Tipo de widget desconocido: {widget_type}")
 
+    # Métricas que son porcentajes: el frontend les agrega el sufijo "%".
+    view["percent"] = [
+        m["as"] for m in data_spec["metrics"] if normalize_metric(m, data_spec)["show_as"] != "value"
+    ]
     view["title"] = (options.get("title") or "").strip() or _default_title(widget_type, data_spec, label)
     view["labels"] = labels
     view["display"] = options.get("display") or {}
@@ -334,5 +400,5 @@ def build_view_spec(widget_type: str, data_spec: dict, options: dict | None = No
 def _default_title(widget_type, data_spec, label) -> str:
     metric = label(data_spec["metrics"][0]["as"])
     if data_spec["dimensions"]:
-        return f"{metric} por {data_spec['dimensions'][0]}"
+        return f"{metric} por {' y '.join(data_spec['dimensions'])}"
     return metric

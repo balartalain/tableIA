@@ -28,9 +28,10 @@
     renderContent(container, data) {
       const payload = data || this.constructor.mockData();
       const value = payload.value ?? '—';
-      const formattedValue = typeof value === 'number'
+      let formattedValue = typeof value === 'number'
         ? value.toLocaleString(undefined, { maximumFractionDigits: 2 })
         : value;
+      if (payload.percent && typeof value === 'number') formattedValue += '%';
       container.className = 'flex flex-col items-center justify-center h-full pb-3';
       container.innerHTML = `
         <span class="text-2xl font-black text-ink tracking-tight">${BaseWidget.escapeHTML(String(formattedValue))}</span>

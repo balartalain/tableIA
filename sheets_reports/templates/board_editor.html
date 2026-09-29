@@ -163,26 +163,56 @@
                   Cargando columnas de la hoja…
                 </p>
 
-                <!-- 1-2. Agrupación y pivote (el KPI es un único total: no agrupa) -->
+                <!-- 1-2. Filas y columnas (el KPI es un único total: no agrupa). La tabla admite
+                     varios niveles anidados, como una tabla dinámica de Sheets. -->
                 <div class="grid grid-cols-2 gap-2" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
                   <div>
-                    <label class="block text-[11px] font-semibold text-ink/60 mb-1">Agrupar por</label>
-                    <select x-model="$store.dashboard.drawerDraft.builder.dimension" x-on:change="$store.dashboard.onDimensionChange()"
-                            class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                      <template x-for="f in $store.dashboard.dimensionOptions" :key="f">
-                        <option x-bind:value="f" x-text="f" x-bind:selected="f === $store.dashboard.drawerDraft.builder.dimension"></option>
+                    <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-text="$store.dashboard.dimensionLabel"></label>
+                    <div class="space-y-1">
+                      <template x-for="(d, i) in $store.dashboard.drawerDraft.builder.dimensions" :key="'dim-' + i">
+                        <div class="flex items-center gap-1">
+                          <select x-model="$store.dashboard.drawerDraft.builder.dimensions[i]" x-on:change="$store.dashboard.onDimensionChange()"
+                                  class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                            <option value="" x-show="!$store.dashboard.drawerDraft.builder.dimensions[i]">Elige una columna…</option>
+                            <template x-for="f in $store.dashboard.dimensionOptionsAt(i)" :key="f">
+                              <option x-bind:value="f" x-text="f" x-bind:selected="f === $store.dashboard.drawerDraft.builder.dimensions[i]"></option>
+                            </template>
+                          </select>
+                          <button type="button" x-show="$store.dashboard.drawerDraft.builder.dimensions.length > 1" x-on:click="$store.dashboard.removeDimension(i)"
+                                  class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                                  title="Quitar nivel" aria-label="Quitar nivel de filas">×</button>
+                        </div>
                       </template>
-                    </select>
+                    </div>
+                    <button type="button" x-show="$store.dashboard.maxDimensions > 1" x-on:click="$store.dashboard.addDimension()"
+                            x-bind:disabled="!$store.dashboard.canAddDimension"
+                            class="mt-1 text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1">
+                      <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar fila
+                    </button>
                   </div>
                   <div>
                     <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-text="$store.dashboard.pivotLabel"></label>
-                    <select x-model="$store.dashboard.drawerDraft.builder.pivot" x-bind:disabled="!$store.dashboard.drawerWidgetClass.supportsPivot"
-                            class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                      <option value="">Sin agrupar</option>
-                      <template x-for="f in $store.dashboard.pivotOptions" :key="f">
-                        <option x-bind:value="f" x-text="f" x-bind:selected="f === $store.dashboard.drawerDraft.builder.pivot"></option>
+                    <div class="space-y-1">
+                      <template x-for="(p, i) in $store.dashboard.drawerDraft.builder.pivots" :key="'piv-' + i">
+                        <div class="flex items-center gap-1">
+                          <select x-model="$store.dashboard.drawerDraft.builder.pivots[i]" x-bind:disabled="!$store.dashboard.drawerWidgetClass.supportsPivot"
+                                  class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <option value="">Sin agrupar</option>
+                            <template x-for="f in $store.dashboard.pivotOptionsAt(i)" :key="f">
+                              <option x-bind:value="f" x-text="f" x-bind:selected="f === $store.dashboard.drawerDraft.builder.pivots[i]"></option>
+                            </template>
+                          </select>
+                          <button type="button" x-show="$store.dashboard.drawerDraft.builder.pivots.length > 1" x-on:click="$store.dashboard.removePivot(i)"
+                                  class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                                  title="Quitar nivel" aria-label="Quitar nivel de columnas">×</button>
+                        </div>
                       </template>
-                    </select>
+                    </div>
+                    <button type="button" x-show="$store.dashboard.maxPivots > 1" x-on:click="$store.dashboard.addPivot()"
+                            x-bind:disabled="!$store.dashboard.canAddPivot"
+                            class="mt-1 text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1">
+                      <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar columna
+                    </button>
                   </div>
                 </div>
 
@@ -197,27 +227,38 @@
                   <label class="block text-[11px] font-semibold text-ink/60 mb-1">Métricas</label>
                   <div class="space-y-1.5">
                     <template x-for="(m, i) in $store.dashboard.drawerDraft.builder.metrics" :key="i">
-                      <div class="flex items-center gap-1.5">
-                        <select x-model="m.agg" class="w-28 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                          <template x-for="a in $store.dashboard.aggOptions" :key="a.value">
-                            <option x-bind:value="a.value" x-text="a.label" x-bind:selected="a.value === m.agg"></option>
-                          </template>
-                        </select>
-                        <template x-if="m.agg !== 'count'">
-                          <select x-model="m.field" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                            <option value="">Elige una columna numérica…</option>
-                            <template x-for="f in $store.dashboard.numericFieldOptions(m.field)" :key="f">
-                              <option x-bind:value="f" x-text="f" x-bind:selected="f === m.field"></option>
+                      <div class="space-y-1 rounded-lg border border-line/70 p-1.5">
+                        <div class="flex items-center gap-1.5">
+                          <select x-model="m.agg" title="Resumir por" class="w-32 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                            <template x-for="a in $store.dashboard.aggOptions" :key="a.value">
+                              <option x-bind:value="a.value" x-text="a.label" x-bind:selected="a.value === m.agg"></option>
                             </template>
                           </select>
-                        </template>
-                        <template x-if="m.agg === 'count'">
-                          <span class="flex-1 min-w-0 text-sm text-ink/60 border border-dashed border-line rounded-lg px-2 py-1.5">Cantidad de filas</span>
-                        </template>
-                        <button type="button" x-on:click="$store.dashboard.removeBuilderMetric(i)"
-                                x-bind:disabled="$store.dashboard.drawerDraft.builder.metrics.length <= 1"
-                                class="text-ink/40 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-ink/40 transition cursor-pointer px-1.5 text-base leading-none"
-                                title="Quitar métrica" aria-label="Quitar métrica">×</button>
+                          <template x-if="!$store.dashboard.isCountAgg(m.agg)">
+                            <select x-model="m.field" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                              <option value="" x-text="m.agg === 'count_distinct' ? 'Elige una columna…' : 'Elige una columna numérica…'"></option>
+                              <template x-for="f in $store.dashboard.fieldOptionsFor(m.agg, m.field)" :key="f">
+                                <option x-bind:value="f" x-text="f" x-bind:selected="f === m.field"></option>
+                              </template>
+                            </select>
+                          </template>
+                          <template x-if="$store.dashboard.isCountAgg(m.agg)">
+                            <span class="flex-1 min-w-0 text-sm text-ink/60 border border-dashed border-line rounded-lg px-2 py-1.5">Cantidad de filas</span>
+                          </template>
+                          <button type="button" x-on:click="$store.dashboard.removeBuilderMetric(i)"
+                                  x-bind:disabled="$store.dashboard.drawerDraft.builder.metrics.length <= 1"
+                                  class="text-ink/40 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-ink/40 transition cursor-pointer px-1.5 text-base leading-none"
+                                  title="Quitar métrica" aria-label="Quitar métrica">×</button>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                          <span class="w-32 text-[11px] font-semibold text-ink/50 pl-1">Mostrar como</span>
+                          <select x-model="m.show_as" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                            <template x-for="o in $store.dashboard.showAsOptions" :key="o.value">
+                              <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.showAsValue(m)"></option>
+                            </template>
+                          </select>
+                          <span class="w-[26px]"></span>
+                        </div>
                       </div>
                     </template>
                   </div>

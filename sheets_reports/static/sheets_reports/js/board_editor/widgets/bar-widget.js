@@ -132,9 +132,10 @@
         },
         dataLabels: {
           enabled: true,
-          formatter: (val) => {
-            return this.dataLabelFormatter ? this.dataLabelFormatter.replace('{value}', val) : val;
-          },
+          // El formato configurado por el usuario manda; si no hay, las series % llevan "%".
+          formatter: this.dataLabelFormatter
+            ? (val) => this.dataLabelFormatter.replace('{value}', val)
+            : BaseWidget.percentAwareFormatter(payload.percent),
           //crop: false,
           offsetY: !this.horizontal && !payload.stacked ? -20 : 0,
           offsetX: this.horizontal && !payload.stacked ? 20 : 0,
@@ -171,10 +172,12 @@
         tooltip: {
           shared: true,
           intersect: false,
+          y: { formatter: BaseWidget.percentAwareFormatter(payload.percent) },
         },
         yaxis: {
           labels: {
             ...(this.yAxisWidth && { maxWidth: this.yAxisWidth }),
+            ...(BaseWidget.allSeriesPercent(payload, series) && { formatter: (val) => `${Math.round(val)}%` }),
           },
           min: (min) => Math.min(min, 0),
           max: (max) => max * 1.12,

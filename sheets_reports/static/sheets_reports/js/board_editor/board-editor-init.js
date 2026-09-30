@@ -137,23 +137,6 @@ async function copyToClipboard(text) {
   document.body.removeChild(textarea);
 }
 
-function setupHeaderAutoHide() {
-  const HIDE_THRESHOLD = 20;
-  const mainEl = document.getElementById('board-main');
-  const headerEl = document.getElementById('app-header');
-  const bodyEl = document.getElementById('board-body');
-  if (!mainEl || !headerEl || !bodyEl) return;
-
-  let headerHidden = false;
-  mainEl.addEventListener('scroll', () => {
-    const shouldHide = mainEl.scrollTop > HIDE_THRESHOLD;
-    if (shouldHide === headerHidden) return;
-    headerHidden = shouldHide;
-    headerEl.classList.toggle('header-hidden', headerHidden);
-    bodyEl.classList.toggle('header-hidden', headerHidden);
-  });
-}
-
 // Al abrir el panel de edición el lienzo conserva el ancho que tenía (los widgets no se
 // redimensionan) y #board-main saca scroll horizontal; al cerrarlo vuelve a ser fluido.
 function setupCanvasFreeze(canvasEl, store) {
@@ -171,7 +154,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const sidebarEl = document.getElementById('sidebar-components');
   const store = Alpine.store('dashboard');
 
-  setupHeaderAutoHide();
   setupCanvasFreeze(canvasEl, store);
   renderPalette(sidebarEl);
   initRail(sidebarEl);

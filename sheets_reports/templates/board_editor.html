@@ -3,7 +3,15 @@
 
 {% block title %}{{ dashboard.nombre }} — Editor de tablero{% endblock %}
 
-{% block header_actions %}{% endblock %}
+{% block header_actions %}
+<button onclick="window.location.href='{% url 'home' %}'" class="bg-white border border-line hover:bg-paper text-ink/70 py-2 px-4 rounded-xl font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+  <i class="ti ti-logout" aria-hidden="true"></i>
+  Salir del editor
+</button>
+<button id="share-btn" class="bg-white border border-line hover:bg-paper text-ink/70 py-2 px-4 rounded-xl font-medium text-sm transition cursor-pointer">
+  Compartir
+</button>
+{% endblock %}
 
 {% block content %}
 
@@ -27,19 +35,8 @@
     min-height: 10px !important;
     grid-column: span var(--ghost-span, 6) / span var(--ghost-span, 6) !important;
   }
- .toolbar-sticky {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px); /* Safari */
-  box-shadow: 0 4px 14px rgba(20, 23, 31, 0.10);
-  border: 1px solid #E3E5DE;
-}
 #board-body {
-  height: calc(100vh - 65px);
-  transition: height 0.25s ease-in-out;
-}
-#board-body.header-hidden {
-  height: 100vh;
+  height: calc(100vh - 4rem); /* menos el header fijo (h-16) */
 }
 
 /* Barra de módulos: expandida (248px) o contraída a una tira de íconos (56px). El estado
@@ -94,18 +91,8 @@ html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180de
     </button>
   </aside>
 
-  <main id="board-main" class="flex-1 min-w-0 min-h-0 p-6 overflow-auto flex flex-col">
-    <div class="toolbar-sticky sticky top-[-20px] left-0 z-50 flex justify-end gap-2 mb-5 px-4 py-2 rounded-xl">
-      <button onclick="window.location.href='{% url 'home' %}'" class="bg-white border border-line hover:bg-paper text-ink/70 py-2.5 px-4 rounded-xl font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
-        <i class="ti ti-logout" aria-hidden="true"></i>
-        Salir del editor
-      </button>
-      <button id="share-btn" class="bg-white border border-line hover:bg-paper text-ink/70 py-2.5 px-4 rounded-xl font-medium text-sm transition cursor-pointer">
-        Compartir
-      </button>
-    </div>
-
-    <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start grow shrink-0 bg-paper border-2 border-dashed border-line rounded-xl p-4 min-h-0">
+  <main id="board-main" class="flex-1 min-w-0 min-h-0 p-6 overflow-auto">
+    <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start h-full bg-paper border-2 border-dashed border-line rounded-xl p-4">
     </div>
   </main>
 

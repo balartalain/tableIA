@@ -61,21 +61,12 @@
     --color-clay-600: #8F5E2E;
   }
   [x-cloak] { display: none !important; }
-  .header-collapsible {
-    max-height: 65px;
-    overflow: hidden;
-    transition: max-height 0.25s ease-in-out, border-color 0.25s ease-in-out;
-  }
-  .header-collapsible.header-hidden {
-    max-height: 0;
-    border-bottom-width: 0;
-  }
 </style>
 </head>
 <body class="bg-paper text-ink antialiased min-h-screen">
 
 {% block header %}
-<header id="app-header" class="header-collapsible border-b border-line bg-white">
+<header id="app-header" class="border-b border-line bg-white">
   <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <span class="w-7 h-7 rounded-md bg-moss-500 flex items-center justify-center text-white text-sm font-sans font-bold">R</span>

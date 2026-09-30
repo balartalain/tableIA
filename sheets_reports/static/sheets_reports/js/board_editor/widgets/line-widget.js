@@ -2,12 +2,10 @@
   class LineWidget extends BaseWidget {
     static type = 'line';
     static palette = {
-      icon: '📈',
+      icon: 'ti-chart-line',
+      category: 'charts',
       label: 'Gráfico de Líneas',
       description: 'Tendencias en el tiempo',
-      chipClass: 'bg-purple-50/60 border border-purple-200 hover:bg-purple-100/80',
-      titleClass: 'text-purple-950',
-      descClass: 'text-purple-700/80',
     };
     static defaults = { title: 'Gráfico de Líneas', width: 'md:col-span-6', height: 300 };
 

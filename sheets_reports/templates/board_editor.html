@@ -41,21 +41,57 @@
 #board-body.header-hidden {
   height: 100vh;
 }
+
+/* Barra de módulos: expandida (248px) o contraída a una tira de íconos (56px). El estado
+   cuelga de html[data-rail] (lo pone el script en línea antes del <aside>). */
+#module-rail { width: 248px; }
+#module-rail [hidden] { display: none !important; }  /* las filas son flex: [hidden] debe ganar */
+#module-rail.rail-animated { transition: width 160ms ease; }
+#module-rail .rail-chevron { transition: transform 160ms ease; }
+html[data-rail="collapsed"] #module-rail { width: 56px; }
+html[data-rail="collapsed"] #module-rail .rail-body { padding-left: 0.5rem; padding-right: 0.5rem; }
+html[data-rail="collapsed"] #module-rail .rail-header,
+html[data-rail="collapsed"] #module-rail .rail-search,
+html[data-rail="collapsed"] #module-rail .rail-group,
+html[data-rail="collapsed"] #module-rail .rail-empty,
+html[data-rail="collapsed"] #module-rail .rail-text { display: none; }
+html[data-rail="collapsed"] #module-rail .rail-item {
+  justify-content: center; padding: 0.25rem 0; border-color: transparent; background: transparent;
+}
+html[data-rail="collapsed"] #module-rail .rail-item:hover .rail-icon { border-color: #cbd5e1; color: #14171f; }
+html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180deg); }
 </style>
 
 <div id="board-body" class="flex w-full overflow-hidden">
 
-  <aside class="w-72 bg-white border-r border-line p-5 flex flex-col justify-between shadow-sm z-10">
-    <div>
-      <div class="mb-6">
-        <h2 class="text-base font-bold text-ink">Módulos Disponibles</h2>
-        <p class="text-xs text-ink/50 mt-1">Arrastra múltiples bloques al lienzo para estructurar tus métricas.</p>
+  <script>
+    // Antes de pintar la barra: si quedó contraída, se dibuja contraída desde el primer frame.
+    try {
+      if (localStorage.getItem('tableia:rail-collapsed') === '1') document.documentElement.dataset.rail = 'collapsed';
+    } catch (e) {}
+  </script>
+  <aside id="module-rail" class="relative shrink-0 bg-white border-r border-line shadow-sm z-10">
+    <div class="rail-body h-full overflow-y-auto overflow-x-hidden px-4 py-5">
+      <div class="rail-header mb-4">
+        <h2 class="text-base font-bold text-ink whitespace-nowrap">Módulos</h2>
+        <p class="text-xs text-ink/50 mt-1">Arrastra un módulo al lienzo.</p>
       </div>
 
-      <div id="sidebar-components" class="space-y-3">
-      </div>
+      <label class="rail-search relative block mb-4">
+        <span class="sr-only">Buscar módulo</span>
+        <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink/40" aria-hidden="true"></i>
+        <input id="rail-search" type="search" placeholder="Buscar módulo…" autocomplete="off"
+               class="w-full text-sm border border-line rounded-lg pl-8 pr-2 py-1.5 focus:outline-none focus:border-moss-500">
+      </label>
+
+      <div id="sidebar-components"></div>
     </div>
 
+    <button id="rail-toggle" type="button" aria-controls="module-rail" aria-expanded="true"
+            aria-label="Contraer panel" title="Contraer panel"
+            class="absolute top-5 -right-[11px] z-20 w-[22px] h-[22px] rounded-full bg-white border border-line shadow-sm text-ink/60 hover:text-ink flex items-center justify-center cursor-pointer">
+      <i class="rail-chevron ti ti-chevron-left text-xs" aria-hidden="true"></i>
+    </button>
   </aside>
 
   <main id="board-main" class="flex-1 min-w-0 min-h-0 p-6 overflow-auto flex flex-col">

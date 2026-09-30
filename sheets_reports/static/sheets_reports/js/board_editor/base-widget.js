@@ -1,13 +1,13 @@
 (function () {
   class BaseWidget {
     static type = null;
+    // Entrada en la barra de módulos: `icon` es una clase de Tabler Icons (de trazo) y
+    // `category` el grupo donde aparece ('charts' = Gráficos, 'data' = Datos).
     static palette = {
-      icon: '❔',
+      icon: 'ti-square',
+      category: 'data',
       label: 'Widget',
       description: '',
-      chipClass: 'bg-slate-50/60 border border-slate-200 hover:bg-slate-100/80',
-      titleClass: 'text-slate-950',
-      descClass: 'text-slate-700/80',
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;

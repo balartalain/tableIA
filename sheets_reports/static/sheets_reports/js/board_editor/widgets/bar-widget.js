@@ -13,12 +13,10 @@
   class BarWidget extends BaseWidget {
     static type = 'bar';
     static palette = {
-      icon: '📊',
+      icon: 'ti-chart-bar',
+      category: 'charts',
       label: 'Gráfico de Barras',
       description: 'Comparativas grupales',
-      chipClass: 'bg-blue-50/60 border border-blue-200 hover:bg-blue-100/80',
-      titleClass: 'text-blue-950',
-      descClass: 'text-blue-700/80',
     };
     static defaults = { title: 'Gráfico de Barras', width: 'md:col-span-6', height: 300 };
 

@@ -273,6 +273,8 @@ class ViewsTests(TestCase):
         r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")
         self.assertContains(r, "window.REFRESH_MINUTES = 5")
         self.assertContains(r, "donut-widget.js")
+        self.assertContains(r, 'id="module-rail"')
+        self.assertContains(r, "tableia:rail-collapsed")
 
 
 class SinUsuarioTests(TestCase):

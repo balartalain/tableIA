@@ -7,12 +7,10 @@
   class KpiWidget extends BaseWidget {
     static type = 'kpi';
     static palette = {
-      icon: '🔢',
+      icon: 'ti-gauge',
+      category: 'data',
       label: 'Tarjeta KPI',
       description: 'Indicador con comparación, meta y tendencia',
-      chipClass: 'bg-emerald-50/60 border border-emerald-200 hover:bg-emerald-100/80',
-      titleClass: 'text-emerald-950',
-      descClass: 'text-emerald-700/80',
     };
     static defaults = { title: 'Tarjeta KPI', width: 'md:col-span-4', height: 300 };
     static supportsDimension = false;

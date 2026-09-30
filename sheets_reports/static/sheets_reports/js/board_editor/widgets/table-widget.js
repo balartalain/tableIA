@@ -28,12 +28,10 @@
   class TableWidget extends BaseWidget {
     static type = 'table';
     static palette = {
-      icon: '<svg viewBox="0 0 20 20" width="1.25rem" height="1.25rem" class="inline-block" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="15" height="13" rx="1.5"/><line x1="2.5" y1="8" x2="17.5" y2="8"/><line x1="2.5" y1="12.5" x2="17.5" y2="12.5"/><line x1="8.5" y1="3.5" x2="8.5" y2="16.5"/></svg>',
+      icon: 'ti-table',
+      category: 'data',
       label: 'Tabla',
       description: 'Filas y columnas de datos',
-      chipClass: 'bg-amber-50/60 border border-amber-200 hover:bg-amber-100/80',
-      titleClass: 'text-amber-950',
-      descClass: 'text-amber-700/80',
     };
     static defaults = { title: 'Tabla', width: 'md:col-span-6', height: 300 };
     static pivotLabel = 'Columnas';

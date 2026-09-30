@@ -71,12 +71,25 @@ function setupHeaderAutoHide() {
   });
 }
 
+// Al abrir el panel de edición el lienzo conserva el ancho que tenía (los widgets no se
+// redimensionan) y #board-main saca scroll horizontal; al cerrarlo vuelve a ser fluido.
+function setupCanvasFreeze(canvasEl, store) {
+  let wasOpen = false;
+  Alpine.effect(() => {
+    const isOpen = !!store.editingId;
+    if (isOpen === wasOpen) return;
+    wasOpen = isOpen;
+    canvasEl.style.width = isOpen ? `${canvasEl.offsetWidth}px` : '';
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const canvasEl = document.getElementById('dashboard-canvas');
   const sidebarEl = document.getElementById('sidebar-components');
   const store = Alpine.store('dashboard');
 
   setupHeaderAutoHide();
+  setupCanvasFreeze(canvasEl, store);
   renderPalette(sidebarEl);
 
   store.loadSchema();

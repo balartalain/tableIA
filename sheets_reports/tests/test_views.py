@@ -127,6 +127,31 @@ class ViewsTests(TestCase):
         table = next(w for w in r.json()["widgets"] if w["type"] == "table")
         self.assertIn("celdas", table["error"])
 
+    def test_update_spec_conserva_labels_que_no_envia_el_builder(self, _df):
+        self.widget.view_spec = {**self.widget.view_spec, "labels": {"total_ventas": "Ingresos"}}
+        self.widget.save()
+        r = self.client.put(
+            f"/api/widget/{self.widget.id}/spec/",
+            json.dumps({"dimensions": ["categoria"], "metrics": [{"field": "ventas", "agg": "sum", "as": "total_ventas"}]}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["view_spec"]["labels"], {"total_ventas": "Ingresos"})
+
+    def test_crear_tabla_con_nombre_a_mostrar(self, _df):
+        r = self.client.post(
+            f"/api/dashboard/{self.dashboard.id}/widgets/",
+            json.dumps({"type": "table", "dimensions": ["categoria"],
+                        "metrics": [{"field": "ventas", "agg": "sum", "as": "total_ventas"}],
+                        "labels": {"categoria": "Categoría", "total_ventas": "Ventas"}}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        columns = r.json()["data"]["columns"]
+        self.assertEqual([c["header"] for c in columns], ["Categoría", "Ventas"])
+        self.assertEqual(Widget.objects.get(id=r.json()["id"]).view_spec["labels"],
+                         {"categoria": "Categoría", "total_ventas": "Ventas"})
+
     def test_crear_widget_invalido_no_guarda_nada(self, _df):
         r = self.client.post(
             f"/api/dashboard/{self.dashboard.id}/widgets/",

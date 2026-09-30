@@ -393,6 +393,17 @@ def generate_widget(request, dashboard_id):
     return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)}, status=201)
 
 
+def _clean_labels(data: dict, previous: dict | None = None) -> dict:
+    """
+    Cabeceras de columna ({columna o alias: "Texto"}) que llegan del builder; las vacías se
+    ignoran en build_view_spec. Sin `labels` en el request se conserva el que ya tenía el widget.
+    """
+    labels = data.get("labels")
+    if isinstance(labels, dict):
+        return labels
+    return (previous or {}).get("labels") or {}
+
+
 def _builder_data_spec(data: dict, dashboard, widget_type: str, schema: dict, previous: dict | None):
     """
     data_spec a partir de los controles del builder ({dimensions, pivot, metrics, sort?,
@@ -425,7 +436,7 @@ def _builder_data_spec(data: dict, dashboard, widget_type: str, schema: dict, pr
 @require_http_methods(["POST"])
 def create_widget(request, dashboard_id):
     """
-    POST {type, dimensions, pivot, metrics, stacked, sort?, title?, position?}
+    POST {type, dimensions, pivot, metrics, stacked, sort?, labels?, title?, position?}
     Crea un widget desde el builder (el usuario elige columnas y métricas). NUNCA llama a la IA.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
@@ -455,7 +466,8 @@ def create_widget(request, dashboard_id):
         position=_clean_position(data.get("position")),
         data_spec=data_spec,
         view_spec=build_view_spec(widget_type, data_spec, {
-            "title": data.get("title"), "stacked": bool(data.get("stacked")), "display": display,
+            "title": data.get("title"), "labels": _clean_labels(data), "stacked": bool(data.get("stacked")),
+            "display": display,
         }),
     )
     return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)}, status=201)
@@ -465,7 +477,7 @@ def create_widget(request, dashboard_id):
 @require_http_methods(["PUT"])
 def update_widget_spec(request, widget_id):
     """
-    PUT {dimensions, pivot, metrics, stacked, sort?, filters?}
+    PUT {dimensions, pivot, metrics, stacked, sort?, labels?, filters?}
     Edición manual desde el builder: aplica las mismas validaciones que el camino de IA,
     reconstruye view_spec y guarda. Este camino NUNCA llama a la IA.
     """
@@ -490,7 +502,7 @@ def update_widget_spec(request, widget_id):
     widget.data_spec = data_spec
     widget.view_spec = build_view_spec(widget.type, data_spec, {
         "title": data.get("title", previous.get("title")),
-        "labels": previous.get("labels"),
+        "labels": _clean_labels(data, previous),
         "stacked": bool(data.get("stacked", previous.get("stacked", False))),
         "display": previous.get("display"),
     })

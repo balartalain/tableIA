@@ -259,6 +259,14 @@
                           </select>
                           <span class="w-[26px]"></span>
                         </div>
+                        <!-- Cabecera de la columna. Vacío = la de por defecto (el placeholder). -->
+                        <div class="flex items-center gap-1.5" x-show="$store.dashboard.drawerSupportsLabels">
+                          <span class="w-32 text-[11px] font-semibold text-ink/50 pl-1">Nombre a mostrar</span>
+                          <input type="text" x-model="m.label" x-bind:placeholder="$store.dashboard.metricLabelPlaceholder(i)"
+                                 aria-label="Nombre a mostrar de la métrica"
+                                 class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                          <span class="w-[26px]"></span>
+                        </div>
                       </div>
                     </template>
                   </div>

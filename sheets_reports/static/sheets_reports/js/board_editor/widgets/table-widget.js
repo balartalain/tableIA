@@ -40,6 +40,8 @@
     static dimensionLabel = 'Filas';
     static maxDimensions = 3;
     static maxPivots = 2;
+    // Cada métrica es una columna con cabecera: se puede renombrar.
+    static supportsLabels = true;
     static help = 'Muestra datos en filas y columnas, como una hoja de cálculo (ej. listado de ' +
       'participantes con sus notas, detalle de transacciones). Útil cuando el detalle fila por ' +
       'fila importa más que una comparación visual, y permite descargar los datos como CSV.';
@@ -218,6 +220,7 @@
         // Los campos del pivote ("__pivots.Ene.total_ventas") son claves planas, no rutas.
         nestedFieldSeparator: false,
         movableColumns: !hasGroups,
+        columnCalcs: "table",
         columns,
         // Tabla dinámica: cada columna a su contenido (estirar "Total general" no aporta).
         // Tabla plana: el ancho se reparte entre todas las columnas; estirar solo la última

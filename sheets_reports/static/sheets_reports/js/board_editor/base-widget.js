@@ -37,6 +37,8 @@
     static maxDimensions = 1;
     static maxPivots = 1;
     static maxMetrics = 5;
+    // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).
+    static supportsLabels = false;
 
     static FIELD_WIDTH = {
       key: 'width',

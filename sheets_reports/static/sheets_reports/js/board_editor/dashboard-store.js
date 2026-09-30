@@ -85,10 +85,18 @@ function metricAlias(agg, field, showAs) {
   return (/^[a-z]/.test(slug) ? slug : `m_${slug}`).slice(0, 63);
 }
 
+// Cabecera por defecto de una columna: el mismo humanize() del backend (spec_validation), para
+// que el placeholder del campo "Nombre a mostrar" sea el título que se ve si no se personaliza.
+function defaultColumnName(name) {
+  const text = String(name || '').replace(/_/g, ' ').trim();
+  return text ? text[0].toUpperCase() + text.slice(1) : '';
+}
+
 // Estado del builder a partir de data_spec/view_spec: el MISMO spec que escribe la IA, así el
 // panel siempre muestra lo que tiene el widget (no hay dos estados separados).
 function builderFromSpec(spec, view) {
   if (!spec) return null;
+  const labels = (view && view.labels) || {};
   return {
     // Siempre al menos un select visible por lista ('' = sin elegir).
     dimensions: (spec.dimensions || []).length ? [...spec.dimensions] : [''],
@@ -97,10 +105,13 @@ function builderFromSpec(spec, view) {
       const m = normalizeMetric(raw, spec);
       const field = isCountAgg(m.agg) ? '' : m.field;
       return {
-        field, agg: m.agg, as: m.as, show_as: m.show_as,
+        field, agg: m.agg, as: m.as, show_as: m.show_as, label: labels[m.as] || '',
         _origAs: m.as, _origField: field, _origAgg: m.agg, _origShowAs: m.show_as,
       };
     }),
+    // Las cabeceras de las filas/columnas no son del builder: se copian tal cual para no perderlas
+    // (las puso la IA) al aplicar un cambio.
+    labels: { ...labels },
     stacked: !!(view && view.stacked),
     sortBy: spec.sort ? spec.sort.by : '',
     sortDir: spec.sort ? spec.sort.dir : 'desc',
@@ -130,13 +141,13 @@ function effectiveShowAs(b, showAs) {
   return showAs;
 }
 
-// Body de PUT /api/widget/<id>/spec/. Las métricas count van sin campo: el backend usa la
-// dimensión (cuenta filas del grupo).
-function builderToPayload(b) {
-  const metrics = [];
+// Alias ("as") final de cada métrica del builder, en el mismo orden (null si aún no es válida:
+// sin función o sin columna). Separado de builderToPayload para que la UI pueda mostrar el nombre
+// por defecto de una métrica concreta, que depende también del orden (desempate de alias).
+function metricAliases(b) {
   const used = new Set();
-  for (const m of b.metrics) {
-    if (!m.agg || (!isCountAgg(m.agg) && !m.field)) continue;
+  return b.metrics.map(m => {
+    if (!m.agg || (!isCountAgg(m.agg) && !m.field)) return null;
     const showAs = effectiveShowAs(b, m.show_as);
     // Conserva el alias existente si la métrica no cambió (así se conservan sus etiquetas).
     const unchanged = m.as && m.as === m._origAs && m.field === m._origField
@@ -145,18 +156,41 @@ function builderToPayload(b) {
     let candidate = alias;
     for (let i = 2; used.has(candidate); i++) candidate = `${alias}_${i}`.slice(0, 63);
     used.add(candidate);
-    const metric = { field: isCountAgg(m.agg) ? '' : m.field, agg: m.agg, as: candidate };
-    if (showAs !== 'value') metric.show_as = showAs;
-    metrics.push(metric);
-  }
+    return { as: candidate, show_as: showAs, isCount: isCountAgg(m.agg) };
+  });
+}
+
+// Body de PUT /api/widget/<id>/spec/. Las métricas count van sin campo: el backend usa la
+// dimensión (cuenta filas del grupo). `labels` son las cabeceras de columna: viven en view_spec
+// (no en la métrica, que el schema valida con additionalProperties: false).
+function builderToPayload(b) {
   const dimensions = builderDims(b);
   const pivots = builderPivots(b);
+  const aliases = metricAliases(b);
+  // Cabeceras de las filas/columnas: se conservan las que ya tenía el widget y siguen en uso.
+  const kept = new Set([...dimensions, ...pivots]);
+  const labels = {};
+  for (const [name, label] of Object.entries(b.labels || {})) {
+    if (kept.has(name) && (label || '').trim()) labels[name] = label.trim();
+  }
+  const metrics = [];
+  b.metrics.forEach((m, i) => {
+    const alias = aliases[i];
+    if (!alias) return;
+    const metric = { field: alias.isCount ? '' : m.field, agg: m.agg, as: alias.as };
+    if (alias.show_as !== 'value') metric.show_as = alias.show_as;
+    metrics.push(metric);
+    // "Nombre a mostrar" vacío = la cabecera por defecto (la del alias).
+    const label = (m.label || '').trim();
+    if (label) labels[alias.as] = label;
+  });
   const sortTargets = new Set([...dimensions, ...metrics.map(m => m.as)]);
   return {
     dimensions,
     // Una columna como texto (compatible con los gráficos); varias, como lista.
     pivot: pivots.length > 1 ? pivots : (pivots[0] || null),
     metrics,
+    labels,
     stacked: !!(b.stacked && pivots.length),
     sort: b.sortBy && sortTargets.has(b.sortBy) ? { by: b.sortBy, dir: b.sortDir || 'desc' } : null,
   };
@@ -376,6 +410,19 @@ document.addEventListener('alpine:init', () => {
       return this.drawerWidgetClass.maxMetrics;
     },
 
+    // El campo "Nombre a mostrar" solo donde la métrica se ve con nombre: hoy, la tabla.
+    get drawerSupportsLabels() {
+      return !!this.drawerWidgetClass.supportsLabels;
+    },
+
+    // Cabecera por defecto de la métrica `i`: lo que se verá si no se escribe un nombre.
+    metricLabelPlaceholder(i) {
+      const b = this.builder;
+      if (!b) return '';
+      const alias = metricAliases(b)[i];
+      return alias ? defaultColumnName(alias.as) : '';
+    },
+
     get showStacked() {
       return this.drawerWidgetClass.supportsStacked && !!(this.builder && builderPivots(this.builder).length);
     },
@@ -456,8 +503,9 @@ document.addEventListener('alpine:init', () => {
         dimensions: [this.drawerWidgetClass.supportsDimension ? (dims[0] || '') : ''],
         pivots: [''],
         metrics: [numeric.length
-          ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value' }
-          : { field: '', agg: 'count', as: '', show_as: 'value' }],
+          ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value', label: '' }
+          : { field: '', agg: 'count', as: '', show_as: 'value', label: '' }],
+        labels: {},
         stacked: false,
         sortBy: '',
         sortDir: 'desc',
@@ -486,8 +534,8 @@ document.addEventListener('alpine:init', () => {
       if (!b || b.metrics.length >= this.maxMetrics) return;
       const numeric = this.schema.numeric_fields || [];
       b.metrics.push(numeric.length
-        ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value' }
-        : { field: '', agg: 'count', as: '', show_as: 'value' });
+        ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value', label: '' }
+        : { field: '', agg: 'count', as: '', show_as: 'value', label: '' });
     },
 
     removeBuilderMetric(index) {

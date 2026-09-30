@@ -35,28 +35,61 @@
     min-height: 10px !important;
     grid-column: span var(--ghost-span, 6) / span var(--ghost-span, 6) !important;
   }
-#board-body {
-  height: calc(100vh - 4rem); /* menos el header fijo (h-16) */
-}
+  /* Sticky la ancla solo en vertical; en horizontal se desplaza junto a las columnas.
+     El ancho en px lo copia setupColumnRulerSync del lienzo, así sus 12 pistas miden
+     exactamente lo mismo que las del grid de abajo. */
+  .grid-numbers-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1rem;
+    /* Mismo padding que el p-4 del lienzo: las pistas miden (ancho - 32px) con los mismos
+       gutters, así que cada número cae en el centro de su columna. */
+    padding: 0 16px;
+    pointer-events: none;
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 24px;
+    color: rgba(239, 68, 68, 0.8);
+    background: rgba(255, 255, 255, 0.9);
+    border-bottom: 1px dashed rgba(239, 68, 68, 0.4);
+    text-align: center;
+  }
+  /* El header real mide 4rem + el 1px de su border-b, así que en vez de calcularlo
+     con un calc se deja que flexbox mida el header de verdad. */
+  html body {
+    height: 100dvh;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #board-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
 
-/* Barra de módulos: expandida (248px) o contraída a una tira de íconos (56px). El estado
-   cuelga de html[data-rail] (lo pone el script en línea antes del <aside>). */
-#module-rail { width: 248px; }
-#module-rail [hidden] { display: none !important; }  /* las filas son flex: [hidden] debe ganar */
-#module-rail.rail-animated { transition: width 160ms ease; }
-#module-rail .rail-chevron { transition: transform 160ms ease; }
-html[data-rail="collapsed"] #module-rail { width: 56px; }
-html[data-rail="collapsed"] #module-rail .rail-body { padding-left: 0.5rem; padding-right: 0.5rem; }
-html[data-rail="collapsed"] #module-rail .rail-header,
-html[data-rail="collapsed"] #module-rail .rail-search,
-html[data-rail="collapsed"] #module-rail .rail-group,
-html[data-rail="collapsed"] #module-rail .rail-empty,
-html[data-rail="collapsed"] #module-rail .rail-text { display: none; }
-html[data-rail="collapsed"] #module-rail .rail-item {
-  justify-content: center; padding: 0.25rem 0; border-color: transparent; background: transparent;
-}
-html[data-rail="collapsed"] #module-rail .rail-item:hover .rail-icon { border-color: #cbd5e1; color: #14171f; }
-html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180deg); }
+  /* Barra de módulos: expandida (248px) o contraída a una tira de íconos (56px). El estado
+    cuelga de html[data-rail] (lo pone el script en línea antes del <aside>). */
+  #module-rail { width: 248px; }
+  #module-rail [hidden] { display: none !important; }  /* las filas son flex: [hidden] debe ganar */
+  #module-rail.rail-animated { transition: width 160ms ease; }
+  #module-rail .rail-chevron { transition: transform 160ms ease; }
+  html[data-rail="collapsed"] #module-rail { width: 56px; }
+  html[data-rail="collapsed"] #module-rail .rail-body { padding-left: 0.5rem; padding-right: 0.5rem; }
+  html[data-rail="collapsed"] #module-rail .rail-header,
+  html[data-rail="collapsed"] #module-rail .rail-search,
+  html[data-rail="collapsed"] #module-rail .rail-group,
+  html[data-rail="collapsed"] #module-rail .rail-empty,
+  html[data-rail="collapsed"] #module-rail .rail-text { display: none; }
+  html[data-rail="collapsed"] #module-rail .rail-item {
+    justify-content: center; padding: 0.25rem 0; border-color: transparent; background: transparent;
+  }
+  html[data-rail="collapsed"] #module-rail .rail-item:hover .rail-icon { border-color: #cbd5e1; color: #14171f; }
+  html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180deg); }
 </style>
 
 <div id="board-body" class="flex w-full overflow-hidden">
@@ -91,8 +124,24 @@ html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180de
     </button>
   </aside>
 
-  <main id="board-main" class="flex-1 min-w-0 min-h-0 p-6 overflow-auto">
-    <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start h-full bg-paper border-2 border-dashed border-line rounded-xl p-4">
+  <main id="board-main" class="relative flex-1 min-w-0 min-h-0 overflow-hidden">
+    <div id="board-scroll" class="h-full w-full overflow-auto flex flex-col">
+      <div class="grid-numbers-header">
+        <span>1</span>
+        <span>2</span>
+        <span>3</span>
+        <span>4</span>
+        <span>5</span>
+        <span>6</span>
+        <span>7</span>
+        <span>8</span>
+        <span>9</span>
+        <span>10</span>
+        <span>11</span>
+        <span>12</span>
+      </div>
+      <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start flex-1 bg-paper p-4">
+      </div>
     </div>
   </main>
 
@@ -666,6 +715,7 @@ html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180de
 
             <template x-if="field.type === 'select'">
               <select x-model="$store.dashboard.drawerDraft[field.key]"
+                      x-on:change="field.key === 'width' && $store.dashboard.fitStartCol()"
                       class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
                 <template x-for="opt in field.options" :key="opt.value">
                   <option x-bind:value="opt.value" x-text="opt.label"></option>

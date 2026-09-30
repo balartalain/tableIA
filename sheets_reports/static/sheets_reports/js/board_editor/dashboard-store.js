@@ -751,7 +751,16 @@ document.addEventListener('alpine:init', () => {
       // No debe colapsar a []: eso destruiría/recrearía los <select> del drawer
       // (y sus <option>) en cada apertura.
       const WidgetClass = this.editingType ? WidgetRegistry.get(this.editingType) : BaseWidget;
-      return WidgetClass.drawerFields;
+      const fields = WidgetClass.drawerFields;
+      // La columna de inicio depende del ancho: un widget de 12 columnas solo puede empezar
+      // al inicio. Se reconstruye el array (nunca vacío) para que sus <option> se actualicen.
+      const width = this.drawerDraft && this.drawerDraft.width;
+      if (!width) return fields;
+      return fields.map((field) => (
+        field.key === 'startCol'
+          ? { ...field, options: BaseWidget.startColOptionsForWidth(width) }
+          : field
+      ));
     },
 
     get drawerWidgetClass() {
@@ -1037,6 +1046,16 @@ document.addEventListener('alpine:init', () => {
       b.pivots = b.pivots.map(p => (b.dimensions.includes(p) ? '' : p));
     },
 
+    // Al cambiar el ancho, la columna de inicio elegida puede quedarse fuera del grid
+    // (p. ej. estaba en la 10 y el widget pasa a 12 columnas). Se recorta al último inicio
+    // válido para que el <select> siempre tenga una opción que coincida con su valor.
+    fitStartCol() {
+      const d = this.drawerDraft;
+      if (!d || !d.width) return;
+      const fitted = BaseWidget.fitStartCol(d.startCol, d.width);
+      if (fitted !== d.startCol) d.startCol = fitted;
+    },
+
     openDrawer(id) {
       const w = this.widgets.find(w => w.id === id);
       if (!w) return;
@@ -1051,6 +1070,10 @@ document.addEventListener('alpine:init', () => {
       }
       draft.prompt = '';
       draft.builder = this._builderDraft(w) || this._defaultBuilder();
+      // Un tablero guardado puede tener un inicio que hoy no cabe con su ancho (o que quedó
+      // de una versión anterior): se normaliza al abrir para que el desplegable no quede sin
+      // opción coincidente.
+      draft.startCol = BaseWidget.fitStartCol(draft.startCol, draft.width);
       // Totales por nivel: van junto a cada fila/columna del builder, pero son presentación
       // (se guardan con "Guardar" y no vuelven a pedir los datos).
       if (this.drawerWidgetClass.supportsTotals) {
@@ -1252,6 +1275,9 @@ document.addEventListener('alpine:init', () => {
         // Cambios del builder sin aplicar: se aplican con el mismo camino que el botón.
         if (builder && this.builderDirty && !(await this.applyBuilder())) return;
 
+        // Última barrera antes de guardar: si el ancho y la columna de inicio no caben en las
+        // 12 columnas del grid, se ajusta el inicio en vez de persistir un diseño inválido.
+        presentation.startCol = BaseWidget.fitStartCol(presentation.startCol, presentation.width);
         Object.assign(w, presentation);
         await this._saveWidget(w);
         w.updateChrome();

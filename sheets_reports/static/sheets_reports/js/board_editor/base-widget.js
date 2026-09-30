@@ -35,17 +35,24 @@
     // "Mostrar totales" por nivel de filas/columnas (props rowTotals/columnTotals).
     static supportsTotals = false;
 
+    // El grid del lienzo tiene 12 columnas (position.w), así que el ancho se expresa en
+    // columnas y no en porcentaje: "12 columnas" es el ancho completo.
     static FIELD_WIDTH = {
       key: 'width',
       label: 'Ancho',
       type: 'select',
       options: [
-        { value: 'md:col-span-2', label: '17%' },
-        { value: 'md:col-span-3', label: '25%' },
-        { value: 'md:col-span-4', label: '33%' },
-        { value: 'md:col-span-6', label: '50%' },
-        { value: 'md:col-span-8', label: '66%' },
-        { value: 'md:col-span-12', label: '100%' },
+        { value: 'md:col-span-2', label: '2 columnas' },
+        { value: 'md:col-span-3', label: '3 columnas' },
+        { value: 'md:col-span-4', label: '4 columnas' },
+        { value: 'md:col-span-5', label: '5 columnas' },
+        { value: 'md:col-span-6', label: '6 columnas' },
+        { value: 'md:col-span-7', label: '7 columnas' },
+        { value: 'md:col-span-8', label: '8 columnas' },
+        { value: 'md:col-span-9', label: '9 columnas' },
+        { value: 'md:col-span-10', label: '10 columnas' },
+        { value: 'md:col-span-11', label: '11 columnas' },
+        { value: 'md:col-span-12', label: '12 columnas' },
       ],
     };
 
@@ -53,25 +60,61 @@
       return { key: 'height', label: 'Alto (px)', type: 'number', min: this.minHeight, step: 10 };
     }
 
+    // El lienzo es un grid de 12 columnas: un widget que empieza en N y ocupa w columnas
+    // termina en N + w - 1, así que N no puede pasar de 13 - w.
+    static GRID_COLUMNS = 12;
+
     static FIELD_START_COL = {
       key: 'startCol',
-      label: 'Posición en fila',
+      label: 'Columna de inicio',
       type: 'select',
       options: [
         { value: '', label: 'Fluido' },
         { value: 'md:col-start-1', label: 'Al inicio' },
-        { value: 'md:col-start-2', label: 'Dejar 1 espacio' },
-        { value: 'md:col-start-3', label: 'Dejar 2 espacios' },
-        { value: 'md:col-start-4', label: 'Dejar 3 espacios' },
-        { value: 'md:col-start-5', label: 'Dejar 4 espacio' },
-        { value: 'md:col-start-6', label: 'Dejar 5 espacios' },
-        { value: 'md:col-start-7', label: 'Dejar 6 espacios' },
-        { value: 'md:col-start-8', label: 'Dejar 7 espacios' },
-        { value: 'md:col-start-9', label: 'Dejar 8 espacios' },
-        { value: 'md:col-start-10', label: 'Dejar 9 espacios' },
-        { value: 'md:col-start-11', label: 'Dejar 10 espacios' },
+        { value: 'md:col-start-2', label: 'Dejar 1 columna' },
+        { value: 'md:col-start-3', label: 'Dejar 2 columnas' },
+        { value: 'md:col-start-4', label: 'Dejar 3 columnas' },
+        { value: 'md:col-start-5', label: 'Dejar 4 columnas' },
+        { value: 'md:col-start-6', label: 'Dejar 5 columnas' },
+        { value: 'md:col-start-7', label: 'Dejar 6 columnas' },
+        { value: 'md:col-start-8', label: 'Dejar 7 columnas' },
+        { value: 'md:col-start-9', label: 'Dejar 8 columnas' },
+        { value: 'md:col-start-10', label: 'Dejar 9 columnas' },
+        { value: 'md:col-start-11', label: 'Dejar 10 columnas' },
       ],
     };
+
+    // Columna inicial (1..12) a la que deja una opción de FIELD_START_COL.
+    static _startColNumber(startCol) {
+      const m = /md:col-start-(\d+)/.exec(startCol || '');
+      return m ? parseInt(m[1], 10) : 0;
+    }
+
+    static _startColValue(n) {
+      return `md:col-start-${n}`;
+    }
+
+    // Última columna inicial posible para un widget de `width` columnas.
+    static _maxStartCol(width) {
+      return this.GRID_COLUMNS - BaseWidget._parseSpan(width) + 1;
+    }
+
+    // Opciones de inicio que no desbordan el grid con el ancho elegido. "Fluido" siempre vale.
+    static startColOptionsForWidth(width) {
+      const max = BaseWidget._maxStartCol(width);
+      return BaseWidget.FIELD_START_COL.options.filter(
+        (opt) => !opt.value || BaseWidget._startColNumber(opt.value) <= max
+      );
+    }
+
+    // Si al elegir un ancho más grande la columna de inicio quedó fuera, se ajusta al último
+    // inicio posible: si no, el <select> se quedaría sin opción coincidente con su valor.
+    static fitStartCol(startCol, width) {
+      const n = BaseWidget._startColNumber(startCol);
+      if (!n) return startCol || '';
+      const max = BaseWidget._maxStartCol(width);
+      return n <= max ? startCol : BaseWidget._startColValue(max);
+    }
 
     static get drawerFields() {
       return [

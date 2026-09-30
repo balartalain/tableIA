@@ -449,6 +449,7 @@
         this.height = clamp(Math.round(el.offsetHeight/stepHeight)*stepHeight, minHeight, 3000);//Max height 3000px
         el.style.height = this.height + 'px';
         this._dirty = true;
+        Alpine.store('dashboard').scheduleLayoutSave();
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
          setTimeout(() => el.classList.remove('is-snapping'), 160);

@@ -92,6 +92,8 @@ function initRail(sidebarEl) {
   search.addEventListener('input', () => filterPalette(sidebarEl, search.value));
 }
 
+// Global: el store la usa para avisar de un guardado fallido.
+window.showToast = showToast;
 function showToast(message) {
   let container = document.getElementById('toast-container');
   if (!container) {
@@ -224,16 +226,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     },
   });
 
-  document.getElementById('save-btn').addEventListener('click', async () => {
-    const store = Alpine.store('dashboard');
-    store.reorderWidgets();
-    for (const w of store.widgets) {
-      if (w._dirty) await store._saveWidget(w);
-    }
-    const pending = store.widgets.filter(w => w.id < 0).length;
-    showToast(pending
-      ? `Diseño guardado. ${pending} widget(s) sin generar no se guardaron.`
-      : 'Diseño guardado');
+  // El diseño se guarda solo; si al salir queda un cambio sin enviar, se envía con keepalive
+  // para que la petición no se corte al cerrar la página.
+  window.addEventListener('pagehide', () => {
+    if (store.hasPendingLayout) store.flushLayoutSave({ keepalive: true });
   });
 
   document.getElementById('share-btn').addEventListener('click', async () => {

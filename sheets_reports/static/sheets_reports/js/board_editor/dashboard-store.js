@@ -1,5 +1,7 @@
 const AI_FETCH_TIMEOUT_MS = 120000;
 const RENDER_FETCH_TIMEOUT_MS = 60000;
+// Espera tras el último cambio de orden o alto antes de guardarlo.
+const LAYOUT_SAVE_DELAY_MS = 600;
 
 // Aborta si tarda demasiado y nunca truena por JSON inválido (p. ej. una página HTML de error
 // devuelta por un timeout de gateway/proxy) — deja que quien llama decida el mensaje de error.
@@ -668,14 +670,54 @@ document.addEventListener('alpine:init', () => {
 
     // Guarda solo la presentación (título, posición, preferencias visuales). Los widgets
     // nuevos no existen en el backend hasta que se generan con IA.
-    async _saveWidget(w) {
-      if (w.id < 0) return;
-      await fetch(apiUrl(`/api/widget/${w.id}/`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(w.toPayload()),
-      });
-      w._dirty = false;
+    // Retorna true si se guardó; si falla, el widget sigue pendiente (_dirty) y se reintenta
+    // en el próximo guardado. `keepalive`: la petición sobrevive al cierre de la página.
+    async _saveWidget(w, { keepalive = false } = {}) {
+      if (w.id < 0) return true;
+      try {
+        const r = await fetch(apiUrl(`/api/widget/${w.id}/`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(w.toPayload()),
+          keepalive,
+        });
+        if (!r.ok) return false;
+        w._dirty = false;
+        return true;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    // Diseño (orden y alto de los widgets): se guarda solo, agrupando los cambios seguidos
+    // (ej. varios pasos del redimensionado) en un único guardado.
+    _layoutTimer: null,
+    _layoutSaving: null,
+
+    scheduleLayoutSave() {
+      clearTimeout(this._layoutTimer);
+      this._layoutTimer = setTimeout(() => this.flushLayoutSave(), LAYOUT_SAVE_DELAY_MS);
+    },
+
+    async flushLayoutSave({ keepalive = false } = {}) {
+      clearTimeout(this._layoutTimer);
+      this._layoutTimer = null;
+      // Sin solapar: si hay un guardado en curso, se espera y luego se guarda lo que quede.
+      // Al cerrar la página (keepalive) no se espera: los pendientes se envían ya, incluidos
+      // los que están en curso (siguen _dirty hasta que el servidor responde).
+      if (this._layoutSaving && !keepalive) await this._layoutSaving;
+      const pending = this.widgets.filter(w => w._dirty && w.id > 0);
+      if (!pending.length) return;
+      this._layoutSaving = Promise.all(pending.map(w => this._saveWidget(w, { keepalive })));
+      const results = await this._layoutSaving;
+      this._layoutSaving = null;
+      if (results.includes(false) && typeof window.showToast === 'function') {
+        window.showToast('No se pudo guardar el diseño. Se reintentará con el próximo cambio.');
+      }
+    },
+
+    get hasPendingLayout() {
+      return !!this._layoutTimer || this.widgets.some(w => w._dirty && w.id > 0);
     },
 
     async removeWidget(id) {
@@ -698,6 +740,7 @@ document.addEventListener('alpine:init', () => {
         }
       });
       this.widgets.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      this.scheduleLayoutSave();
     },
 
     get editingWidget() {

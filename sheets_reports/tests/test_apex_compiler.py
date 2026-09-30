@@ -3,13 +3,14 @@ from django.test import SimpleTestCase
 from sheets_reports.services.apex_compiler import compile_view
 from sheets_reports.services.query_engine import run_data_spec
 from sheets_reports.services.spec_validation import build_view_spec
-from sheets_reports.tests.fixtures import sales_df, spec
+from sheets_reports.tests.fixtures import agg, sales_df, sellers_df, spec
 
 
-def compiled(widget_type, data_spec, options=None):
+def compiled(widget_type, data_spec, options=None, df=None):
     view_spec = build_view_spec(widget_type, data_spec, options)
     layout = "table" if widget_type == "table" else "auto"
-    return compile_view(widget_type, run_data_spec(sales_df(), data_spec, layout=layout), view_spec)
+    df = sales_df() if df is None else df
+    return compile_view(widget_type, run_data_spec(df, data_spec, layout=layout), view_spec)
 
 
 class CompileViewTests(SimpleTestCase):
@@ -18,23 +19,22 @@ class CompileViewTests(SimpleTestCase):
         self.assertEqual(out, {"value": 755.0, "label": "Total"})
 
     def test_kpi_porcentaje(self):
-        out = compiled("kpi", spec(dimensions=[], metrics=[{"field": "ventas", "agg": "pct_sum", "as": "porcentaje"}],
+        out = compiled("kpi", spec(dimensions=[], metrics=[agg("porcentaje", show_as="pct_total")],
                                    filters=[{"field": "anio", "op": "eq", "value": 2026}]))
         self.assertEqual(out, {"value": 89.4, "label": "Porcentaje", "percent": True})
 
     def test_bar_y_table_marcan_series_y_campos_de_porcentaje(self):
-        metrics = [{"field": "ventas", "agg": "sum", "as": "total_ventas"},
-                   {"field": "ventas", "agg": "pct_sum", "as": "porcentaje"}]
+        metrics = [agg("total_ventas"), agg("porcentaje", show_as="pct_column")]
         self.assertEqual(compiled("bar", spec(metrics=metrics))["percent"], ["Porcentaje"])
         self.assertEqual(compiled("table", spec(metrics=metrics))["percent"], ["porcentaje"])
-        pivoted = compiled("table", spec(pivot="mes", metrics=[metrics[1]]))
+        pivoted = compiled("table", spec(pivots=["mes"], metrics=[metrics[1]]))
         # Una por mes + la columna "Total general".
         self.assertEqual(len(pivoted["percent"]), 4)
 
     def test_bar_sin_pivote_una_serie_por_metrica(self):
         out = compiled("bar", spec(metrics=[
-            {"field": "ventas", "agg": "sum", "as": "total_ventas"},
-            {"field": "categoria", "agg": "count", "as": "cantidad"},
+            {"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"},
+            {"type": "agg", "agg": "count", "as": "cantidad"},
         ]), {"labels": {"cantidad": "Cantidad"}})
         self.assertEqual(out["categories"], ["Hogar", "Electrónica", "Ropa"])
         self.assertEqual(out["series"], [
@@ -44,7 +44,7 @@ class CompileViewTests(SimpleTestCase):
         self.assertFalse(out["stacked"])
 
     def test_bar_con_pivote_una_serie_por_valor(self):
-        out = compiled("bar", spec(pivot="mes"), {"stacked": True})
+        out = compiled("bar", spec(pivots=["mes"]), {"stacked": True})
         self.assertEqual(out["categories"], ["Hogar", "Electrónica", "Ropa"])
         self.assertEqual(out["series"], [
             {"name": "Ene", "data": [100.0, 300.0, 0]},
@@ -69,7 +69,7 @@ class CompileViewTests(SimpleTestCase):
         self.assertEqual(out["rows"][0], {"categoria": "Hogar", "total_ventas": 175.0})
 
     def test_table_con_pivote_columnas_anidadas(self):
-        out = compiled("table", spec(pivot="mes"), {"labels": {"total_ventas": "Ventas"}})
+        out = compiled("table", spec(pivots=["mes"]), {"labels": {"total_ventas": "Ventas"}})
         self.assertEqual(out["columns"], [
             {"header": "Categoria", "field": "categoria"},
             {"header": "Ventas", "children": [
@@ -95,9 +95,9 @@ class CompileViewTests(SimpleTestCase):
         })
 
     def test_table_con_pivote_y_varias_metricas_agrupa_por_valor_del_pivote(self):
-        out = compiled("table", spec(pivot="mes", metrics=[
-            {"field": "categoria", "agg": "count", "as": "cantidad"},
-            {"field": "categoria", "agg": "count", "as": "pct", "show_as": "pct_row"},
+        out = compiled("table", spec(pivots=["mes"], metrics=[
+            {"type": "agg", "agg": "count", "as": "cantidad"},
+            {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"},
         ]), {"labels": {"pct": "%"}})
         self.assertEqual(out["columns"][1], {"header": "Ene", "children": [
             {"header": "Cantidad", "field": "__pivots.Ene.cantidad"},
@@ -116,6 +116,51 @@ class CompileViewTests(SimpleTestCase):
         self.assertEqual(out["totals"], {"categoria": "Total general", "total_ventas": 755.0})
 
 
+class KpiCompileTests(SimpleTestCase):
+    def data_spec(self, *metrics, **overrides):
+        return spec(dimensions=[], metrics=list(metrics) or [
+            agg("actual", filters=[{"field": "anio", "op": "eq", "value": 2026}]),
+            agg("anterior", filters=[{"field": "anio", "op": "eq", "value": 2025}]),
+        ], **overrides)
+
+    def test_comparacion(self):
+        out = compiled("kpi", self.data_spec(), {"kpi": {"compare": "anterior"}, "labels": {"anterior": "2025"}})
+        self.assertEqual(out["value"], 675.0)
+        self.assertEqual(out["compare"], {"label": "2025", "value": 80.0, "mode": "pct",
+                                          "delta": 595.0, "delta_pct": 743.75, "better": True})
+
+    def test_comparacion_cuando_menos_es_mejor(self):
+        out = compiled("kpi", self.data_spec(), {"kpi": {"compare": "anterior", "higher_is_better": False}})
+        self.assertFalse(out["compare"]["better"])
+
+    def test_meta_numerica_y_semaforo(self):
+        options = {"kpi": {"target": 1000, "status": {"basis": "target_pct", "good": 100, "warn": 60}}}
+        out = compiled("kpi", self.data_spec(), options)
+        self.assertEqual(out["target"], {"label": "Meta", "value": 1000, "pct": 67.5})
+        self.assertEqual(out["status"], "warn")
+
+    def test_semaforo_por_valor_invertido(self):
+        options = {"kpi": {"higher_is_better": False, "status": {"basis": "value", "good": 500, "warn": 700}}}
+        self.assertEqual(compiled("kpi", self.data_spec(), options)["status"], "warn")
+
+    def test_meta_desde_otra_metrica(self):
+        out = compiled("kpi", self.data_spec(agg("ventas"), agg("plan", field="plan")),
+                       {"kpi": {"target": "plan"}}, df=sellers_df())
+        self.assertEqual(out["target"], {"label": "Plan", "value": 1020.0, "pct": 104.9})
+
+    def test_top_muestra_el_grupo(self):
+        metric = {"type": "grouped", "as": "lider", "group_by": "categoria", "inner": [agg("v")],
+                  "having": [], "result": "top", "value": "v"}
+        out = compiled("kpi", self.data_spec(metric), {"labels": {"lider": "Ventas"}})
+        self.assertEqual(out, {"label": "Ventas", "text": "Electrónica", "value": 500.0})
+
+    def test_tendencia_de_la_metrica_principal(self):
+        out = compiled("kpi", self.data_spec(agg("total"), agg("cantidad", "count"), trend_by="mes"),
+                       {"kpi": {"primary": "cantidad"}})
+        self.assertEqual(out["value"], 6)
+        self.assertEqual(out["trend"], {"categories": ["Ene", "Feb", "Mar"], "data": [2, 3, 1]})
+
+
 class PivotTableCompileTests(SimpleTestCase):
     def test_varias_filas_marcan_subtotales(self):
         out = compiled("table", spec(dimensions=["anio", "categoria"]))
@@ -125,7 +170,7 @@ class PivotTableCompileTests(SimpleTestCase):
         self.assertEqual(out["totals"], {"anio": "Total general", "total_ventas": 755.0})
 
     def test_dos_pivotes_anidan_columnas_con_subtotales(self):
-        out = compiled("table", spec(pivot=["anio", "mes"]))
+        out = compiled("table", spec(pivots=["anio", "mes"]))
         sep = "\x1f"
         self.assertEqual(out["columns"][1], {"header": "Total ventas", "children": [
             {"header": "2026", "children": [
@@ -142,9 +187,9 @@ class PivotTableCompileTests(SimpleTestCase):
         self.assertEqual(out["rows"][0]["__pivots.2026.total_ventas"], 175.0)
 
     def test_dos_pivotes_y_varias_metricas(self):
-        out = compiled("table", spec(pivot=["anio", "mes"], metrics=[
-            {"field": "categoria", "agg": "count", "as": "cantidad"},
-            {"field": "categoria", "agg": "count", "as": "pct", "show_as": "pct_row"},
+        out = compiled("table", spec(pivots=["anio", "mes"], metrics=[
+            {"type": "agg", "agg": "count", "as": "cantidad"},
+            {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"},
         ]))
         anio_2026 = out["columns"][1]
         self.assertEqual(anio_2026["header"], "2026")

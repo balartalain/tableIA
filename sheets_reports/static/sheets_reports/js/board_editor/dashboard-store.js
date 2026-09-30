@@ -34,19 +34,78 @@ const SHOW_AS_LABELS = {
   pct_total: '% del total general',
 };
 
-// Operadores de los filtros (spec_validation.FILTER_OPS), para describirlos en los pasos de
-// "Consulta con la IA".
-const FILTER_OP_LABELS = { eq: '=', ne: '≠', lt: '<', lte: '≤', gt: '>', gte: '≥', in: 'es uno de' };
+// Tipos de métrica (spec_validation.METRIC_TYPES). "Por grupo" es solo del KPI.
+const METRIC_TYPE_OPTIONS = [
+  { value: 'agg', label: 'Resumir una columna' },
+  { value: 'calc', label: 'Cálculo entre métricas' },
+  { value: 'grouped', label: 'Por grupo (condición / ranking)' },
+];
+
+// Operaciones de una métrica calculada (spec_validation.CALC_OPS).
+const CALC_OP_OPTIONS = [
+  { value: 'sub', label: '− menos', word: 'dif' },
+  { value: 'add', label: '+ más', word: 'suma' },
+  { value: 'mul', label: '× por', word: 'prod' },
+  { value: 'div', label: '÷ entre', word: 'div' },
+  { value: 'ratio_pct', label: 'como % de', word: 'pct' },
+  { value: 'diff_pct', label: 'variación % vs', word: 'var' },
+];
+
+// Resultado de una métrica por grupo (spec_validation.GROUP_RESULTS).
+const GROUP_RESULT_OPTIONS = [
+  { value: 'count', label: 'Cuántos grupos cumplen', word: 'grupos' },
+  { value: 'pct_groups', label: '% de grupos que cumplen', word: 'pct_grupos' },
+  { value: 'top', label: 'El grupo con el mayor…', word: 'top' },
+  { value: 'bottom', label: 'El grupo con el menor…', word: 'menor' },
+  { value: 'sum', label: 'Suma de…', word: 'suma' },
+  { value: 'avg', label: 'Promedio de…', word: 'promedio' },
+  { value: 'min', label: 'Mínimo de…', word: 'minimo' },
+  { value: 'max', label: 'Máximo de…', word: 'maximo' },
+];
+const COUNT_RESULTS = ['count', 'pct_groups'];
+const RANKING_RESULTS = ['top', 'bottom'];
+
+// Operadores de las condiciones (spec_validation.FILTER_OPS). `numeric`: solo columnas numéricas.
+const FILTER_OP_OPTIONS = [
+  { value: 'eq', label: 'es igual a', short: '=' },
+  { value: 'ne', label: 'es distinto de', short: '≠' },
+  { value: 'gt', label: 'mayor que', short: '>', numeric: true },
+  { value: 'gte', label: 'mayor o igual que', short: '≥', numeric: true },
+  { value: 'lt', label: 'menor que', short: '<', numeric: true },
+  { value: 'lte', label: 'menor o igual que', short: '≤', numeric: true },
+  { value: 'between', label: 'está entre', short: 'entre', numeric: true },
+  { value: 'in', label: 'es uno de', short: 'es uno de' },
+  { value: 'not_in', label: 'no es ninguno de', short: 'no es ninguno de' },
+  { value: 'contains', label: 'contiene', short: 'contiene' },
+  { value: 'is_empty', label: 'está vacío', short: 'está vacío' },
+  { value: 'not_empty', label: 'no está vacío', short: 'no está vacío' },
+];
+const LIST_OPS = ['in', 'not_in'];
+const EMPTY_OPS = ['is_empty', 'not_empty'];
+// Operadores que aceptan un valor relativo (spec_validation: eq, ne y comparaciones).
+const RELATIVE_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte'];
+
+// De dónde sale el valor de una condición: fijo, o relativo (spec_validation.RELATIVE_VALUES).
+const VALUE_MODE_OPTIONS = [
+  { value: 'value', label: 'Valor fijo…' },
+  { value: 'current_year', label: 'Año actual' },
+  { value: 'previous_year', label: 'Año anterior' },
+  { value: 'current_month', label: 'Mes actual (1-12)' },
+  { value: 'max', label: 'Último valor de la columna' },
+  { value: 'second_max', label: 'Penúltimo valor' },
+  { value: 'min', label: 'Primer valor' },
+];
+
+// Comparaciones de las condiciones sobre grupos (having).
+const COMPARE_OP_OPTIONS = FILTER_OP_OPTIONS.filter(o => RELATIVE_OPS.includes(o.value));
+
+const OP_SHORT = Object.fromEntries(FILTER_OP_OPTIONS.map(o => [o.value, o.short]));
 
 // Totales por nivel de filas/columnas (rowTotals/columnTotals) ajustados a `n` niveles;
 // los que faltan quedan visibles.
 function totalsLevels(list, n) {
   return Array.from({ length: n }, (_, i) => (list || [])[i] !== false);
 }
-
-// Formato anterior de porcentajes (agg pct_* + of): se traduce al abrir un widget guardado,
-// igual que normalize_metric en el backend.
-const LEGACY_PERCENT_AGGS = { pct_count: 'count', pct_sum: 'sum' };
 
 // Filas y columnas elegidas en el builder, sin vacíos ni repetidos (una columna usada como
 // fila no puede ser además columna de pivote).
@@ -55,7 +114,7 @@ function chosen(list) {
 }
 
 function builderDims(b) {
-  return chosen(b.dimensions);
+  return b.widget === 'kpi' ? [] : chosen(b.dimensions);
 }
 
 function builderPivots(b) {
@@ -63,36 +122,41 @@ function builderPivots(b) {
   return chosen(b.pivots).filter(p => !dims.has(p));
 }
 
-// `pivot` del spec como lista (null, "mes" o ["anio", "mes"]), como pivots_of del backend.
-function pivotsOf(spec) {
-  if (!spec.pivot) return [];
-  return Array.isArray(spec.pivot) ? [...spec.pivot] : [spec.pivot];
-}
-
 // count cuenta filas y no usa campo.
 function isCountAgg(agg) {
   return agg === 'count';
 }
 
-function normalizeMetric(m, spec) {
-  if (!(m.agg in LEGACY_PERCENT_AGGS)) return { ...m, show_as: m.show_as || 'value' };
-  let showAs = 'pct_total';
-  if (m.of !== 'total' && (spec.dimensions || []).length) showAs = spec.pivot ? 'pct_row' : 'pct_column';
-  return { ...m, agg: LEGACY_PERCENT_AGGS[m.agg], show_as: showAs };
+// Identificador local y estable de cada métrica del builder: los cálculos, las condiciones
+// sobre grupos, el orden y los roles del KPI se refieren a métricas por este id (su alias
+// "as" cambia al cambiar la métrica); builderToPayload lo traduce al alias.
+let _metricSeq = 0;
+function newId() {
+  _metricSeq += 1;
+  return `m${_metricSeq}`;
 }
 
-// Nombre de columna resultante ("as") para una métrica del builder: snake_case ASCII, como
-// exige el schema (^[a-z][a-z0-9_]{0,62}$). count no depende del campo: siempre "cantidad".
-function metricAlias(agg, field, showAs) {
+function slug(text) {
+  return String(text)
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function asAlias(text) {
+  const s = slug(text);
+  return (/^[a-z]/.test(s) ? s : `m_${s}`).slice(0, 63);
+}
+
+// Nombre de columna resultante ("as") para una métrica agg: snake_case ASCII, como exige el
+// schema (^[a-z][a-z0-9_]{0,62}$). count no depende del campo: siempre "cantidad". Las
+// condiciones propias de la métrica se agregan al final (ej. total_ventas_2026).
+function metricAlias(agg, field, showAs, suffix = '') {
   const pct = showAs && showAs !== 'value' ? 'pct_' : '';
-  if (agg === 'count') return `${pct}cantidad`;
   const prefix = {
     avg: 'promedio', min: 'minimo', max: 'maximo', median: 'mediana', count_distinct: 'unicos',
   }[agg] || 'total';
-  const slug = `${pct}${prefix}_${field}`
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  return (/^[a-z]/.test(slug) ? slug : `m_${slug}`).slice(0, 63);
+  const base = agg === 'count' ? `${pct}cantidad` : `${pct}${prefix}_${field}`;
+  return asAlias(suffix ? `${base}_${suffix}` : base);
 }
 
 // Cabecera por defecto de una columna: el mismo humanize() del backend (spec_validation), para
@@ -102,33 +166,161 @@ function defaultColumnName(name) {
   return text ? text[0].toUpperCase() + text.slice(1) : '';
 }
 
-// Estado del builder a partir de data_spec/view_spec: el MISMO spec que escribe la IA, así el
-// panel siempre muestra lo que tiene el widget (no hay dos estados separados).
-function builderFromSpec(spec, view) {
-  if (!spec) return null;
-  const labels = (view && view.labels) || {};
+// --- Condiciones -----------------------------------------------------------------------
+
+// `_k`: clave estable para los x-for del panel (no se envía).
+function newCondition(field = '') {
+  return { _k: newId(), field, op: 'eq', mode: 'value', value: '', value2: '' };
+}
+
+function conditionFromSpec(f) {
+  const c = newCondition(f.field);
+  c.op = f.op;
+  if (f.relative) c.mode = f.relative;
+  if (f.op === 'between' && Array.isArray(f.value)) {
+    [c.value, c.value2] = f.value.map(String);
+  } else if (Array.isArray(f.value)) {
+    c.value = f.value.join(', ');
+  } else if (f.value !== undefined && f.value !== null) {
+    c.value = String(f.value);
+  }
+  return c;
+}
+
+// Valor tipado según la columna: en una numérica, "2026" se envía como 2026.
+function typedValue(text, numeric) {
+  const v = String(text ?? '').trim();
+  if (numeric && v !== '' && !Number.isNaN(Number(v))) return Number(v);
+  return v;
+}
+
+// Condición del builder -> condición del spec; null si está incompleta (no se envía).
+function conditionToSpec(c, numericFields) {
+  if (!c.field || !c.op) return null;
+  const numeric = numericFields.has(c.field);
+  if (EMPTY_OPS.includes(c.op)) return { field: c.field, op: c.op };
+  if (RELATIVE_OPS.includes(c.op) && c.mode && c.mode !== 'value') {
+    return { field: c.field, op: c.op, relative: c.mode };
+  }
+  if (LIST_OPS.includes(c.op)) {
+    const values = String(c.value || '').split(',').map(v => typedValue(v, numeric)).filter(v => v !== '');
+    return values.length ? { field: c.field, op: c.op, value: values } : null;
+  }
+  if (c.op === 'between') {
+    const range = [c.value, c.value2].map(v => (String(v ?? '').trim() === '' ? NaN : Number(v)));
+    return range.some(Number.isNaN) ? null : { field: c.field, op: c.op, value: range };
+  }
+  const value = typedValue(c.value, numeric);
+  return value === '' ? null : { field: c.field, op: c.op, value };
+}
+
+function conditionsToSpec(list, numericFields) {
+  return (list || []).map(c => conditionToSpec(c, numericFields)).filter(Boolean);
+}
+
+function describeCondition(f) {
+  if (EMPTY_OPS.includes(f.op)) return `${f.field} ${OP_SHORT[f.op]}`;
+  const value = f.relative
+    ? (VALUE_MODE_OPTIONS.find(o => o.value === f.relative) || { label: f.relative }).label.toLowerCase()
+    : Array.isArray(f.value) ? f.value.join(f.op === 'between' ? ' y ' : ', ') : f.value;
+  return `${f.field} ${OP_SHORT[f.op] || f.op} ${value}`;
+}
+
+// --- Condiciones sobre grupos (having) -------------------------------------------------
+
+function newGroupCondition(left = '') {
+  return { _k: newId(), left, op: 'lt', rightKind: 'metric', right: '' };
+}
+
+// `idOf`: alias -> id local de la métrica.
+function groupConditionFromSpec(h, idOf) {
+  const numeric = typeof h.right === 'number';
   return {
-    // Siempre al menos un select visible por lista ('' = sin elegir).
-    dimensions: (spec.dimensions || []).length ? [...spec.dimensions] : [''],
-    pivots: pivotsOf(spec).length ? pivotsOf(spec) : [''],
-    metrics: (spec.metrics || []).map(raw => {
-      const m = normalizeMetric(raw, spec);
-      const field = isCountAgg(m.agg) ? '' : m.field;
-      return {
-        field, agg: m.agg, as: m.as, show_as: m.show_as, label: labels[m.as] || '',
-        _origAs: m.as, _origField: field, _origAgg: m.agg, _origShowAs: m.show_as,
-      };
-    }),
-    // Las cabeceras de las filas/columnas no son del builder: se copian tal cual para no perderlas
-    // (las puso la IA) al aplicar un cambio.
-    labels: { ...labels },
-    stacked: !!(view && view.stacked),
-    sortBy: spec.sort ? spec.sort.by : '',
-    sortDir: spec.sort ? spec.sort.dir : 'desc',
+    _k: newId(),
+    left: idOf[h.left] || '',
+    op: h.op,
+    rightKind: numeric ? 'number' : 'metric',
+    right: numeric ? String(h.right) : (idOf[h.right] || ''),
   };
 }
 
-// "Mostrar como" disponibles: en un KPI el % es contra la hoja sin los filtros del widget;
+// `aliasOf`: id local -> alias; null si está incompleta.
+function groupConditionToSpec(h, aliasOf) {
+  const left = aliasOf[h.left];
+  if (!left) return null;
+  if (h.rightKind === 'number') {
+    const right = Number(h.right);
+    return String(h.right ?? '').trim() === '' || Number.isNaN(right) ? null : { left, op: h.op, right };
+  }
+  const right = aliasOf[h.right];
+  return right ? { left, op: h.op, right } : null;
+}
+
+// --- Métricas --------------------------------------------------------------------------
+
+// Métrica del builder con los campos de todos los tipos: cambiar de tipo no pierde nada.
+function newMetric(type = 'agg', numericFields = []) {
+  const firstNumeric = numericFields[0] || '';
+  return {
+    _id: newId(), type, label: '', _origAs: '', _origSig: '',
+    // agg
+    agg: firstNumeric ? 'sum' : 'count', field: firstNumeric, show_as: 'value', filters: [], filtersOpen: false,
+    // calc
+    op: 'sub', left: '', rightKind: 'metric', right: '',
+    // grouped
+    group_by: '', inner: [newInnerMetric(numericFields)], having: [], result: 'count', value: '',
+  };
+}
+
+function newInnerMetric(numericFields = []) {
+  const firstNumeric = numericFields[0] || '';
+  return { _id: newId(), agg: firstNumeric ? 'sum' : 'count', field: firstNumeric };
+}
+
+// Firma del contenido de una métrica: si no cambió, conserva su alias (y con él sus etiquetas).
+const withoutKeys = (list) => JSON.stringify((list || []).map(({ _k, _id, ...rest }) => rest));
+
+function metricSignature(m, b) {
+  const pick = {
+    agg: () => [m.agg, isCountAgg(m.agg) ? '' : m.field, effectiveShowAs(b, m.show_as), withoutKeys(m.filters)],
+    calc: () => [m.op, m.left, m.rightKind, m.right],
+    grouped: () => [m.group_by, JSON.stringify(m.inner), JSON.stringify(m.having), m.result, m.value, withoutKeys(m.filters)],
+  }[m.type];
+  return JSON.stringify([m.type, ...pick()]);
+}
+
+function metricFromSpec(raw, b, idOf) {
+  const m = newMetric(raw.type);
+  m._origAs = raw.as;
+  if (raw.type === 'agg') {
+    Object.assign(m, { agg: raw.agg, field: raw.field || '', show_as: raw.show_as || 'value' });
+    m.filters = (raw.filters || []).map(conditionFromSpec);
+    m.filtersOpen = m.filters.length > 0;
+  } else if (raw.type === 'calc') {
+    const numeric = typeof raw.right === 'number';
+    Object.assign(m, {
+      op: raw.op, left: idOf[raw.left] || '',
+      rightKind: numeric ? 'number' : 'metric', right: numeric ? String(raw.right) : (idOf[raw.right] || ''),
+    });
+  } else {
+    const innerIds = {};
+    m.inner = (raw.inner || []).map(x => {
+      const inner = { _id: newId(), agg: x.agg, field: x.field || '' };
+      innerIds[x.as] = inner._id;
+      return inner;
+    });
+    Object.assign(m, {
+      group_by: raw.group_by, result: raw.result, value: innerIds[raw.value] || '',
+      having: (raw.having || []).map(h => groupConditionFromSpec(h, innerIds)),
+    });
+    m.filters = (raw.filters || []).map(conditionFromSpec);
+    m.filtersOpen = m.filters.length > 0;
+  }
+  idOf[raw.as] = m._id;
+  return m;
+}
+
+// "Mostrar como" disponibles: en un KPI el % es contra los datos sin las condiciones;
 // sin pivote, % de la fila siempre sería 100 y % de la columna = % del total.
 function showAsOptions(b) {
   const hasDim = builderDims(b).length > 0;
@@ -138,7 +330,7 @@ function showAsOptions(b) {
   else if (!hasPivot) values = ['value', 'pct_column'];
   return values.map(value => ({
     value,
-    label: !hasDim && value === 'pct_total' ? '% del total (sin filtros del widget)'
+    label: !hasDim && value === 'pct_total' ? '% sobre los datos sin las condiciones'
       : !hasPivot && value === 'pct_column' ? '% del total' : SHOW_AS_LABELS[value],
   }));
 }
@@ -151,32 +343,174 @@ function effectiveShowAs(b, showAs) {
   return showAs;
 }
 
-// Alias ("as") final de cada métrica del builder, en el mismo orden (null si aún no es válida:
-// sin función o sin columna). Separado de builderToPayload para que la UI pueda mostrar el nombre
-// por defecto de una métrica concreta, que depende también del orden (desempate de alias).
+// Métricas que el builder puede enviar: el KPI es el único con métricas por grupo.
+function activeMetrics(b) {
+  return b.metrics.filter(m => m.type !== 'grouped' || b.widget === 'kpi');
+}
+
+function isRankingMetric(m) {
+  return m.type === 'grouped' && RANKING_RESULTS.includes(m.result);
+}
+
+// Alias ("as") final de cada métrica del builder, en el mismo orden, y el mapa id -> alias.
+// Una métrica aún incompleta (sin columna, cálculo sin operandos...) no tiene alias.
+// Separado de builderToPayload para que la UI pueda mostrar el nombre por defecto de una
+// métrica concreta, que depende también del orden (desempate de alias).
 function metricAliases(b) {
   const used = new Set();
-  return b.metrics.map(m => {
-    if (!m.agg || (!isCountAgg(m.agg) && !m.field)) return null;
-    const showAs = effectiveShowAs(b, m.show_as);
-    // Conserva el alias existente si la métrica no cambió (así se conservan sus etiquetas).
-    const unchanged = m.as && m.as === m._origAs && m.field === m._origField
-      && m.agg === m._origAgg && showAs === m._origShowAs;
-    const alias = unchanged ? m.as : metricAlias(m.agg, m.field, showAs);
+  const aliasOf = {};
+  const unique = (alias) => {
     let candidate = alias;
     for (let i = 2; used.has(candidate); i++) candidate = `${alias}_${i}`.slice(0, 63);
     used.add(candidate);
-    return { as: candidate, show_as: showAs, isCount: isCountAgg(m.agg) };
+    return candidate;
+  };
+  const list = b.metrics.map(m => {
+    if (m.type === 'grouped' && b.widget !== 'kpi') return null;
+    let alias = null;
+    if (m.type === 'agg') {
+      if (!m.agg || (!isCountAgg(m.agg) && !m.field)) return null;
+      const suffix = (m.filters || []).map(c => (c.mode !== 'value' && RELATIVE_OPS.includes(c.op) ? c.mode : c.value))
+        .filter(Boolean).join('_');
+      alias = metricAlias(m.agg, m.field, effectiveShowAs(b, m.show_as), suffix);
+    } else if (m.type === 'calc') {
+      const left = aliasOf[m.left];
+      const right = m.rightKind === 'number' ? String(m.right ?? '').trim() : aliasOf[m.right];
+      if (!left || !right || (m.rightKind === 'number' && Number.isNaN(Number(right)))) return null;
+      const word = (CALC_OP_OPTIONS.find(o => o.value === m.op) || { word: m.op }).word;
+      alias = asAlias(`${word}_${left}_${right}`);
+    } else {
+      if (!m.group_by || !m.inner.some(x => x.agg && (isCountAgg(x.agg) || x.field))) return null;
+      if (!COUNT_RESULTS.includes(m.result) && !m.inner.some(x => x._id === m.value)) return null;
+      const word = (GROUP_RESULT_OPTIONS.find(o => o.value === m.result) || { word: m.result }).word;
+      alias = asAlias(`${word}_${m.group_by}`);
+    }
+    const unchanged = m._origAs && m._origSig === metricSignature(m, b);
+    const as = unique(unchanged ? m._origAs : alias);
+    aliasOf[m._id] = as;
+    return { as, show_as: m.type === 'agg' ? effectiveShowAs(b, m.show_as) : 'value' };
   });
+  return { list, aliasOf };
 }
 
-// Body de PUT /api/widget/<id>/spec/. Las métricas count van sin campo: el backend usa la
-// dimensión (cuenta filas del grupo). `labels` son las cabeceras de columna: viven en view_spec
-// (no en la métrica, que el schema valida con additionalProperties: false).
-function builderToPayload(b) {
+function metricToSpec(m, alias, aliasOf, numericFields) {
+  if (m.type === 'agg') {
+    const metric = { type: 'agg', as: alias.as, agg: m.agg };
+    if (!isCountAgg(m.agg)) metric.field = m.field;
+    if (alias.show_as !== 'value') metric.show_as = alias.show_as;
+    const filters = conditionsToSpec(m.filters, numericFields);
+    if (filters.length) metric.filters = filters;
+    return metric;
+  }
+  if (m.type === 'calc') {
+    return {
+      type: 'calc', as: alias.as, op: m.op, left: aliasOf[m.left],
+      right: m.rightKind === 'number' ? Number(m.right) : aliasOf[m.right],
+    };
+  }
+  // Métricas internas: alias propios, únicos dentro del grupo.
+  const used = new Set();
+  const innerAlias = {};
+  const inner = m.inner.filter(x => x.agg && (isCountAgg(x.agg) || x.field)).map(x => {
+    let as = metricAlias(x.agg, x.field, 'value');
+    for (let i = 2; used.has(as); i++) as = `${metricAlias(x.agg, x.field, 'value')}_${i}`;
+    used.add(as);
+    innerAlias[x._id] = as;
+    const metric = { type: 'agg', as, agg: x.agg };
+    if (!isCountAgg(x.agg)) metric.field = x.field;
+    return metric;
+  });
+  const metric = {
+    type: 'grouped', as: alias.as, group_by: m.group_by, inner,
+    having: m.having.map(h => groupConditionToSpec(h, innerAlias)).filter(Boolean),
+    result: m.result,
+  };
+  if (!COUNT_RESULTS.includes(m.result)) metric.value = innerAlias[m.value];
+  const filters = conditionsToSpec(m.filters, numericFields);
+  if (filters.length) metric.filters = filters;
+  return metric;
+}
+
+// Roles del KPI (view_spec) <-> controles del builder, con ids locales.
+function kpiFromView(view, idOf) {
+  const target = view ? view.target : null;
+  const status = view && view.status;
+  return {
+    primary: (view && idOf[view.primary]) || '',
+    compare: (view && idOf[view.compare]) || '',
+    compareMode: (view && view.compare_mode) || 'pct',
+    targetKind: typeof target === 'number' ? 'number' : (target ? 'metric' : 'none'),
+    targetMetric: typeof target === 'string' ? (idOf[target] || '') : '',
+    targetValue: typeof target === 'number' ? String(target) : '',
+    higherIsBetter: !view || view.higher_is_better !== false,
+    statusBasis: status ? status.basis : 'none',
+    good: status ? String(status.good) : '100',
+    warn: status ? String(status.warn) : '80',
+  };
+}
+
+function kpiToPayload(k, aliasOf) {
+  const number = (v) => (String(v ?? '').trim() === '' || Number.isNaN(Number(v)) ? null : Number(v));
+  const target = k.targetKind === 'number' ? number(k.targetValue)
+    : k.targetKind === 'metric' ? (aliasOf[k.targetMetric] || null) : null;
+  const status = k.statusBasis !== 'none' && number(k.good) !== null && number(k.warn) !== null
+    ? { basis: k.statusBasis, good: number(k.good), warn: number(k.warn) } : null;
+  return {
+    primary: aliasOf[k.primary] || null,
+    compare: aliasOf[k.compare] || null,
+    compare_mode: k.compareMode,
+    target,
+    higher_is_better: !!k.higherIsBetter,
+    status,
+  };
+}
+
+// Estado del builder a partir de data_spec/view_spec: el MISMO spec que escribe la IA, así el
+// panel siempre muestra lo que tiene el widget (no hay dos estados separados).
+function builderFromSpec(spec, view, widget) {
+  if (!spec) return null;
+  const labels = (view && view.labels) || {};
+  const idOf = {};
+  const b = {
+    widget,
+    // Siempre al menos un select visible por lista ('' = sin elegir).
+    dimensions: (spec.dimensions || []).length ? [...spec.dimensions] : [''],
+    pivots: (spec.pivots || []).length ? [...spec.pivots] : [''],
+    filters: (spec.filters || []).map(conditionFromSpec),
+    metrics: [],
+    having: [],
+    // Las cabeceras de las filas/columnas no son del builder: se copian tal cual para no perderlas
+    // (las puso la IA) al aplicar un cambio.
+    labels: { ...labels },
+    stacked: !!(view && view.stacked),
+    sortBy: '',
+    sortDir: spec.sort ? spec.sort.dir : 'desc',
+    limitN: spec.limit ? String(spec.limit.n) : '',
+    limitOthers: !!(spec.limit && spec.limit.others),
+    trendBy: spec.trend_by || '',
+    kpi: null,
+  };
+  b.metrics = (spec.metrics || []).map(raw => {
+    const m = metricFromSpec(raw, b, idOf);
+    m.label = labels[raw.as] || '';
+    return m;
+  });
+  // La firma se calcula con el builder completo (show_as depende de filas y columnas).
+  b.metrics.forEach(m => { m._origSig = metricSignature(m, b); });
+  b.having = (spec.having || []).map(h => groupConditionFromSpec(h, idOf));
+  if (spec.sort) b.sortBy = idOf[spec.sort.by] ? `#${idOf[spec.sort.by]}` : spec.sort.by;
+  b.kpi = kpiFromView(widget === 'kpi' ? view : null, idOf);
+  return b;
+}
+
+// Body de POST/PUT del builder: las claves del data_spec más las de presentación (labels,
+// stacked, kpi). `labels` son las cabeceras de columna: viven en view_spec (no en la métrica,
+// que el schema valida con additionalProperties: false).
+function builderToPayload(b, numericFields = new Set()) {
   const dimensions = builderDims(b);
   const pivots = builderPivots(b);
-  const aliases = metricAliases(b);
+  const { list: aliases, aliasOf } = metricAliases(b);
+  const isKpi = b.widget === 'kpi';
   // Cabeceras de las filas/columnas: se conservan las que ya tenía el widget y siguen en uso.
   const kept = new Set([...dimensions, ...pivots]);
   const labels = {};
@@ -187,23 +521,51 @@ function builderToPayload(b) {
   b.metrics.forEach((m, i) => {
     const alias = aliases[i];
     if (!alias) return;
-    const metric = { field: alias.isCount ? '' : m.field, agg: m.agg, as: alias.as };
-    if (alias.show_as !== 'value') metric.show_as = alias.show_as;
-    metrics.push(metric);
+    metrics.push(metricToSpec(m, alias, aliasOf, numericFields));
     // "Nombre a mostrar" vacío = la cabecera por defecto (la del alias).
     const label = (m.label || '').trim();
     if (label) labels[alias.as] = label;
   });
-  const sortTargets = new Set([...dimensions, ...metrics.map(m => m.as)]);
-  return {
+  const sortBy = b.sortBy && b.sortBy.startsWith('#') ? aliasOf[b.sortBy.slice(1)] : b.sortBy;
+  const sortable = new Set([...dimensions, ...metrics.map(m => m.as)]);
+  const sort = !isKpi && sortBy && sortable.has(sortBy) ? { by: sortBy, dir: b.sortDir || 'desc' } : null;
+  const limitN = parseInt(b.limitN, 10);
+  const payload = {
     dimensions,
-    // Una columna como texto (compatible con los gráficos); varias, como lista.
-    pivot: pivots.length > 1 ? pivots : (pivots[0] || null),
+    pivots,
+    filters: conditionsToSpec(b.filters, numericFields),
     metrics,
+    having: isKpi ? [] : b.having.map(h => groupConditionToSpec(h, aliasOf)).filter(Boolean),
+    sort,
+    limit: !isKpi && limitN > 0 ? { n: limitN, others: !!b.limitOthers } : null,
+    trend_by: isKpi && b.trendBy ? b.trendBy : null,
     labels,
     stacked: !!(b.stacked && pivots.length),
-    sort: b.sortBy && sortTargets.has(b.sortBy) ? { by: b.sortBy, dir: b.sortDir || 'desc' } : null,
   };
+  if (isKpi) payload.kpi = kpiToPayload(b.kpi, aliasOf);
+  return payload;
+}
+
+// Texto de una métrica del builder para los pasos de "Consulta con la IA".
+function describeMetric(m, b) {
+  const aggLabel = (agg) => (AGG_OPTIONS.find(o => o.value === agg) || { label: agg }).label;
+  const nameOf = (id) => {
+    const i = b.metrics.findIndex(x => x._id === id);
+    return i >= 0 ? `métrica ${i + 1}` : '—';
+  };
+  let text;
+  if (m.type === 'agg') {
+    text = isCountAgg(m.agg) ? `${aggLabel(m.agg)} de filas` : `${aggLabel(m.agg)} de ${m.field}`;
+    if (m.show_as && m.show_as !== 'value') text += ` · Mostrar como ${SHOW_AS_LABELS[m.show_as]}`;
+  } else if (m.type === 'calc') {
+    const op = (CALC_OP_OPTIONS.find(o => o.value === m.op) || { label: m.op }).label;
+    text = `Cálculo: ${nameOf(m.left)} ${op} ${m.rightKind === 'number' ? m.right : nameOf(m.right)}`;
+  } else {
+    const result = (GROUP_RESULT_OPTIONS.find(o => o.value === m.result) || { label: m.result }).label;
+    text = `Por grupo de ${m.group_by}: ${result}`;
+  }
+  if (m.label) text += ` · Nombre: «${m.label}»`;
+  return text;
 }
 
 // Incluye `current` aunque no esté en la lista (ej. la IA agrupó por una columna numérica de
@@ -235,8 +597,12 @@ document.addEventListener('alpine:init', () => {
     drawerApplying: false,
     // Copia de data_spec/view_spec del widget en edición, para el visor JSON.
     drawerSpecs: { data_spec: null, view_spec: null },
-    schema: { all_fields: [], numeric_fields: [], dimension_fields: [] },
+    schema: { all_fields: [], numeric_fields: [], dimension_fields: [], sample_values: {} },
     aggOptions: AGG_OPTIONS,
+    metricTypeOptions: METRIC_TYPE_OPTIONS,
+    calcOpOptions: CALC_OP_OPTIONS,
+    groupResultOptions: GROUP_RESULT_OPTIONS,
+    compareOpOptions: COMPARE_OP_OPTIONS,
     isCountAgg,
     _nextId: -1,
 
@@ -354,33 +720,25 @@ document.addEventListener('alpine:init', () => {
       const a = this.drawerAdvice;
       if (!a) return [];
       const b = a.builder;
-      const aggLabel = (agg) => (AGG_OPTIONS.find(o => o.value === agg) || { label: agg }).label;
       const dims = builderDims(b);
       const pivots = builderPivots(b);
       const steps = [
         { title: 'Filas', detail: dims.length ? `Agrega, en este orden: ${dims.join(' › ')}` : 'Sin filas' },
         { title: 'Columnas', detail: pivots.length ? `Agrega, en este orden: ${pivots.join(' › ')}` : 'Deja «Sin agrupar»' },
-        {
-          title: 'Valores',
-          details: b.metrics.map(m => {
-            let text = isCountAgg(m.agg) ? `${aggLabel(m.agg)} de filas` : `${aggLabel(m.agg)} de ${m.field}`;
-            if (m.show_as && m.show_as !== 'value') text += ` · Mostrar como ${SHOW_AS_LABELS[m.show_as]}`;
-            if (m.label) text += ` · Nombre: «${m.label}»`;
-            return text;
-          }),
-        },
       ];
-      if (b.sortBy) {
-        steps.push({ title: 'Orden', detail: `Ordenar por ${b.sortBy}, ${b.sortDir === 'asc' ? 'de menor a mayor' : 'de mayor a menor'}` });
-      }
       if (a.filters.length) {
-        steps.push({
-          title: 'Filtros',
-          details: [
-            ...a.filters.map(f => `${f.field} ${FILTER_OP_LABELS[f.op] || f.op} ${Array.isArray(f.value) ? f.value.join(', ') : f.value}`),
-            'Aplícalos con los filtros del tablero.',
-          ],
-        });
+        steps.push({ title: 'Condiciones', details: a.filters.map(describeCondition) });
+      }
+      steps.push({ title: 'Valores', details: b.metrics.map(m => describeMetric(m, b)) });
+      if (a.having.length) {
+        steps.push({ title: 'Mostrar solo grupos donde', details: a.having.map(h => `${h.left} ${OP_SHORT[h.op]} ${h.right}`) });
+      }
+      if (b.sortBy) {
+        const target = b.sortBy.startsWith('#') ? `la métrica ${b.metrics.findIndex(m => `#${m._id}` === b.sortBy) + 1}` : b.sortBy;
+        steps.push({ title: 'Orden', detail: `Ordenar por ${target}, ${b.sortDir === 'asc' ? 'de menor a mayor' : 'de mayor a menor'}` });
+      }
+      if (b.limitN) {
+        steps.push({ title: 'Top', detail: `Mostrar solo los primeros ${b.limitN}${b.limitOthers ? ' y agrupar el resto en «Otros»' : ''}` });
       }
       steps.push({ title: 'Listo', detail: 'Pulsa «Aplicar al widget» para ver la tabla.' });
       return steps;
@@ -477,12 +835,126 @@ document.addEventListener('alpine:init', () => {
       return !!this.drawerWidgetClass.supportsLabels;
     },
 
+    get drawerIsKpi() {
+      return this.editingType === 'kpi';
+    },
+
     // Cabecera por defecto de la métrica `i`: lo que se verá si no se escribe un nombre.
     metricLabelPlaceholder(i) {
       const b = this.builder;
       if (!b) return '';
-      const alias = metricAliases(b)[i];
+      const alias = metricAliases(b).list[i];
       return alias ? defaultColumnName(alias.as) : '';
+    },
+
+    get _numericSet() {
+      return new Set(this.schema.numeric_fields || []);
+    },
+
+    _payload(b) {
+      return builderToPayload(b, this._numericSet);
+    },
+
+    // Tipos de métrica disponibles: "por grupo" solo en el KPI.
+    get metricTypes() {
+      return this.drawerIsKpi ? METRIC_TYPE_OPTIONS : METRIC_TYPE_OPTIONS.filter(o => o.value !== 'grouped');
+    },
+
+    // Nombre corto de la métrica `id` en los selects (su nombre a mostrar o el de por defecto).
+    metricName(id) {
+      const b = this.builder;
+      if (!b) return '';
+      const i = b.metrics.findIndex(m => m._id === id);
+      if (i < 0) return '';
+      return (b.metrics[i].label || '').trim() || this.metricLabelPlaceholder(i) || `Métrica ${i + 1} (incompleta)`;
+    },
+
+    // Métricas a las que puede referirse la métrica `i` en un cálculo: las anteriores que dan
+    // un número. Sin `i`, todas (condiciones sobre grupos y roles del KPI).
+    metricRefOptions(i = null, { numericOnly = true } = {}) {
+      const b = this.builder;
+      if (!b) return [];
+      const list = i === null ? activeMetrics(b) : activeMetrics(b).filter(m => b.metrics.indexOf(m) < i);
+      return list
+        .filter(m => !numericOnly || !isRankingMetric(m))
+        .map(m => ({ value: m._id, label: this.metricName(m._id) }));
+    },
+
+    // Métricas internas de una métrica por grupo, para su condición y su resultado.
+    innerRefOptions(m) {
+      const aggLabel = (agg) => (AGG_OPTIONS.find(o => o.value === agg) || { label: agg }).label;
+      return m.inner
+        .filter(x => x.agg && (isCountAgg(x.agg) || x.field))
+        .map(x => ({ value: x._id, label: isCountAgg(x.agg) ? 'Conteo de filas' : `${aggLabel(x.agg)} de ${x.field}` }));
+    },
+
+    groupResultNeedsValue(m) {
+      return !COUNT_RESULTS.includes(m.result);
+    },
+
+    addInnerMetric(m) {
+      if (m.inner.length >= 3) return;
+      m.inner.push(newInnerMetric(this.schema.numeric_fields || []));
+    },
+
+    removeInnerMetric(m, i) {
+      if (m.inner.length <= 1) return;
+      const [removed] = m.inner.splice(i, 1);
+      if (m.value === removed._id) m.value = '';
+    },
+
+    // --- Condiciones ---
+    addCondition(list) {
+      list.push(newCondition((this.schema.all_fields || [])[0] || ''));
+    },
+
+    removeCondition(list, i) {
+      list.splice(i, 1);
+    },
+
+    // Operadores según la columna: las comparaciones de orden solo en columnas numéricas.
+    opOptionsFor(field) {
+      const numeric = this._numericSet.has(field);
+      return FILTER_OP_OPTIONS.filter(o => numeric || !o.numeric);
+    },
+
+    onConditionFieldChange(c) {
+      if (!this.opOptionsFor(c.field).some(o => o.value === c.op)) c.op = 'eq';
+    },
+
+    conditionUsesMode(c) {
+      return RELATIVE_OPS.includes(c.op);
+    },
+
+    conditionNeedsValue(c) {
+      return !EMPTY_OPS.includes(c.op) && !(this.conditionUsesMode(c) && c.mode !== 'value');
+    },
+
+    conditionIsList(c) {
+      return LIST_OPS.includes(c.op);
+    },
+
+    valueModeOptions: VALUE_MODE_OPTIONS,
+
+    // id del <datalist> con los valores de ejemplo de la columna (autocompletar).
+    sampleListId(field) {
+      const fields = Object.keys(this.schema.sample_values || {});
+      const i = fields.indexOf(field);
+      return i >= 0 ? `samples-${i}` : null;
+    },
+
+    get sampleLists() {
+      return Object.values(this.schema.sample_values || {}).map((values, i) => ({ id: `samples-${i}`, values }));
+    },
+
+    addGroupCondition(list, options) {
+      list.push(newGroupCondition(options[0] ? options[0].value : ''));
+    },
+
+    // --- Top N ---
+    get limitNeedsMetricSort() {
+      const b = this.builder;
+      return !!b && parseInt(b.limitN, 10) > 0 && !(b.sortBy || '').startsWith('#');
     },
 
     get showStacked() {
@@ -507,15 +979,11 @@ document.addEventListener('alpine:init', () => {
     get sortOptions() {
       const b = this.builder;
       if (!b) return [];
-      const payload = builderToPayload(b);
-      const opts = [];
-      for (const d of payload.dimensions) opts.push({ value: d, label: d });
-      for (const m of payload.metrics) {
-        const agg = AGG_OPTIONS.find(a => a.value === m.agg)?.label || m.agg;
-        const base = m.agg === 'count' ? 'Conteo de filas' : `${agg} de ${m.field}`;
-        const showAs = m.show_as ? ` (${SHOW_AS_LABELS[m.show_as]})` : '';
-        opts.push({ value: m.as, label: base + showAs });
-      }
+      const opts = builderDims(b).map(d => ({ value: d, label: d }));
+      const { list } = metricAliases(b);
+      b.metrics.forEach((m, i) => {
+        if (list[i]) opts.push({ value: `#${m._id}`, label: this.metricName(m._id) });
+      });
       return opts;
     },
 
@@ -565,25 +1033,17 @@ document.addEventListener('alpine:init', () => {
     },
 
     _builderDraft(w) {
-      return builderFromSpec(w.data_spec, w.view_spec);
+      return builderFromSpec(w.data_spec, w.view_spec, w.chart_type);
     },
 
     // Punto de partida del builder para un widget nuevo: primera columna agrupable y una
     // métrica (suma de la primera columna numérica, o conteo si la hoja no tiene números).
     _defaultBuilder() {
       const dims = this.schema.dimension_fields || [];
-      const numeric = this.schema.numeric_fields || [];
-      return {
-        dimensions: [this.drawerWidgetClass.supportsDimension ? (dims[0] || '') : ''],
-        pivots: [''],
-        metrics: [numeric.length
-          ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value', label: '' }
-          : { field: '', agg: 'count', as: '', show_as: 'value', label: '' }],
-        labels: {},
-        stacked: false,
-        sortBy: '',
-        sortDir: 'desc',
-      };
+      const b = builderFromSpec({ dimensions: [], pivots: [], metrics: [] }, null, this.editingType);
+      b.dimensions = [this.drawerWidgetClass.supportsDimension ? (dims[0] || '') : ''];
+      b.metrics = [newMetric('agg', this.schema.numeric_fields || [])];
+      return b;
     },
 
     _syncDrawerSpecs(w) {
@@ -608,16 +1068,18 @@ document.addEventListener('alpine:init', () => {
     addBuilderMetric() {
       const b = this.builder;
       if (!b || b.metrics.length >= this.maxMetrics) return;
-      const numeric = this.schema.numeric_fields || [];
-      b.metrics.push(numeric.length
-        ? { field: numeric[0], agg: 'sum', as: '', show_as: 'value', label: '' }
-        : { field: '', agg: 'count', as: '', show_as: 'value', label: '' });
+      b.metrics.push(newMetric('agg', this.schema.numeric_fields || []));
     },
 
     removeBuilderMetric(index) {
       const b = this.builder;
       if (!b || b.metrics.length <= 1) return;
       b.metrics.splice(index, 1);
+    },
+
+    // Al pasar una métrica a "por grupo", arranca agrupando por la primera columna agrupable.
+    onMetricTypeChange(m) {
+      if (m.type === 'grouped' && !m.group_by) m.group_by = (this.schema.dimension_fields || [])[0] || '';
     },
 
     // "Aplicar al widget seleccionado": escribe data_spec vía update_widget_spec. NUNCA llama a
@@ -627,7 +1089,7 @@ document.addEventListener('alpine:init', () => {
       const w = this.editingWidget;
       const b = this.builder;
       if (!w || !b) return false;
-      const payload = builderToPayload(b);
+      const payload = this._payload(b);
       if (!payload.metrics.length) {
         this.drawerSpecError = 'Agrega al menos una métrica con su columna.';
         return false;
@@ -675,8 +1137,8 @@ document.addEventListener('alpine:init', () => {
       const w = this.editingWidget;
       if (!w || !this.builder) return false;
       if (w.id < 0) return true;
-      return JSON.stringify(builderToPayload(this.builder))
-        !== JSON.stringify(builderToPayload(this._builderDraft(w)));
+      return JSON.stringify(this._payload(this.builder))
+        !== JSON.stringify(this._payload(this._builderDraft(w)));
     },
 
     _swapWidgetId(w, newId) {
@@ -708,8 +1170,9 @@ document.addEventListener('alpine:init', () => {
           throw new Error((data && data.error) || 'El servidor no respondió correctamente (puede que la IA haya tardado demasiado). Intenta de nuevo.');
         }
         this.drawerAdvice = {
-          builder: builderFromSpec(data.data_spec, data.view_spec),
+          builder: builderFromSpec(data.data_spec, data.view_spec, 'table'),
           filters: data.data_spec.filters || [],
+          having: data.data_spec.having || [],
           title: (data.view_spec && data.view_spec.title) || '',
         };
       } catch (e) {
@@ -727,6 +1190,7 @@ document.addEventListener('alpine:init', () => {
       const a = this.drawerAdvice;
       if (!a) return;
       const builder = JSON.parse(JSON.stringify(a.builder));
+      builder.widget = this.editingType;
       this.drawerDraft.builder = builder;
       if (a.title) this.drawerDraft.title = a.title;
       if (this.drawerDraft.rowTotals) {

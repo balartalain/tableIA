@@ -1,0 +1,48 @@
+{% comment %}
+Editor de condiciones sobre grupos ("donde [métrica] [op] [métrica | número]"). `list` es la
+expresión Alpine de la lista y `options` la de las métricas elegibles ([{value, label}]).
+{% endcomment %}
+<div class="space-y-1">
+  <template x-for="(h, hi) in {{ list }}" :key="h._k">
+    <div class="flex flex-wrap items-center gap-1 rounded-lg bg-paper/70 border border-line/60 p-1">
+      <select x-model="h.left" aria-label="Métrica"
+              class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+        <option value="">Elige una métrica…</option>
+        <template x-for="o in {{ options }}" :key="o.value">
+          <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === h.left"></option>
+        </template>
+      </select>
+      <select x-model="h.op" aria-label="Operador"
+              class="w-32 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+        <template x-for="o in $store.dashboard.compareOpOptions" :key="o.value">
+          <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === h.op"></option>
+        </template>
+      </select>
+      <select x-model="h.rightKind" aria-label="Comparar contra"
+              class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+        <option value="metric">métrica</option>
+        <option value="number">número</option>
+      </select>
+      <template x-if="h.rightKind === 'metric'">
+        <select x-model="h.right" aria-label="Métrica de comparación"
+                class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+          <option value="">Elige una métrica…</option>
+          <template x-for="o in {{ options }}" :key="o.value">
+            <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === h.right"></option>
+          </template>
+        </select>
+      </template>
+      <template x-if="h.rightKind === 'number'">
+        <input type="number" x-model="h.right" placeholder="Número" aria-label="Número"
+               class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+      </template>
+      <button type="button" x-on:click="{{ list }}.splice(hi, 1)"
+              class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+              title="Quitar condición" aria-label="Quitar condición">×</button>
+    </div>
+  </template>
+  <button type="button" x-on:click="$store.dashboard.addGroupCondition({{ list }}, {{ options }})"
+          class="text-xs font-medium text-moss-700 hover:text-moss-800 cursor-pointer flex items-center gap-1">
+    <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar condición
+  </button>
+</div>

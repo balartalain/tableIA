@@ -31,7 +31,10 @@ REJECT_TOOL = "reject_request"
 # rechaza ("too many states for serving"). Las reglas que expresan se siguen aplicando: la
 # validación real es la de jsonschema sobre el schema completo. Los `enum` de columnas SÍ se
 # conservan: son los que impiden que la IA invente columnas.
-_GEMINI_UNSUPPORTED_KEYS = {"allOf", "if", "then", "$comment", "$schema", "maxItems", "pattern", "maxLength"}
+_GEMINI_UNSUPPORTED_KEYS = {
+    "allOf", "if", "then", "not", "$comment", "$schema", "maxItems", "minItems", "pattern", "maxLength",
+    "minimum", "maximum",
+}
 
 
 class SpecGenerationError(Exception):
@@ -51,112 +54,157 @@ consulta.
 ## data_spec
 - dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). En
   gráficos, UNA sola. En una tabla, hasta 3 anidadas de la más general a la más detallada
-  (ej. ["sede", "carrera"]); la tabla agrega un subtotal por cada grupo. Lista VACÍA solo
-  para widget_type "kpi" (un único número total).
-- pivot: columna opcional para desagregar además de la dimensión (columnas en una tabla,
-  series en un gráfico). null si no aplica. En una tabla puede ser una lista de hasta 2
-  columnas anidadas (ej. ["anio", "mes"]); en gráficos, una sola columna.
-- metrics: una o más métricas {field, agg, as, show_as?}.
-  - agg "count": "cuántos", "cantidad de", "número de", "conteo". Cuenta filas; usa como
-    field la propia dimensión (o cualquier columna si no hay dimensión).
-  - agg "count_distinct": "cuántos distintos", "valores únicos de" una columna (cualquier tipo).
-  - agg "sum": "total de", "suma de", "monto", "acumulado" sobre una columna numérica.
-  - agg "avg": "promedio", "media", "en promedio" sobre una columna numérica.
-  - agg "min" / "max" / "median": "mínimo", "máximo", "mediana" de una columna numérica.
-  - sum, avg, min, max y median SOLO sobre columnas numéricas.
-  - show_as (opcional, default "value"): cómo se muestra el valor, como en las tablas
-    dinámicas de Google Sheets:
-    - "pct_row": % del total de su fila de la dimensión ("de cada categoría, qué % fue...").
-      Solo tiene sentido con pivot.
-    - "pct_column": % del total de su columna; sin pivot, cada grupo como % del total
-      ("porcentaje por sede", "participación", "qué % representa cada...").
-    - "pct_total": % del total general ("sobre el total general").
-    En un kpi, cualquier porcentaje es el % de filas (o de la suma) que cumplen los `filters`
-    del widget respecto a toda la hoja, así que el kpi de porcentaje NECESITA filtros.
-  - Para "la cantidad y su porcentaje" usa DOS métricas con el mismo agg, una con
-    show_as "value" y otra con el porcentaje.
-  - as: nombre de la columna resultante en snake_case minúsculas, único
-    (ej. "total_ventas", "cantidad", "promedio_nota", "pct_cantidad").
-- filters: condiciones {field, op, value}; op en eq|ne|lt|lte|gt|gte|in. lt/lte/gt/gte solo
-  sobre columnas numéricas con valor numérico. "in" lleva una lista de valores. Lista vacía si
-  no hay filtros. Usa los valores de ejemplo de las columnas para escribir el valor exacto.
-- sort: {by, dir} o null. by es la dimensión o el `as` de una métrica. "los más altos",
-  "ranking", "de mayor a menor" -> desc por la métrica.
+  (ej. ["sede", "carrera"]). Lista VACÍA solo para widget_type "kpi".
+- pivots: lista de columnas para desagregar además de la dimensión (columnas en una tabla,
+  series en un gráfico). [] si no aplica. Tabla: hasta 2 (ej. ["anio", "mes"]); gráficos: 1.
+- filters: condiciones sobre las FILAS que entran al widget. [] si no hay.
+- metrics: lista de métricas; cada una lleva "type" y un "as" único en snake_case
+  (ej. "total_ventas", "cantidad"). Tipos:
+  1. {"type": "agg", "as", "agg", "field", "show_as"?, "filters"?}: resume una columna.
+     - agg "count": "cuántos", "cantidad de". Cuenta filas y NO lleva field.
+     - agg "count_distinct": "cuántos distintos" de una columna (cualquier tipo).
+     - agg "sum" / "avg" / "min" / "max" / "median": SOLO sobre columnas numéricas.
+     - show_as (opcional, default "value"), como en las tablas dinámicas de Sheets:
+       "pct_row" (% de su fila; solo con pivots), "pct_column" (% de su columna; sin pivots,
+       cada grupo como % del total: "participación", "qué % representa cada..."),
+       "pct_total" (% del total general). En un kpi, cualquier porcentaje es el valor con las
+       condiciones (del widget y de la métrica) sobre el valor sin ellas: NECESITA condiciones.
+     - filters propios (opcional): condiciones SOLO para esa métrica. Sirven para poner en el
+       mismo widget "ventas 2026" y "ventas 2025", o "ventas de Hogar" junto al total.
+  2. {"type": "calc", "as", "op", "left", "right"}: cálculo entre métricas ANTERIORES de la
+     lista (left/right son su "as"; right también puede ser un número).
+     op: "add", "sub", "mul", "div", "ratio_pct" (left/right×100: margen, % de cumplimiento),
+     "diff_pct" ((left−right)/right×100: variación, crecimiento).
+  3. {"type": "grouped", "as", "group_by", "inner", "having", "result", "value"?, "filters"?}:
+     SOLO en kpi. Agrupa por `group_by`, calcula las métricas `inner` (agg o calc) de cada
+     grupo, se queda con los grupos que cumplen `having` y los resume en un número:
+     - result "count": cuántos grupos cumplen ("cuántos vendedores no cumplieron el plan").
+     - result "pct_groups": qué % de los grupos cumple.
+     - result "sum"/"avg"/"min"/"max": de la métrica interna `value` ("venta promedio por
+       vendedor").
+     - result "top"/"bottom": el grupo con el mayor/menor `value` ("la categoría que más
+       vendió", "el vendedor con menos ventas"); el kpi muestra el nombre del grupo.
+     `value` es el "as" de una métrica interna; count y pct_groups no lo llevan.
+- having: condiciones sobre los GRUPOS de la primera dimensión, con las métricas del widget
+  (solo widgets con dimensión): [{"left": "total_ventas", "op": "lt", "right": "total_plan"}]
+  o contra un número ("right": 1000). op: eq ne lt lte gt gte. Ej. "vendedores que no
+  llegaron a la meta" en una tabla o barras. [] si no aplica.
+- sort: {by, dir} o null. by es la dimensión o el "as" de una métrica. En el kpi, null.
+- limit: {"n": 5, "others": false} o null: Top N grupos de la dimensión ("top 5", "los 10
+  mejores"). Requiere sort por una métrica. others true agrega el resto como «Otros».
+- trend_by: solo kpi, columna para una mini tendencia bajo el número ("por mes"); o null.
 
-## Cuándo usar pivot
-Cuando el usuario pide cruzar dos columnas: "ventas por categoría y por mes", "desglosado
-por mes", "comparando cada región por año". La primera columna es la dimensión, la segunda el
-pivot. En una tabla (widget_type "table") el pivot admite varias métricas: cada valor del
-pivot muestra una subcolumna por métrica, más una columna de total general. En los gráficos
-el pivot solo admite UNA métrica: si el usuario pide varias métricas y además un cruce en un
-gráfico, NO descartes nada de lo que pidió: incluye todas las métricas y el pivot tal como las
-pidió; el sistema le pedirá que elija.
-Si el usuario pide agrupar por varias columnas en filas ("por sede y carrera") o en columnas
-("por año y mes") usa una tabla con varias dimensions o un pivot lista.
+## Condiciones (filters)
+{"field", "op", "value"} o {"field", "op", "relative"}:
+- op "eq"/"ne": igual/distinto de un valor. "lt"/"lte"/"gt"/"gte": comparación numérica
+  (solo columnas numéricas). "in"/"not_in": lista de valores. "between": [desde, hasta]
+  numérico. "contains": el texto contiene "value". "is_empty"/"not_empty": sin valor.
+- relative (en vez de value) para valores que dependen de la fecha o de los datos:
+  "current_year", "previous_year", "current_month" (1-12), "max" (el último valor de la
+  columna: "el último año", "el periodo más reciente"), "second_max" (el anterior al
+  último), "min". Úsalo para "este año", "el año actual", "el último mes" en vez de fijar
+  un número.
+Usa los valores de ejemplo de las columnas para escribir el valor exacto.
 
 ## Tipo de widget (si no viene fijado)
-- kpi: un único número ("total de ventas", "cuántos estudiantes hay").
-- bar: comparar categorías ("ventas por región", "top de productos").
-- line: evolución en el tiempo ("por mes", "por semana", "tendencia").
-- donut: cómo se reparte un total entre pocas categorías ("distribución", "proporción",
-  "porcentaje del total", "participación"). Una dimensión, UNA métrica y sin pivot.
+- kpi: uno o pocos números ("total de ventas", "cuántos vendedores...", "la categoría que
+  más vendió", "ventas de este año vs el anterior"). Hasta 4 métricas.
+- bar: comparar categorías ("ventas por región", "top 5 de productos").
+- line: evolución en el tiempo ("por mes", "tendencia").
+- donut: cómo se reparte un total entre pocas categorías. Una dimensión, UNA métrica, sin pivots.
 - table: varias métricas por fila, detalle, o cuando el usuario pide "tabla"/"listado".
+Con pivots, los gráficos admiten UNA métrica; si el usuario pide varias y un cruce en un
+gráfico, incluye todo tal como lo pidió: el sistema le pedirá que elija.
 
 ## view_options
 - title: título corto y claro para la tarjeta, en español.
 - stacked: true solo si el usuario pide barras apiladas.
-- labels: texto legible para cada métrica (`name` = su `as`) y, si hace falta, para la
+- labels: texto legible para cada métrica (`name` = su "as") y, si hace falta, para la
   dimensión (ej. {"name": "total_ventas", "label": "Total de ventas"}).
+- kpi (solo kpi): {"primary": as de la métrica grande (por defecto la primera),
+  "compare": as de la métrica contra la que se muestra la variación ▲/▼ ("vs el año
+  anterior"), "compare_mode": "pct" | "abs", "target_metric": as de la meta, o
+  "target_value": número de la meta ("meta de 50000"), "higher_is_better": false si menos es
+  mejor (costos, quejas)}.
 
 ## Ejemplos (columnas ilustrativas; usa SOLO las columnas reales de la hoja)
 
-Prompt: "Total vendido en 2026"
-create_widget({"widget_type": "kpi", "title": "Total vendido 2026",
-  "data_spec": {"dimensions": [], "pivot": null,
-    "metrics": [{"field": "ventas", "agg": "sum", "as": "total_ventas"}],
-    "filters": [{"field": "anio", "op": "eq", "value": 2026}], "sort": null},
-  "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Total de ventas"}]}})
+Prompt: "Ventas de este año comparadas con el año anterior"
+create_widget({"widget_type": "kpi", "title": "Ventas del año",
+  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+    "limit": null, "trend_by": null,
+    "metrics": [
+      {"type": "agg", "as": "ventas_actual", "agg": "sum", "field": "ventas",
+       "filters": [{"field": "anio", "op": "eq", "relative": "current_year"}]},
+      {"type": "agg", "as": "ventas_anterior", "agg": "sum", "field": "ventas",
+       "filters": [{"field": "anio", "op": "eq", "relative": "previous_year"}]}]},
+  "view_options": {"stacked": false, "labels": [{"name": "ventas_actual", "label": "Ventas"},
+    {"name": "ventas_anterior", "label": "Año anterior"}],
+    "kpi": {"primary": "ventas_actual", "compare": "ventas_anterior", "compare_mode": "pct"}}})
 
-Prompt: "Porcentaje de ventas que son de Electrónica"
-create_widget({"widget_type": "kpi", "title": "% de ventas de Electrónica",
-  "data_spec": {"dimensions": [], "pivot": null,
-    "metrics": [{"field": "categoria", "agg": "count", "as": "porcentaje", "show_as": "pct_total"}],
-    "filters": [{"field": "categoria", "op": "eq", "value": "Electrónica"}], "sort": null},
-  "view_options": {"stacked": false, "labels": [{"name": "porcentaje", "label": "% de ventas"}]}})
+Prompt: "Cuántos vendedores no cumplieron el plan de ventas"
+create_widget({"widget_type": "kpi", "title": "Vendedores bajo el plan",
+  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+    "limit": null, "trend_by": null,
+    "metrics": [{"type": "grouped", "as": "vendedores_bajo_plan", "group_by": "vendedor",
+      "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
+                {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"}],
+      "having": [{"left": "ventas", "op": "lt", "right": "plan"}], "result": "count"}]},
+  "view_options": {"stacked": false, "labels": [{"name": "vendedores_bajo_plan", "label": "Vendedores"}]}})
+
+Prompt: "La categoría que más vendió"
+create_widget({"widget_type": "kpi", "title": "Categoría líder",
+  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+    "limit": null, "trend_by": null,
+    "metrics": [{"type": "grouped", "as": "categoria_top", "group_by": "categoria",
+      "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"}],
+      "having": [], "result": "top", "value": "ventas"}]},
+  "view_options": {"stacked": false, "labels": [{"name": "categoria_top", "label": "Ventas"}]}})
+
+Prompt: "Margen de ganancia en porcentaje"
+create_widget({"widget_type": "kpi", "title": "Margen",
+  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+    "limit": null, "trend_by": null,
+    "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
+                {"type": "agg", "as": "costo", "agg": "sum", "field": "costo"},
+                {"type": "calc", "as": "ganancia", "op": "sub", "left": "ventas", "right": "costo"},
+                {"type": "calc", "as": "margen", "op": "ratio_pct", "left": "ganancia", "right": "ventas"}]},
+  "view_options": {"stacked": false, "labels": [{"name": "margen", "label": "Margen"}],
+    "kpi": {"primary": "margen"}}})
+
+Prompt: "Top 5 productos por ventas en 2026"
+create_widget({"widget_type": "bar", "title": "Top 5 productos 2026",
+  "data_spec": {"dimensions": ["producto"], "pivots": [], "having": [], "trend_by": null,
+    "filters": [{"field": "anio", "op": "eq", "value": 2026}],
+    "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}],
+    "sort": {"by": "total_ventas", "dir": "desc"}, "limit": {"n": 5, "others": false}},
+  "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})
+
+Prompt: "Tabla de vendedores que no llegaron a su plan, con ventas, plan y % de cumplimiento"
+create_widget({"widget_type": "table", "title": "Vendedores bajo el plan",
+  "data_spec": {"dimensions": ["vendedor"], "pivots": [], "filters": [], "limit": null, "trend_by": null,
+    "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
+                {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"},
+                {"type": "calc", "as": "cumplimiento", "op": "ratio_pct", "left": "ventas", "right": "plan"}],
+    "having": [{"left": "ventas", "op": "lt", "right": "plan"}],
+    "sort": {"by": "cumplimiento", "dir": "asc"}},
+  "view_options": {"stacked": false, "labels": [{"name": "cumplimiento", "label": "% cumplimiento"}]}})
 
 Prompt: "Tabla de respuestas por categoría con la cantidad y el porcentaje de cada respuesta"
 create_widget({"widget_type": "table", "title": "Respuestas por categoría",
-  "data_spec": {"dimensions": ["categoria"], "pivot": "respuesta",
-    "metrics": [{"field": "categoria", "agg": "count", "as": "cantidad"},
-                {"field": "categoria", "agg": "count", "as": "pct_cantidad", "show_as": "pct_row"}],
-    "filters": [], "sort": null},
+  "data_spec": {"dimensions": ["categoria"], "pivots": ["respuesta"], "filters": [], "having": [],
+    "sort": null, "limit": null, "trend_by": null,
+    "metrics": [{"type": "agg", "as": "cantidad", "agg": "count"},
+                {"type": "agg", "as": "pct_cantidad", "agg": "count", "show_as": "pct_row"}]},
   "view_options": {"stacked": false, "labels": [{"name": "cantidad", "label": "Cant."},
     {"name": "pct_cantidad", "label": "%"}]}})
 
 Prompt: "Barras apiladas de ventas por categoría y por mes"
 create_widget({"widget_type": "bar", "title": "Ventas por categoría y mes",
-  "data_spec": {"dimensions": ["categoria"], "pivot": "mes",
-    "metrics": [{"field": "ventas", "agg": "sum", "as": "total_ventas"}],
-    "filters": [], "sort": null},
+  "data_spec": {"dimensions": ["categoria"], "pivots": ["mes"], "filters": [], "having": [],
+    "sort": null, "limit": null, "trend_by": null,
+    "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
   "view_options": {"stacked": true, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})
-
-Prompt: "Tabla con la cantidad de ventas y el promedio vendido por región, de mayor a menor cantidad"
-create_widget({"widget_type": "table", "title": "Ventas por región",
-  "data_spec": {"dimensions": ["region"], "pivot": null,
-    "metrics": [{"field": "region", "agg": "count", "as": "cantidad"},
-                {"field": "ventas", "agg": "avg", "as": "promedio_ventas"}],
-    "filters": [], "sort": {"by": "cantidad", "dir": "desc"}},
-  "view_options": {"stacked": false, "labels": [{"name": "region", "label": "Región"},
-    {"name": "cantidad", "label": "Cantidad"}, {"name": "promedio_ventas", "label": "Promedio de ventas"}]}})
-
-Prompt: "Evolución mensual de las ventas de Electrónica y Hogar con monto mayor a 100"
-create_widget({"widget_type": "line", "title": "Ventas mensuales Electrónica y Hogar",
-  "data_spec": {"dimensions": ["mes"], "pivot": null,
-    "metrics": [{"field": "ventas", "agg": "sum", "as": "total_ventas"}],
-    "filters": [{"field": "categoria", "op": "in", "value": ["Electrónica", "Hogar"]},
-                {"field": "ventas", "op": "gt", "value": 100}],
-    "sort": null},
-  "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})
 """
 
 
@@ -201,7 +249,7 @@ def _scalar_or_list_schema():
 def build_tool_parameters(schema: dict, widget_type: str | None) -> dict:
     """Schema de parámetros de `create_widget`, construido en cada llamada: los `enum` de
     columnas salen de `schema` (columnas reales de la hoja)."""
-    data_spec = _to_gemini_schema(build_data_spec_schema(schema, source=None))
+    data_spec = _to_gemini_schema(build_data_spec_schema(schema, source=None, for_ai=True))
     return {
         "type": "object",
         "additionalProperties": False,
@@ -216,6 +264,17 @@ def build_tool_parameters(schema: dict, widget_type: str | None) -> dict:
                 "required": ["stacked", "labels"],
                 "properties": {
                     "stacked": {"type": "boolean"},
+                    "kpi": {
+                        "type": "object",
+                        "properties": {
+                            "primary": {"type": "string"},
+                            "compare": {"type": "string"},
+                            "compare_mode": {"enum": ["pct", "abs"]},
+                            "target_metric": {"type": "string"},
+                            "target_value": {"type": "number"},
+                            "higher_is_better": {"type": "boolean"},
+                        },
+                    },
                     "labels": {
                         "type": "array",
                         "items": {
@@ -319,6 +378,15 @@ def _normalize(args: dict, source: str) -> tuple[str, dict, dict]:
         if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("label"), str)
     }
     options = {"title": args.get("title") or "", "stacked": bool(view_options.get("stacked")), "labels": labels}
+    kpi = view_options.get("kpi")
+    if isinstance(kpi, dict):
+        options["kpi"] = {
+            "primary": kpi.get("primary"),
+            "compare": kpi.get("compare"),
+            "compare_mode": kpi.get("compare_mode"),
+            "target": kpi.get("target_metric") or kpi.get("target_value"),
+            "higher_is_better": kpi.get("higher_is_better", True),
+        }
     return args.get("widget_type"), data_spec, options
 
 

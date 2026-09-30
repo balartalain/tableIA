@@ -41,7 +41,7 @@ def _label(view_spec: dict, name) -> str:
 
 
 def _metric_names(view_spec: dict) -> list[str]:
-    return view_spec.get("metrics") or [view_spec["metric"]]
+    return view_spec["metrics"]
 
 
 def _records(df: pd.DataFrame) -> list[dict]:
@@ -49,14 +49,78 @@ def _records(df: pd.DataFrame) -> list[dict]:
 
 
 def _percent_metrics(view_spec: dict) -> list[str]:
-    # Widgets guardados antes de existir las métricas pct_* no traen la clave.
     return view_spec.get("percent") or []
 
 
+def _number(value):
+    value = to_python(value)
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def _status(value, status: dict, higher_is_better: bool):
+    """Semáforo: "good" / "warn" / "bad" según los umbrales (invertidos si menos es mejor)."""
+    if value is None:
+        return None
+    if higher_is_better:
+        return "good" if value >= status["good"] else "warn" if value >= status["warn"] else "bad"
+    return "good" if value <= status["good"] else "warn" if value <= status["warn"] else "bad"
+
+
 def _compile_kpi(result, view_spec):
-    compiled = {"value": to_python(result.get(view_spec["metric"])), "label": view_spec.get("label", "")}
-    if view_spec["metric"] in _percent_metrics(view_spec):
+    """
+    {"value", "label", "percent"?, "text"? (grupo de un top/bottom),
+     "compare"?: {"label", "value", "mode", "delta", "delta_pct", "better"},
+     "target"?: {"label", "value", "pct"}, "status"?: "good"|"warn"|"bad",
+     "trend"?: {"categories", "data"}}
+    """
+    percent = _percent_metrics(view_spec)
+    primary = view_spec["primary"]
+    raw = result.get(primary)
+    compiled = {"label": _label(view_spec, primary)}
+    if isinstance(raw, dict):
+        compiled["text"] = str(raw["label"])
+        raw = raw["value"]
+    value = _number(raw)
+    compiled["value"] = value
+    if primary in percent:
         compiled["percent"] = True
+    higher_is_better = view_spec.get("higher_is_better", True)
+
+    compare = view_spec.get("compare")
+    if compare:
+        other = _number(result.get(compare))
+        delta = value - other if value is not None and other is not None else None
+        compiled["compare"] = {
+            "label": _label(view_spec, compare),
+            "value": other,
+            "mode": view_spec.get("compare_mode", "pct"),
+            "delta": round(delta, 2) if delta is not None else None,
+            "delta_pct": round(delta / abs(other) * 100, 2) if delta is not None and other else None,
+            "better": None if not delta else (delta > 0) == higher_is_better,
+        }
+
+    target = view_spec.get("target")
+    target_pct = None
+    if target is not None:
+        goal = _number(target) if not isinstance(target, str) else _number(result.get(target))
+        target_pct = round(value / goal * 100, 2) if value is not None and goal else None
+        compiled["target"] = {
+            "label": _label(view_spec, target) if isinstance(target, str) else "Meta",
+            "value": goal,
+            "pct": target_pct,
+        }
+
+    status = view_spec.get("status")
+    if status:
+        basis = target_pct if status["basis"] == "target_pct" else value
+        compiled["status"] = _status(basis, status, higher_is_better)
+
+    trend = result.get("__trend")
+    if trend and primary in trend["series"]:
+        compiled["trend"] = {
+            "categories": [str(c) for c in trend["categories"]],
+            "data": [_number(v) for v in trend["series"][primary]],
+        }
     return compiled
 
 
@@ -88,7 +152,7 @@ def _compile_chart(result, view_spec):
 
 
 def _compile_donut(result, view_spec):
-    metric = view_spec["metric"]
+    metric = view_spec["metrics"][0]
     return {
         "series": [to_python(v) for v in result[metric]],
         "labels": [str(to_python(v)) for v in result[view_spec["x"]]],
@@ -208,7 +272,7 @@ _COMPILERS = {
 def compile_view(widget_type: str, result, view_spec: dict) -> dict:
     """
     Traduce el resultado de run_data_spec + view_spec al formato de cada widget:
-    - kpi:      {"value": ..., "label": ...}
+    - kpi:      {"value", "label", ...} (ver _compile_kpi)
     - bar/line: {"series": [...], "categories": [...]} (+ "stacked" en bar); una serie por
                 métrica sin seriesBy, o una por cada valor del pivote con seriesBy.
     - donut:    {"series": [valores], "labels": [categorías]} (formato nativo de ApexCharts).

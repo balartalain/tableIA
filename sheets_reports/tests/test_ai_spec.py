@@ -17,17 +17,20 @@ VALID_ARGS = {
     "title": "Ventas por categoría",
     "data_spec": {
         "dimensions": ["categoria"],
-        "pivot": None,
-        "metrics": [{"field": "ventas", "agg": "sum", "as": "total_ventas"}],
+        "pivots": [],
+        "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"}],
         "filters": [],
+        "having": [],
         "sort": {"by": "total_ventas", "dir": "desc"},
+        "limit": None,
+        "trend_by": None,
     },
     "view_options": {"stacked": False, "labels": [{"name": "total_ventas", "label": "Ventas"}]},
 }
 
 INVALID_ARGS = {
     **VALID_ARGS,
-    "data_spec": {**VALID_ARGS["data_spec"], "metrics": [{"field": "ventaz", "agg": "sum", "as": "total_ventas"}]},
+    "data_spec": {**VALID_ARGS["data_spec"], "metrics": [{"type": "agg", "field": "ventaz", "agg": "sum", "as": "total_ventas"}]},
 }
 
 
@@ -63,9 +66,9 @@ class GenerateWidgetSpecTests(SimpleTestCase):
         self.assertIn("No se pudo generar un widget válido", str(ctx.exception))
 
     def test_pivote_con_varias_metricas_no_se_reintenta(self, _audit):
-        args = {**VALID_ARGS, "data_spec": {**VALID_ARGS["data_spec"], "pivot": "mes", "sort": None, "metrics": [
-            {"field": "ventas", "agg": "sum", "as": "total_ventas"},
-            {"field": "categoria", "agg": "count", "as": "cantidad"},
+        args = {**VALID_ARGS, "data_spec": {**VALID_ARGS["data_spec"], "pivots": ["mes"], "sort": None, "metrics": [
+            {"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"},
+            {"type": "agg", "agg": "count", "as": "cantidad"},
         ]}}
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
             with self.assertRaisesMessage(SpecGenerationError, "Con pivote solo se permite una métrica"):
@@ -76,6 +79,20 @@ class GenerateWidgetSpecTests(SimpleTestCase):
         with mock.patch.object(ai_spec, "_call_model", return_value=("reject_request", {"reason": "No hay columna de región."})):
             with self.assertRaisesMessage(SpecGenerationError, "No hay columna de región."):
                 generate_widget_spec("ventas por región", None, sales_schema(), source="0")
+
+    def test_opciones_del_kpi(self, _audit):
+        args = {
+            "widget_type": "kpi", "title": "Ventas",
+            "data_spec": {**VALID_ARGS["data_spec"], "dimensions": [], "sort": None, "metrics": [
+                {"type": "agg", "field": "ventas", "agg": "sum", "as": "actual"},
+                {"type": "agg", "field": "ventas", "agg": "avg", "as": "promedio"},
+            ]},
+            "view_options": {"stacked": False, "labels": [],
+                             "kpi": {"primary": "actual", "compare": "promedio", "target_value": 900}},
+        }
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)):
+            view = generate_widget_spec("ventas", "kpi", sales_schema(), source="0")["view_spec"]
+        self.assertEqual((view["primary"], view["compare"], view["target"]), ("actual", "promedio", 900))
 
     def test_audita_prompt_y_spec(self, _audit):
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", VALID_ARGS)):
@@ -93,8 +110,11 @@ class ToolSchemaTests(SimpleTestCase):
 
         expected = ["Carrera", "Nota", "Periodo"]
         self.assertEqual(data_spec["dimensions"]["items"]["enum"], expected)
-        self.assertEqual(data_spec["metrics"]["items"]["properties"]["field"]["enum"], expected)
-        self.assertEqual(data_spec["pivot"]["anyOf"][1]["enum"], expected)
+        agg_metric = data_spec["metrics"]["items"]["anyOf"][0]
+        self.assertEqual(agg_metric["properties"]["type"]["enum"], ["agg"])
+        self.assertEqual(agg_metric["properties"]["field"]["enum"], expected)
+        self.assertEqual(data_spec["pivots"]["items"]["enum"], expected)
+        self.assertEqual(data_spec["filters"]["items"]["properties"]["field"]["enum"], expected)
         self.assertNotIn("source", data_spec)
 
     def test_tipo_fijado(self):

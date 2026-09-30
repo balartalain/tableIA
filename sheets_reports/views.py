@@ -11,7 +11,6 @@ from django.utils.timesince import timesince
 from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from jsonschema import Draft202012Validator
 
 from sheets_reports.models import Dashboard, Widget, default_position
 from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_spec
@@ -28,7 +27,7 @@ from sheets_reports.services.sheets import (
 from sheets_reports.services.spec_validation import (
     WIDGET_TYPES,
     build_view_spec,
-    filter_schema,
+    condition_errors,
     validate_widget_spec,
 )
 
@@ -167,7 +166,7 @@ def _board_filters(request, schema) -> list[dict]:
     Filtros del tablero, desde la query string:
       ?filters=[{"field": ..., "op": ..., "value": ...}]   (JSON)
       ?filtro_<columna>=<valor>                             (atajo: eq)
-    Se validan con el mismo sub-schema `filter` que el data_spec.
+    Se validan con las mismas reglas que las condiciones del data_spec.
     """
     filters = []
     raw = request.GET.get("filters")
@@ -189,11 +188,9 @@ def _board_filters(request, schema) -> list[dict]:
                     pass
             filters.append({"field": field, "op": "eq", "value": value})
 
-    validator = Draft202012Validator(filter_schema(schema))
-    for f in filters:
-        errors = list(validator.iter_errors(f))
-        if errors:
-            raise ValueError(f"Filtro inválido {json.dumps(f, ensure_ascii=False)}: {errors[0].message}")
+    errors = condition_errors(filters, schema)
+    if errors:
+        raise ValueError(f"Filtro del tablero inválido: {errors[0]}")
     return filters
 
 
@@ -298,7 +295,9 @@ def dashboard_schema(request, dashboard_id):
         df, schema = _load_sheet(dashboard)
     except SheetError as e:
         return _error(str(e), status=502)
-    return JsonResponse({**schema, "dimension_fields": get_dimension_fields(df)})
+    return JsonResponse({
+        **schema, "dimension_fields": get_dimension_fields(df), "sample_values": get_field_samples(df),
+    })
 
 
 @require_http_methods(["GET"])
@@ -379,39 +378,47 @@ def _clean_labels(data: dict, previous: dict | None = None) -> dict:
     return (previous or {}).get("labels") or {}
 
 
-def _builder_data_spec(data: dict, dashboard, widget_type: str, schema: dict, previous: dict | None):
+# Claves del data_spec que manda el builder (todas; sin ellas se usa el valor por defecto).
+_BUILDER_DEFAULTS = {
+    "dimensions": [], "pivots": [], "filters": [], "metrics": [], "having": [],
+    "sort": None, "limit": None, "trend_by": None,
+}
+
+
+def _builder_data_spec(data: dict, dashboard, widget_type: str, schema: dict):
     """
-    data_spec a partir de los controles del builder ({dimensions, pivot, metrics, sort?,
-    filters?}). Retorna (data_spec, errores). Mismas validaciones que el camino de IA.
+    data_spec a partir de los controles del builder ({dimensions, pivots, filters, metrics,
+    having, sort, limit, trend_by}). Retorna (data_spec, errores). Mismas validaciones que el
+    camino de IA.
     """
-    previous = previous or {}
-    dimensions = data.get("dimensions") or []
-    if isinstance(dimensions, str):
-        dimensions = [dimensions]
-    metrics = data.get("metrics") or []
-    if not isinstance(metrics, list):
-        return None, ["metrics debe ser una lista."]
-    # count cuenta filas: si el builder no manda campo, se usa la dimensión (o la primera
-    # columna en un KPI), como indica la semántica del DSL.
-    for m in metrics:
-        if isinstance(m, dict) and m.get("agg") == "count" and not m.get("field"):
-            m["field"] = dimensions[0] if dimensions else (schema["all_fields"] or [""])[0]
-    data_spec = {
-        "source": dashboard.sheet_gid,
-        "dimensions": dimensions,
-        "pivot": data.get("pivot") or None,
-        "metrics": metrics,
-        "filters": data["filters"] if "filters" in data else previous.get("filters") or [],
-        "sort": data["sort"] if "sort" in data else previous.get("sort"),
-    }
+    data_spec = {"source": dashboard.sheet_gid}
+    for key, default in _BUILDER_DEFAULTS.items():
+        value = data.get(key, default)
+        data_spec[key] = default if value is None and isinstance(default, list) else value
     return data_spec, validate_widget_spec(widget_type, data_spec, schema, dashboard.sheet_gid)
+
+
+def _view_options(data: dict, previous: dict | None = None) -> dict:
+    """Opciones de build_view_spec desde el request; lo que no viene se toma del widget."""
+    previous = previous or {}
+    options = {
+        "title": data.get("title", previous.get("title")),
+        "labels": _clean_labels(data, previous),
+        "stacked": bool(data.get("stacked", previous.get("stacked", False))),
+    }
+    if isinstance(data.get("kpi"), dict):
+        options["kpi"] = data["kpi"]
+    elif previous.get("widget") == "kpi":
+        options["kpi"] = {k: previous.get(k) for k in (
+            "primary", "compare", "compare_mode", "target", "higher_is_better", "status")}
+    return options
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_widget(request, dashboard_id):
     """
-    POST {type, dimensions, pivot, metrics, stacked, sort?, labels?, title?, position?}
+    POST {type, <claves del data_spec>, stacked?, labels?, kpi?, title?, position?, display?}
     Crea un widget desde el builder (el usuario elige columnas y métricas). NUNCA llama a la IA.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
@@ -430,7 +437,7 @@ def create_widget(request, dashboard_id):
     except SheetError as e:
         return _error(str(e), status=502)
 
-    data_spec, errors = _builder_data_spec(data, dashboard, widget_type, schema, None)
+    data_spec, errors = _builder_data_spec(data, dashboard, widget_type, schema)
     if errors:
         return _error(errors[0], status=422, errors=errors)
 
@@ -440,10 +447,7 @@ def create_widget(request, dashboard_id):
         type=widget_type,
         position=_clean_position(data.get("position")),
         data_spec=data_spec,
-        view_spec=build_view_spec(widget_type, data_spec, {
-            "title": data.get("title"), "labels": _clean_labels(data), "stacked": bool(data.get("stacked")),
-            "display": display,
-        }),
+        view_spec=build_view_spec(widget_type, data_spec, {**_view_options(data), "display": display}),
     )
     return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)}, status=201)
 
@@ -452,7 +456,7 @@ def create_widget(request, dashboard_id):
 @require_http_methods(["PUT"])
 def update_widget_spec(request, widget_id):
     """
-    PUT {dimensions, pivot, metrics, stacked, sort?, labels?, filters?}
+    PUT {<claves del data_spec>, stacked?, labels?, kpi?, title?}
     Edición manual desde el builder: aplica las mismas validaciones que el camino de IA,
     reconstruye view_spec y guarda. Este camino NUNCA llama a la IA.
     """
@@ -469,17 +473,14 @@ def update_widget_spec(request, widget_id):
     except SheetError as e:
         return _error(str(e), status=502)
 
-    data_spec, errors = _builder_data_spec(data, widget.dashboard, widget.type, schema, widget.data_spec)
+    data_spec, errors = _builder_data_spec(data, widget.dashboard, widget.type, schema)
     if errors:
         return _error(errors[0], status=422, errors=errors)
 
     previous = widget.view_spec or {}
     widget.data_spec = data_spec
     widget.view_spec = build_view_spec(widget.type, data_spec, {
-        "title": data.get("title", previous.get("title")),
-        "labels": _clean_labels(data, previous),
-        "stacked": bool(data.get("stacked", previous.get("stacked", False))),
-        "display": previous.get("display"),
+        **_view_options(data, previous), "display": previous.get("display"),
     })
     widget.save()
     return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)})

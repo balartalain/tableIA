@@ -42,6 +42,8 @@
     static maxPivots = 2;
     // Cada métrica es una columna con cabecera: se puede renombrar.
     static supportsLabels = true;
+    // "Mostrar totales" por cada nivel de filas/columnas, como en las tablas dinámicas de Sheets.
+    static supportsTotals = true;
     static help = 'Muestra datos en filas y columnas, como una hoja de cálculo (ej. listado de ' +
       'participantes con sus notas, detalle de transacciones). Útil cuando el detalle fila por ' +
       'fila importa más que una comparación visual, y permite descargar los datos como CSV.';
@@ -53,10 +55,6 @@
       return [...super.drawerFields,
         this.FIELD_PAGE_SIZE,
         this.FIELD_SHOW_PAGINATION,
-        { key: 'showRowTotals', label: 'Mostrar fila de totales', type: 'checkbox' },
-        { key: 'showColumnTotals', label: 'Mostrar columna de totales (con pivote)', type: 'checkbox' },
-        { key: 'showSubtotals', label: 'Mostrar subtotales (varios niveles)', type: 'checkbox' },
-        { key: 'repeatRowLabels', label: 'Repetir etiquetas de fila', type: 'checkbox' },
         { key: 'boldLastRow', label: 'Resaltar última fila', type: 'checkbox' }
       ];
     }
@@ -82,11 +80,14 @@
       this.pageSize = raw.pageSize ?? 10;
       this.showPagination = raw.showPagination ?? true;
       this.boldLastRow = raw.boldLastRow ?? false;
-      // Totales como en Sheets: visibles por defecto. Si la tabla ya resaltaba su última fila
-      // (hojas que traen su propia fila de total), no se agrega otra salvo que se active.
-      this.showRowTotals = raw.showRowTotals ?? !this.boldLastRow;
-      this.showColumnTotals = raw.showColumnTotals ?? true;
-      this.showSubtotals = raw.showSubtotals ?? true;
+      // Totales por nivel, como en Sheets (visibles por defecto): rowTotals[0] es la fila
+      // "Total general" y rowTotals[k] los subtotales "Total <valor>" del nivel k-1;
+      // columnTotals igual con los pivotes. Se migran los flags anteriores (showRowTotals,
+      // showColumnTotals, showSubtotals). Si la tabla ya resaltaba su última fila (hojas que
+      // traen su propia fila de total), no se agrega otra salvo que se active.
+      const sub = raw.showSubtotals ?? true;
+      this.rowTotals = raw.rowTotals ?? [raw.showRowTotals ?? !this.boldLastRow, sub, sub];
+      this.columnTotals = raw.columnTotals ?? [raw.showColumnTotals ?? true, sub];
       this.repeatRowLabels = raw.repeatRowLabels ?? false;
       this.columnOrder = raw.columnOrder ?? null;
       this.formattersMap = raw.formattersMap ?? {};
@@ -94,8 +95,8 @@
 
     getProperties() {
       return { ...super.getProperties(), pageSize: this.pageSize, showPagination: this.showPagination,
-        boldLastRow: this.boldLastRow, showRowTotals: this.showRowTotals, showColumnTotals: this.showColumnTotals,
-        showSubtotals: this.showSubtotals, repeatRowLabels: this.repeatRowLabels,
+        boldLastRow: this.boldLastRow, rowTotals: this.rowTotals, columnTotals: this.columnTotals,
+        repeatRowLabels: this.repeatRowLabels,
         columnOrder: this.columnOrder, formattersMap: this.formattersMap };
     }
 
@@ -153,9 +154,11 @@
       // última fila; sí puede encogerse (min-h-0) y entonces hace scroll (ver maxHeight).
       container.style.flex = '0 1 auto';
       container.classList.remove('tb-pivot');
-      // "Total general" viene marcada con total: true y los "Total <valor>" de un pivote
-      // anidado con subtotal: true; se quitan (con sus hijos) si están apagados.
-      const keep = (c) => !(c.total && !this.showColumnTotals) && !(c.subtotal && !this.showSubtotals);
+      // "Total general" viene marcada con total: true (nivel 0 de columnas) y los "Total <valor>"
+      // del pivote anidado con subtotal: true (nivel 1, hay como mucho dos pivotes); se quitan
+      // (con sus hijos) si ese nivel tiene los totales apagados.
+      const keep = (c) => !(c.total && !TableWidget.totalsOn(this.columnTotals, 0))
+        && !(c.subtotal && !TableWidget.totalsOn(this.columnTotals, 1));
       const prune = (cols) => cols.filter(keep)
         .map(c => (c.children ? { ...c, children: prune(c.children) } : c))
         .filter(c => !c.children || c.children.length);
@@ -169,7 +172,7 @@
       const hierarchical = rowFields.length > 1;
       const rows = this._displayRows(payload.rows || [], rowFields);
       // La fila de totales se muestra como fila de pie (bottomCalc): no se ordena ni pagina.
-      const totals = this.showRowTotals ? payload.totals : null;
+      const totals = TableWidget.totalsOn(this.rowTotals, 0) ? payload.totals : null;
       const hasGroups = columns.some(c => c.children);
       // Tabla dinámica (columnas anidadas o varios niveles de filas): separadores de grupos,
       // columnas de filas fijas al hacer scroll horizontal, etc. (estilos en .tb-pivot).
@@ -268,10 +271,17 @@
       }
     }
 
-    // Filas a mostrar: sin subtotales si están apagados y, salvo "Repetir etiquetas de fila",
-    // con la etiqueta de un nivel en blanco cuando repite la de la fila anterior (como Sheets).
+    static totalsOn(levels, level) {
+      return (levels || [])[level] !== false;
+    }
+
+    // Filas a mostrar: sin los subtotales de los niveles apagados y, salvo "Repetir etiquetas
+    // de fila", con la etiqueta de un nivel en blanco cuando repite la de la fila anterior
+    // (como Sheets). Un subtotal "Total <valor>" del nivel k-1 deja en blanco los niveles
+    // desde k, así que su primera etiqueta vacía dice qué checkbox lo controla.
     _displayRows(rows, rowFields) {
-      if (!this.showSubtotals) rows = rows.filter(r => !r.__subtotal);
+      rows = rows.filter(r => !r.__subtotal
+        || TableWidget.totalsOn(this.rowTotals, rowFields.findIndex(f => r[f] == null)));
       if (this.repeatRowLabels || rowFields.length < 2) return rows;
       let previous = null;
       return rows.map(row => {

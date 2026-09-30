@@ -86,6 +86,18 @@
       <button x-on:click="$store.dashboard.closeDrawer()" class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
     </div>
 
+    <div role="tablist" class="flex gap-4 px-5 border-b border-line">
+      <template x-for="tab in [{ id: 'data', label: 'Configurar', icon: 'ti-table' }, { id: 'style', label: 'Personalizar', icon: 'ti-palette' }]" :key="tab.id">
+        <button type="button" role="tab" x-on:click="$store.dashboard.drawerTab = tab.id"
+                x-bind:aria-selected="$store.dashboard.drawerTab === tab.id"
+                x-bind:class="$store.dashboard.drawerTab === tab.id ? 'border-moss-500 text-moss-600' : 'border-transparent text-ink/50 hover:text-ink'"
+                class="-mb-px flex items-center gap-1.5 border-b-2 py-2.5 text-sm font-medium transition cursor-pointer">
+          <i class="ti text-base" x-bind:class="tab.icon" aria-hidden="true"></i>
+          <span x-text="tab.label"></span>
+        </button>
+      </template>
+    </div>
+
     <div class="flex-1 min-h-0 overflow-y-auto p-5">
 
     <div x-show="$store.dashboard.drawerSpecError" x-cloak role="alert"
@@ -97,7 +109,8 @@
     <div class="grid grid-cols-2 gap-x-3 gap-y-4">
       <template x-for="field in $store.dashboard.drawerFields" :key="field.key">
         <template x-if="field.type !== 'builder' || $store.dashboard.drawerDraft.builder">
-          <div x-bind:class="(field.key === 'title' || field.type === 'textarea' || field.type === 'builder') ? 'col-span-2' : 'col-span-1'">
+          <div x-show="(field.tab || 'style') === $store.dashboard.drawerTab"
+               x-bind:class="(field.key === 'title' || field.type === 'textarea' || field.type === 'builder') ? 'col-span-2' : 'col-span-1'">
             <template x-if="field.type !== 'textarea' && field.type !== 'builder'">
               <div class="flex items-center justify-between mb-1">
                 <label class="block text-xs font-semibold text-ink/70" x-text="field.label"></label>
@@ -168,6 +181,7 @@
                     <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-text="$store.dashboard.dimensionLabel"></label>
                     <div class="space-y-1">
                       <template x-for="(d, i) in $store.dashboard.drawerDraft.builder.dimensions" :key="'dim-' + i">
+                        <div class="space-y-1">
                         <div class="flex items-center gap-1">
                           <select x-model="$store.dashboard.drawerDraft.builder.dimensions[i]" x-on:change="$store.dashboard.onDimensionChange()"
                                   class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
@@ -179,6 +193,23 @@
                           <button type="button" x-show="$store.dashboard.drawerDraft.builder.dimensions.length > 1" x-on:click="$store.dashboard.removeDimension(i)"
                                   class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
                                   title="Quitar nivel" aria-label="Quitar nivel de filas">×</button>
+                        </div>
+                        <template x-if="$store.dashboard.drawerDraft.rowTotals">
+                          <label class="flex items-center gap-1.5 pl-1 text-[11px] text-ink/60 cursor-pointer"
+                                 x-bind:title="i === 0 ? 'Fila «Total general» al pie de la tabla' : `Subtotal «Total …» de cada ${$store.dashboard.drawerDraft.builder.dimensions[i - 1] || 'grupo'}`">
+                            <input type="checkbox" x-model="$store.dashboard.drawerDraft.rowTotals[i]"
+                                   class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+                            Mostrar totales
+                          </label>
+                        </template>
+                        <template x-if="i === 0 && $store.dashboard.drawerDraft.rowTotals">
+                          <label class="flex items-center gap-1.5 pl-1 text-[11px] text-ink/60 cursor-pointer"
+                                 title="Repite la etiqueta de cada nivel en todas sus filas en vez de dejarla en blanco">
+                            <input type="checkbox" x-model="$store.dashboard.drawerDraft.repeatRowLabels"
+                                   class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+                            Repetir etiquetas de fila
+                          </label>
+                        </template>
                         </div>
                       </template>
                     </div>
@@ -192,6 +223,7 @@
                     <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-text="$store.dashboard.pivotLabel"></label>
                     <div class="space-y-1">
                       <template x-for="(p, i) in $store.dashboard.drawerDraft.builder.pivots" :key="'piv-' + i">
+                        <div class="space-y-1">
                         <div class="flex items-center gap-1">
                           <select x-model="$store.dashboard.drawerDraft.builder.pivots[i]" x-bind:disabled="!$store.dashboard.drawerWidgetClass.supportsPivot"
                                   class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -203,6 +235,15 @@
                           <button type="button" x-show="$store.dashboard.drawerDraft.builder.pivots.length > 1" x-on:click="$store.dashboard.removePivot(i)"
                                   class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
                                   title="Quitar nivel" aria-label="Quitar nivel de columnas">×</button>
+                        </div>
+                        <template x-if="$store.dashboard.drawerDraft.columnTotals">
+                          <label x-show="$store.dashboard.drawerDraft.builder.pivots[i]" class="flex items-center gap-1.5 pl-1 text-[11px] text-ink/60 cursor-pointer"
+                                 x-bind:title="i === 0 ? 'Columna «Total general» a la derecha' : `Subtotal «Total …» de cada ${$store.dashboard.drawerDraft.builder.pivots[i - 1] || 'grupo'}`">
+                            <input type="checkbox" x-model="$store.dashboard.drawerDraft.columnTotals[i]"
+                                   class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+                            Mostrar totales
+                          </label>
+                        </template>
                         </div>
                       </template>
                     </div>

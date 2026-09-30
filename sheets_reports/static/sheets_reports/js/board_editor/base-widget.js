@@ -13,17 +13,19 @@
     static minHeight = 150;
     static help = '';
 
-    static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text' };
+    // Pestaña del panel de edición: 'data' (Configurar) o, si se omite, 'style' (Personalizar).
+    static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
 
     static FIELD_PROMPT = {
       key: 'prompt',
       label: 'Descripción',
       type: 'textarea',
       generatable: true,
+      tab: 'data',
     };
 
     // Constructor estructurado (dimensión, pivote, métricas, apiladas): edita data_spec sin IA.
-    static FIELD_BUILDER = { key: 'builder', label: 'Datos', type: 'builder' };
+    static FIELD_BUILDER = { key: 'builder', label: 'Datos', type: 'builder', tab: 'data' };
 
     // Capacidades del builder por tipo (las reglas reales las valida el backend).
     // Solo las barras tienen "apiladas", y solo con pivote.
@@ -39,6 +41,8 @@
     static maxMetrics = 5;
     // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).
     static supportsLabels = false;
+    // "Mostrar totales" por nivel de filas/columnas (props rowTotals/columnTotals).
+    static supportsTotals = false;
 
     static FIELD_WIDTH = {
       key: 'width',

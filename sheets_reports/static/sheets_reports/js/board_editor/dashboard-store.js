@@ -214,6 +214,8 @@ document.addEventListener('alpine:init', () => {
     drawerSaving: false,
     drawerSaveError: '',
     drawerHelpOpen: false,
+    // Pestaña activa del panel: 'data' (filas, columnas, métricas) o 'style' (personalizar).
+    drawerTab: 'data',
     // Banner de advertencia del builder: mensaje de rechazo del backend (no se aplica nada).
     drawerSpecError: '',
     drawerApplying: false,
@@ -382,24 +384,37 @@ document.addEventListener('alpine:init', () => {
       return !!b && b.pivots.length < this.maxPivots && b.pivots.every(Boolean);
     },
 
+    // Los totales de cada nivel (drawerDraft.rowTotals/columnTotals) siguen a su fila o
+    // columna al agregar o quitar niveles, como en Sheets.
     addDimension() {
-      if (this.canAddDimension) this.builder.dimensions.push('');
+      if (!this.canAddDimension) return;
+      this.builder.dimensions.push('');
+      this.drawerDraft.rowTotals?.push(true);
     },
 
     removeDimension(i) {
       const b = this.builder;
-      if (b && b.dimensions.length > 1) b.dimensions.splice(i, 1);
+      if (!b || b.dimensions.length <= 1) return;
+      b.dimensions.splice(i, 1);
+      this.drawerDraft.rowTotals?.splice(i, 1);
     },
 
     addPivot() {
-      if (this.canAddPivot) this.builder.pivots.push('');
+      if (!this.canAddPivot) return;
+      this.builder.pivots.push('');
+      this.drawerDraft.columnTotals?.push(true);
     },
 
     removePivot(i) {
       const b = this.builder;
       if (!b) return;
-      if (b.pivots.length > 1) b.pivots.splice(i, 1);
-      else b.pivots[0] = '';
+      if (b.pivots.length > 1) {
+        b.pivots.splice(i, 1);
+        this.drawerDraft.columnTotals?.splice(i, 1);
+      } else {
+        b.pivots[0] = '';
+        if (this.drawerDraft.columnTotals) this.drawerDraft.columnTotals[0] = true;
+      }
     },
 
     get pivotLabel() {
@@ -469,6 +484,8 @@ document.addEventListener('alpine:init', () => {
       if (!w) return;
       this.editingId = id;
       this.editingType = w.chart_type;
+      // Un widget nuevo empieza por sus datos.
+      if (w.id < 0) this.drawerTab = 'data';
       const draft = {};
       for (const field of this.drawerFields) {
         if (field.key === 'builder' || field.key === 'prompt') continue;
@@ -476,6 +493,15 @@ document.addEventListener('alpine:init', () => {
       }
       draft.prompt = '';
       draft.builder = this._builderDraft(w) || this._defaultBuilder();
+      // Totales por nivel: van junto a cada fila/columna del builder, pero son presentación
+      // (se guardan con "Guardar" y no vuelven a pedir los datos).
+      if (this.drawerWidgetClass.supportsTotals) {
+        const levels = (list, n) => Array.from({ length: n }, (_, i) => (list || [])[i] !== false);
+        draft.rowTotals = levels(w.rowTotals, draft.builder.dimensions.length);
+        draft.columnTotals = levels(w.columnTotals, draft.builder.pivots.length);
+        // "Repetir etiquetas de fila" va, como en Sheets, bajo la primera fila.
+        draft.repeatRowLabels = !!w.repeatRowLabels;
+      }
       this.drawerDraft = draft;
       // Widget nuevo abierto antes de que llegaran las columnas: completar los valores por
       // defecto cuando lleguen.
@@ -527,6 +553,7 @@ document.addEventListener('alpine:init', () => {
       this.drawerSaveError = '';
       this.drawerSpecError = '';
       this.drawerHelpOpen = false;
+      this.drawerTab = 'data';
     },
 
     addBuilderMetric() {

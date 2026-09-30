@@ -14,7 +14,7 @@ urlpatterns = [
     path('api/dashboard/<int:dashboard_id>/schema/', views.dashboard_schema, name='dashboard_schema'),
     path('api/dashboard/<int:dashboard_id>/render/', views.dashboard_render, name='dashboard_render'),
     path('api/dashboard/<int:dashboard_id>/widgets/', views.create_widget, name='create_widget'),
-    path('api/dashboard/<int:dashboard_id>/widgets/generate/', views.generate_widget, name='generate_widget'),
+    path('api/dashboard/<int:dashboard_id>/table-assistant/', views.table_assistant, name='table_assistant'),
     path('api/widget/<int:widget_id>/', views.widget_detail, name='widget_detail'),
     path('api/widget/<int:widget_id>/spec/', views.update_widget_spec, name='update_widget_spec'),
 ]

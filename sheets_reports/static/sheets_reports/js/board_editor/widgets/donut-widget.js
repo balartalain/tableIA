@@ -13,9 +13,6 @@
     // Reparte UNA métrica entre las categorías: sin pivote.
     static supportsPivot = false;
     static maxMetrics = 1;
-    static help = 'Muestra cómo se reparte un total entre categorías, como porciones de un ' +
-      'círculo (ej. participantes por sede, presupuesto por rubro). Útil para ver proporciones ' +
-      'de un conjunto pequeño de categorías; con muchas categorías es mejor usar una tabla o barras.';
 
     static mockData() {
       return { series: [44, 55, 13, 33], labels: ['Norte', 'Sur', 'Este', 'Oeste'] };

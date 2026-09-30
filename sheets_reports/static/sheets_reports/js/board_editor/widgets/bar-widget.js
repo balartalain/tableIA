@@ -21,10 +21,6 @@
       descClass: 'text-blue-700/80',
     };
     static defaults = { title: 'Gráfico de Barras', width: 'md:col-span-6', height: 300 };
-    static help = 'Compara valores entre categorías usando barras: una o más series de datos ' +
-      '(ej. ventas por mes, participantes por carrera) agrupadas o apiladas a lo largo de un eje ' +
-      'de categorías. Ideal para comparar magnitudes entre grupos, no para ver tendencias continuas. ' +
-      'Con más de una serie, puedes arrastrar los ítems de la leyenda para reordenarlas.';
 
     static supportsStacked = true;
     static FIELD_HORIZONTAL = { key: 'horizontal', label: 'Horizontal', type: 'checkbox' };

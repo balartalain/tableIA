@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from sheets_reports.models import Dashboard, Widget
+from sheets_reports.services.ai_spec import SpecGenerationError
 from sheets_reports.services.spec_validation import build_view_spec
 from sheets_reports.tests.fixtures import sales_df, spec
 
@@ -184,22 +185,34 @@ class ViewsTests(TestCase):
         self.widget.refresh_from_db()
         self.assertIsNone(self.widget.data_spec["pivot"])
 
-    def test_generate_guarda_spec_y_prompt(self, _df):
+    def test_asistente_de_tabla_devuelve_spec_sin_guardar(self, _df):
         generated = {
-            "widget_type": "kpi",
-            "data_spec": spec(dimensions=[]),
-            "view_spec": build_view_spec("kpi", spec(dimensions=[])),
+            "widget_type": "table",
+            "data_spec": spec(),
+            "view_spec": build_view_spec("table", spec()),
         }
-        with mock.patch("sheets_reports.views.generate_widget_spec", return_value=generated):
+        widgets_before = Widget.objects.count()
+        with mock.patch("sheets_reports.views.generate_widget_spec", return_value=generated) as ai:
             r = self.client.post(
-                f"/api/dashboard/{self.dashboard.id}/widgets/generate/",
-                json.dumps({"prompt": "total de ventas", "widget_type": "kpi"}),
+                f"/api/dashboard/{self.dashboard.id}/table-assistant/",
+                json.dumps({"prompt": "ventas por categoría"}),
                 content_type="application/json",
             )
-        self.assertEqual(r.status_code, 201, r.content)
-        widget = Widget.objects.get(id=r.json()["id"])
-        self.assertEqual(widget.source_prompt, "total de ventas")
-        self.assertEqual(r.json()["data"], {"value": 755.0, "label": "Total ventas"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(ai.call_args.args[:2], ("ventas por categoría", "table"))
+        self.assertEqual(r.json(), {"data_spec": generated["data_spec"], "view_spec": generated["view_spec"]})
+        self.assertEqual(Widget.objects.count(), widgets_before)
+
+    def test_asistente_de_tabla_error_legible(self, _df):
+        with mock.patch("sheets_reports.views.generate_widget_spec",
+                        side_effect=SpecGenerationError("La columna Precio no existe.")):
+            r = self.client.post(
+                f"/api/dashboard/{self.dashboard.id}/table-assistant/",
+                json.dumps({"prompt": "precio promedio"}),
+                content_type="application/json",
+            )
+        self.assertEqual(r.status_code, 422)
+        self.assertEqual(r.json()["error"], "La columna Precio no existe.")
 
     def test_paginas_renderizan(self, _df):
         for url in ("/", f"/tableros/{self.dashboard.id}/edit/", f"/tableros/{self.dashboard.id}/shared/"):

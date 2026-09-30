@@ -44,15 +44,17 @@
     static supportsLabels = true;
     // "Mostrar totales" por cada nivel de filas/columnas, como en las tablas dinámicas de Sheets.
     static supportsTotals = true;
-    static help = 'Muestra datos en filas y columnas, como una hoja de cálculo (ej. listado de ' +
-      'participantes con sus notas, detalle de transacciones). Útil cuando el detalle fila por ' +
-      'fila importa más que una comparación visual, y permite descargar los datos como CSV.';
 
     static FIELD_PAGE_SIZE = { key: 'pageSize', label: 'Filas por página', type: 'number', min: 5, step: 5 };
     static FIELD_SHOW_PAGINATION = { key: 'showPagination', label: 'Mostrar paginación', type: 'checkbox' };
 
+    // "Consulta con la IA": la IA responde con los pasos para configurar la tabla en el
+    // constructor (no modifica el widget).
+    static FIELD_ASSISTANT = { key: 'prompt', label: 'Consulta con la IA', type: 'assistant', tab: 'data' };
+
     static get drawerFields() {
-      return [...super.drawerFields,
+      const [title, ...rest] = super.drawerFields;
+      return [title, this.FIELD_ASSISTANT, ...rest,
         this.FIELD_PAGE_SIZE,
         this.FIELD_SHOW_PAGINATION,
         { key: 'boldLastRow', label: 'Resaltar última fila', type: 'checkbox' }

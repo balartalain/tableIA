@@ -331,11 +331,12 @@ def dashboard_render(request, dashboard_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def generate_widget(request, dashboard_id):
+def table_assistant(request, dashboard_id):
     """
-    POST {prompt, widget_type?, widget_id?, position?, title?}
-    Genera el spec con IA y lo guarda: crea un widget nuevo, o reemplaza el spec de
-    `widget_id` (conservando su tipo, posición y preferencias de UI).
+    POST {prompt}
+    "Consulta con la IA" de las tablas: la IA propone la configuración (filas, columnas,
+    métricas, orden, filtros) como un data_spec validado contra la hoja, y el panel la muestra
+    como pasos a seguir en el constructor. NO crea ni modifica widgets.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
     if not dashboard:
@@ -349,16 +350,6 @@ def generate_widget(request, dashboard_id):
     if not prompt:
         return _error("El prompt es obligatorio")
 
-    widget = None
-    widget_type = data.get("widget_type") or None
-    if data.get("widget_id"):
-        widget = Widget.objects.filter(id=data["widget_id"], dashboard=dashboard).first()
-        if not widget:
-            return _error("Widget no encontrado", status=404)
-        widget_type = widget.type
-    if widget_type is not None and widget_type not in WIDGET_TYPES:
-        return _error(f"Tipo de widget desconocido: {widget_type}")
-
     try:
         df, schema = _load_sheet(dashboard)
     except SheetError as e:
@@ -366,31 +357,15 @@ def generate_widget(request, dashboard_id):
 
     try:
         spec = generate_widget_spec(
-            prompt, widget_type, {**schema, "sample_values": get_field_samples(df)}, source=dashboard.sheet_gid,
+            prompt, "table", {**schema, "sample_values": get_field_samples(df)}, source=dashboard.sheet_gid,
         )
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     except Exception:
-        logger.exception("Falló la generación de widget por IA")
+        logger.exception("Falló la consulta de tabla con IA")
         return _error("La IA no respondió correctamente. Intenta de nuevo.", status=502)
 
-    view_spec = spec["view_spec"]
-    if widget:
-        view_spec["display"] = (widget.view_spec or {}).get("display") or {}
-        widget.data_spec = spec["data_spec"]
-        widget.view_spec = view_spec
-        widget.source_prompt = prompt
-        widget.save()
-    else:
-        widget = Widget.objects.create(
-            dashboard=dashboard,
-            type=spec["widget_type"],
-            position=_clean_position(data.get("position")),
-            data_spec=spec["data_spec"],
-            view_spec=view_spec,
-            source_prompt=prompt,
-        )
-    return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)}, status=201)
+    return JsonResponse({"data_spec": spec["data_spec"], "view_spec": spec["view_spec"]})
 
 
 def _clean_labels(data: dict, previous: dict | None = None) -> dict:

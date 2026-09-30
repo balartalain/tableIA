@@ -11,18 +11,9 @@
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;
-    static help = '';
 
     // Pestaña del panel de edición: 'data' (Configurar) o, si se omite, 'style' (Personalizar).
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
-
-    static FIELD_PROMPT = {
-      key: 'prompt',
-      label: 'Descripción',
-      type: 'textarea',
-      generatable: true,
-      tab: 'data',
-    };
 
     // Constructor estructurado (dimensión, pivote, métricas, apiladas): edita data_spec sin IA.
     static FIELD_BUILDER = { key: 'builder', label: 'Datos', type: 'builder', tab: 'data' };
@@ -84,7 +75,7 @@
 
     static get drawerFields() {
       return [
-        this.FIELD_TITLE, this.FIELD_PROMPT, this.FIELD_BUILDER,
+        this.FIELD_TITLE, this.FIELD_BUILDER,
         this.FIELD_WIDTH, this.FIELD_START_COL,
       ];
     }

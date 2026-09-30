@@ -10,9 +10,6 @@
       descClass: 'text-purple-700/80',
     };
     static defaults = { title: 'Gráfico de Líneas', width: 'md:col-span-6', height: 300 };
-    static help = 'Muestra la evolución de uno o más valores a lo largo de un eje continuo, ' +
-      'normalmente tiempo (ej. inscripciones por mes, ingresos por semana). Ideal para ver ' +
-      'tendencias, picos y caídas a lo largo del período.';
 
     static mockData() {
       return {

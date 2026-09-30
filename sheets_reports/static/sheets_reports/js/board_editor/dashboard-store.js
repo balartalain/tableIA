@@ -34,6 +34,16 @@ const SHOW_AS_LABELS = {
   pct_total: '% del total general',
 };
 
+// Operadores de los filtros (spec_validation.FILTER_OPS), para describirlos en los pasos de
+// "Consulta con la IA".
+const FILTER_OP_LABELS = { eq: '=', ne: '≠', lt: '<', lte: '≤', gt: '>', gte: '≥', in: 'es uno de' };
+
+// Totales por nivel de filas/columnas (rowTotals/columnTotals) ajustados a `n` niveles;
+// los que faltan quedan visibles.
+function totalsLevels(list, n) {
+  return Array.from({ length: n }, (_, i) => (list || [])[i] !== false);
+}
+
 // Formato anterior de porcentajes (agg pct_* + of): se traduce al abrir un widget guardado,
 // igual que normalize_metric en el backend.
 const LEGACY_PERCENT_AGGS = { pct_count: 'count', pct_sum: 'sum' };
@@ -209,11 +219,15 @@ document.addEventListener('alpine:init', () => {
     editingType: null,
     dashboardId: window.DASHBOARD_ID,
     drawerDraft: {},
-    drawerGenerating: false,
-    drawerGenerateError: '',
+    // "Consulta con la IA" (solo tablas): configuración sugerida {builder, filters, title}
+    // que el panel muestra como pasos; no se aplica hasta pulsar "Aplicar pasos".
+    // Bloque colapsado por defecto: ocupa mucho alto y empuja el constructor hacia abajo.
+    drawerAskOpen: false,
+    drawerAsking: false,
+    drawerAskError: '',
+    drawerAdvice: null,
     drawerSaving: false,
     drawerSaveError: '',
-    drawerHelpOpen: false,
     // Pestaña activa del panel: 'data' (filas, columnas, métricas) o 'style' (personalizar).
     drawerTab: 'data',
     // Banner de advertencia del builder: mensaje de rechazo del backend (no se aplica nada).
@@ -335,8 +349,41 @@ document.addEventListener('alpine:init', () => {
       return this.editingType ? WidgetRegistry.get(this.editingType) : BaseWidget;
     },
 
-    get drawerHelp() {
-      return this.drawerWidgetClass.help;
+    // Pasos de la sugerencia de la IA, en el orden del constructor.
+    get drawerSteps() {
+      const a = this.drawerAdvice;
+      if (!a) return [];
+      const b = a.builder;
+      const aggLabel = (agg) => (AGG_OPTIONS.find(o => o.value === agg) || { label: agg }).label;
+      const dims = builderDims(b);
+      const pivots = builderPivots(b);
+      const steps = [
+        { title: 'Filas', detail: dims.length ? `Agrega, en este orden: ${dims.join(' › ')}` : 'Sin filas' },
+        { title: 'Columnas', detail: pivots.length ? `Agrega, en este orden: ${pivots.join(' › ')}` : 'Deja «Sin agrupar»' },
+        {
+          title: 'Valores',
+          details: b.metrics.map(m => {
+            let text = isCountAgg(m.agg) ? `${aggLabel(m.agg)} de filas` : `${aggLabel(m.agg)} de ${m.field}`;
+            if (m.show_as && m.show_as !== 'value') text += ` · Mostrar como ${SHOW_AS_LABELS[m.show_as]}`;
+            if (m.label) text += ` · Nombre: «${m.label}»`;
+            return text;
+          }),
+        },
+      ];
+      if (b.sortBy) {
+        steps.push({ title: 'Orden', detail: `Ordenar por ${b.sortBy}, ${b.sortDir === 'asc' ? 'de menor a mayor' : 'de mayor a menor'}` });
+      }
+      if (a.filters.length) {
+        steps.push({
+          title: 'Filtros',
+          details: [
+            ...a.filters.map(f => `${f.field} ${FILTER_OP_LABELS[f.op] || f.op} ${Array.isArray(f.value) ? f.value.join(', ') : f.value}`),
+            'Aplícalos con los filtros del tablero.',
+          ],
+        });
+      }
+      steps.push({ title: 'Listo', detail: 'Pulsa «Aplicar al widget» para ver la tabla.' });
+      return steps;
     },
 
     get builder() {
@@ -496,9 +543,8 @@ document.addEventListener('alpine:init', () => {
       // Totales por nivel: van junto a cada fila/columna del builder, pero son presentación
       // (se guardan con "Guardar" y no vuelven a pedir los datos).
       if (this.drawerWidgetClass.supportsTotals) {
-        const levels = (list, n) => Array.from({ length: n }, (_, i) => (list || [])[i] !== false);
-        draft.rowTotals = levels(w.rowTotals, draft.builder.dimensions.length);
-        draft.columnTotals = levels(w.columnTotals, draft.builder.pivots.length);
+        draft.rowTotals = totalsLevels(w.rowTotals, draft.builder.dimensions.length);
+        draft.columnTotals = totalsLevels(w.columnTotals, draft.builder.pivots.length);
         // "Repetir etiquetas de fila" va, como en Sheets, bajo la primera fila.
         draft.repeatRowLabels = !!w.repeatRowLabels;
       }
@@ -510,7 +556,9 @@ document.addEventListener('alpine:init', () => {
           if (this.editingId === id) this.drawerDraft.builder = this._defaultBuilder();
         });
       }
-      this.drawerGenerateError = '';
+      this.drawerAskError = '';
+      this.drawerAdvice = null;
+      this.drawerAskOpen = false;
       this.drawerSaveError = '';
       this.drawerSpecError = '';
       this._syncDrawerSpecs(w);
@@ -549,10 +597,11 @@ document.addEventListener('alpine:init', () => {
       this.editingId = null;
       this.editingType = null;
       this.drawerDraft = {};
-      this.drawerGenerateError = '';
+      this.drawerAskError = '';
+      this.drawerAdvice = null;
+      this.drawerAskOpen = false;
       this.drawerSaveError = '';
       this.drawerSpecError = '';
-      this.drawerHelpOpen = false;
       this.drawerTab = 'data';
     },
 
@@ -641,42 +690,48 @@ document.addEventListener('alpine:init', () => {
       if (this.editingId === oldId) this.editingId = newId;
     },
 
-    // Genera (o regenera) el spec del widget con IA y lo guarda en el backend.
-    async generateWidgetSpec() {
-      const w = this.editingWidget;
-      if (!w || !this.drawerDraft.prompt) return;
-      this.drawerGenerating = true;
-      this.drawerGenerateError = '';
+    // "Consulta con la IA": pide la configuración sugerida para el pedido del usuario. No
+    // modifica el widget; el panel la muestra como pasos.
+    async askAssistant() {
+      const prompt = (this.drawerDraft.prompt || '').trim();
+      if (!prompt) return;
+      this.drawerAsking = true;
+      this.drawerAskError = '';
+      this.drawerAdvice = null;
       try {
-        const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.dashboardId}/widgets/generate/`), {
+        const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.dashboardId}/table-assistant/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: this.drawerDraft.prompt,
-            widget_type: this.editingType,
-            widget_id: w.id > 0 ? w.id : null,
-            position: w.getPosition(),
-          }),
+          body: JSON.stringify({ prompt }),
         });
         if (!r.ok || !data) {
           throw new Error((data && data.error) || 'El servidor no respondió correctamente (puede que la IA haya tardado demasiado). Intenta de nuevo.');
         }
-        if (w.id < 0) this._swapWidgetId(w, data.id);
-        w.applyServerState(data);
-        w.updateChrome();
-        w.applyRender(data);
-        // Mostrar en el drawer lo que generó la IA, para revisarlo o ajustarlo en el builder.
-        this.drawerDraft.title = w.title;
-        this.drawerDraft.builder = this._builderDraft(w);
-        this.drawerDraft.prompt = '';
-        this.drawerSpecError = '';
-        this._syncDrawerSpecs(w);
+        this.drawerAdvice = {
+          builder: builderFromSpec(data.data_spec, data.view_spec),
+          filters: data.data_spec.filters || [],
+          title: (data.view_spec && data.view_spec.title) || '',
+        };
       } catch (e) {
-        this.drawerGenerateError = e.name === 'AbortError'
+        this.drawerAskError = e.name === 'AbortError'
           ? 'La IA tardó demasiado en responder. Intenta de nuevo.'
           : e.message;
       } finally {
-        this.drawerGenerating = false;
+        this.drawerAsking = false;
+      }
+    },
+
+    // Rellena el constructor con la sugerencia. No guarda: el usuario revisa y pulsa
+    // "Aplicar al widget".
+    applyAdvice() {
+      const a = this.drawerAdvice;
+      if (!a) return;
+      const builder = JSON.parse(JSON.stringify(a.builder));
+      this.drawerDraft.builder = builder;
+      if (a.title) this.drawerDraft.title = a.title;
+      if (this.drawerDraft.rowTotals) {
+        this.drawerDraft.rowTotals = totalsLevels(this.drawerDraft.rowTotals, builder.dimensions.length);
+        this.drawerDraft.columnTotals = totalsLevels(this.drawerDraft.columnTotals, builder.pivots.length);
       }
     },
 

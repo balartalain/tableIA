@@ -13,9 +13,6 @@
     static supportsDimension = false;
     static supportsPivot = false;
     static maxMetrics = 1;
-    static help = 'Resalta un único número clave (ej. total recaudado, matrícula total) como ' +
-      'cifra grande y protagonista, con su etiqueta. No compara categorías ni muestra ' +
-      'tendencias: para eso usa un gráfico de barras o líneas.';
 
     static mockData() {
       return { value: 412900, label: 'Monto Consumido' };

@@ -363,6 +363,43 @@
 
                 <hr class="border-line/70 !mt-6" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
 
+                <!-- Columnas a mostrar (widgets con usesColumns): las filas de la hoja tal cual, sin
+                     agrupar; solo se eligen qué columnas y en qué orden. -->
+                <template x-if="$store.dashboard.drawerWidgetClass.usesColumns">
+                  <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Columnas a mostrar</h3>
+                      <p class="text-[11px] text-ink/40">los datos de la hoja tal cual, en este orden</p>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="(c, i) in $store.dashboard.drawerDraft.builder.columns" :key="'col-' + i">
+                        <div class="flex items-center gap-1">
+                          <select x-model="$store.dashboard.drawerDraft.builder.columns[i]" x-bind:aria-label="`Columna ${i + 1}`"
+                                  class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                            <option value="" x-show="!$store.dashboard.drawerDraft.builder.columns[i]">Elige una columna…</option>
+                            <template x-for="f in $store.dashboard.columnOptionsAt(i)" :key="f">
+                              <option x-bind:value="f" x-text="f" x-bind:selected="f === $store.dashboard.drawerDraft.builder.columns[i]"></option>
+                            </template>
+                          </select>
+                          <button type="button" x-on:click="$store.dashboard.removeColumn(i)"
+                                  class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                                  title="Quitar columna" aria-label="Quitar columna">×</button>
+                        </div>
+                      </template>
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <button type="button" x-on:click="$store.dashboard.addColumn()" x-bind:disabled="!$store.dashboard.canAddColumn"
+                              class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1">
+                        <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar columna
+                      </button>
+                      <button type="button" x-on:click="$store.dashboard.useAllColumns()"
+                              class="text-xs font-medium text-ink/60 hover:text-ink/80 cursor-pointer">
+                        Usar todas
+                      </button>
+                    </div>
+                  </div>
+                </template>
+
                 <!-- Valores de ejemplo de las columnas de texto (autocompletar de los filtros) -->
                 <template x-for="l in $store.dashboard.sampleLists" :key="l.id">
                   <datalist x-bind:id="l.id">
@@ -370,8 +407,9 @@
                   </datalist>
                 </template>
 
-                <!-- Métricas: cada una es una fila compacta; el detalle se despliega con el chevron. -->
-                <div class="space-y-2 pt-3">
+                <!-- Métricas: cada una es una fila compacta; el detalle se despliega con el chevron.
+                     Se ocultan en los widgets sin métricas (supportsMetrics = false). -->
+                <div class="space-y-2 pt-3" x-show="$store.dashboard.drawerWidgetClass.supportsMetrics">
                   <div class="flex items-center gap-2">
                     <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Métricas</h3>
                     <p class="text-[11px] text-ink/40">lo que se mide y cómo se muestra</p>
@@ -675,6 +713,28 @@
                 </div>
 
                 <hr class="border-line/70 !mt-6">
+
+                <!-- Widgets con columnas sueltas: orden de las filas por una de sus columnas. -->
+                <template x-if="$store.dashboard.drawerWidgetClass.usesColumns">
+                  <div class="grid grid-cols-2 gap-2 pt-3">
+                    <div>
+                      <label class="block text-[11px] font-semibold text-ink/60 mb-1">Ordenar por</label>
+                      <select x-model="$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                        <option value="">Orden de la hoja</option>
+                        <template x-for="o in $store.dashboard.sortOptions" :key="o.value">
+                          <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.drawerDraft.builder.sortBy"></option>
+                        </template>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-semibold text-ink/60 mb-1">Dirección</label>
+                      <select x-model="$store.dashboard.drawerDraft.builder.sortDir" x-bind:disabled="!$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                        <option value="desc">Mayor a menor</option>
+                        <option value="asc">Menor a mayor</option>
+                      </select>
+                    </div>
+                  </div>
+                </template>
 
                 <!-- Filtrar resultado: condición sobre los grupos de la primera fila/categoría y Top N.
                      Solo donde hay grupos: el KPI es un único total. -->

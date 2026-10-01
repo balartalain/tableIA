@@ -23,6 +23,8 @@ MAX_LIMIT = 100
 # Tablas dinámicas: filas y columnas anidadas.
 MAX_DIMENSIONS = 3
 MAX_PIVOTS = 2
+# Columnas que se muestran tal cual, sin agrupar (tabla de datos).
+MAX_COLUMNS = 50
 
 
 def field_enum(fields) -> dict:

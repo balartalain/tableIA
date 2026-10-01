@@ -47,6 +47,7 @@ def spec(**overrides) -> dict:
         "source": "0",
         "dimensions": ["categoria"],
         "pivots": [],
+        "columns": [],
         "filters": [],
         "metrics": [agg("total_ventas")],
         "having": [],

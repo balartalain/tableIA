@@ -30,6 +30,11 @@
     static maxDimensions = 1;
     static maxPivots = 1;
     static maxMetrics = 5;
+    // Métricas: el builder las muestra salvo en widgets que no resumen datos.
+    static supportsMetrics = true;
+    // Columnas que se muestran tal cual, sin agrupar (data_spec.columns).
+    static usesColumns = false;
+    static maxColumns = 0;
     // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).
     static supportsLabels = false;
     // "Mostrar totales" por nivel de filas/columnas (props rowTotals/columnTotals).

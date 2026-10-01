@@ -155,21 +155,22 @@ class Metric(ABC):
 @dataclass(frozen=True)
 class DataSpec:
     source: str
-    dimensions: list[str]          # filas / eje X
-    pivots: list[str]              # columnas / series
+    dimensions: list[str]          # filas / eje X (agrupa)
+    pivots: list[str]              # columnas / series (agrupa)
     metrics: list[Metric]
+    columns: list[str]             # columnas que se muestran tal cual, sin agrupar
     filters: list[Condition]       # WHERE
     having: list[GroupCondition]   # grupos de la primera dimensión que se muestran
     sort: Sort | None
     limit: Limit | None            # Top N (+ «Otros»)
     trend_by: str | None           # serie de la sparkline
 
-    DataSpec.schema(ctx, *, for_ai, dimensions, pivots, max_metrics, metric_types) -> dict
+    DataSpec.schema(ctx, *, for_ai, dimensions, pivots, columns, metrics, metric_types) -> dict
     from_dict(raw) / to_dict()
     resolved(df)                   # relativos resueltos una vez ("el último año" es el de la hoja)
 ```
 
-`DataSpec.schema` recibe los límites de quien lo pide (cada widget pasa sus capacidades). La unión de métricas se limita a `metric_types`. Con `for_ai=True` se omite `source` y las uniones van como `anyOf`, porque Gemini no soporta `if/then`.
+`DataSpec.schema` recibe los límites de quien lo pide (cada widget pasa sus capacidades como rangos `(mín, máx)`). La unión de métricas se limita a `metric_types`; con `metric_types` vacío, `metrics` debe ser `[]`. Con `for_ai=True` se omite `source` y las uniones van como `anyOf`, porque Gemini no soporta `if/then`.
 
 ### 2.5 Reglas semánticas (`dsl/rules.py`)
 
@@ -188,9 +189,9 @@ Las reglas consultan `widget.capabilities` y `widget.label`; nunca preguntan por
 | Banda | Prioridad | Reglas |
 |---|---|---|
 | `BUSINESS` | 0 | `PivotMultiMetric`: etapa PRE_SCHEMA y bloqueante. "Con pivote solo se permite una métrica": el usuario elige, ni la IA ni el backend eligen por él. |
-| `STRUCTURE` | 100 | `NoColumnRepeated`, `PivotNeedsDimension`, y las que salen de las capacidades: `HavingAllowed`, `LimitAllowed`, `SortAllowed`, `TrendAllowed`. |
+| `STRUCTURE` | 100 | `NoColumnRepeated` (dimensiones, pivotes y columnas), `PivotNeedsDimension`, y las que salen de las capacidades: `HavingAllowed`, `LimitAllowed`, `SortAllowed`, `TrendAllowed`. |
 | `METRICS` | 200 | `ConditionsValid`, `MetricsValid` (delega en `metrics_errors`), `AliasNotColumn`. |
-| `REFERENCES` | 300 | `HavingRefsWidgetMetrics`, `SortTargetExists`, `LimitNeedsMetricSort`. El KPI agrega `TrendNeedsTrendableMetric`. |
+| `REFERENCES` | 300 | `HavingRefsWidgetMetrics`, `SortTargetExists` (dimensión, columna mostrada o métrica), `LimitNeedsMetricSort`. El KPI agrega `TrendNeedsTrendableMetric`. |
 
 Que un widget no admita un tipo de métrica no es una regla: lo impide el schema del widget, que limita la unión de métricas a sus `metric_types`.
 
@@ -228,9 +229,10 @@ Declara qué `data_spec` admite un widget. De aquí salen su JSON Schema y las r
 ```python
 @dataclass(frozen=True)
 class DataCapabilities:
-    dimensions: tuple[int, int]                     # (mín, máx)
-    pivots: tuple[int, int]
-    max_metrics: int = 5
+    dimensions: tuple[int, int]                     # (mín, máx) de columnas que agrupan filas
+    pivots: tuple[int, int]                         # (mín, máx) de columnas que agrupan columnas
+    columns: tuple[int, int] = (0, 0)               # (mín, máx) de columnas que se muestran tal cual
+    metrics: tuple[int, int] = (1, 5)
     metric_types: frozenset = {"agg", "calc"}       # lo declara el widget, no la métrica
     multi_metric_with_pivot: bool = False
     having: bool = True
@@ -318,7 +320,9 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
   - `build_tool_parameters(ctx, widget_type)` arma la tool de Gemini desde los registros. Los tipos de widget salen de `WIDGETS`. El `data_spec` sale de `widget.data_schema(ctx, for_ai=True)` si el tipo está fijado, o de `DataSpec.schema` si no. `view_options` se arma con `ai_properties()` de cada `ViewOptions`.
   - `generate_widget_spec(prompt, widget_type, ctx)` valida con `widget.errors`. Si falla, reintenta una vez pasando los errores. Si el error es de `PivotMultiMetric`, no reintenta.
 - **Modelo**: `Widget.type` toma sus choices de `WIDGETS` (`widget_type_choices`), y `Widget.definition` devuelve su `WidgetType`. `data_spec` y `view_spec` siguen siendo `JSONField`.
-- **Frontend**: `metricAliases` (`dashboard-store.js`) resuelve los alias de los cálculos en orden de dependencias. La métrica agrupada usa `innerHaving` ↔ `inner_having`.
+- **Frontend**:
+  - Cada widget tiene su clase registrada en `WidgetRegistry`, con el mismo `type` que su `key` en el backend. Sus capacidades (`supportsDimension`, `supportsPivot`, `supportsMetrics`, `usesColumns`, `maxColumns`…) deciden qué bloques muestra el builder.
+  - `metricAliases` (`dashboard-store.js`) resuelve los alias de los cálculos en orden de dependencias. La métrica agrupada usa `innerHaving` ↔ `inner_having`.
 
 ### Flujos
 
@@ -385,7 +389,7 @@ class RawRowsPlan(ResultPlan[RawRowsResult]):
 class ScatterWidget(WidgetType[RawRowsResult, ViewOptions]):
     key = "scatter"
     label = "Dispersión"
-    capabilities = DataCapabilities(dimensions=(2, 2), pivots=(0, 0), max_metrics=1,
+    capabilities = DataCapabilities(dimensions=(2, 2), pivots=(0, 0), metrics=(1, 1),
                                     having=False, sort=False, limit=False)
     plan_key = "raw_rows"
 

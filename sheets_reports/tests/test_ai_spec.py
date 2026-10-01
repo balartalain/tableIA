@@ -18,6 +18,7 @@ VALID_ARGS = {
     "data_spec": {
         "dimensions": ["categoria"],
         "pivots": [],
+        "columns": [],
         "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"}],
         "filters": [],
         "having": [],

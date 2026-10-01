@@ -36,6 +36,8 @@
       description: 'Agrupa filas y columnas, con totales',
     };
     static defaults = { title: 'Tabla dinámica', width: 'md:col-span-6', height: 300 };
+    // Formatos de columna (menú de la cabecera); reutilizables por otros widgets de tabla.
+    static formats = formattersMap;
     static pivotLabel = 'Columnas';
     static dimensionLabel = 'Filas';
     static maxDimensions = 3;
@@ -180,12 +182,7 @@
       // columnas de filas fijas al hacer scroll horizontal, etc. (estilos en .tb-pivot).
       const pivotMode = hasGroups || hierarchical;
       if (pivotMode) container.classList.add('tb-pivot');
-      if (!hasGroups && this.columnOrder && this.columnOrder.length) {
-        const byField = new Map(columns.map(c => [c.field, c]));
-        const ordered = this.columnOrder.map(f => byField.get(f)).filter(Boolean);
-        const remaining = columns.filter(c => !this.columnOrder.includes(c.field));
-        columns = [...ordered, ...remaining];
-      }
+      if (!hasGroups) columns = this._orderedColumns(columns);
       // Las métricas pct_* se muestran como porcentaje salvo que el usuario elija otro formato.
       const percentFields = new Set(payload.percent || []);
       // {header, field} / {header, children} (formato de compile_view) -> columnas de Tabulator.
@@ -240,23 +237,30 @@
         // al fondo de la tarjeta, lejos de la última fila. Así la tabla crece con su contenido
         // (totales justo debajo) y solo al llenar la tarjeta hace scroll con los totales al pie.
         maxHeight: '100%',
-        rowFormatter: (row)=> {
-          // Quitamos la clase por defecto para evitar residuos al alternar el checkbox
-          row.getElement().classList.remove("tabulator-row-bold");
-          row.getElement().classList.toggle("tabulator-row-subtotal", !!row.getData().__subtotal);
-
-          // Si la opción está activa y es la última fila del set de datos actual
-          if (this.boldLastRow) {
-            const todasLasFilas = row.getTable().getRows("active"); // Obtiene las filas activas/filtradas
-            const ultimaFila = todasLasFilas[todasLasFilas.length - 1];
-
-            // Si la fila actual que se está dibujando es idéntica a la última fila
-            if (ultimaFila && row.getPosition() === ultimaFila.getPosition()) {
-              row.getElement().classList.add("tabulator-row-bold");
-            }
-          }
-        }
+        rowFormatter: (row) => this._formatRow(row),
       });
+      this._wireTableEvents();
+    }
+
+    _formatRow(row) {
+      // Quitamos la clase por defecto para evitar residuos al alternar el checkbox
+      row.getElement().classList.remove("tabulator-row-bold");
+      row.getElement().classList.toggle("tabulator-row-subtotal", !!row.getData().__subtotal);
+
+      // Si la opción está activa y es la última fila del set de datos actual
+      if (this.boldLastRow) {
+        const todasLasFilas = row.getTable().getRows("active"); // Obtiene las filas activas/filtradas
+        const ultimaFila = todasLasFilas[todasLasFilas.length - 1];
+
+        // Si la fila actual que se está dibujando es idéntica a la última fila
+        if (ultimaFila && row.getPosition() === ultimaFila.getPosition()) {
+          row.getElement().classList.add("tabulator-row-bold");
+        }
+      }
+    }
+
+    // Orden de columnas arrastradas (se guarda) y botón "Descargar CSV".
+    _wireTableEvents() {
       this._table.on("columnMoved", (_column, columns) => {
         this.columnOrder = columns.map(col => col.getField());
         this._dirty = true;
@@ -271,6 +275,15 @@
           this._table.download('csv', `${this._filenameSlug('tabla')}.csv`);
         };
       }
+    }
+
+    // Columnas en el orden que dejó el usuario al arrastrarlas; las nuevas, al final.
+    _orderedColumns(columns) {
+      if (!this.columnOrder || !this.columnOrder.length) return columns;
+      const byField = new Map(columns.map(c => [c.field, c]));
+      const ordered = this.columnOrder.map(f => byField.get(f)).filter(Boolean);
+      const remaining = columns.filter(c => !this.columnOrder.includes(c.field));
+      return [...ordered, ...remaining];
     }
 
     static totalsOn(levels, level) {

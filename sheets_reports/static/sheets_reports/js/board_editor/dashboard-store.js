@@ -115,13 +115,24 @@ function chosen(list) {
   return [...new Set((list || []).filter(Boolean))];
 }
 
+// Clase del widget que edita el builder (sus capacidades: dimensión, pivote, métricas...).
+function builderClass(b) {
+  return b && b.widget && WidgetRegistry.has(b.widget) ? WidgetRegistry.get(b.widget) : BaseWidget;
+}
+
 function builderDims(b) {
-  return b.widget === 'kpi' ? [] : chosen(b.dimensions);
+  return builderClass(b).supportsDimension ? chosen(b.dimensions) : [];
 }
 
 function builderPivots(b) {
+  if (!builderClass(b).supportsPivot) return [];
   const dims = new Set(builderDims(b));
   return chosen(b.pivots).filter(p => !dims.has(p));
+}
+
+// Columnas que se muestran tal cual (widgets con usesColumns), en el orden elegido.
+function builderColumns(b) {
+  return builderClass(b).usesColumns ? chosen(b.columns) : [];
 }
 
 // count cuenta filas y no usa campo.
@@ -494,6 +505,7 @@ function builderFromSpec(spec, view, widget) {
     // Siempre al menos un select visible por lista ('' = sin elegir).
     dimensions: (spec.dimensions || []).length ? [...spec.dimensions] : [''],
     pivots: (spec.pivots || []).length ? [...spec.pivots] : [''],
+    columns: (spec.columns || []).length ? [...spec.columns] : [''],
     filters: (spec.filters || []).map(conditionFromSpec),
     metrics: [],
     having: [],
@@ -527,10 +539,12 @@ function builderFromSpec(spec, view, widget) {
 function builderToPayload(b, numericFields = new Set()) {
   const dimensions = builderDims(b);
   const pivots = builderPivots(b);
+  const columns = builderColumns(b);
   const { list: aliases, aliasOf } = metricAliases(b);
   const isKpi = b.widget === 'kpi';
+  const withMetrics = builderClass(b).supportsMetrics;
   // Cabeceras de las filas/columnas: se conservan las que ya tenía el widget y siguen en uso.
-  const kept = new Set([...dimensions, ...pivots]);
+  const kept = new Set([...dimensions, ...pivots, ...columns]);
   const labels = {};
   for (const [name, label] of Object.entries(b.labels || {})) {
     if (kept.has(name) && (label || '').trim()) labels[name] = label.trim();
@@ -538,24 +552,25 @@ function builderToPayload(b, numericFields = new Set()) {
   const metrics = [];
   b.metrics.forEach((m, i) => {
     const alias = aliases[i];
-    if (!alias) return;
+    if (!alias || !withMetrics) return;
     metrics.push(metricToSpec(m, alias, aliasOf, numericFields));
     // "Nombre a mostrar" vacío = la cabecera por defecto (la del alias).
     const label = (m.label || '').trim();
     if (label) labels[alias.as] = label;
   });
   const sortBy = b.sortBy && b.sortBy.startsWith('#') ? aliasOf[b.sortBy.slice(1)] : b.sortBy;
-  const sortable = new Set([...dimensions, ...metrics.map(m => m.as)]);
+  const sortable = new Set([...dimensions, ...columns, ...metrics.map(m => m.as)]);
   const sort = !isKpi && sortBy && sortable.has(sortBy) ? { by: sortBy, dir: b.sortDir || 'desc' } : null;
   const limitN = parseInt(b.limitN, 10);
   const payload = {
     dimensions,
     pivots,
+    columns,
     filters: conditionsToSpec(b.filters, numericFields),
     metrics,
     having: isKpi ? [] : b.having.map(h => groupConditionToSpec(h, aliasOf)).filter(Boolean),
     sort,
-    limit: !isKpi && limitN > 0 ? { n: limitN, others: !!b.limitOthers } : null,
+    limit: !isKpi && withMetrics && limitN > 0 ? { n: limitN, others: !!b.limitOthers } : null,
     trend_by: isKpi && b.trendBy ? b.trendBy : null,
     labels,
     stacked: !!(b.stacked && pivots.length),
@@ -846,6 +861,38 @@ document.addEventListener('alpine:init', () => {
       return withCurrent(this.schema.dimension_fields || [], current).filter(f => f === current || !used.has(f));
     },
 
+    // Columnas de la hoja para la posición `i` de "Columnas a mostrar", sin las ya elegidas.
+    columnOptionsAt(i) {
+      const b = this.builder;
+      if (!b) return [];
+      const current = b.columns[i];
+      const used = new Set(b.columns);
+      return withCurrent(this.schema.all_fields || [], current).filter(f => f === current || !used.has(f));
+    },
+
+    get canAddColumn() {
+      const b = this.builder;
+      return !!b && b.columns.length < this.drawerWidgetClass.maxColumns && b.columns.every(Boolean);
+    },
+
+    addColumn() {
+      if (this.canAddColumn) this.builder.columns.push('');
+    },
+
+    removeColumn(i) {
+      const b = this.builder;
+      if (!b) return;
+      if (b.columns.length > 1) b.columns.splice(i, 1);
+      else b.columns[0] = '';
+    },
+
+    // Todas las columnas de la hoja, en su orden (atajo de "Columnas a mostrar").
+    useAllColumns() {
+      const b = this.builder;
+      if (!b) return;
+      b.columns = (this.schema.all_fields || []).slice(0, this.drawerWidgetClass.maxColumns);
+    },
+
     pivotOptionsAt(i) {
       const b = this.builder;
       if (!b) return [];
@@ -1067,7 +1114,7 @@ document.addEventListener('alpine:init', () => {
     get sortOptions() {
       const b = this.builder;
       if (!b) return [];
-      const opts = builderDims(b).map(d => ({ value: d, label: d }));
+      const opts = [...builderDims(b), ...builderColumns(b)].map(d => ({ value: d, label: d }));
       const { list } = metricAliases(b);
       b.metrics.forEach((m, i) => {
         if (list[i]) opts.push({ value: `#${m._id}`, label: this.metricName(m._id) });
@@ -1140,11 +1187,17 @@ document.addEventListener('alpine:init', () => {
 
     // Punto de partida del builder para un widget nuevo: primera columna agrupable y una
     // métrica (suma de la primera columna numérica, o conteo si la hoja no tiene números).
+    // Los widgets con columnas sueltas arrancan con las primeras columnas de la hoja.
     _defaultBuilder() {
+      const WidgetClass = this.drawerWidgetClass;
       const dims = this.schema.dimension_fields || [];
       const b = builderFromSpec({ dimensions: [], pivots: [], metrics: [] }, null, this.editingType);
-      b.dimensions = [this.drawerWidgetClass.supportsDimension ? (dims[0] || '') : ''];
-      b.metrics = [newMetric('agg', this.schema.numeric_fields || [])];
+      b.dimensions = [WidgetClass.supportsDimension ? (dims[0] || '') : ''];
+      if (WidgetClass.usesColumns) {
+        const first = (this.schema.all_fields || []).slice(0, Math.min(5, WidgetClass.maxColumns));
+        b.columns = first.length ? first : [''];
+      }
+      b.metrics = WidgetClass.supportsMetrics ? [newMetric('agg', this.schema.numeric_fields || [])] : [];
       return b;
     },
 
@@ -1236,8 +1289,13 @@ document.addEventListener('alpine:init', () => {
       const b = this.builder;
       if (!w || !b) return false;
       const payload = this._payload(b);
-      if (!payload.metrics.length) {
+      const WidgetClass = this.drawerWidgetClass;
+      if (WidgetClass.supportsMetrics && !payload.metrics.length) {
         this.drawerSpecError = 'Agrega al menos una métrica con su columna.';
+        return false;
+      }
+      if (WidgetClass.usesColumns && !payload.columns.length) {
+        this.drawerSpecError = 'Elige al menos una columna para mostrar.';
         return false;
       }
       this.drawerApplying = true;

@@ -4,8 +4,9 @@ Widget.data_spec (to_dict / from_dict) y el código trabaja siempre con el objet
 
     data_spec = {
       "source": gid,
-      "dimensions": [col, ...],        # filas / eje X
-      "pivots": [col, ...],            # columnas / series
+      "dimensions": [col, ...],        # filas / eje X (agrupa)
+      "pivots": [col, ...],            # columnas / series (agrupa)
+      "columns": [col, ...],           # columnas que se muestran tal cual, sin agrupar
       "filters": [Condition],          # filas que entran al widget (WHERE)
       "metrics": [Metric],             # unión discriminada por "type" (ver METRICS)
       "having": [GroupCondition],      # grupos de la primera dimensión que se muestran
@@ -23,6 +24,7 @@ from sheets_reports.dsl.context import SheetContext
 from sheets_reports.dsl.groups import GroupCondition, group_conditions_schema, parse_group_conditions
 from sheets_reports.dsl.metrics import Metric, metric_union, parse_metric
 from sheets_reports.dsl.schema import (
+    MAX_COLUMNS,
     MAX_DIMENSIONS,
     MAX_LIMIT,
     MAX_METRICS,
@@ -31,7 +33,7 @@ from sheets_reports.dsl.schema import (
     nullable,
 )
 
-SPEC_KEYS = ["dimensions", "pivots", "filters", "metrics", "having", "sort", "limit", "trend_by"]
+SPEC_KEYS = ["dimensions", "pivots", "columns", "filters", "metrics", "having", "sort", "limit", "trend_by"]
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,7 @@ class DataSpec:
     dimensions: list[str]
     pivots: list[str]
     metrics: list[Metric]
+    columns: list[str] = field(default_factory=list)
     filters: list[Condition] = field(default_factory=list)
     having: list[GroupCondition] = field(default_factory=list)
     sort: Sort | None = None
@@ -80,21 +83,31 @@ class DataSpec:
     def schema(ctx: SheetContext, *, for_ai: bool = False,
                dimensions: tuple[int, int] = (0, MAX_DIMENSIONS),
                pivots: tuple[int, int] = (0, MAX_PIVOTS),
-               max_metrics: int = MAX_METRICS,
+               columns: tuple[int, int] = (0, MAX_COLUMNS),
+               metrics: tuple[int, int] = (1, MAX_METRICS),
                metric_types=None) -> dict:
         """
         JSON Schema de `data_spec`, con los límites que pida quien lo usa (cada widget pasa sus
         capacidades). Con `for_ai` se omite `source` (el backend la completa) y las uniones van
         como anyOf.
         """
+        min_metrics, max_metrics = metrics
+        if metric_types is not None and not metric_types:
+            # Sin tipos de métrica (ej. la tabla de datos): la lista va vacía.
+            metrics_schema = {"type": "array", "maxItems": 0, "items": {"type": "object"}}
+        else:
+            metrics_schema = {
+                "type": "array", "maxItems": max_metrics,
+                "items": metric_union(ctx, only=metric_types, for_ai=for_ai),
+            }
+            if min_metrics:
+                metrics_schema["minItems"] = min_metrics
         properties = {
             "dimensions": _columns_schema(ctx.fields, dimensions),
             "pivots": _columns_schema(ctx.fields, pivots),
+            "columns": _columns_schema(ctx.fields, columns),
             "filters": conditions_schema(ctx),
-            "metrics": {
-                "type": "array", "minItems": 1, "maxItems": max_metrics,
-                "items": metric_union(ctx, only=metric_types, for_ai=for_ai),
-            },
+            "metrics": metrics_schema,
             "having": group_conditions_schema(),
             "sort": nullable({
                 "type": "object",
@@ -133,7 +146,8 @@ class DataSpec:
             source=str(raw.get("source", "")),
             dimensions=list(raw.get("dimensions") or []),
             pivots=list(raw.get("pivots") or []),
-            metrics=[parse_metric(m) for m in raw["metrics"]],
+            columns=list(raw.get("columns") or []),
+            metrics=[parse_metric(m) for m in raw.get("metrics") or []],
             filters=parse_conditions(raw.get("filters")),
             having=parse_group_conditions(raw.get("having")),
             sort=Sort(sort["by"], sort["dir"]) if sort else None,
@@ -146,6 +160,7 @@ class DataSpec:
             "source": self.source,
             "dimensions": list(self.dimensions),
             "pivots": list(self.pivots),
+            "columns": list(self.columns),
             "filters": [c.to_dict() for c in self.filters],
             "metrics": [m.to_dict() for m in self.metrics],
             "having": [h.to_dict() for h in self.having],

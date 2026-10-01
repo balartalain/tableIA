@@ -77,6 +77,8 @@ class NoColumnRepeated(Rule):
             errors.append("pivots: no se puede repetir una columna.")
         if set(spec.pivots) & set(spec.dimensions):
             errors.append("pivots: no puede ser la misma columna que la dimensión.")
+        if len(set(spec.columns)) < len(spec.columns):
+            errors.append("columns: no se puede repetir una columna.")
         return errors
 
 
@@ -166,8 +168,9 @@ class SortTargetExists(Rule):
     def check(self, spec, widget, ctx):
         if not (spec.sort and widget.capabilities.sort):
             return []
-        if spec.sort.by not in {*spec.dimensions, *spec.aliases}:
-            allowed = ", ".join([*spec.dimensions, *spec.aliases])
+        targets = [*spec.dimensions, *spec.columns, *spec.aliases]
+        if spec.sort.by not in targets:
+            allowed = ", ".join(targets)
             return [f"sort.by: '{spec.sort.by}' no es válido; usa una de: {allowed}."]
         return []
 

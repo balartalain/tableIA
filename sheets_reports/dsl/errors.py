@@ -33,7 +33,8 @@ _METRIC_TYPE_PATH = re.compile(r"(^|\.)metrics\[\d+\]\.type$")
 
 def _readable(error, ctx: SheetContext) -> str:
     path = _path(error)
-    is_column = path.endswith(("field", "group_by", "trend_by")) or "dimensions[" in path or "pivots[" in path
+    is_column = (path.endswith(("field", "group_by", "trend_by"))
+                 or any(f"{key}[" in path for key in ("dimensions", "pivots", "columns")))
     if error.validator == "enum" and is_column:
         value = error.instance
         if value in ctx.fields and not ctx.is_numeric(value):
@@ -58,6 +59,14 @@ def _readable(error, ctx: SheetContext) -> str:
         if error.validator_value == 1:
             return f"{path}: los gráficos admiten un solo pivote (las tablas hasta {MAX_PIVOTS})."
         return f"{path}: se admiten como máximo {error.validator_value} columnas de pivote."
+    if error.validator == "minItems" and path.endswith("columns"):
+        return f"{path}: elige al menos una columna para mostrar."
+    if error.validator == "maxItems" and path.endswith("columns"):
+        if error.validator_value == 0:
+            return f"{path}: este tipo de widget no muestra columnas sueltas (agrupa con dimensiones)."
+        return f"{path}: se pueden mostrar como máximo {error.validator_value} columnas."
+    if error.validator == "maxItems" and path.endswith("metrics") and error.validator_value == 0:
+        return f"{path}: este tipo de widget no lleva métricas (muestra los datos tal cual)."
     if error.validator == "maxItems" and path.endswith("metrics"):
         return f"{path}: se permiten como máximo {error.validator_value} métricas aquí."
     if error.validator == "pattern" and path.endswith(".as"):

@@ -132,6 +132,10 @@ class ValidateWidgetSpecTests(SimpleTestCase):
         self.assertTrue(errors_for("donut", spec(metrics=[agg("total_ventas"), agg("cantidad", "count")])))
         self.assertIn("se requiere una dimensión", errors_for("donut", spec(dimensions=[]))[0])
 
+    def test_widgets_que_agrupan_no_usan_columns(self):
+        self.assertEqual(errors_for("bar", spec(columns=["mes"])),
+                         ["columns: este tipo de widget no muestra columnas sueltas (agrupa con dimensiones)."])
+
     def test_graficos_requieren_dimension(self):
         self.assertIn("se requiere una dimensión", errors_for("bar", spec(dimensions=[]))[0])
 

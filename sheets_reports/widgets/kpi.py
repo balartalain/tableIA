@@ -128,7 +128,7 @@ class KpiWidget(WidgetType[ScalarResult, KpiOptions]):
     key = "kpi"
     label = "Tarjeta KPI"
     capabilities = DataCapabilities(
-        dimensions=(0, 0), pivots=(0, 0), max_metrics=4,
+        dimensions=(0, 0), pivots=(0, 0), metrics=(1, 4),
         metric_types=frozenset({"agg", "calc", "grouped"}),
         having=False, sort=False, limit=False, trend=True,
     )

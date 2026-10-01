@@ -50,10 +50,13 @@ consulta.
 
 ## data_spec
 - dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). En
-  gráficos, UNA sola. En una tabla dinámica, hasta 3 anidadas de la más general a la más detallada
-  (ej. ["sede", "carrera"]). Lista VACÍA solo para widget_type "kpi".
-- pivots: lista de columnas para desagregar además de la dimensión (columnas en una tabla,
-  series en un gráfico). [] si no aplica. Tabla: hasta 2 (ej. ["anio", "mes"]); gráficos: 1.
+  gráficos, UNA sola. En una tabla dinámica, hasta 3 anidadas de la más general a la más
+  detallada (ej. ["sede", "carrera"]). Lista VACÍA solo para widget_type "kpi".
+- pivots: lista de columnas para desagregar además de la dimensión (columnas en una tabla
+  dinámica, series en un gráfico). [] si no aplica. Tabla dinámica: hasta 2 (ej. ["anio", "mes"]);
+  gráficos: 1.
+- columns: columnas de la hoja que se muestran tal cual, sin agrupar, en los widgets que lo
+  admiten. En los demás widgets, [].
 - filters: condiciones sobre las FILAS que entran al widget. [] si no hay.
 - metrics: lista de métricas; cada una lleva "type" y un "as" único en snake_case
   (ej. "total_ventas", "cantidad"). Tipos:
@@ -131,7 +134,7 @@ gráfico, incluye todo tal como lo pidió: el sistema le pedirá que elija.
 
 Prompt: "Ventas de este año comparadas con el año anterior"
 create_widget({"widget_type": "kpi", "title": "Ventas del año",
-  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
     "limit": null, "trend_by": null,
     "metrics": [
       {"type": "agg", "as": "ventas_actual", "agg": "sum", "field": "ventas",
@@ -144,7 +147,7 @@ create_widget({"widget_type": "kpi", "title": "Ventas del año",
 
 Prompt: "Cuántos vendedores no cumplieron el plan de ventas"
 create_widget({"widget_type": "kpi", "title": "Vendedores bajo el plan",
-  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
     "limit": null, "trend_by": null,
     "metrics": [{"type": "grouped", "as": "vendedores_bajo_plan", "group_by": "vendedor",
       "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
@@ -154,7 +157,7 @@ create_widget({"widget_type": "kpi", "title": "Vendedores bajo el plan",
 
 Prompt: "La categoría que más vendió"
 create_widget({"widget_type": "kpi", "title": "Categoría líder",
-  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
     "limit": null, "trend_by": null,
     "metrics": [{"type": "grouped", "as": "categoria_top", "group_by": "categoria",
       "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"}],
@@ -163,7 +166,7 @@ create_widget({"widget_type": "kpi", "title": "Categoría líder",
 
 Prompt: "Margen de ganancia en porcentaje"
 create_widget({"widget_type": "kpi", "title": "Margen",
-  "data_spec": {"dimensions": [], "pivots": [], "filters": [], "having": [], "sort": null,
+  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
     "limit": null, "trend_by": null,
     "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
                 {"type": "agg", "as": "costo", "agg": "sum", "field": "costo"},
@@ -174,7 +177,7 @@ create_widget({"widget_type": "kpi", "title": "Margen",
 
 Prompt: "Top 5 productos por ventas en 2026"
 create_widget({"widget_type": "bar", "title": "Top 5 productos 2026",
-  "data_spec": {"dimensions": ["producto"], "pivots": [], "having": [], "trend_by": null,
+  "data_spec": {"dimensions": ["producto"], "pivots": [], "columns": [], "having": [], "trend_by": null,
     "filters": [{"field": "anio", "op": "eq", "value": 2026}],
     "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}],
     "sort": {"by": "total_ventas", "dir": "desc"}, "limit": {"n": 5, "others": false}},
@@ -182,7 +185,7 @@ create_widget({"widget_type": "bar", "title": "Top 5 productos 2026",
 
 Prompt: "Tabla de vendedores que no llegaron a su plan, con ventas, plan y % de cumplimiento"
 create_widget({"widget_type": "dynamic_table", "title": "Vendedores bajo el plan",
-  "data_spec": {"dimensions": ["vendedor"], "pivots": [], "filters": [], "limit": null, "trend_by": null,
+  "data_spec": {"dimensions": ["vendedor"], "pivots": [], "columns": [], "filters": [], "limit": null, "trend_by": null,
     "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
                 {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"},
                 {"type": "calc", "as": "cumplimiento", "op": "ratio_pct", "left": "ventas", "right": "plan"}],
@@ -192,7 +195,7 @@ create_widget({"widget_type": "dynamic_table", "title": "Vendedores bajo el plan
 
 Prompt: "Tabla de respuestas por categoría con la cantidad y el porcentaje de cada respuesta"
 create_widget({"widget_type": "dynamic_table", "title": "Respuestas por categoría",
-  "data_spec": {"dimensions": ["categoria"], "pivots": ["respuesta"], "filters": [], "having": [],
+  "data_spec": {"dimensions": ["categoria"], "pivots": ["respuesta"], "columns": [], "filters": [], "having": [],
     "sort": null, "limit": null, "trend_by": null,
     "metrics": [{"type": "agg", "as": "cantidad", "agg": "count"},
                 {"type": "agg", "as": "pct_cantidad", "agg": "count", "show_as": "pct_row"}]},
@@ -201,7 +204,7 @@ create_widget({"widget_type": "dynamic_table", "title": "Respuestas por categor�
 
 Prompt: "Barras apiladas de ventas por categoría y por mes"
 create_widget({"widget_type": "bar", "title": "Ventas por categoría y mes",
-  "data_spec": {"dimensions": ["categoria"], "pivots": ["mes"], "filters": [], "having": [],
+  "data_spec": {"dimensions": ["categoria"], "pivots": ["mes"], "columns": [], "filters": [], "having": [],
     "sort": null, "limit": null, "trend_by": null,
     "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
   "view_options": {"stacked": true, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})

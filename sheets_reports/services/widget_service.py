@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # Valor de cada clave del data_spec que el builder no manda.
 _BUILDER_DEFAULTS = {
-    "dimensions": [], "pivots": [], "filters": [], "metrics": [], "having": [],
+    "dimensions": [], "pivots": [], "columns": [], "filters": [], "metrics": [], "having": [],
     "sort": None, "limit": None, "trend_by": None,
 }
 

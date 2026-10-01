@@ -32,9 +32,10 @@ V = TypeVar("V", bound="ViewOptions")
 
 @dataclass(frozen=True)
 class DataCapabilities:
-    dimensions: tuple[int, int]          # (mín, máx) de columnas de filas / eje X
-    pivots: tuple[int, int]              # (mín, máx) de columnas de pivote / series
-    max_metrics: int = MAX_METRICS
+    dimensions: tuple[int, int]          # (mín, máx) de columnas de filas / eje X (agrupan)
+    pivots: tuple[int, int]              # (mín, máx) de columnas de pivote / series (agrupan)
+    columns: tuple[int, int] = (0, 0)    # (mín, máx) de columnas que se muestran tal cual
+    metrics: tuple[int, int] = (1, MAX_METRICS)
     # Tipos de métrica que admite (claves de METRICS). Lo declara el widget, no la métrica.
     metric_types: frozenset = frozenset({"agg", "calc"})
     # Varias métricas a la vez que un pivote (una subcolumna por métrica en cada valor).
@@ -111,7 +112,7 @@ class ViewOptions:
     def reconcile(self, spec: DataSpec):
         """Copia sin referencias a lo que el data_spec ya no tiene (ver la tabla de la
         arquitectura). Las subclases agregan las suyas."""
-        names = {*spec.dimensions, *spec.pivots, *spec.aliases}
+        names = {*spec.dimensions, *spec.pivots, *spec.columns, *spec.aliases}
         if spec.trend_by:
             names.add(spec.trend_by)
         return dataclasses.replace(self, labels={k: v for k, v in self.labels.items() if k in names})
@@ -139,8 +140,8 @@ class WidgetType(Generic[R, V]):
     def data_schema(self, ctx: SheetContext, *, for_ai: bool = False) -> dict:
         caps = self.capabilities
         return DataSpec.schema(
-            ctx, for_ai=for_ai, dimensions=caps.dimensions, pivots=caps.pivots,
-            max_metrics=caps.max_metrics, metric_types=caps.metric_types,
+            ctx, for_ai=for_ai, dimensions=caps.dimensions, pivots=caps.pivots, columns=caps.columns,
+            metrics=caps.metrics, metric_types=caps.metric_types,
         )
 
     def rules(self) -> list[Rule]:

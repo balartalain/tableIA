@@ -72,7 +72,7 @@ class RawRowsPlan(ResultPlan[RawRowsResult]):
 class ListWidget(WidgetType[RawRowsResult, "ViewOptions"]):
     key = "list"
     label = "Lista"
-    capabilities = DataCapabilities(dimensions=(1, 2), pivots=(0, 0), max_metrics=1,
+    capabilities = DataCapabilities(dimensions=(1, 2), pivots=(0, 0), metrics=(1, 1),
                                     metric_types=frozenset({"agg", "constant"}),
                                     having=False, sort=False, limit=False)
     plan_key = "raw_rows"

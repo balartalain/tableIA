@@ -134,6 +134,13 @@ class WidgetType(Generic[R, V]):
     options_cls: ClassVar[type[ViewOptions]] = ViewOptions
     # Clave del plan en PLANS; un widget cuya forma depende del spec sobrescribe plan().
     plan_key: ClassVar[str]
+    # Se calcula con los filtros del tablero aplicados (False: la caja de filtros, cuyas
+    # opciones no deben achicarse con su propia selección).
+    board_filtered: ClassVar[bool] = True
+    # Cuántos widgets de este tipo admite un tablero (None: sin límite).
+    max_per_dashboard: ClassVar[int | None] = None
+    # La IA puede proponer este tipo de widget.
+    ai_enabled: ClassVar[bool] = True
 
     # --- data_spec ----------------------------------------------------------------------
 

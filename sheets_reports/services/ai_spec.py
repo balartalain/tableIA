@@ -263,7 +263,7 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
     """Schema de parámetros de `create_widget`, construido en cada llamada desde los registros:
     los `enum` de columnas salen de la hoja real, los tipos de widget de WIDGETS y las opciones
     de vista de cada ViewOptions. Con el tipo fijado, el data_spec trae sus capacidades."""
-    widgets = [WIDGETS.get(widget_type)] if widget_type else WIDGETS.values()
+    widgets = [WIDGETS.get(widget_type)] if widget_type else [w for w in WIDGETS if w.ai_enabled]
     data_spec = (widgets[0].data_schema(ctx, for_ai=True) if widget_type
                  else DataSpec.schema(ctx, for_ai=True))
     view_properties = {
@@ -422,8 +422,9 @@ def generate_widget_spec(prompt: str, widget_type: str | None, ctx: SheetContext
             raise SpecGenerationError(args.get("reason") or "La IA no pudo interpretar el pedido.")
 
         resolved_type, raw, options = _normalize(args, ctx.source)
-        if resolved_type not in WIDGETS:
-            errors = [f"widget_type: '{resolved_type}' no es válido; usa uno de {', '.join(WIDGETS.keys())}."]
+        if resolved_type not in WIDGETS or not WIDGETS.get(resolved_type).ai_enabled:
+            allowed = ", ".join(w.key for w in WIDGETS if w.ai_enabled)
+            errors = [f"widget_type: '{resolved_type}' no es válido; usa uno de {allowed}."]
         else:
             errors = WIDGETS.get(resolved_type).errors(raw, ctx)
         _audit(prompt, widget_type, attempt, call_name, args, errors)

@@ -506,6 +506,8 @@ function builderFromSpec(spec, view, widget) {
     dimensions: (spec.dimensions || []).length ? [...spec.dimensions] : [''],
     pivots: (spec.pivots || []).length ? [...spec.pivots] : [''],
     columns: (spec.columns || []).length ? [...spec.columns] : [''],
+    // Tipo de control por columna (caja de filtros): {columna: 'multi_select'}.
+    controls: { ...((view && view.controls) || {}) },
     filters: (spec.filters || []).map(conditionFromSpec),
     metrics: [],
     having: [],
@@ -576,6 +578,11 @@ function builderToPayload(b, numericFields = new Set()) {
     stacked: !!(b.stacked && pivots.length),
   };
   if (isKpi) payload.kpi = kpiToPayload(b.kpi, aliasOf);
+  const controlTypes = builderClass(b).columnControls;
+  if (controlTypes) {
+    const fallback = controlTypes.find(o => !o.disabled).value;
+    payload.controls = Object.fromEntries(columns.map(c => [c, (b.controls || {})[c] || fallback]));
+  }
   return payload;
 }
 
@@ -667,10 +674,22 @@ document.addEventListener('alpine:init', () => {
       return qs ? `${url}?${qs}` : url;
     },
 
+    // Filtros del tablero que el backend ignoró (ej. una columna que ya no existe): se avisan
+    // una vez cada uno.
+    _reportFilterErrors(data) {
+      const errors = (data && data.filter_errors) || [];
+      this._reportedFilterErrors = this._reportedFilterErrors || new Set();
+      errors.filter(e => !this._reportedFilterErrors.has(e)).forEach(e => {
+        this._reportedFilterErrors.add(e);
+        if (typeof window.showToast === 'function') window.showToast(e);
+      });
+    },
+
     // Carga widgets + datos ya calculados en un solo request. Retorna {id: entry}.
     async loadBoard() {
       const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
+      this._reportFilterErrors(data);
       this.widgets = data.widgets.map(w => BaseWidget.fromServer(w));
       this.widgets.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       return Object.fromEntries(data.widgets.map(w => [w.id, w]));
@@ -687,6 +706,7 @@ document.addEventListener('alpine:init', () => {
           saved.forEach(w => { w.setLoading(false); w.renderError(message, { retryable: true }); });
           return;
         }
+        this._reportFilterErrors(data);
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
         saved.forEach(w => w.applyRender(byId[w.id]));
       } catch (e) {
@@ -757,6 +777,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     async removeWidget(id) {
+      const removed = this.widgets.find(w => w.id === id);
+      if (removed && removed.constructor.placement === 'header' && this.clearBoardFilters) {
+        this.clearBoardFilters((removed.data_spec && removed.data_spec.columns) || []);
+      }
       if (id > 0) {
         try { await fetch(apiUrl(`/api/widget/${id}/`), { method: 'DELETE' }); } catch (e) {}
       }
@@ -918,6 +942,35 @@ document.addEventListener('alpine:init', () => {
         this.columnsSortable.destroy();
         this.columnsSortable = null;
       }
+    },
+
+    // Tipo de control de la columna `i` (caja de filtros); el primero habilitado por defecto.
+    columnControl(i) {
+      const b = this.builder;
+      const types = this.drawerWidgetClass.columnControls;
+      if (!b || !types) return '';
+      return (b.controls || {})[b.columns[i]] || types.find(o => !o.disabled).value;
+    },
+
+    setColumnControl(i, value) {
+      const b = this.builder;
+      if (!b || !b.columns[i]) return;
+      b.controls = { ...(b.controls || {}), [b.columns[i]]: value };
+    },
+
+    // Nombre a mostrar de la columna `i` (labels del view_spec); vacío = el de la columna.
+    columnLabel(i) {
+      const b = this.builder;
+      return (b && b.columns[i] && (b.labels || {})[b.columns[i]]) || '';
+    },
+
+    setColumnLabel(i, value) {
+      const b = this.builder;
+      if (!b || !b.columns[i]) return;
+      const labels = { ...(b.labels || {}) };
+      if ((value || '').trim()) labels[b.columns[i]] = value;
+      else delete labels[b.columns[i]];
+      b.labels = labels;
     },
 
     // Todas las columnas de la hoja, en su orden (atajo de "Columnas a mostrar").
@@ -1228,7 +1281,8 @@ document.addEventListener('alpine:init', () => {
       const b = builderFromSpec({ dimensions: [], pivots: [], metrics: [] }, null, this.editingType);
       b.dimensions = [WidgetClass.supportsDimension ? (dims[0] || '') : ''];
       if (WidgetClass.usesColumns) {
-        const first = (this.schema.all_fields || []).slice(0, Math.min(5, WidgetClass.maxColumns));
+        const source = this.schema[WidgetClass.defaultColumnsFrom] || this.schema.all_fields || [];
+        const first = source.slice(0, Math.min(WidgetClass.defaultColumns, WidgetClass.maxColumns));
         b.columns = first.length ? first : [''];
       }
       b.metrics = WidgetClass.supportsMetrics ? [newMetric('agg', this.schema.numeric_fields || [])] : [];
@@ -1358,6 +1412,11 @@ document.addEventListener('alpine:init', () => {
           return false;
         }
         if (isNew) this._swapWidgetId(w, data.id);
+        // Filtros quitados de la caja: su selección deja de aplicarse.
+        if (WidgetClass.placement === 'header' && this.clearBoardFilters) {
+          const kept = new Set((data.data_spec && data.data_spec.columns) || []);
+          this.clearBoardFilters(((w.data_spec && w.data_spec.columns) || []).filter(c => !kept.has(c)));
+        }
         w.applyServerState(data);
         w.updateChrome();
         w.applyRender(data);

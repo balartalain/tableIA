@@ -32,9 +32,26 @@
     static maxMetrics = 5;
     // Métricas: el builder las muestra salvo en widgets que no resumen datos.
     static supportsMetrics = true;
-    // Columnas que se muestran tal cual, sin agrupar (data_spec.columns).
+    // Columnas que se muestran tal cual, sin agrupar (data_spec.columns), y cómo se llama ese
+    // bloque en el builder. `columnControls`: tipos a elegir por columna (caja de filtros).
     static usesColumns = false;
     static maxColumns = 0;
+    static defaultColumns = 5;
+    static defaultColumnsFrom = 'all_fields';
+    static columnsLabel = 'Columnas';
+    static columnsHint = 'los datos de la hoja tal cual, en este orden';
+    static addColumnLabel = 'Agregar columna';
+    static allowAllColumns = true;
+    static columnControls = null;
+    // "Nombre a mostrar" por columna (view_spec.labels), ej. la etiqueta de cada filtro.
+    static supportsColumnLabels = false;
+    // Condiciones sobre filas (bloque «Filtros» del builder) y orden.
+    static supportsConditions = true;
+    static supportsSort = true;
+    // Dónde se monta: 'canvas' (grid de 12 columnas) o 'header' (fijo arriba, a todo el ancho).
+    static placement = 'canvas';
+    // Solo uno por tablero (el backend también lo valida: max_per_dashboard).
+    static singleton = false;
     // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).
     static supportsLabels = false;
     // "Mostrar totales" por nivel de filas/columnas (props rowTotals/columnTotals).

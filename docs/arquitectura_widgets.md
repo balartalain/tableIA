@@ -56,12 +56,12 @@ sheets_reports/
     executor.py                 # run(spec, df, plan) y restrict_groups (having / Top N)
     plans/                      # PLANS: un archivo por forma de resultado
       base.py                   # ResultPlan[R], PlanResult, PlanInput, ResultTooLargeError
-      scalar.py  flat.py  pivot_chart.py  pivot_table.py  rows.py   # cada plan con su *Result tipado
+      scalar.py  flat.py  pivot_chart.py  pivot_table.py  rows.py  column_values.py   # cada plan con su *Result tipado
   widgets/
     base.py                     # WidgetType, DataCapabilities, ViewOptions, WIDGETS
     presentation.py             # humanize y claves de campos de la tabla
     chart.py                    # ChartWidget (base de bar y line)
-    kpi.py  bar.py  line.py  donut.py  dynamic_table.py  table.py
+    kpi.py  bar.py  line.py  donut.py  dynamic_table.py  table.py  filter.py
   services/
     widget_service.py           # crear / editar data_spec / filtros del tablero / calcular
     ai_spec.py                  # genera specs con Gemini usando los registros
@@ -87,8 +87,9 @@ Importar `sheets_reports.widgets` registra los cinco widgets; importar `sheets_r
 | `CALC_OPS` | `add`, `sub`, `mul`, `div`, `ratio_pct`, `diff_pct` | `dsl/calc_ops.py` |
 | `GROUP_RESULTS` | resultados de una métrica agrupada (`count`, `pct_groups`, `sum`…, `top`, `bottom`) | `dsl/metrics/grouped.py` |
 | `METRICS` | tipos de métrica (`agg`, `calc`, `grouped`) | `dsl/metrics/` |
-| `PLANS` | formas de resultado (`scalar`, `flat`, `pivot_chart`, `pivot_table`, `rows`) | `engine/plans/` |
-| `WIDGETS` | tipos de widget (`kpi`, `bar`, `line`, `donut`, `dynamic_table`, `table`) | `widgets/` |
+| `PLANS` | formas de resultado (`scalar`, `flat`, `pivot_chart`, `pivot_table`, `rows`, `column_values`) | `engine/plans/` |
+| `WIDGETS` | tipos de widget (`kpi`, `bar`, `line`, `donut`, `dynamic_table`, `table`, `filter`) | `widgets/` |
+| `FILTER_CONTROLS` | tipos de control de la caja de filtros (`multi_select`) | `widgets/filter.py` |
 
 ### 2.2 Vocabulario: estrategias pequeñas
 
@@ -218,6 +219,7 @@ Cada plan está registrado en `PLANS` y devuelve su propio resultado tipado:
 | `pivot_chart` | `PivotChartResult(...)` | cruce dimensión × pivote para una métrica, con totales por fila, columna y general |
 | `pivot_table` | `PivotTableResult(dimensions, pivots, metrics, column_keys, rows: list[PivotRow], grand: PivotBlock)` | tabla dinámica con filas y columnas anidadas y subtotales; las métricas derivadas se calculan por celda; tope de 20 000 celdas (`ResultTooLargeError`) |
 | `rows` | `RowsResult(columns, rows, total_rows)` + `truncated` | las filas de la hoja tal cual (con los filtros), solo con `columns`, ordenadas por `sort` si lo hay; no agrega (`aggregates = False`); tope de 5 000 filas (`MAX_ROWS`), con el total real en `total_rows` |
+| `column_values` | `ColumnValuesResult(values, truncated)` | valores distintos no vacíos de cada columna de `columns` (opciones de un filtro), normalizados con `distinct_values` igual que los compara la condición `in`; tope de 5 000 por columna (`MAX_OPTIONS`); no agrega |
 
 ---
 
@@ -269,6 +271,9 @@ Es una dataclass inmutable por widget. La base trae `title`, `labels` y `display
 ```python
 class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewOptions
     key, label, capabilities, options_cls, plan_key
+    board_filtered = True        # se calcula con los filtros del tablero aplicados
+    max_per_dashboard = None     # cuántos admite un tablero (la caja de filtros: 1)
+    ai_enabled = True            # la IA puede proponerlo
 
     # data_spec
     data_schema(ctx, *, for_ai=False) -> dict    # DataSpec.schema con sus capacidades
@@ -306,10 +311,16 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 | `donut` (`DonutWidget`) | 1 | 0 | 1 | agg, calc | — | `flat` |
 | `dynamic_table` (`DynamicTableWidget`) | 1–3 | 0–2 | ≤ 5 | agg, calc | varias métricas con pivote | `pivot_table` |
 | `table` (`TableWidget`) | 0 | 0 | 0 | — | 1–50 `columns`; filtros y orden por columna; sin having/Top N | `rows` |
+| `filter` (`FilterWidget`) | 0 | 0 | 0 | — | 1–10 `columns` (un control cada una); uno por tablero; no la filtra el tablero; la IA no lo propone | `column_values` |
 
 `bar` y `line` heredan de `ChartWidget`, que elige el plan según el spec y compila tanto `FlatResult` como `PivotChartResult`.
 
 **Las dos tablas.** `dynamic_table` siempre agrupa por al menos una fila y resume con métricas, como una tabla dinámica de Sheets. `table` muestra las filas de la hoja tal cual: solo se eligen las columnas (y su orden), los filtros y el orden. Su `compile` devuelve `{"columns": [{"header", "field", "numeric"}], "rows", "total_rows", "truncated"?}`, donde la cabecera es el nombre exacto de la columna en la hoja.
+
+**La caja de filtros.** `filter` es una barra fija arriba del tablero, a todo el ancho. Tiene un control por columna, en el orden del panel, y se reordena arrastrando. Hoy el único control es el selector múltiple (`MultiSelectControl`); el rango de fecha está previsto en `FILTER_CONTROLS`.
+- Su `view_spec` guarda `controls: {columna: tipo}`. `FilterOptions.reconcile` deja uno por columna y cambia un tipo desconocido por `multi_select`.
+- `compile` devuelve `{"filters": [{"field", "label", "type", "options", "truncated"?}]}`.
+- Lo que el usuario elige **no se guarda en el widget**: es la selección del que mira el tablero, viaja en la URL y se aplica como filtro del tablero (ver §5).
 
 ---
 
@@ -317,23 +328,31 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 
 - **`WidgetService(dashboard, df)`** (`services/widget_service.py`): recibe la hoja ya cargada, no hace I/O.
   - `create(widget_type, payload)` y `update_spec(widget, payload)`: arman el `data_spec` con los valores por defecto del builder, validan con el widget, guardan `spec.to_dict()` y reconstruyen el `view_spec`. Nunca llaman a la IA.
-  - `board_filters(filters)`: valida los filtros del tablero con las mismas reglas que las condiciones.
-  - `render(widget, board_filters)`: aplica los filtros del tablero (que definen el universo) y llama a `widget.definition.render(...)`. Un error en un widget no tumba el tablero: devuelve `{"error": ...}`.
+  - `create` también respeta `max_per_dashboard`: una segunda caja de filtros responde 422.
+  - `parse_board_filters(raw)`: lee `?filters=[{field, op, value | relative}]`, el único formato de filtros del tablero, que es lo que arma la caja de filtros.
+    - Cada filtro se valida con las mismas reglas que las condiciones. Un `in` admite hasta 5 000 valores (`MAX_BOARD_IN_VALUES`).
+    - Un filtro inválido (por ejemplo, una URL compartida con una columna que ya no existe) **se ignora** y se informa en `filter_errors` de la respuesta, sin tumbar el tablero. Solo un parámetro que no es una lista JSON responde 400.
+  - `render(widget, board_filters)`: aplica los filtros del tablero, que definen el universo y los denominadores de los %, salvo en los widgets con `board_filtered = False` (la caja de filtros, para que sus opciones no se achiquen con su propia selección). Luego llama a `widget.definition.render(...)`. Un error en un widget no tumba el tablero: devuelve `{"error": ...}`.
 - **`views.py`**: es un adaptador HTTP. Carga la hoja (cacheada), llama al servicio y responde 422 con `SpecValidationError`.
 - **IA (`services/ai_spec.py`)**:
-  - `build_tool_parameters(ctx, widget_type)` arma la tool de Gemini desde los registros. Los tipos de widget salen de `WIDGETS`. El `data_spec` sale de `widget.data_schema(ctx, for_ai=True)` si el tipo está fijado, o de `DataSpec.schema` si no. `view_options` se arma con `ai_properties()` de cada `ViewOptions`.
+  - `build_tool_parameters(ctx, widget_type)` arma la tool de Gemini desde los registros. Los tipos de widget salen de `WIDGETS`, solo los que tienen `ai_enabled`. El `data_spec` sale de `widget.data_schema(ctx, for_ai=True)` si el tipo está fijado, o de `DataSpec.schema` si no. `view_options` se arma con `ai_properties()` de cada `ViewOptions`.
   - `generate_widget_spec(prompt, widget_type, ctx)` valida con `widget.errors`. Si falla, reintenta una vez pasando los errores. Si el error es de `PivotMultiMetric`, no reintenta.
 - **Modelo**: `Widget.type` toma sus choices de `WIDGETS` (`widget_type_choices`), y `Widget.definition` devuelve su `WidgetType`. `data_spec` y `view_spec` siguen siendo `JSONField`.
 - **Frontend**:
   - Cada widget tiene su clase registrada en `WidgetRegistry`, con el mismo `type` que su `key` en el backend. Sus capacidades (`supportsDimension`, `supportsPivot`, `supportsMetrics`, `usesColumns`, `maxColumns`…) deciden qué bloques muestra el builder.
   - `TableWidget` (`table-widget.js`) extiende `DynamicTableWidget` (`dynamic-table-widget.js`) para reutilizar formatos, paginación, orden de columnas y descarga CSV.
+  - **Caja de filtros** (`filter-widget.js`):
+    - **Montaje y unicidad:** `placement = 'header'` la monta en `#dashboard-filters`, fuera del grid. `singleton` impide soltar una segunda.
+    - **Panel:** `columnControls` agrega el selector de tipo en cada fila del builder.
+    - **Controles:** cada selector múltiple es un Virtual Select (`virtual-select-plugin@1.0.39`), con el desplegable dibujado en `<body>`.
+  - **Selección del tablero** (`filters.js`): `store.boardFilters = {columna: [valores]}` se sincroniza con `?filters=` en la URL, se manda a `/render/`, va en el enlace de "Compartir" y se limpia al quitar un filtro o la caja.
   - `metricAliases` (`dashboard-store.js`) resuelve los alias de los cálculos en orden de dependencias. La métrica agrupada usa `innerHaving` ↔ `inner_having`.
 
 ### Flujos
 
 ```
 Builder (crear/editar)                 Render del tablero                    IA
-POST/PUT ─► WidgetService              GET ─► WidgetService.board_filters    prompt ─► Gemini (tool desde registros)
+POST/PUT ─► WidgetService              GET ─► parse_board_filters (?filters=) prompt ─► Gemini (tool desde registros)
   WIDGETS.get(type).validate(raw, ctx)    por cada widget:                     WIDGETS.get(type).errors(raw, ctx)
   build_view(spec, options(payload))      definition.render(data, view, df)    reintento con errores (1 vez)
   guarda data_spec + view_spec              execute: engine.run(plan)          build_view(spec, options(ia))
@@ -417,7 +436,7 @@ La tabla de datos (`table`) se agregó así: un plan nuevo (`engine/plans/rows.p
 
 ## 7. Pruebas
 
-`python manage.py test sheets_reports` corre 213 tests, organizados por capa:
+`python manage.py test sheets_reports` corre 227 tests, organizados por capa:
 
 | Archivo | Qué cubre |
 |---|---|
@@ -427,6 +446,7 @@ La tabla de datos (`table`) se agregó así: un plan nuevo (`engine/plans/rows.p
 | `tests/widgets/test_rule_order.py` | el orden de los errores lo deciden etapa y prioridad, no la posición en `rules()` |
 | `tests/widgets/test_view_options.py` | cada fila de la política vista → datos |
 | `tests/widgets/test_table.py` | tabla de datos: validación, plan `rows`, compilación y creación por la API |
+| `tests/widgets/test_filter.py` | caja de filtros: validación, opciones (`distinct_values`, `column_values`), una por tablero, la selección filtra los widgets pero no la caja, la IA no la propone |
 | `tests/test_architecture.py` | extensión por registro de punta a punta y reglas de capas |
 | `tests/test_views.py`, `tests/test_ai_spec.py` | endpoints HTTP y generación con IA (con Gemini simulado) |
 

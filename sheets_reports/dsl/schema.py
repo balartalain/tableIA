@@ -17,6 +17,9 @@ REF_OR_NUMBER = {"anyOf": [REF, {"type": "number"}]}
 MAX_METRICS = 5
 MAX_FILTERS = 20
 MAX_IN_VALUES = 200
+# Valores de un `in` en los filtros del tablero (selector múltiple de la caja de filtros):
+# tantos como opciones puede ofrecer un selector.
+MAX_BOARD_IN_VALUES = 5000
 MAX_HAVING = 5
 MAX_INNER_METRICS = 3
 MAX_LIMIT = 100

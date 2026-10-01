@@ -9,6 +9,7 @@ Nunca se evalúa texto: solo operaciones vectorizadas de pandas.
 """
 import datetime
 import operator
+import unicodedata
 from dataclasses import dataclass, replace
 from typing import Any, ClassVar
 
@@ -136,6 +137,28 @@ def _comparable(series: pd.Series) -> pd.Series:
     if pd.api.types.is_numeric_dtype(series):
         return series
     return series.astype("string").str.strip()
+
+
+def _text_key(value):
+    # Orden para mostrar: números de menor a mayor, luego textos sin distinguir mayúsculas ni
+    # acentos ("Árbol" antes que "Ropa").
+    if is_number(value):
+        return (0, value, "")
+    plain = unicodedata.normalize("NFD", str(value).casefold())
+    return (1, 0, "".join(c for c in plain if unicodedata.category(c) != "Mn"))
+
+
+def distinct_values(series: pd.Series) -> list:
+    """Valores distintos no vacíos de una columna, normalizados igual que los compara una
+    condición (`_comparable` + `_coerce_value`): texto recortado y enteros sin ".0". Así una
+    opción elegida de esta lista siempre coincide al filtrar con `in`/`eq`."""
+    values = series.dropna()
+    if pd.api.types.is_numeric_dtype(series):
+        keys = {to_key(v) for v in values}
+    else:
+        text = _comparable(values)
+        keys = {str(v) for v in text[text != ""]}
+    return sorted(keys, key=_text_key)
 
 
 def _blank(raw: pd.Series) -> pd.Series:
@@ -303,7 +326,7 @@ class Gte(_OrderComparison):
 # Condición
 # ---------------------------------------------------------------------------
 
-def condition_schema(ctx: SheetContext) -> dict:
+def condition_schema(ctx: SheetContext, max_in_values: int = MAX_IN_VALUES) -> dict:
     """Una condición {field, op, value | relative}. Qué valor lleva cada operador lo decide el
     operador (FilterOperator.validate), con mensajes legibles."""
     return {
@@ -313,14 +336,14 @@ def condition_schema(ctx: SheetContext) -> dict:
         "properties": {
             "field": field_enum(ctx.fields),
             "op": enum_of(FILTER_OPS),
-            "value": {"anyOf": [SCALAR, {"type": "array", "maxItems": MAX_IN_VALUES, "items": SCALAR}]},
+            "value": {"anyOf": [SCALAR, {"type": "array", "maxItems": max_in_values, "items": SCALAR}]},
             "relative": enum_of(RELATIVE_VALUES),
         },
     }
 
 
-def conditions_schema(ctx: SheetContext) -> dict:
-    return {"type": "array", "maxItems": MAX_FILTERS, "items": condition_schema(ctx)}
+def conditions_schema(ctx: SheetContext, max_in_values: int = MAX_IN_VALUES) -> dict:
+    return {"type": "array", "maxItems": MAX_FILTERS, "items": condition_schema(ctx, max_in_values)}
 
 
 _MISSING = object()
@@ -370,9 +393,10 @@ def parse_conditions(raw: list[dict] | None) -> list[Condition]:
     return [Condition.from_dict(c) for c in raw or []]
 
 
-def condition_errors(filters, ctx: SheetContext, path: str = "filters") -> list[str]:
+def condition_errors(filters, ctx: SheetContext, path: str = "filters",
+                     max_in_values: int = MAX_IN_VALUES) -> list[str]:
     """Valida una lista de condiciones (filtros del widget, de una métrica o del tablero)."""
-    schema = {"type": "object", "properties": {"filters": conditions_schema(ctx)}}
+    schema = {"type": "object", "properties": {"filters": conditions_schema(ctx, max_in_values)}}
     errors = [e.replace("filters", path, 1) for e in schema_errors(schema, {"filters": filters}, ctx)]
     if errors:
         return errors

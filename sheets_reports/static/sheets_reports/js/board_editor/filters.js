@@ -1,56 +1,70 @@
 (function () {
+  // Selección de la caja de filtros: {columna: [valores]}. Es del que mira el tablero (no se
+  // guarda en el widget): viaja en la URL como ?filters=[{field, op: 'in', value}] — el mismo
+  // formato que valida el backend (WidgetService.parse_board_filters) —, se comparte con el
+  // enlace y define el universo de todos los widgets.
   document.addEventListener('alpine:init', () => {
     const store = Alpine.store('dashboard');
 
-    store.filters = {};
+    store.boardFilters = {};
 
-    store.initFiltersFromURL = function () {
-      const params = new URLSearchParams(window.location.search);
-      for (const [key, value] of params) {
-        if (key.startsWith('filtro_')) {
-          this.filters[key.slice(7)] = value || '';
-        }
+    store.initBoardFiltersFromURL = function () {
+      const raw = new URLSearchParams(window.location.search).get('filters');
+      if (!raw) return;
+      try {
+        const list = JSON.parse(raw);
+        if (!Array.isArray(list)) return;
+        const filters = {};
+        list.forEach(c => {
+          if (c && c.op === 'in' && typeof c.field === 'string' && Array.isArray(c.value) && c.value.length) {
+            filters[c.field] = c.value;
+          }
+        });
+        this.boardFilters = filters;
+      } catch (e) {
+        // Una URL mal formada no debe impedir cargar el tablero: se ignora.
       }
     };
 
-    store.setFilter = function (field, value) {
-      if (value) {
-        this.filters = { ...this.filters, [field]: value };
-      } else {
-        const f = { ...this.filters };
-        delete f[field];
-        this.filters = f;
-      }
-      this._syncFiltersToURL();
-      window.dispatchEvent(new CustomEvent('dashboard:filters-changed'));
+    store._boardConditions = function () {
+      return Object.entries(this.boardFilters)
+        .filter(([, values]) => values && values.length)
+        .map(([field, value]) => ({ field, op: 'in', value }));
     };
 
-    store.clearFilter = function (field) {
-      const f = { ...this.filters };
-      delete f[field];
-      this.filters = f;
-      this._syncFiltersToURL();
-      window.dispatchEvent(new CustomEvent('dashboard:filters-changed'));
-    };
-
-    store._syncFiltersToURL = function () {
+    store._applyBoardFilters = function (filters) {
+      this.boardFilters = filters;
       const url = new URL(window.location);
-      const keysToDelete = [...url.searchParams.keys()].filter(k => k.startsWith('filtro_'));
-      for (const k of keysToDelete) url.searchParams.delete(k);
-      for (const [field, value] of Object.entries(this.filters)) {
-        if (value) url.searchParams.set('filtro_' + field, value);
-      }
+      const conditions = this._boardConditions();
+      if (conditions.length) url.searchParams.set('filters', JSON.stringify(conditions));
+      else url.searchParams.delete('filters');
       history.replaceState({}, '', url);
+      window.dispatchEvent(new CustomEvent('dashboard:filters-changed'));
     };
 
+    // Valores elegidos en un control; una lista vacía quita el filtro de esa columna.
+    store.setBoardFilter = function (field, values) {
+      const filters = { ...this.boardFilters };
+      if (values && values.length) filters[field] = values;
+      else delete filters[field];
+      this._applyBoardFilters(filters);
+    };
+
+    // Quita la selección de varias columnas (filtros quitados de la caja o la caja borrada).
+    store.clearBoardFilters = function (fields) {
+      const present = (fields || []).filter(f => f in this.boardFilters);
+      if (!present.length) return;
+      const filters = { ...this.boardFilters };
+      present.forEach(f => delete filters[f]);
+      this._applyBoardFilters(filters);
+    };
+
+    // Query string para /render/ y para el enlace de "Compartir".
     store.getFilterQueryString = function () {
-      const params = new URLSearchParams();
-      for (const [field, value] of Object.entries(this.filters)) {
-        if (value) params.set('filtro_' + field, value);
-      }
-      return params.toString();
+      const conditions = this._boardConditions();
+      return conditions.length ? `filters=${encodeURIComponent(JSON.stringify(conditions))}` : '';
     };
 
-    store.initFiltersFromURL();
+    store.initBoardFiltersFromURL();
   });
 })();

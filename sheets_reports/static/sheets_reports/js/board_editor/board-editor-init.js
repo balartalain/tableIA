@@ -2,7 +2,13 @@
 const PALETTE_GROUPS = [
   { id: 'charts', label: 'Gráficos' },
   { id: 'data', label: 'Datos' },
+  { id: 'controls', label: 'Controles' },
 ];
+
+// Contenedor donde va cada widget: el grid o, si su clase lo pide, la franja fija de arriba.
+function containerFor(WidgetClass) {
+  return document.getElementById(WidgetClass.placement === 'header' ? 'dashboard-filters' : 'dashboard-canvas');
+}
 
 const RAIL_STORAGE_KEY = 'tableia:rail-collapsed';
 
@@ -182,7 +188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {
     canvasEl.insertAdjacentHTML('beforebegin', `<p class="text-sm text-red-600 mb-3">${BaseWidget.escapeHTML(e.message)}</p>`);
   }
-  store.widgets.forEach(w => canvasEl.appendChild(w.mount()));
+  store.widgets.forEach(w => containerFor(w.constructor).appendChild(w.mount()));
   // Doble rAF: ApexCharts necesita que el contenedor ya tenga su tamaño final al montar.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     store.widgets.forEach(w => w.applyRender(entries[w.id]));
@@ -208,11 +214,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     onAdd: function (evt) {
       const type = evt.item.getAttribute('data-type');
+      const WidgetClass = WidgetRegistry.get(type);
+      // Widgets únicos (la caja de filtros): si ya hay uno, se abre ese en vez de crear otro.
+      const existing = WidgetClass.singleton && store.widgets.find(w => w.chart_type === type);
+      if (existing) {
+        evt.item.remove();
+        showToast(`El tablero ya tiene un widget «${WidgetClass.palette.label}».`);
+        store.openDrawer(existing.id);
+        return;
+      }
       const widget = store.addWidget(type);
       const widgetEl = widget.mount();
-      evt.item.replaceWith(widgetEl);
-      store.reorderWidgets();
-      store.fluidStartColOnDrop(widgetEl);
+      if (WidgetClass.placement === 'header') {
+        // Siempre arriba y a todo el ancho, sin importar dónde se soltó.
+        evt.item.remove();
+        containerFor(WidgetClass).appendChild(widgetEl);
+      } else {
+        evt.item.replaceWith(widgetEl);
+        store.reorderWidgets();
+        store.fluidStartColOnDrop(widgetEl);
+      }
       requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
       });

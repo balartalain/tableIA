@@ -124,35 +124,6 @@ def _serialize_widget(widget):
     }
 
 
-def _board_filters(request, ctx: SheetContext) -> list[dict]:
-    """
-    Filtros del tablero, desde la query string:
-      ?filters=[{"field": ..., "op": ..., "value": ...}]   (JSON)
-      ?filtro_<columna>=<valor>                             (atajo: eq)
-    El servicio los valida con las mismas reglas que las condiciones del data_spec.
-    """
-    filters = []
-    raw = request.GET.get("filters")
-    if raw:
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            raise ValueError("El parámetro 'filters' no es JSON válido.")
-        if not isinstance(parsed, list):
-            raise ValueError("El parámetro 'filters' debe ser una lista.")
-        filters.extend(parsed)
-    for key, value in request.GET.items():
-        if key.startswith("filtro_") and value != "":
-            field = key[len("filtro_"):]
-            if ctx.is_numeric(field):
-                try:
-                    value = float(value)
-                except ValueError:
-                    pass
-            filters.append({"field": field, "op": "eq", "value": value})
-    return filters
-
-
 # ---------------------------------------------------------------------------
 # Dashboards
 # ---------------------------------------------------------------------------
@@ -272,7 +243,7 @@ def dashboard_render(request, dashboard_id):
     except SheetError as e:
         return _error(str(e), status=502)
     try:
-        filters = service.board_filters(_board_filters(request, service.ctx))
+        filters, filter_errors = service.parse_board_filters(request.GET.get("filters"))
     except ValueError as e:
         return _error(str(e))
 
@@ -280,6 +251,7 @@ def dashboard_render(request, dashboard_id):
     return JsonResponse({
         "dashboard": _serialize_dashboard(dashboard),
         "widgets": [{**_serialize_widget(w), **service.render(w, filters)} for w in widgets],
+        "filter_errors": filter_errors,
     })
 
 

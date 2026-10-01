@@ -1,5 +1,6 @@
 import json
 from unittest import mock
+from urllib.parse import quote
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -8,6 +9,14 @@ from sheets_reports.models import Dashboard, Widget
 from sheets_reports.services.ai_spec import SpecGenerationError
 from sheets_reports.tests.fixtures import agg, sales_df, spec
 from sheets_reports.tests.fixtures import view as build_view_spec
+
+
+def board_filters(*conditions) -> str:
+    """Query string de los filtros del tablero (lo que arma la caja de filtros)."""
+    return "filters=" + quote(json.dumps(list(conditions)))
+
+
+ANIO_2026 = {"field": "anio", "op": "in", "value": [2026]}
 
 
 @mock.patch("sheets_reports.views.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
@@ -27,7 +36,7 @@ class ViewsTests(TestCase):
 
     def test_render_no_llama_a_la_ia(self, _df):
         with mock.patch("sheets_reports.views.generate_widget_spec") as ai:
-            r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filtro_anio=2026")
+            r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?{board_filters(ANIO_2026)}")
         ai.assert_not_called()
         self.assertEqual(r.status_code, 200)
         data = r.json()["widgets"][0]["data"]
@@ -39,20 +48,29 @@ class ViewsTests(TestCase):
                          filters=[{"field": "categoria", "op": "eq", "value": "Hogar"}])
         Widget.objects.create(dashboard=self.dashboard, type="kpi",
                               data_spec=data_spec, view_spec=build_view_spec("kpi", data_spec))
-        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filtro_anio=2026")
+        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?{board_filters(ANIO_2026)}")
         kpi = next(w for w in r.json()["widgets"] if w["type"] == "kpi")
         # 3 filas de Hogar entre las 5 de 2026 (no entre las 6 de la hoja).
         self.assertEqual(kpi["data"]["value"], 60.0)
 
-    def test_render_rechaza_filtro_de_columna_inexistente(self, _df):
-        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filtro_pais=DO")
-        self.assertEqual(r.status_code, 400)
+    def test_filtro_de_columna_inexistente_se_ignora_sin_tumbar_el_tablero(self, _df):
+        # Ej. una URL compartida cuando la columna ya no está en la hoja.
+        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?"
+                            + board_filters({"field": "pais", "op": "in", "value": ["DO"]}, ANIO_2026))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("'pais' no existe", r.json()["filter_errors"][0])
+        # El filtro válido sí se aplicó.
+        self.assertEqual(r.json()["widgets"][0]["data"]["categories"], ["Hogar", "Electrónica"])
 
     def test_render_valida_las_reglas_de_las_condiciones(self, _df):
-        bad = json.dumps([{"field": "ventas", "op": "between", "value": [1]}])
-        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/", {"filters": bad})
+        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?"
+                            + board_filters({"field": "ventas", "op": "between", "value": [1]}))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("dos números", r.json()["filter_errors"][0])
+
+    def test_filters_que_no_es_una_lista_json(self, _df):
+        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filters=nada")
         self.assertEqual(r.status_code, 400)
-        self.assertIn("dos números", r.json()["error"])
 
     def test_crear_kpi_con_condiciones_y_roles(self, _df):
         r = self.client.post(

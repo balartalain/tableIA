@@ -8,6 +8,7 @@ from sheets_reports.engine.plans.base import (  # noqa: F401
     ResultPlan,
     ResultTooLargeError,
 )
+from sheets_reports.engine.plans.column_values import ColumnValuesPlan, ColumnValuesResult  # noqa: F401
 from sheets_reports.engine.plans.flat import FlatPlan, FlatResult  # noqa: F401
 from sheets_reports.engine.plans.pivot_chart import PivotChartPlan, PivotChartResult  # noqa: F401
 from sheets_reports.engine.plans.pivot_table import (  # noqa: F401

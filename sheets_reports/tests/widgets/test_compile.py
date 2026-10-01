@@ -186,3 +186,40 @@ class PivotTableCompileTests(SimpleTestCase):
         self.assertEqual([c["header"] for c in anio_2026["children"][0]["children"]], ["Cantidad", "Pct"])
         self.assertEqual(out["columns"][2]["header"], "Total 2026")
         self.assertTrue(out["columns"][2]["subtotal"])
+
+
+class LineOrderTests(SimpleTestCase):
+    """El eje X de una línea va en orden cronológico ascendente, salvo un orden elegido."""
+
+    def df(self):
+        import pandas as pd
+        return pd.DataFrame({
+            "mes": ["Mar", "Ene", "Feb", "Ene"],
+            "anio": [2026, 2024, 2025, 2024],
+            "fecha": ["03/02/2024", "15/01/2024", "2024-01-20", "15/01/2024"],
+            "cat": ["a", "b", "a", "b"],
+            "v": [10.0, 2.0, 30.0, 4.0],
+        })
+
+    def categories(self, widget_type="line", **overrides):
+        data_spec = spec(**{"metrics": [agg("t", field="v")], **overrides})
+        return compiled(widget_type, data_spec, df=self.df())["categories"]
+
+    def test_anios_meses_y_fechas_ascendentes(self):
+        self.assertEqual(self.categories(dimensions=["anio"]), ["2024", "2025", "2026"])
+        self.assertEqual(self.categories(dimensions=["mes"]), ["Ene", "Feb", "Mar"])
+        self.assertEqual(self.categories(dimensions=["fecha"]), ["15/01/2024", "2024-01-20", "03/02/2024"])
+
+    def test_los_valores_siguen_a_su_categoria(self):
+        out = compiled("line", spec(dimensions=["anio"], metrics=[agg("t", field="v")]), df=self.df())
+        self.assertEqual(out["series"][0]["data"], [6.0, 30.0, 10.0])
+
+    def test_con_pivote(self):
+        self.assertEqual(self.categories(dimensions=["anio"], pivots=["cat"]), ["2024", "2025", "2026"])
+
+    def test_un_orden_elegido_se_respeta(self):
+        self.assertEqual(self.categories(dimensions=["anio"], sort={"by": "t", "dir": "desc"}),
+                         ["2025", "2026", "2024"])
+
+    def test_las_barras_mantienen_el_orden_de_la_hoja(self):
+        self.assertEqual(self.categories("bar", dimensions=["anio"]), ["2026", "2024", "2025"])

@@ -40,6 +40,7 @@ sheets_reports/
     registry.py                 # Registry genérico (register, unregister, get, keys)
     context.py                  # SheetContext
     values.py                   # to_python, to_key, percent, sort_key, series_dict
+    ordering.py                 # chronological: orden de años, meses, fechas y periodos
     errors.py                   # SpecValidationError + mensajes legibles de jsonschema
     schema.py                   # helpers de JSON Schema (enum, union, nullable) y límites globales
     conditions.py               # FilterOperator, RelativeValue, Condition (+ FILTER_OPS, RELATIVE_VALUES)
@@ -307,13 +308,13 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 |---|---|---|---|---|---|---|
 | `kpi` (`KpiWidget`) | 0 | 0 | ≤ 4 | agg, calc, grouped | sin having/sort/limit; con tendencia | `scalar` |
 | `bar` (`BarWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | `stacked` | `flat` o `pivot_chart` (según haya pivote) |
-| `line` (`LineWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | — | `flat` o `pivot_chart` |
+| `line` (`LineWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | eje X en orden cronológico ascendente si no hay `sort` | `flat` o `pivot_chart` |
 | `donut` (`DonutWidget`) | 1 | 0 | 1 | agg, calc | — | `flat` |
 | `dynamic_table` (`DynamicTableWidget`) | 1–3 | 0–2 | ≤ 5 | agg, calc | varias métricas con pivote | `pivot_table` |
 | `table` (`TableWidget`) | 0 | 0 | 0 | — | 1–50 `columns`; filtros y orden por columna; sin having/Top N | `rows` |
 | `filter` (`FilterWidget`) | 0 | 0 | 0 | — | 1–10 `columns` (un control cada una); uno por tablero; no la filtra el tablero; la IA no lo propone | `column_values` |
 
-`bar` y `line` heredan de `ChartWidget`, que elige el plan según el spec y compila tanto `FlatResult` como `PivotChartResult`.
+`bar` y `line` heredan de `ChartWidget`, que elige el plan según el spec y compila tanto `FlatResult` como `PivotChartResult`. `LineWidget.compile` reordena antes las categorías con `dsl/ordering.chronological` (la misma regla que la sparkline del KPI): una línea muestra una evolución, así que sin un orden elegido el eje X va de lo más antiguo a lo más reciente y no en el orden de la hoja. «Otros» queda al final.
 
 **Las dos tablas.** `dynamic_table` siempre agrupa por al menos una fila y resume con métricas, como una tabla dinámica de Sheets. `table` muestra las filas de la hoja tal cual: solo se eligen las columnas (y su orden), los filtros y el orden. Su `compile` devuelve `{"columns": [{"header", "field", "numeric"}], "rows", "total_rows", "truncated"?}`, donde la cabecera es el nombre exacto de la columna en la hoja.
 
@@ -436,7 +437,7 @@ La tabla de datos (`table`) se agregó así: un plan nuevo (`engine/plans/rows.p
 
 ## 7. Pruebas
 
-`python manage.py test sheets_reports` corre 227 tests, organizados por capa:
+`python manage.py test sheets_reports` corre 232 tests, organizados por capa:
 
 | Archivo | Qué cubre |
 |---|---|

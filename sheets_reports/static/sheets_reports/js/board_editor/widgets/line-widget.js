@@ -25,29 +25,30 @@
       const series = payload.series || [{ name: 'Datos', data: [] }];
       const categories = payload.categories || [];
       const options = {
-        chart: { type: 'line', height: '100%', width: '100%', fontFamily: 'inherit',
-          toolbar: {
-            show: true, // Muestra el toolbar
-            tools: {
-              download: true,  // Botón de descargar (SVG, PNG, CSV)
-              selection: true, // Herramienta de selección
-              zoom: true,      // Zoom por selección
-              zoomin: true,    // Acercar
-              zoomout: true,   // Alejar
-              pan: true,       // Desplazamiento (Pan)
-              reset: true      // Reiniciar zoom
-            }
-          }
+        chart: {
+          type: 'line', height: '90%', width: '100%', fontFamily: 'inherit',
+          // Solo descargar (igual que barras y dona): el zoom/pan no sirve en un eje de
+          // categorías y sus íconos se dibujaban encima del gráfico.
+          toolbar: this.chartExportToolbar(),
         },
         colors: ['#7c3aed', '#2563eb', '#f5a623', '#10b981', '#ef4444', '#0ea5e9'],
-        stroke: { curve: 'smooth', width: 3 },
+        // monotoneCubic: curva suave que no se pasa de los puntos ('smooth' inventaba picos y
+        // valles entre categorías, incluso por debajo de 0).
+        stroke: { curve: 'monotoneCubic', width: 3 },
+        markers: { size: 3, hover: { size: 5 } },
         series,
-        xaxis: { categories, labels: { style: { fontSize: '11px' } } },
-        tooltip: { y: { formatter: BaseWidget.percentAwareFormatter(payload.percent) } },
+        xaxis: {
+          // Mismo formato que las barras: etiquetas largas en varias líneas, sin inclinar.
+          categories: categories.map((cat) => formatearEtiquetaApex(cat, 18)),
+          labels: { rotate: 0, hideOverlappingLabels: true, style: { fontSize: '11px' } },
+          tooltip: { enabled: false },
+        },
+        tooltip: { shared: true, intersect: false, y: { formatter: BaseWidget.percentAwareFormatter(payload.percent) } },
         ...(BaseWidget.allSeriesPercent(payload, series) && {
           yaxis: { labels: { formatter: (val) => `${Math.round(val)}%` } },
         }),
-        grid: { padding: { bottom: 25 } },
+        // Margen a los lados para que las etiquetas de los extremos no queden cortadas.
+        grid: { padding: { left: 12, right: 18 } },
       };
       this.renderApexChart(container, options);
     }

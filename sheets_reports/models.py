@@ -55,7 +55,7 @@ class Widget(models.Model):
     Nunca contiene código: solo valores de datos validados contra un JSON Schema cerrado.
     """
     dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="widgets")
-    type = models.CharField(max_length=10, choices=widget_type_choices)
+    type = models.CharField(max_length=20, choices=widget_type_choices)
     position = models.JSONField(
         default=default_position,
         help_text="Posición en el lienzo: x = columna inicial (0 = fluido), y = orden, w = columnas (1-12), h = alto en px.",

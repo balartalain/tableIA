@@ -61,7 +61,7 @@ sheets_reports/
     base.py                     # WidgetType, DataCapabilities, ViewOptions, WIDGETS
     presentation.py             # humanize y claves de campos de la tabla
     chart.py                    # ChartWidget (base de bar y line)
-    kpi.py  bar.py  line.py  donut.py  table.py
+    kpi.py  bar.py  line.py  donut.py  dynamic_table.py
   services/
     widget_service.py           # crear / editar data_spec / filtros del tablero / calcular
     ai_spec.py                  # genera specs con Gemini usando los registros
@@ -88,7 +88,7 @@ Importar `sheets_reports.widgets` registra los cinco widgets; importar `sheets_r
 | `GROUP_RESULTS` | resultados de una métrica agrupada (`count`, `pct_groups`, `sum`…, `top`, `bottom`) | `dsl/metrics/grouped.py` |
 | `METRICS` | tipos de métrica (`agg`, `calc`, `grouped`) | `dsl/metrics/` |
 | `PLANS` | formas de resultado (`scalar`, `flat`, `pivot_chart`, `pivot_table`) | `engine/plans/` |
-| `WIDGETS` | tipos de widget (`kpi`, `bar`, `line`, `donut`, `table`) | `widgets/` |
+| `WIDGETS` | tipos de widget (`kpi`, `bar`, `line`, `donut`, `dynamic_table`) | `widgets/` |
 
 ### 2.2 Vocabulario: estrategias pequeñas
 
@@ -301,7 +301,7 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 | `bar` (`BarWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | `stacked` | `flat` o `pivot_chart` (según haya pivote) |
 | `line` (`LineWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | — | `flat` o `pivot_chart` |
 | `donut` (`DonutWidget`) | 1 | 0 | 1 | agg, calc | — | `flat` |
-| `table` (`TableWidget`) | 1–3 | 0–2 | ≤ 5 | agg, calc | varias métricas con pivote | `pivot_table` |
+| `dynamic_table` (`DynamicTableWidget`) | 1–3 | 0–2 | ≤ 5 | agg, calc | varias métricas con pivote | `pivot_table` |
 
 `bar` y `line` heredan de `ChartWidget`, que elige el plan según el spec y compila tanto `FlatResult` como `PivotChartResult`.
 

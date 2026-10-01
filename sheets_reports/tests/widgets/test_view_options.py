@@ -39,7 +39,7 @@ class ReconcileTests(SimpleTestCase):
 
     def test_labels_de_lo_que_ya_no_existe_se_descartan(self):
         labels = {"total_ventas": "Ventas", "categoria": "Categoría", "vieja": "Ya no está"}
-        self.assertEqual(view("table", spec(), {"labels": labels})["labels"],
+        self.assertEqual(view("dynamic_table", spec(), {"labels": labels})["labels"],
                          {"total_ventas": "Ventas", "categoria": "Categoría"})
 
     def test_tendencia_y_comparacion_son_independientes(self):

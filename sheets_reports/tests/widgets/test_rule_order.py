@@ -27,7 +27,7 @@ class RuleOrderTests(SimpleTestCase):
     def test_el_orden_no_depende_de_la_posicion_en_rules(self):
         data_spec = spec(dimensions=["categoria", "categoria"], sort={"by": "nada", "dir": "asc"},
                          metrics=[agg("total"), agg("total", "avg")])
-        widget = WIDGETS.get("table")
+        widget = WIDGETS.get("dynamic_table")
         expected = widget.errors(data_spec, sales_ctx())
 
         class Reversed(type(widget)):

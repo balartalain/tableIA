@@ -315,7 +315,7 @@ def table_assistant(request, dashboard_id):
 
     try:
         ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid, samples=get_field_samples(df))
-        spec = generate_widget_spec(prompt, "table", ctx)
+        spec = generate_widget_spec(prompt, "dynamic_table", ctx)
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     except Exception:

@@ -19,7 +19,7 @@ def grouped(name="bajo_plan", **overrides):
 class ValidateWidgetSpecTests(SimpleTestCase):
     def test_spec_valido(self):
         self.assertEqual(errors_for("bar", spec(pivots=["mes"])), [])
-        self.assertEqual(errors_for("table", spec(metrics=[
+        self.assertEqual(errors_for("dynamic_table", spec(metrics=[
             agg("cantidad", "count"), agg("promedio_ventas", "avg"),
         ], sort={"by": "cantidad", "dir": "desc"})), [])
 
@@ -39,27 +39,27 @@ class ValidateWidgetSpecTests(SimpleTestCase):
                       errors_for("bar", spec(metrics=[{"as": "total", "agg": "sum", "field": "ventas"}]))[0])
 
     def test_tabla_con_pivote_admite_varias_metricas(self):
-        self.assertEqual(errors_for("table", spec(pivots=["mes"], metrics=[
+        self.assertEqual(errors_for("dynamic_table", spec(pivots=["mes"], metrics=[
             agg("total_ventas"), agg("cantidad", "count", show_as="pct_row"),
         ])), [])
 
     def test_tabla_admite_varias_filas_y_dos_pivotes(self):
-        self.assertEqual(errors_for("table", spec(dimensions=["anio", "categoria"], pivots=["mes"])), [])
-        self.assertEqual(errors_for("table", spec(dimensions=["categoria"], pivots=["anio", "mes"])), [])
+        self.assertEqual(errors_for("dynamic_table", spec(dimensions=["anio", "categoria"], pivots=["mes"])), [])
+        self.assertEqual(errors_for("dynamic_table", spec(dimensions=["categoria"], pivots=["anio", "mes"])), [])
 
     def test_graficos_admiten_una_fila_y_un_pivote(self):
         self.assertIn("solo se admite una dimensión", errors_for("bar", spec(dimensions=["anio", "categoria"]))[0])
         self.assertIn("un solo pivote", errors_for("bar", spec(pivots=["anio", "mes"]))[0])
 
     def test_limites_de_filas_y_pivotes(self):
-        self.assertTrue(errors_for("table", spec(dimensions=["anio", "categoria", "mes", "ventas"])))
-        self.assertTrue(errors_for("table", spec(pivots=["anio", "mes", "ventas"])))
+        self.assertTrue(errors_for("dynamic_table", spec(dimensions=["anio", "categoria", "mes", "ventas"])))
+        self.assertTrue(errors_for("dynamic_table", spec(pivots=["anio", "mes", "ventas"])))
 
     def test_columnas_repetidas_entre_filas_y_pivotes(self):
         self.assertIn("pivots: no puede ser la misma columna que la dimensión.",
-                      errors_for("table", spec(dimensions=["anio", "categoria"], pivots=["mes", "anio"])))
+                      errors_for("dynamic_table", spec(dimensions=["anio", "categoria"], pivots=["mes", "anio"])))
         self.assertIn("dimensions: no se puede repetir una columna.",
-                      errors_for("table", spec(dimensions=["anio", "anio"])))
+                      errors_for("dynamic_table", spec(dimensions=["anio", "anio"])))
 
     def test_pivote_con_varias_metricas_da_mensaje_claro(self):
         errors = errors_for("bar", spec(pivots=["mes"], metrics=[agg("total_ventas"), agg("cantidad", "count")]))
@@ -85,15 +85,15 @@ class ValidateWidgetSpecTests(SimpleTestCase):
         self.assertEqual(errors_for("bar", spec(metrics=[agg("meses", "count_distinct", field="mes")])), [])
 
     def test_show_as_solo_acepta_valores_conocidos(self):
-        self.assertEqual(errors_for("table", spec(pivots=["mes"], metrics=[agg("pct", show_as="pct_column")])), [])
-        self.assertTrue(errors_for("table", spec(pivots=["mes"], metrics=[agg("pct", show_as="pct_fila")])))
+        self.assertEqual(errors_for("dynamic_table", spec(pivots=["mes"], metrics=[agg("pct", show_as="pct_column")])), [])
+        self.assertTrue(errors_for("dynamic_table", spec(pivots=["mes"], metrics=[agg("pct", show_as="pct_fila")])))
 
     def test_maximo_cinco_metricas(self):
         metrics = [agg(f"m{i}") for i in range(6)]
-        self.assertIn("como máximo 5", errors_for("table", spec(metrics=metrics))[0])
+        self.assertIn("como máximo 5", errors_for("dynamic_table", spec(metrics=metrics))[0])
 
     def test_as_duplicado(self):
-        errors = errors_for("table", spec(metrics=[agg("total"), agg("total", "avg")]))
+        errors = errors_for("dynamic_table", spec(metrics=[agg("total"), agg("total", "avg")]))
         self.assertIn("'total' está repetido", errors[0])
 
     def test_as_invalido(self):
@@ -191,22 +191,22 @@ class CalcAndGroupedTests(SimpleTestCase):
             {"type": "calc", "as": "ticket", "op": "div", "left": "ventas", "right": "cantidad"},
             {"type": "calc", "as": "doble", "op": "mul", "left": "ticket", "right": 2},
         ])
-        self.assertEqual(errors_for("table", data_spec), [])
+        self.assertEqual(errors_for("dynamic_table", data_spec), [])
 
     def test_calc_puede_ir_antes_de_las_metricas_que_usa(self):
         # El orden de la lista es de presentación (ej. el usuario arrastró el cálculo arriba).
-        self.assertEqual(errors_for("table", spec(metrics=[calc("ticket", "div", "ventas", 2), agg("ventas")])), [])
+        self.assertEqual(errors_for("dynamic_table", spec(metrics=[calc("ticket", "div", "ventas", 2), agg("ventas")])), [])
 
     def test_calc_con_referencia_inexistente(self):
-        errors = errors_for("table", spec(metrics=[calc("ticket", "div", "ventaz", 2), agg("ventas")]))
+        errors = errors_for("dynamic_table", spec(metrics=[calc("ticket", "div", "ventaz", 2), agg("ventas")]))
         self.assertIn("'ventaz' no es una de las métricas de la lista", errors[0])
 
     def test_calc_en_ciclo(self):
-        errors = errors_for("table", spec(metrics=[
+        errors = errors_for("dynamic_table", spec(metrics=[
             agg("ventas"), calc("a", "add", "b", "ventas"), calc("b", "mul", "a", 2),
         ]))
         self.assertEqual(errors, ["metrics: las métricas calculadas a, b dependen unas de otras en círculo."])
-        self.assertIn("en círculo", errors_for("table", spec(metrics=[calc("a", "add", "a", 1)]))[0])
+        self.assertIn("en círculo", errors_for("dynamic_table", spec(metrics=[calc("a", "add", "a", 1)]))[0])
 
     def test_calc_no_usa_un_ranking(self):
         errors = errors_for("kpi", kpi_spec(
@@ -240,9 +240,9 @@ class GroupsAndLimitTests(SimpleTestCase):
     def test_having_con_metricas_del_widget(self):
         ok = spec(metrics=[agg("total_ventas"), agg("cantidad", "count")],
                   having=[{"left": "total_ventas", "op": "gt", "right": "cantidad"}])
-        self.assertEqual(errors_for("table", ok), [])
+        self.assertEqual(errors_for("dynamic_table", ok), [])
         bad = spec(having=[{"left": "plan", "op": "gt", "right": 0}])
-        self.assertIn("having[0].left", errors_for("table", bad)[0])
+        self.assertIn("having[0].left", errors_for("dynamic_table", bad)[0])
 
     def test_limit_requiere_orden_por_metrica(self):
         self.assertEqual(errors_for("bar", spec(
@@ -304,7 +304,7 @@ class BuildViewSpecTests(SimpleTestCase):
         self.assertEqual(build_view_spec("kpi", kpi_spec(agg("actual")), {"kpi": {"target": 5000}})["target"], 5000)
 
     def test_marca_las_metricas_de_porcentaje(self):
-        view = build_view_spec("table", spec(metrics=[
+        view = build_view_spec("dynamic_table", spec(metrics=[
             agg("total_ventas"), agg("porcentaje", show_as="pct_column"),
             {"type": "calc", "as": "variacion", "op": "diff_pct", "left": "total_ventas", "right": 100},
             {"type": "calc", "as": "doble", "op": "mul", "left": "total_ventas", "right": 2},

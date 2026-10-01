@@ -25,15 +25,17 @@
           }
       }
   };
-  class TableWidget extends BaseWidget {
-    static type = 'table';
+  // Tabla dinámica: siempre agrupa por al menos una fila, con subtotales y totales
+  // (DynamicTableWidget del backend).
+  class DynamicTableWidget extends BaseWidget {
+    static type = 'dynamic_table';
     static palette = {
-      icon: 'ti-table',
+      icon: 'ti-table-options',
       category: 'data',
-      label: 'Tabla',
-      description: 'Filas y columnas de datos',
+      label: 'Tabla dinámica',
+      description: 'Agrupa filas y columnas, con totales',
     };
-    static defaults = { title: 'Tabla', width: 'md:col-span-6', height: 300 };
+    static defaults = { title: 'Tabla dinámica', width: 'md:col-span-6', height: 300 };
     static pivotLabel = 'Columnas';
     static dimensionLabel = 'Filas';
     static maxDimensions = 3;
@@ -117,7 +119,7 @@
           if (col.field === fieldName) {
             const updated = { ...col, ...config };
             // La celda de la fila de totales usa el mismo formato que la columna.
-            if (col.bottomCalc) Object.assign(updated, TableWidget.calcFormatter(config));
+            if (col.bottomCalc) Object.assign(updated, DynamicTableWidget.calcFormatter(config));
             return updated;
           }
           return col;
@@ -157,8 +159,8 @@
       // "Total general" viene marcada con total: true (nivel 0 de columnas) y los "Total <valor>"
       // del pivote anidado con subtotal: true (nivel 1, hay como mucho dos pivotes); se quitan
       // (con sus hijos) si ese nivel tiene los totales apagados.
-      const keep = (c) => !(c.total && !TableWidget.totalsOn(this.columnTotals, 0))
-        && !(c.subtotal && !TableWidget.totalsOn(this.columnTotals, 1));
+      const keep = (c) => !(c.total && !DynamicTableWidget.totalsOn(this.columnTotals, 0))
+        && !(c.subtotal && !DynamicTableWidget.totalsOn(this.columnTotals, 1));
       const prune = (cols) => cols.filter(keep)
         .map(c => (c.children ? { ...c, children: prune(c.children) } : c))
         .filter(c => !c.children || c.children.length);
@@ -172,7 +174,7 @@
       const hierarchical = rowFields.length > 1;
       const rows = this._displayRows(payload.rows || [], rowFields);
       // La fila de totales se muestra como fila de pie (bottomCalc): no se ordena ni pagina.
-      const totals = TableWidget.totalsOn(this.rowTotals, 0) ? payload.totals : null;
+      const totals = DynamicTableWidget.totalsOn(this.rowTotals, 0) ? payload.totals : null;
       const hasGroups = columns.some(c => c.children);
       // Tabla dinámica (columnas anidadas o varios niveles de filas): separadores de grupos,
       // columnas de filas fijas al hacer scroll horizontal, etc. (estilos en .tb-pivot).
@@ -212,7 +214,7 @@
         if (hierarchical) result.headerSort = false;
         if (totals) {
           result.bottomCalc = () => totals[col.field] ?? null;
-          Object.assign(result, TableWidget.calcFormatter(formatterConfig));
+          Object.assign(result, DynamicTableWidget.calcFormatter(formatterConfig));
         }
         if (!this._readOnly) result.headerMenu = this.menuFormatter;
         return result;
@@ -281,7 +283,7 @@
     // desde k, así que su primera etiqueta vacía dice qué checkbox lo controla.
     _displayRows(rows, rowFields) {
       rows = rows.filter(r => !r.__subtotal
-        || TableWidget.totalsOn(this.rowTotals, rowFields.findIndex(f => r[f] == null)));
+        || DynamicTableWidget.totalsOn(this.rowTotals, rowFields.findIndex(f => r[f] == null)));
       if (this.repeatRowLabels || rowFields.length < 2) return rows;
       let previous = null;
       return rows.map(row => {
@@ -308,5 +310,5 @@
     }
   }
 
-  WidgetRegistry.register(TableWidget);
+  WidgetRegistry.register(DynamicTableWidget);
 })();

@@ -1316,7 +1316,7 @@ document.addEventListener('alpine:init', () => {
           throw new Error((data && data.error) || 'El servidor no respondió correctamente (puede que la IA haya tardado demasiado). Intenta de nuevo.');
         }
         this.drawerAdvice = {
-          builder: builderFromSpec(data.data_spec, data.view_spec, 'table'),
+          builder: builderFromSpec(data.data_spec, data.view_spec, 'dynamic_table'),
           filters: data.data_spec.filters || [],
           having: data.data_spec.having || [],
           title: (data.view_spec && data.view_spec.title) || '',

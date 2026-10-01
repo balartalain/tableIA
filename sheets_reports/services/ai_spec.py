@@ -50,7 +50,7 @@ consulta.
 
 ## data_spec
 - dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). En
-  gráficos, UNA sola. En una tabla, hasta 3 anidadas de la más general a la más detallada
+  gráficos, UNA sola. En una tabla dinámica, hasta 3 anidadas de la más general a la más detallada
   (ej. ["sede", "carrera"]). Lista VACÍA solo para widget_type "kpi".
 - pivots: lista de columnas para desagregar además de la dimensión (columnas en una tabla,
   series en un gráfico). [] si no aplica. Tabla: hasta 2 (ej. ["anio", "mes"]); gráficos: 1.
@@ -111,7 +111,8 @@ Usa los valores de ejemplo de las columnas para escribir el valor exacto.
 - bar: comparar categorías ("ventas por región", "top 5 de productos").
 - line: evolución en el tiempo ("por mes", "tendencia").
 - donut: cómo se reparte un total entre pocas categorías. Una dimensión, UNA métrica, sin pivots.
-- table: varias métricas por fila, detalle, o cuando el usuario pide "tabla"/"listado".
+- dynamic_table: tabla dinámica que agrupa: varias métricas por fila, detalle, o cuando el
+  usuario pide "tabla"/"listado".
 Con pivots, los gráficos admiten UNA métrica; si el usuario pide varias y un cruce en un
 gráfico, incluye todo tal como lo pidió: el sistema le pedirá que elija.
 
@@ -180,7 +181,7 @@ create_widget({"widget_type": "bar", "title": "Top 5 productos 2026",
   "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})
 
 Prompt: "Tabla de vendedores que no llegaron a su plan, con ventas, plan y % de cumplimiento"
-create_widget({"widget_type": "table", "title": "Vendedores bajo el plan",
+create_widget({"widget_type": "dynamic_table", "title": "Vendedores bajo el plan",
   "data_spec": {"dimensions": ["vendedor"], "pivots": [], "filters": [], "limit": null, "trend_by": null,
     "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
                 {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"},
@@ -190,7 +191,7 @@ create_widget({"widget_type": "table", "title": "Vendedores bajo el plan",
   "view_options": {"stacked": false, "labels": [{"name": "cumplimiento", "label": "% cumplimiento"}]}})
 
 Prompt: "Tabla de respuestas por categoría con la cantidad y el porcentaje de cada respuesta"
-create_widget({"widget_type": "table", "title": "Respuestas por categoría",
+create_widget({"widget_type": "dynamic_table", "title": "Respuestas por categoría",
   "data_spec": {"dimensions": ["categoria"], "pivots": ["respuesta"], "filters": [], "having": [],
     "sort": null, "limit": null, "trend_by": null,
     "metrics": [{"type": "agg", "as": "cantidad", "agg": "count"},

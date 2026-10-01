@@ -47,11 +47,12 @@ def _pivot_columns(result: PivotTableResult, options: ViewOptions) -> list[dict]
 
 
 @WIDGETS.register
-class TableWidget(WidgetType[PivotTableResult, ViewOptions]):
-    """Tabla dinámica: varias filas y columnas anidadas, con subtotales; varias métricas aun
-    con pivote (una subcolumna por métrica en cada valor)."""
-    key = "table"
-    label = "Tabla"
+class DynamicTableWidget(WidgetType[PivotTableResult, ViewOptions]):
+    """Tabla dinámica: siempre agrupa por al menos una fila (hasta 3 anidadas) y opcionalmente
+    por columnas (hasta 2), con subtotales; varias métricas aun con pivote (una subcolumna por
+    métrica en cada valor)."""
+    key = "dynamic_table"
+    label = "Tabla dinámica"
     capabilities = DataCapabilities(
         dimensions=(1, MAX_DIMENSIONS), pivots=(0, MAX_PIVOTS), multi_metric_with_pivot=True,
     )

@@ -143,7 +143,7 @@ class ViewsTests(TestCase):
         with mock.patch("sheets_reports.views.generate_widget_spec") as ai:
             r = self.client.post(
                 f"/api/dashboard/{self.dashboard.id}/widgets/",
-                json.dumps({"type": "table", "dimensions": ["categoria"], "pivots": ["mes"],
+                json.dumps({"type": "dynamic_table", "dimensions": ["categoria"], "pivots": ["mes"],
                             "metrics": [{"type": "agg", "agg": "count", "as": "cantidad"}],
                             "position": {"x": 0, "y": 3, "w": 12, "h": 400}}),
                 content_type="application/json",
@@ -158,7 +158,7 @@ class ViewsTests(TestCase):
     def test_crear_tabla_dinamica_con_varios_niveles(self, _df):
         r = self.client.post(
             f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps({"type": "table", "dimensions": ["anio", "categoria"], "pivots": ["mes"],
+            json.dumps({"type": "dynamic_table", "dimensions": ["anio", "categoria"], "pivots": ["mes"],
                         "metrics": [{"type": "agg", "agg": "count", "as": "cantidad"},
                                     {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"}]}),
             content_type="application/json",
@@ -172,11 +172,11 @@ class ViewsTests(TestCase):
 
     def test_tabla_demasiado_grande_muestra_mensaje(self, _df):
         data_spec = spec(pivots=["mes"])
-        Widget.objects.create(dashboard=self.dashboard, type="table",
-                              data_spec=data_spec, view_spec=build_view_spec("table", data_spec))
+        Widget.objects.create(dashboard=self.dashboard, type="dynamic_table",
+                              data_spec=data_spec, view_spec=build_view_spec("dynamic_table", data_spec))
         with mock.patch("sheets_reports.engine.plans.pivot_table.MAX_TABLE_CELLS", 5):
             r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/")
-        table = next(w for w in r.json()["widgets"] if w["type"] == "table")
+        table = next(w for w in r.json()["widgets"] if w["type"] == "dynamic_table")
         self.assertIn("celdas", table["error"])
 
     def test_update_spec_conserva_labels_que_no_envia_el_builder(self, _df):
@@ -193,7 +193,7 @@ class ViewsTests(TestCase):
     def test_crear_tabla_con_nombre_a_mostrar(self, _df):
         r = self.client.post(
             f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps({"type": "table", "dimensions": ["categoria"],
+            json.dumps({"type": "dynamic_table", "dimensions": ["categoria"],
                         "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"}],
                         "labels": {"categoria": "Categoría", "total_ventas": "Ventas"}}),
             content_type="application/json",
@@ -239,9 +239,9 @@ class ViewsTests(TestCase):
 
     def test_asistente_de_tabla_devuelve_spec_sin_guardar(self, _df):
         generated = {
-            "widget_type": "table",
+            "widget_type": "dynamic_table",
             "data_spec": spec(),
-            "view_spec": build_view_spec("table", spec()),
+            "view_spec": build_view_spec("dynamic_table", spec()),
         }
         widgets_before = Widget.objects.count()
         with mock.patch("sheets_reports.views.generate_widget_spec", return_value=generated) as ai:
@@ -251,7 +251,7 @@ class ViewsTests(TestCase):
                 content_type="application/json",
             )
         self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(ai.call_args.args[:2], ("ventas por categoría", "table"))
+        self.assertEqual(ai.call_args.args[:2], ("ventas por categoría", "dynamic_table"))
         self.assertEqual(r.json(), {"data_spec": generated["data_spec"], "view_spec": generated["view_spec"]})
         self.assertEqual(Widget.objects.count(), widgets_before)
 

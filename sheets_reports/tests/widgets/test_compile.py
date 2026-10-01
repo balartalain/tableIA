@@ -16,8 +16,8 @@ class CompileViewTests(SimpleTestCase):
     def test_bar_y_table_marcan_series_y_campos_de_porcentaje(self):
         metrics = [agg("total_ventas"), agg("porcentaje", show_as="pct_column")]
         self.assertEqual(compiled("bar", spec(metrics=metrics))["percent"], ["Porcentaje"])
-        self.assertEqual(compiled("table", spec(metrics=metrics))["percent"], ["porcentaje"])
-        pivoted = compiled("table", spec(pivots=["mes"], metrics=[metrics[1]]))
+        self.assertEqual(compiled("dynamic_table", spec(metrics=metrics))["percent"], ["porcentaje"])
+        pivoted = compiled("dynamic_table", spec(pivots=["mes"], metrics=[metrics[1]]))
         # Una por mes + la columna "Total general".
         self.assertEqual(len(pivoted["percent"]), 4)
 
@@ -51,7 +51,7 @@ class CompileViewTests(SimpleTestCase):
         self.assertEqual(out, {"series": [500.0, 175.0, 80.0], "labels": ["Electrónica", "Hogar", "Ropa"]})
 
     def test_table_plana(self):
-        out = compiled("table", spec())
+        out = compiled("dynamic_table", spec())
         self.assertEqual(out["columns"], [
             {"header": "Categoria", "field": "categoria"},
             {"header": "Total ventas", "field": "total_ventas"},
@@ -59,7 +59,7 @@ class CompileViewTests(SimpleTestCase):
         self.assertEqual(out["rows"][0], {"categoria": "Hogar", "total_ventas": 175.0})
 
     def test_table_con_pivote_columnas_anidadas(self):
-        out = compiled("table", spec(pivots=["mes"]), {"labels": {"total_ventas": "Ventas"}})
+        out = compiled("dynamic_table", spec(pivots=["mes"]), {"labels": {"total_ventas": "Ventas"}})
         self.assertEqual(out["columns"], [
             {"header": "Categoria", "field": "categoria"},
             {"header": "Ventas", "children": [
@@ -85,7 +85,7 @@ class CompileViewTests(SimpleTestCase):
         })
 
     def test_table_con_pivote_y_varias_metricas_agrupa_por_valor_del_pivote(self):
-        out = compiled("table", spec(pivots=["mes"], metrics=[
+        out = compiled("dynamic_table", spec(pivots=["mes"], metrics=[
             {"type": "agg", "agg": "count", "as": "cantidad"},
             {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"},
         ]), {"labels": {"pct": "%"}})
@@ -102,7 +102,7 @@ class CompileViewTests(SimpleTestCase):
         self.assertNotIn("__total.cantidad", out["percent"])
 
     def test_table_plana_trae_fila_de_totales(self):
-        out = compiled("table", spec())
+        out = compiled("dynamic_table", spec())
         self.assertEqual(out["totals"], {"categoria": "Total general", "total_ventas": 755.0})
 
 
@@ -153,14 +153,14 @@ class KpiCompileTests(SimpleTestCase):
 
 class PivotTableCompileTests(SimpleTestCase):
     def test_varias_filas_marcan_subtotales(self):
-        out = compiled("table", spec(dimensions=["anio", "categoria"]))
+        out = compiled("dynamic_table", spec(dimensions=["anio", "categoria"]))
         self.assertEqual([c["field"] for c in out["columns"]], ["anio", "categoria", "total_ventas"])
         self.assertEqual(out["rowFields"], ["anio", "categoria"])
         self.assertEqual(out["rows"][2], {"anio": "Total 2026", "categoria": None, "__subtotal": True, "total_ventas": 675.0})
         self.assertEqual(out["totals"], {"anio": "Total general", "total_ventas": 755.0})
 
     def test_dos_pivotes_anidan_columnas_con_subtotales(self):
-        out = compiled("table", spec(pivots=["anio", "mes"]))
+        out = compiled("dynamic_table", spec(pivots=["anio", "mes"]))
         sep = "\x1f"
         self.assertEqual(out["columns"][1], {"header": "Total ventas", "children": [
             {"header": "2026", "children": [
@@ -177,7 +177,7 @@ class PivotTableCompileTests(SimpleTestCase):
         self.assertEqual(out["rows"][0]["__pivots.2026.total_ventas"], 175.0)
 
     def test_dos_pivotes_y_varias_metricas(self):
-        out = compiled("table", spec(pivots=["anio", "mes"], metrics=[
+        out = compiled("dynamic_table", spec(pivots=["anio", "mes"], metrics=[
             {"type": "agg", "agg": "count", "as": "cantidad"},
             {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"},
         ]))

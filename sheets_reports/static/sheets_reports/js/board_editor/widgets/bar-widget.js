@@ -177,15 +177,16 @@
           max: (max) => max * 1.12,
         }
       };
+      // Reordenar series arrastrando la leyenda edita el widget: no en la vista compartida.
       this.renderApexChart(container, options).then(() => {
-        this._wireLegendDrag(container, series);
+        if (!this._readOnly) this._wireLegendDrag(container, series);
       });
     }
 
     _wireLegendDrag(container, series) {
       if (this._legendSortable) { this._legendSortable.destroy(); this._legendSortable = null; }
       if (this._legendObserver) { this._legendObserver.disconnect(); this._legendObserver = null; }
-      if (series.length <= 1) return;
+      if (series.length <= 1 || typeof Sortable === 'undefined') return;
       const legendEl = container.querySelector('.apexcharts-legend');
       if (!legendEl) return;
       this._legendSortable = new Sortable(legendEl, {

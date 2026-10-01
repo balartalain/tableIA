@@ -344,7 +344,10 @@
       return el;
     }
 
+    // Vista compartida: sin acciones de edición (arrastres, menús de formato...). Cada widget
+    // lo consulta en this._readOnly.
     mountReadOnly() {
+      this._readOnly = true;
       this.el = this.buildReadOnlyElement();
       this.setLoading(true);
       return this.el;

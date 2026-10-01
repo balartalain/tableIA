@@ -109,7 +109,6 @@
     }
 
     buildReadOnlyElement() {
-      this._readOnly = true;
       const el = super.buildReadOnlyElement();
       el.querySelector('.actions-slot').innerHTML = this.downloadButtonHTML('Descargar CSV');
       return el;

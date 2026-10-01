@@ -746,6 +746,23 @@ document.addEventListener('alpine:init', () => {
       this.scheduleLayoutSave();
     },
 
+    // Al soltar un widget arrastrado, su "Columna de inicio" vuelve a "Fluido" (valor ''):
+    // la posición la decide el arrastre, y dejar el desplazamiento fijo lo dejaría descolocado.
+    // Un widget nuevo ya nace fluido, así que esto solo afecta a los que lo traían fijo.
+    fluidStartColOnDrop(widgetEl) {
+      const id = parseInt(widgetEl.dataset.widgetId);
+      const w = this.widgets.find(w => w.id === id);
+      if (!w || !w.startCol) return;
+      w.startCol = '';
+      w._dirty = true;
+      w.updateChrome();
+      // Si este widget es el del drawer abierto, el borrador guardaría el valor viejo.
+      if (this.editingId === id) {
+        this.drawerDraft.startCol = '';
+      }
+      this.scheduleLayoutSave();
+    },
+
     get editingWidget() {
       return this.widgets.find(w => w.id === this.editingId) || null;
     },

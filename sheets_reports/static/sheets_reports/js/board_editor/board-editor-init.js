@@ -212,6 +212,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const widgetEl = widget.mount();
       evt.item.replaceWith(widgetEl);
       store.reorderWidgets();
+      store.fluidStartColOnDrop(widgetEl);
       requestAnimationFrame(() => {
         window.dispatchEvent(new Event('resize'));
       });
@@ -219,8 +220,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       store.openDrawer(widget.id);
     },
 
-    onEnd: function () {
+    onEnd: function (evt) {
       store.reorderWidgets();
+      store.fluidStartColOnDrop(evt.item);
     },
   });
 

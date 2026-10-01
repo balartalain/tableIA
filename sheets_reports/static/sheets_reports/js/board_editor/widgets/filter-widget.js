@@ -4,8 +4,8 @@
   // el widget: va a la selección del tablero (filters.js) y recalcula todos los widgets.
 
   // Textos de Virtual Select en español.
+  // El placeholder es el nombre de cada filtro (ver _initMultiSelect).
   const MULTI_SELECT_TEXTS = {
-    placeholder: 'Todos',
     searchPlaceholderText: 'Buscar…',
     noOptionsText: 'Sin opciones',
     noSearchResultsText: 'Sin resultados',
@@ -119,8 +119,10 @@
       filters.forEach(filter => {
         const wrap = document.createElement('div');
         wrap.className = 'w-56 max-w-full';
+        // Sin etiqueta encima: el nombre del filtro va dentro del selector (placeholder). El
+        // title lo muestra al pasar el mouse cuando ya hay valores elegidos.
+        wrap.title = filter.label;
         wrap.innerHTML = `
-          <label class="block text-[11px] font-semibold text-ink/60 mb-1">${BaseWidget.escapeHTML(filter.label)}</label>
           <div class="filter-control"></div>
           ${filter.truncated ? `<p class="mt-0.5 text-[10px] text-ink/40">Solo las primeras ${filter.options.length.toLocaleString()} opciones</p>` : ''}`;
         container.appendChild(wrap);
@@ -146,6 +148,9 @@
         dropboxWrapper: 'body',
         zIndex: 60,
         ...MULTI_SELECT_TEXTS,
+        placeholder: filter.label,
+        ariaLabelText: filter.label,
+        allOptionsSelectedText: `${filter.label}: todos`,
       });
       ele.addEventListener('change', () => {
         const values = (ele.value || []).map(k => (byKey.has(k) ? byKey.get(k) : k));

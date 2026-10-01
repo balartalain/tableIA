@@ -132,8 +132,6 @@
 
   <main id="board-main" class="relative flex-1 min-w-0 min-h-0 overflow-hidden">
     <div id="board-scroll" class="h-full w-full overflow-auto flex flex-col">
-      <!-- Caja de filtros (widgets con placement 'header'): siempre arriba, fuera del grid. -->
-      <div id="dashboard-filters" class="bg-paper px-4 pt-4"></div>
       <div class="grid-numbers-header">
         <span>1</span>
         <span>2</span>
@@ -148,6 +146,8 @@
         <span>11</span>
         <span>12</span>
       </div>
+      <!-- Caja de filtros (widgets con placement 'header'): arriba del grid, bajo la regla. -->
+      <div id="dashboard-filters" class="bg-paper px-4 pt-4"></div>
       <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start flex-1 bg-paper p-4">
       </div>
     </div>

@@ -55,6 +55,8 @@
     static placement = 'canvas';
     // Solo uno por tablero (el backend también lo valida: max_per_dashboard).
     static singleton = false;
+    // "Mostrar como" porcentaje en las métricas (la dona no: ApexCharts calcula sus %).
+    static supportsShowAs = true;
     // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).
     static supportsLabels = false;
     // "Mostrar totales" por nivel de filas/columnas (props rowTotals/columnTotals).

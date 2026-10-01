@@ -136,6 +136,17 @@ class ValidateWidgetSpecTests(SimpleTestCase):
         self.assertEqual(errors_for("bar", spec(columns=["mes"])),
                          ["columns: este tipo de widget no muestra columnas sueltas (agrupa con dimensiones)."])
 
+    def test_donut_no_admite_mostrar_como_porcentaje(self):
+        # ApexCharts calcula la participación de cada porción: el backend manda siempre valores.
+        for show_as in ("pct_column", "pct_total", "pct_row"):
+            self.assertEqual(errors_for("donut", spec(metrics=[agg("total_ventas", show_as=show_as)])), [
+                "metrics[0].show_as: «Gráfico de Dona» ya muestra la participación de cada porción; "
+                "usa 'value' (el porcentaje se elige al presentar el gráfico).",
+            ], show_as)
+        self.assertEqual(errors_for("donut", spec(metrics=[agg("total_ventas", show_as="value")])), [])
+        self.assertEqual(errors_for("donut", spec()), [])
+        self.assertEqual(errors_for("dynamic_table", spec(metrics=[agg("pct", show_as="pct_column")])), [])
+
     def test_graficos_requieren_dimension(self):
         self.assertIn("se requiere una dimensión", errors_for("bar", spec(dimensions=[]))[0])
 

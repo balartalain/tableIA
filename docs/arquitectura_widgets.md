@@ -191,7 +191,7 @@ Las reglas consultan `widget.capabilities` y `widget.label`; nunca preguntan por
 | Banda | Prioridad | Reglas |
 |---|---|---|
 | `BUSINESS` | 0 | `PivotMultiMetric`: etapa PRE_SCHEMA y bloqueante. "Con pivote solo se permite una métrica": el usuario elige, ni la IA ni el backend eligen por él. |
-| `STRUCTURE` | 100 | `NoColumnRepeated` (dimensiones, pivotes y columnas), `PivotNeedsDimension`, y las que salen de las capacidades: `HavingAllowed`, `LimitAllowed`, `SortAllowed`, `TrendAllowed`. |
+| `STRUCTURE` | 100 | `NoColumnRepeated` (dimensiones, pivotes y columnas), `PivotNeedsDimension`, y las que salen de las capacidades: `HavingAllowed`, `LimitAllowed`, `SortAllowed`, `ShowAsAllowed`, `TrendAllowed`. |
 | `METRICS` | 200 | `ConditionsValid`, `MetricsValid` (delega en `metrics_errors`), `AliasNotColumn`. |
 | `REFERENCES` | 300 | `HavingRefsWidgetMetrics`, `SortTargetExists` (dimensión, columna mostrada o métrica), `LimitNeedsMetricSort`. El KPI agrega `TrendNeedsTrendableMetric`. |
 
@@ -238,6 +238,7 @@ class DataCapabilities:
     columns: tuple[int, int] = (0, 0)               # (mín, máx) de columnas que se muestran tal cual
     metrics: tuple[int, int] = (1, 5)
     metric_types: frozenset = {"agg", "calc"}       # lo declara el widget, no la métrica
+    show_as: bool = True                            # métricas «mostradas como» porcentaje
     multi_metric_with_pivot: bool = False
     having: bool = True
     sort: bool = True
@@ -309,7 +310,7 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 | `kpi` (`KpiWidget`) | 0 | 0 | ≤ 4 | agg, calc, grouped | sin having/sort/limit; con tendencia | `scalar` |
 | `bar` (`BarWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | `stacked` | `flat` o `pivot_chart` (según haya pivote) |
 | `line` (`LineWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | eje X en orden cronológico ascendente si no hay `sort` | `flat` o `pivot_chart` |
-| `donut` (`DonutWidget`) | 1 | 0 | 1 | agg, calc | — | `flat` |
+| `donut` (`DonutWidget`) | 1 | 0 | 1 | agg, calc | sin `show_as`: manda valores y ApexCharts calcula los % | `flat` |
 | `dynamic_table` (`DynamicTableWidget`) | 1–3 | 0–2 | ≤ 5 | agg, calc | varias métricas con pivote | `pivot_table` |
 | `table` (`TableWidget`) | 0 | 0 | 0 | — | 1–50 `columns`; filtros y orden por columna; sin having/Top N | `rows` |
 | `filter` (`FilterWidget`) | 0 | 0 | 0 | — | 1–10 `columns` (un control cada una); uno por tablero; no la filtra el tablero; la IA no lo propone | `column_values` |

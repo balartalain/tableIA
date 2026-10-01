@@ -40,6 +40,9 @@ class DataCapabilities:
     metric_types: frozenset = frozenset({"agg", "calc"})
     # Varias métricas a la vez que un pivote (una subcolumna por métrica en cada valor).
     multi_metric_with_pivot: bool = False
+    # Métricas agg «mostradas como» porcentaje (show_as). La dona no: ApexCharts ya calcula la
+    # participación de cada porción.
+    show_as: bool = True
     having: bool = True
     sort: bool = True
     limit: bool = True

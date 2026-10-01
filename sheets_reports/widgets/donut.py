@@ -9,7 +9,7 @@ class DonutWidget(WidgetType[FlatResult, ViewOptions]):
     """Reparte UNA métrica entre las categorías de la dimensión: sin pivote."""
     key = "donut"
     label = "Gráfico de Dona"
-    capabilities = DataCapabilities(dimensions=(1, 1), pivots=(0, 0), metrics=(1, 1))
+    capabilities = DataCapabilities(dimensions=(1, 1), pivots=(0, 0), metrics=(1, 1), show_as=False)
     plan_key = "flat"
 
     def data_view(self, spec: DataSpec) -> dict:

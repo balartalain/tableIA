@@ -114,6 +114,17 @@ class SortAllowed(Rule):
         return []
 
 
+class ShowAsAllowed(Rule):
+    """Widgets que calculan sus propios porcentajes al presentar (la dona): sus métricas van
+    siempre como valor."""
+    def check(self, spec, widget, ctx):
+        if widget.capabilities.show_as:
+            return []
+        return [f"metrics[{i}].show_as: «{widget.label}» ya muestra la participación de cada porción; "
+                f"usa 'value' (el porcentaje se elige al presentar el gráfico)."
+                for i, m in enumerate(spec.metrics) if m.show_as != "value"]
+
+
 class TrendAllowed(Rule):
     def check(self, spec, widget, ctx):
         if spec.trend_by and not widget.capabilities.trend:
@@ -191,6 +202,7 @@ DEFAULT_RULES: list[Rule] = [
     HavingAllowed(),
     LimitAllowed(),
     SortAllowed(),
+    ShowAsAllowed(),
     TrendAllowed(),
     ConditionsValid(),
     MetricsValid(),

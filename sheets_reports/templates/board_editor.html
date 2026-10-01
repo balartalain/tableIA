@@ -513,7 +513,7 @@
 
                         <!-- Detalle desplegable -->
                         <div x-show="m.expanded" class="mt-2 pl-5 space-y-1.5 border-t border-dashed border-line/60 pt-2">
-                          <template x-if="m.type === 'agg'">
+                          <template x-if="m.type === 'agg' && $store.dashboard.drawerWidgetClass.supportsShowAs">
                             <div class="flex items-center gap-1.5">
                               <span class="w-28 shrink-0 text-[11px] font-semibold text-ink/50">Mostrar como</span>
                               <select x-model="m.show_as" aria-label="Mostrar como" class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">

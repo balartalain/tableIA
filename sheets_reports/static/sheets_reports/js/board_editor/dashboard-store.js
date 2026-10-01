@@ -350,7 +350,7 @@ function showAsOptions(b) {
 
 // Lleva `show_as` a una opción válida para la forma actual (ej. se quitó el pivote).
 function effectiveShowAs(b, showAs) {
-  if (!showAs || showAs === 'value') return 'value';
+  if (!showAs || showAs === 'value' || !builderClass(b).supportsShowAs) return 'value';
   if (!builderDims(b).length) return 'pct_total';
   if (!builderPivots(b).length) return 'pct_column';
   return showAs;

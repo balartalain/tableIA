@@ -8,7 +8,7 @@
     return [...ordered, ...remaining];
   }
 
-  const COLOR_PALETTE = ['#2563eb', '#f5a623', '#00e1ffff', '#8b5cf6'];
+  const COLOR_PALETTE = BaseWidget.CHART_COLORS;
 
   class BarWidget extends BaseWidget {
     static type = 'bar';

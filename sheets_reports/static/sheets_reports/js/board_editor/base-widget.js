@@ -11,6 +11,9 @@
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;
+    // Paleta de las series de los gráficos (barras, líneas, dona), en este orden. Con más
+    // series de las que tiene, se repite desde el principio.
+    static CHART_COLORS = ['#4285F4', '#f59e52', '#ad7fe6', '#b5c665', '#2bb8ca', '#4CC38A', '#E36BB3', '#EF6E6E'];
 
     // Pestaña del panel de edición: 'data' (Configurar) o, si se omite, 'style' (Personalizar).
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };

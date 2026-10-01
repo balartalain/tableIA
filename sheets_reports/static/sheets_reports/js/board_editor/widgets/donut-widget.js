@@ -26,13 +26,24 @@
       const series = (payload.series || []).map(v => v ?? 0);
       const labels = payload.labels || [];
       const options = {
-        chart: { type: 'donut', height: '90%', width: '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
-        colors: ['#2563eb', '#f5a623', '#1F8A5F', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'],
+        chart: { type: 'donut', height: '100%', width: '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
+        plotOptions: {
+          pie: {
+            donut: {
+              size: '50%' // Controla el tamaño del agujero interno (menor % = centro más cerrado)
+            }
+          }
+        },
+        colors: BaseWidget.CHART_COLORS,
         series,
         labels,
         legend: { position: 'bottom', fontSize: '11px' },
         dataLabels: {
-          enabled: true//,
+          enabled: true,
+          fontSize: '10px',                  // Tamaño de la letra
+          fontFamily: 'Roboto, sans-serif',  // Tipo de fuente
+          fontWeight: '400',                 // Grosor (normal, bold, 600, etc.)
+          colors: ['#000000']
           /*formatter: function (val) {
             // Usamos Math.round() para redondear al entero más cercano (ej: 44.25 -> 44)
             return Math.round(val) + "%";

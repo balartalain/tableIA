@@ -31,7 +31,7 @@
           // categorías y sus íconos se dibujaban encima del gráfico.
           toolbar: this.chartExportToolbar(),
         },
-        colors: ['#7c3aed', '#2563eb', '#f5a623', '#10b981', '#ef4444', '#0ea5e9'],
+        colors: BaseWidget.CHART_COLORS,
         // monotoneCubic: curva suave que no se pasa de los puntos ('smooth' inventaba picos y
         // valles entre categorías, incluso por debajo de 0).
         stroke: { curve: 'monotoneCubic', width: 3 },

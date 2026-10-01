@@ -641,6 +641,8 @@ document.addEventListener('alpine:init', () => {
     // Sortable de la lista de métricas del drawer (se crea al abrirse y se destruye al cerrarse).
     metricsListEl: null,
     metricsSortable: null,
+    // Sortable de "Columnas a mostrar" (mismo ciclo de vida que el de las métricas).
+    columnsSortable: null,
 
     schemaError: '',
 
@@ -884,6 +886,38 @@ document.addEventListener('alpine:init', () => {
       if (!b) return;
       if (b.columns.length > 1) b.columns.splice(i, 1);
       else b.columns[0] = '';
+    },
+
+    // Arrastre de "Columnas a mostrar". Las filas se identifican por posición (una columna
+    // aún sin elegir no tiene nombre), así que Sortable no se queda con el DOM movido: al
+    // soltar se devuelve el nodo a su lugar y se reordena el array; Alpine redibuja la lista.
+    initColumnsList(el) {
+      if (!el || typeof Sortable === 'undefined') return;
+      this.destroyColumnsList();
+      this.columnsSortable = new Sortable(el, {
+        draggable: '[data-column-row]',
+        handle: '.column-drag-handle',
+        animation: 150,
+        ghostClass: 'metric-ghost-preview',
+        onEnd: (evt) => {
+          const from = evt.oldDraggableIndex;
+          const to = evt.newDraggableIndex;
+          if (from === to || from == null || to == null) return;
+          const rows = [...el.querySelectorAll('[data-column-row]')].filter(n => n !== evt.item);
+          el.insertBefore(evt.item, rows[from] || null);
+          const columns = this.builder && this.builder.columns;
+          if (!columns) return;
+          const [moved] = columns.splice(from, 1);
+          columns.splice(to, 0, moved);
+        },
+      });
+    },
+
+    destroyColumnsList() {
+      if (this.columnsSortable) {
+        this.columnsSortable.destroy();
+        this.columnsSortable = null;
+      }
     },
 
     // Todas las columnas de la hoja, en su orden (atajo de "Columnas a mostrar").
@@ -1213,6 +1247,7 @@ document.addEventListener('alpine:init', () => {
       this.editingType = null;
       this.drawerDraft = {};
       this.destroyMetricsList();
+      this.destroyColumnsList();
       this.drawerAskError = '';
       this.drawerAdvice = null;
       this.drawerAskOpen = false;

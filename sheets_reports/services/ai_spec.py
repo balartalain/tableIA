@@ -51,12 +51,12 @@ consulta.
 ## data_spec
 - dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). En
   gráficos, UNA sola. En una tabla dinámica, hasta 3 anidadas de la más general a la más
-  detallada (ej. ["sede", "carrera"]). Lista VACÍA solo para widget_type "kpi".
+  detallada (ej. ["sede", "carrera"]). Lista VACÍA para widget_type "kpi" y "table".
 - pivots: lista de columnas para desagregar además de la dimensión (columnas en una tabla
   dinámica, series en un gráfico). [] si no aplica. Tabla dinámica: hasta 2 (ej. ["anio", "mes"]);
   gráficos: 1.
-- columns: columnas de la hoja que se muestran tal cual, sin agrupar, en los widgets que lo
-  admiten. En los demás widgets, [].
+- columns: SOLO en widget_type "table" (datos tal cual, sin agrupar): las columnas de la hoja a
+  mostrar, en orden. En los demás widgets, [].
 - filters: condiciones sobre las FILAS que entran al widget. [] si no hay.
 - metrics: lista de métricas; cada una lleva "type" y un "as" único en snake_case
   (ej. "total_ventas", "cantidad"). Tipos:
@@ -114,8 +114,11 @@ Usa los valores de ejemplo de las columnas para escribir el valor exacto.
 - bar: comparar categorías ("ventas por región", "top 5 de productos").
 - line: evolución en el tiempo ("por mes", "tendencia").
 - donut: cómo se reparte un total entre pocas categorías. Una dimensión, UNA métrica, sin pivots.
-- dynamic_table: tabla dinámica que agrupa: varias métricas por fila, detalle, o cuando el
-  usuario pide "tabla"/"listado".
+- dynamic_table: tabla dinámica que agrupa (resúmenes por fila/columna, varias métricas por
+  fila, "tabla de ventas por ...").
+- table: las filas de la hoja tal cual, sin agrupar ni resumir ("listado", "mostrar los datos",
+  "tabla con las columnas ..."): columns con las columnas pedidas, metrics [], dimensions [],
+  pivots []. Admite filters y sort por una de sus columnas.
 Con pivots, los gráficos admiten UNA métrica; si el usuario pide varias y un cruce en un
 gráfico, incluye todo tal como lo pidió: el sistema le pedirá que elija.
 
@@ -201,6 +204,13 @@ create_widget({"widget_type": "dynamic_table", "title": "Respuestas por categor�
                 {"type": "agg", "as": "pct_cantidad", "agg": "count", "show_as": "pct_row"}]},
   "view_options": {"stacked": false, "labels": [{"name": "cantidad", "label": "Cant."},
     {"name": "pct_cantidad", "label": "%"}]}})
+
+Prompt: "Listado de las ventas de 2026 con producto, vendedor y monto, de mayor a menor"
+create_widget({"widget_type": "table", "title": "Ventas 2026",
+  "data_spec": {"dimensions": [], "pivots": [], "columns": ["producto", "vendedor", "ventas"],
+    "filters": [{"field": "anio", "op": "eq", "value": 2026}], "metrics": [], "having": [],
+    "sort": {"by": "ventas", "dir": "desc"}, "limit": null, "trend_by": null},
+  "view_options": {"stacked": false, "labels": []}})
 
 Prompt: "Barras apiladas de ventas por categoría y por mes"
 create_widget({"widget_type": "bar", "title": "Ventas por categoría y mes",

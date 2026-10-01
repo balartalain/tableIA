@@ -56,12 +56,12 @@ sheets_reports/
     executor.py                 # run(spec, df, plan) y restrict_groups (having / Top N)
     plans/                      # PLANS: un archivo por forma de resultado
       base.py                   # ResultPlan[R], PlanResult, PlanInput, ResultTooLargeError
-      scalar.py  flat.py  pivot_chart.py  pivot_table.py   # cada plan con su *Result tipado
+      scalar.py  flat.py  pivot_chart.py  pivot_table.py  rows.py   # cada plan con su *Result tipado
   widgets/
     base.py                     # WidgetType, DataCapabilities, ViewOptions, WIDGETS
     presentation.py             # humanize y claves de campos de la tabla
     chart.py                    # ChartWidget (base de bar y line)
-    kpi.py  bar.py  line.py  donut.py  dynamic_table.py
+    kpi.py  bar.py  line.py  donut.py  dynamic_table.py  table.py
   services/
     widget_service.py           # crear / editar data_spec / filtros del tablero / calcular
     ai_spec.py                  # genera specs con Gemini usando los registros
@@ -87,8 +87,8 @@ Importar `sheets_reports.widgets` registra los cinco widgets; importar `sheets_r
 | `CALC_OPS` | `add`, `sub`, `mul`, `div`, `ratio_pct`, `diff_pct` | `dsl/calc_ops.py` |
 | `GROUP_RESULTS` | resultados de una métrica agrupada (`count`, `pct_groups`, `sum`…, `top`, `bottom`) | `dsl/metrics/grouped.py` |
 | `METRICS` | tipos de métrica (`agg`, `calc`, `grouped`) | `dsl/metrics/` |
-| `PLANS` | formas de resultado (`scalar`, `flat`, `pivot_chart`, `pivot_table`) | `engine/plans/` |
-| `WIDGETS` | tipos de widget (`kpi`, `bar`, `line`, `donut`, `dynamic_table`) | `widgets/` |
+| `PLANS` | formas de resultado (`scalar`, `flat`, `pivot_chart`, `pivot_table`, `rows`) | `engine/plans/` |
+| `WIDGETS` | tipos de widget (`kpi`, `bar`, `line`, `donut`, `dynamic_table`, `table`) | `widgets/` |
 
 ### 2.2 Vocabulario: estrategias pequeñas
 
@@ -158,7 +158,7 @@ class DataSpec:
     dimensions: list[str]          # filas / eje X (agrupa)
     pivots: list[str]              # columnas / series (agrupa)
     metrics: list[Metric]
-    columns: list[str]             # columnas que se muestran tal cual, sin agrupar
+    columns: list[str]             # columnas que se muestran tal cual, sin agrupar (tabla de datos)
     filters: list[Condition]       # WHERE
     having: list[GroupCondition]   # grupos de la primera dimensión que se muestran
     sort: Sort | None
@@ -217,6 +217,7 @@ Cada plan está registrado en `PLANS` y devuelve su propio resultado tipado:
 | `flat` | `FlatResult(dimension, rows, totals)` | `rows` es un DataFrame con una fila por grupo y una columna por métrica; `totals` es el total general calculado desde los datos |
 | `pivot_chart` | `PivotChartResult(...)` | cruce dimensión × pivote para una métrica, con totales por fila, columna y general |
 | `pivot_table` | `PivotTableResult(dimensions, pivots, metrics, column_keys, rows: list[PivotRow], grand: PivotBlock)` | tabla dinámica con filas y columnas anidadas y subtotales; las métricas derivadas se calculan por celda; tope de 20 000 celdas (`ResultTooLargeError`) |
+| `rows` | `RowsResult(columns, rows, total_rows)` + `truncated` | las filas de la hoja tal cual (con los filtros), solo con `columns`, ordenadas por `sort` si lo hay; no agrega (`aggregates = False`); tope de 5 000 filas (`MAX_ROWS`), con el total real en `total_rows` |
 
 ---
 
@@ -304,8 +305,11 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 | `line` (`LineWidget`) | 1 | 0–1 | ≤ 5 | agg, calc | — | `flat` o `pivot_chart` |
 | `donut` (`DonutWidget`) | 1 | 0 | 1 | agg, calc | — | `flat` |
 | `dynamic_table` (`DynamicTableWidget`) | 1–3 | 0–2 | ≤ 5 | agg, calc | varias métricas con pivote | `pivot_table` |
+| `table` (`TableWidget`) | 0 | 0 | 0 | — | 1–50 `columns`; filtros y orden por columna; sin having/Top N | `rows` |
 
 `bar` y `line` heredan de `ChartWidget`, que elige el plan según el spec y compila tanto `FlatResult` como `PivotChartResult`.
+
+**Las dos tablas.** `dynamic_table` siempre agrupa por al menos una fila y resume con métricas, como una tabla dinámica de Sheets. `table` muestra las filas de la hoja tal cual: solo se eligen las columnas (y su orden), los filtros y el orden. Su `compile` devuelve `{"columns": [{"header", "field", "numeric"}], "rows", "total_rows", "truncated"?}`, donde la cabecera es el nombre exacto de la columna en la hoja.
 
 ---
 
@@ -322,6 +326,7 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 - **Modelo**: `Widget.type` toma sus choices de `WIDGETS` (`widget_type_choices`), y `Widget.definition` devuelve su `WidgetType`. `data_spec` y `view_spec` siguen siendo `JSONField`.
 - **Frontend**:
   - Cada widget tiene su clase registrada en `WidgetRegistry`, con el mismo `type` que su `key` en el backend. Sus capacidades (`supportsDimension`, `supportsPivot`, `supportsMetrics`, `usesColumns`, `maxColumns`…) deciden qué bloques muestra el builder.
+  - `TableWidget` (`table-widget.js`) extiende `DynamicTableWidget` (`dynamic-table-widget.js`) para reutilizar formatos, paginación, orden de columnas y descarga CSV.
   - `metricAliases` (`dashboard-store.js`) resuelve los alias de los cálculos en orden de dependencias. La métrica agrupada usa `innerHaving` ↔ `inner_having`.
 
 ### Flujos
@@ -341,8 +346,8 @@ POST/PUT ─► WidgetService              GET ─► WidgetService.board_filter
 
 | Quiero agregar | Qué toco |
 |---|---|
-| Widget nuevo **con una forma de datos que ya existe** (ej. `area` = `flat`/`pivot_chart`, `funnel` = `flat`) | `widgets/<nuevo>.py`: una subclase con `capabilities`, `options_cls` (si tiene opciones propias), `plan_key` (o `plan()`), `compile` y `@WIDGETS.register`, importada en `widgets/__init__.py`. Más su componente en el frontend. Nada más en el backend: el schema, la IA, los choices del modelo y la validación lo toman de los registros. |
-| Widget nuevo **con una forma de datos nueva** (ej. `scatter`: un punto por fila cruda) | Lo anterior, más una segunda pieza: `engine/plans/<forma>.py` con un `ResultPlan` registrado en `PLANS` y su `PlanResult`, importado en `engine/plans/__init__.py`. Esto sí es lógica de procesamiento de datos, pero queda aislada en su clase. No se edita `executor.py` ni otro plan. |
+| Widget nuevo **con una forma de datos que ya existe** (ej. `area` = `flat`/`pivot_chart`, `funnel` = `flat`, `scatter` = `rows` con dos columnas) | `widgets/<nuevo>.py`: una subclase con `capabilities`, `options_cls` (si tiene opciones propias), `plan_key` (o `plan()`), `compile` y `@WIDGETS.register`, importada en `widgets/__init__.py`. Más su componente en el frontend. Nada más en el backend: el schema, la IA, los choices del modelo y la validación lo toman de los registros. |
+| Widget nuevo **con una forma de datos nueva** (ej. `histogram`: conteo de filas por intervalos de una columna numérica) | Lo anterior, más una segunda pieza: `engine/plans/<forma>.py` con un `ResultPlan` registrado en `PLANS` y su `PlanResult`, importado en `engine/plans/__init__.py`. Esto sí es lógica de procesamiento de datos, pero queda aislada en su clase. No se edita `executor.py` ni otro plan. |
 | Tipo de métrica (ej. `running_total`) | `dsl/metrics/<tipo>.py` con una subclase de `Metric` registrada en `METRICS`, importada en `dsl/metrics/__init__.py`. Después se agrega su `key` a `metric_types` de los widgets que la admitan. |
 | Agregación (ej. `stddev`) | Una clase `Aggregation` en `dsl/aggregations.py`. |
 | Operador de filtro (ej. `starts_with`) | Una clase `FilterOperator` en `dsl/conditions.py`. |
@@ -369,34 +374,42 @@ Después se agrega `area` al import de `widgets/__init__.py` y se crea `area-wid
 ### Ejemplo: widget con una forma nueva
 
 ```python
-# engine/plans/raw_rows.py
+# engine/plans/bins.py
 @dataclass(frozen=True)
-class RawRowsResult(PlanResult):
-    rows: list
+class BinsResult(PlanResult):
+    edges: list
+    counts: list
 
 
 @PLANS.register
-class RawRowsPlan(ResultPlan[RawRowsResult]):
-    key = "raw_rows"
-    aggregates = False                  # filas crudas: no se aplica having/Top N
+class BinsPlan(ResultPlan[BinsResult]):
+    key = "bins"
+    aggregates = False                  # trabaja con las filas, no con grupos
 
     def run(self, spec, data):
-        return RawRowsResult(rows=data.df[spec.dimensions].to_dict(orient="records"))
+        counts, edges = np.histogram(data.df[spec.columns[0]].dropna(), bins=10)
+        return BinsResult(edges=edges.tolist(), counts=counts.tolist())
 
 
-# widgets/scatter.py
+# widgets/histogram.py
 @WIDGETS.register
-class ScatterWidget(WidgetType[RawRowsResult, ViewOptions]):
-    key = "scatter"
-    label = "Dispersión"
-    capabilities = DataCapabilities(dimensions=(2, 2), pivots=(0, 0), metrics=(1, 1),
+class HistogramWidget(WidgetType[BinsResult, ViewOptions]):
+    key = "histogram"
+    label = "Histograma"
+    capabilities = DataCapabilities(dimensions=(0, 0), pivots=(0, 0), columns=(1, 1),
+                                    metrics=(0, 0), metric_types=frozenset(),
                                     having=False, sort=False, limit=False)
-    plan_key = "raw_rows"
+    plan_key = "bins"
+
+    def default_title(self, spec, options):
+        return f"Distribución de {spec.columns[0]}"
 
     def compile(self, result, options, spec):
-        x, y = spec.dimensions
-        return {"points": [[r[x], r[y]] for r in result.rows]}
+        labels = [f"{a:g}–{b:g}" for a, b in zip(result.edges, result.edges[1:])]
+        return {"categories": labels, "series": [{"name": "Filas", "data": result.counts}]}
 ```
+
+La tabla de datos (`table`) se agregó así: un plan nuevo (`engine/plans/rows.py`) y un widget nuevo (`widgets/table.py`), más el campo `columns` en `DataSpec` porque ningún widget anterior mostraba columnas sin agrupar.
 
 `tests/test_architecture.py` hace exactamente esto con un widget, una métrica y un plan de prueba, y comprueba que funcionan de punta a punta (validación, tool de la IA, choices del modelo y `WidgetService`) sin tocar ningún otro módulo.
 
@@ -404,7 +417,7 @@ class ScatterWidget(WidgetType[RawRowsResult, ViewOptions]):
 
 ## 7. Pruebas
 
-`python manage.py test sheets_reports` corre 201 tests, organizados por capa:
+`python manage.py test sheets_reports` corre 213 tests, organizados por capa:
 
 | Archivo | Qué cubre |
 |---|---|
@@ -413,6 +426,7 @@ class ScatterWidget(WidgetType[RawRowsResult, ViewOptions]):
 | `tests/widgets/test_compile.py` | formato que recibe el frontend en cada widget |
 | `tests/widgets/test_rule_order.py` | el orden de los errores lo deciden etapa y prioridad, no la posición en `rules()` |
 | `tests/widgets/test_view_options.py` | cada fila de la política vista → datos |
+| `tests/widgets/test_table.py` | tabla de datos: validación, plan `rows`, compilación y creación por la API |
 | `tests/test_architecture.py` | extensión por registro de punta a punta y reglas de capas |
 | `tests/test_views.py`, `tests/test_ai_spec.py` | endpoints HTTP y generación con IA (con Gemini simulado) |
 

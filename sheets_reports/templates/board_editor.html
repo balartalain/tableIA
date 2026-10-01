@@ -27,7 +27,7 @@
     );
   }
   .is-snapping { transition: height 0.16s ease-out; }
-  /* Fantasma de la métrica que se está arrastrando dentro del panel de edición. */
+  /* Fantasma de la métrica o columna que se está arrastrando dentro del panel de edición. */
   .metric-ghost-preview {
     background-color: #f1f5f9 !important;
     opacity: 0.6;
@@ -368,12 +368,14 @@
                 <template x-if="$store.dashboard.drawerWidgetClass.usesColumns">
                   <div class="space-y-2">
                     <div class="flex items-center gap-2">
-                      <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Columnas a mostrar</h3>
+                      <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Columnas</h3>
                       <p class="text-[11px] text-ink/40">los datos de la hoja tal cual, en este orden</p>
                     </div>
-                    <div class="space-y-1">
+                    <div class="space-y-1" x-init="$store.dashboard.initColumnsList($el)">
                       <template x-for="(c, i) in $store.dashboard.drawerDraft.builder.columns" :key="'col-' + i">
-                        <div class="flex items-center gap-1">
+                        <div class="flex items-center gap-1" data-column-row>
+                          <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+                             aria-hidden="true" title="Arrastra para reordenar"></i>
                           <select x-model="$store.dashboard.drawerDraft.builder.columns[i]" x-bind:aria-label="`Columna ${i + 1}`"
                                   class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
                             <option value="" x-show="!$store.dashboard.drawerDraft.builder.columns[i]">Elige una columna…</option>
@@ -873,6 +875,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/donut-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/kpi-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/dynamic-table-widget.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/widgets/table-widget.js' %}"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>

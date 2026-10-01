@@ -16,4 +16,5 @@ from sheets_reports.engine.plans.pivot_table import (  # noqa: F401
     PivotTablePlan,
     PivotTableResult,
 )
+from sheets_reports.engine.plans.rows import RowsPlan, RowsResult  # noqa: F401
 from sheets_reports.engine.plans.scalar import ScalarPlan, ScalarResult, Trend  # noqa: F401

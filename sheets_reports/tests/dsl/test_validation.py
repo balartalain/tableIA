@@ -1,11 +1,7 @@
 from django.test import SimpleTestCase
 
-from sheets_reports.services.spec_validation import build_view_spec, validate_widget_spec
-from sheets_reports.tests.fixtures import agg, sales_schema, spec
-
-
-def errors_for(widget_type, data_spec):
-    return validate_widget_spec(widget_type, data_spec, sales_schema(), source="0")
+from sheets_reports.tests.fixtures import agg, calc, errors_for, spec
+from sheets_reports.tests.fixtures import view as build_view_spec
 
 
 def kpi_spec(*metrics, **overrides):
@@ -15,7 +11,7 @@ def kpi_spec(*metrics, **overrides):
 def grouped(name="bajo_plan", **overrides):
     return {
         "type": "grouped", "as": name, "group_by": "categoria",
-        "inner": [agg("v")], "having": [{"left": "v", "op": "lt", "right": 200}], "result": "count",
+        "inner": [agg("v")], "inner_having": [{"left": "v", "op": "lt", "right": 200}], "result": "count",
         **overrides,
     }
 
@@ -197,34 +193,47 @@ class CalcAndGroupedTests(SimpleTestCase):
         ])
         self.assertEqual(errors_for("table", data_spec), [])
 
-    def test_calc_no_puede_referirse_a_una_metrica_posterior(self):
+    def test_calc_puede_ir_antes_de_las_metricas_que_usa(self):
+        # El orden de la lista es de presentación (ej. el usuario arrastró el cálculo arriba).
+        self.assertEqual(errors_for("table", spec(metrics=[calc("ticket", "div", "ventas", 2), agg("ventas")])), [])
+
+    def test_calc_con_referencia_inexistente(self):
+        errors = errors_for("table", spec(metrics=[calc("ticket", "div", "ventaz", 2), agg("ventas")]))
+        self.assertIn("'ventaz' no es una de las métricas de la lista", errors[0])
+
+    def test_calc_en_ciclo(self):
         errors = errors_for("table", spec(metrics=[
-            {"type": "calc", "as": "ticket", "op": "div", "left": "ventas", "right": 2}, agg("ventas"),
+            agg("ventas"), calc("a", "add", "b", "ventas"), calc("b", "mul", "a", 2),
         ]))
-        self.assertIn("no es una métrica anterior", errors[0])
+        self.assertEqual(errors, ["metrics: las métricas calculadas a, b dependen unas de otras en círculo."])
+        self.assertIn("en círculo", errors_for("table", spec(metrics=[calc("a", "add", "a", 1)]))[0])
 
     def test_calc_no_usa_un_ranking(self):
         errors = errors_for("kpi", kpi_spec(
             grouped("top", result="top", value="v"),
-            {"type": "calc", "as": "x", "op": "mul", "left": "top", "right": 2},
+            calc("x", "mul", "top", 2),
         ))
         self.assertIn("devuelve un grupo", errors[0])
 
     def test_grouped_valido_en_kpi(self):
         self.assertEqual(errors_for("kpi", kpi_spec(grouped())), [])
-        self.assertEqual(errors_for("kpi", kpi_spec(grouped(result="top", value="v", having=[]))), [])
+        self.assertEqual(errors_for("kpi", kpi_spec(grouped(result="top", value="v", inner_having=[]))), [])
 
     def test_grouped_solo_en_kpi(self):
         errors = errors_for("bar", spec(metrics=[grouped()]))
-        self.assertIn("solo para el KPI", errors[0])
+        self.assertEqual(errors, ["metrics[0].type: las métricas «por grupo» no están disponibles en este tipo de widget."])
 
     def test_grouped_value_debe_ser_interna(self):
         self.assertIn("necesita 'value'", errors_for("kpi", kpi_spec(grouped(result="sum")))[0])
         self.assertIn("no lleva 'value'", errors_for("kpi", kpi_spec(grouped(value="v")))[0])
 
     def test_grouped_having_referencia_interna(self):
-        errors = errors_for("kpi", kpi_spec(grouped(having=[{"left": "plan", "op": "lt", "right": "v"}])))
-        self.assertIn("'plan' no es una de las métricas", errors[0])
+        errors = errors_for("kpi", kpi_spec(grouped(inner_having=[{"left": "plan", "op": "lt", "right": "v"}])))
+        self.assertIn("inner_having[0].left: 'plan' no es una de las métricas", errors[0])
+
+    def test_grouped_no_acepta_el_nombre_having(self):
+        errors = errors_for("kpi", kpi_spec({**grouped(), "having": []}))
+        self.assertTrue(any("'having' was unexpected" in e for e in errors), errors)
 
 
 class GroupsAndLimitTests(SimpleTestCase):
@@ -248,7 +257,11 @@ class GroupsAndLimitTests(SimpleTestCase):
 
     def test_trend_by_solo_en_kpi(self):
         self.assertEqual(errors_for("kpi", kpi_spec(agg("total"), trend_by="mes")), [])
-        self.assertIn("solo para el KPI", errors_for("bar", spec(trend_by="mes"))[0])
+        self.assertIn("no muestra tendencia", errors_for("bar", spec(trend_by="mes"))[0])
+
+    def test_trend_by_necesita_una_metrica_con_tendencia(self):
+        errors = errors_for("kpi", kpi_spec(grouped(result="top", value="v", inner_having=[]), trend_by="mes"))
+        self.assertIn("ninguna métrica tiene tendencia", errors[0])
 
 
 class BuildViewSpecTests(SimpleTestCase):

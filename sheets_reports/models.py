@@ -39,22 +39,23 @@ class Dashboard(models.Model):
         return m.group(1) if m else ""
 
 
+def widget_type_choices():
+    """Los tipos de widget registrados (sheets_reports/widgets)."""
+    from sheets_reports.widgets import WIDGETS
+
+    return [(w.key, w.label) for w in WIDGETS]
+
+
 class Widget(models.Model):
     """
     Widget de un tablero, definido por dos specs JSON independientes:
-    - data_spec: qué calcular (ver services/spec_validation.py), agnóstico del tipo de widget.
-    - view_spec: cómo presentarlo; se deriva de data_spec + type (build_view_spec).
+    - data_spec: qué calcular (dsl.spec.DataSpec), agnóstico del tipo de widget.
+    - view_spec: cómo presentarlo; lo construye su WidgetType a partir de data_spec y sus
+      opciones de vista (WidgetType.build_view).
     Nunca contiene código: solo valores de datos validados contra un JSON Schema cerrado.
     """
-    class Type(models.TextChoices):
-        KPI = "kpi", "Tarjeta KPI"
-        BAR = "bar", "Gráfico de Barras"
-        LINE = "line", "Gráfico de Líneas"
-        DONUT = "donut", "Gráfico de Dona"
-        TABLE = "table", "Tabla"
-
     dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="widgets")
-    type = models.CharField(max_length=10, choices=Type.choices)
+    type = models.CharField(max_length=10, choices=widget_type_choices)
     position = models.JSONField(
         default=default_position,
         help_text="Posición en el lienzo: x = columna inicial (0 = fluido), y = orden, w = columnas (1-12), h = alto en px.",
@@ -72,3 +73,10 @@ class Widget(models.Model):
 
     def __str__(self):
         return (self.view_spec or {}).get("title") or f"{self.get_type_display()} ({self.id})"
+
+    @property
+    def definition(self):
+        """El WidgetType de este widget."""
+        from sheets_reports.widgets import WIDGETS
+
+        return WIDGETS.get(self.type)

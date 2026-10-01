@@ -12,13 +12,10 @@ from django.conf import settings
 from google import genai
 from google.genai import types
 
-from sheets_reports.services.spec_validation import (
-    PIVOT_MULTIMETRIC_MSG,
-    WIDGET_TYPES,
-    build_data_spec_schema,
-    build_view_spec,
-    validate_widget_spec,
-)
+from sheets_reports.dsl.context import SheetContext
+from sheets_reports.dsl.rules import PIVOT_MULTIMETRIC_MSG
+from sheets_reports.dsl.spec import DataSpec
+from sheets_reports.widgets import WIDGETS
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("tableia.ai_audit")
@@ -71,13 +68,15 @@ consulta.
        condiciones (del widget y de la métrica) sobre el valor sin ellas: NECESITA condiciones.
      - filters propios (opcional): condiciones SOLO para esa métrica. Sirven para poner en el
        mismo widget "ventas 2026" y "ventas 2025", o "ventas de Hogar" junto al total.
-  2. {"type": "calc", "as", "op", "left", "right"}: cálculo entre métricas ANTERIORES de la
-     lista (left/right son su "as"; right también puede ser un número).
+  2. {"type": "calc", "as", "op", "left", "right"}: cálculo entre otras métricas de la lista
+     (left/right son su "as"; right también puede ser un número). El orden de la lista no
+     importa para el cálculo: solo decide el orden de las columnas.
      op: "add", "sub", "mul", "div", "ratio_pct" (left/right×100: margen, % de cumplimiento),
      "diff_pct" ((left−right)/right×100: variación, crecimiento).
-  3. {"type": "grouped", "as", "group_by", "inner", "having", "result", "value"?, "filters"?}:
+  3. {"type": "grouped", "as", "group_by", "inner", "inner_having", "result", "value"?, "filters"?}:
      SOLO en kpi. Agrupa por `group_by`, calcula las métricas `inner` (agg o calc) de cada
-     grupo, se queda con los grupos que cumplen `having` y los resume en un número:
+     grupo, se queda con los grupos que cumplen `inner_having` (condiciones sobre sus métricas
+     internas; no confundir con el `having` del widget) y los resume en un número:
      - result "count": cuántos grupos cumplen ("cuántos vendedores no cumplieron el plan").
      - result "pct_groups": qué % de los grupos cumple.
      - result "sum"/"avg"/"min"/"max": de la métrica interna `value` ("venta promedio por
@@ -149,7 +148,7 @@ create_widget({"widget_type": "kpi", "title": "Vendedores bajo el plan",
     "metrics": [{"type": "grouped", "as": "vendedores_bajo_plan", "group_by": "vendedor",
       "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
                 {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"}],
-      "having": [{"left": "ventas", "op": "lt", "right": "plan"}], "result": "count"}]},
+      "inner_having": [{"left": "ventas", "op": "lt", "right": "plan"}], "result": "count"}]},
   "view_options": {"stacked": false, "labels": [{"name": "vendedores_bajo_plan", "label": "Vendedores"}]}})
 
 Prompt: "La categoría que más vendió"
@@ -158,7 +157,7 @@ create_widget({"widget_type": "kpi", "title": "Categoría líder",
     "limit": null, "trend_by": null,
     "metrics": [{"type": "grouped", "as": "categoria_top", "group_by": "categoria",
       "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"}],
-      "having": [], "result": "top", "value": "ventas"}]},
+      "inner_having": [], "result": "top", "value": "ventas"}]},
   "view_options": {"stacked": false, "labels": [{"name": "categoria_top", "label": "Ventas"}]}})
 
 Prompt: "Margen de ganancia en porcentaje"
@@ -246,59 +245,55 @@ def _scalar_or_list_schema():
     return {"anyOf": [*scalar, {"type": "array", "items": {"anyOf": scalar}}]}
 
 
-def build_tool_parameters(schema: dict, widget_type: str | None) -> dict:
-    """Schema de parámetros de `create_widget`, construido en cada llamada: los `enum` de
-    columnas salen de `schema` (columnas reales de la hoja)."""
-    data_spec = _to_gemini_schema(build_data_spec_schema(schema, source=None, for_ai=True))
+def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
+    """Schema de parámetros de `create_widget`, construido en cada llamada desde los registros:
+    los `enum` de columnas salen de la hoja real, los tipos de widget de WIDGETS y las opciones
+    de vista de cada ViewOptions. Con el tipo fijado, el data_spec trae sus capacidades."""
+    widgets = [WIDGETS.get(widget_type)] if widget_type else WIDGETS.values()
+    data_spec = (widgets[0].data_schema(ctx, for_ai=True) if widget_type
+                 else DataSpec.schema(ctx, for_ai=True))
+    view_properties = {
+        "labels": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["name", "label"],
+                "properties": {
+                    "name": {"type": "string", "description": "`as` de una métrica o nombre de columna"},
+                    "label": {"type": "string"},
+                },
+            },
+        },
+    }
+    view_required = ["labels"]
+    for widget in widgets:
+        view_properties.update(widget.options_cls.ai_properties())
+        view_required += [k for k in widget.options_cls.ai_required() if k not in view_required]
     return {
         "type": "object",
         "additionalProperties": False,
         "required": ["widget_type", "title", "data_spec", "view_options"],
         "properties": {
-            "widget_type": {"enum": [widget_type] if widget_type else WIDGET_TYPES},
+            "widget_type": {"enum": [w.key for w in widgets]},
             "title": {"type": "string"},
-            "data_spec": data_spec,
+            "data_spec": _to_gemini_schema(data_spec),
             "view_options": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["stacked", "labels"],
-                "properties": {
-                    "stacked": {"type": "boolean"},
-                    "kpi": {
-                        "type": "object",
-                        "properties": {
-                            "primary": {"type": "string"},
-                            "compare": {"type": "string"},
-                            "compare_mode": {"enum": ["pct", "abs"]},
-                            "target_metric": {"type": "string"},
-                            "target_value": {"type": "number"},
-                            "higher_is_better": {"type": "boolean"},
-                        },
-                    },
-                    "labels": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["name", "label"],
-                            "properties": {
-                                "name": {"type": "string", "description": "`as` de una métrica o nombre de columna"},
-                                "label": {"type": "string"},
-                            },
-                        },
-                    },
-                },
+                "required": view_required,
+                "properties": view_properties,
             },
         },
     }
 
 
-def _tools(schema: dict, widget_type: str | None) -> list[types.Tool]:
+def _tools(ctx: SheetContext, widget_type: str | None) -> list[types.Tool]:
     return [types.Tool(function_declarations=[
         types.FunctionDeclaration(
             name=CREATE_TOOL,
             description="Crea la especificación (data_spec + opciones de vista) de un widget del tablero.",
-            parameters_json_schema=build_tool_parameters(schema, widget_type),
+            parameters_json_schema=build_tool_parameters(ctx, widget_type),
         ),
         types.FunctionDeclaration(
             name=REJECT_TOOL,
@@ -312,25 +307,23 @@ def _tools(schema: dict, widget_type: str | None) -> list[types.Tool]:
     ])]
 
 
-def _columns_context(schema: dict) -> str:
-    numeric = set(schema["numeric_fields"])
-    samples = schema.get("sample_values") or {}
+def _columns_context(ctx: SheetContext) -> str:
     lines = []
-    for field in schema["all_fields"]:
-        kind = "numérica" if field in numeric else "texto"
+    for field in ctx.fields:
+        kind = "numérica" if ctx.is_numeric(field) else "texto"
         line = f"- {json.dumps(field, ensure_ascii=False)} ({kind})"
-        if samples.get(field):
-            line += f" — valores de ejemplo: {json.dumps(samples[field], ensure_ascii=False)}"
+        if ctx.samples.get(field):
+            line += f" — valores de ejemplo: {json.dumps(ctx.samples[field], ensure_ascii=False)}"
         lines.append(line)
     return "Columnas de la hoja:\n" + "\n".join(lines)
 
 
-def _user_message(prompt: str, widget_type: str | None, schema: dict) -> str:
+def _user_message(prompt: str, widget_type: str | None, ctx: SheetContext) -> str:
     fixed = f"El tipo de widget está fijado en: {widget_type}.\n\n" if widget_type else ""
-    return f"{_columns_context(schema)}\n\n{fixed}Pedido del usuario:\n{prompt}"
+    return f"{_columns_context(ctx)}\n\n{fixed}Pedido del usuario:\n{prompt}"
 
 
-def _call_model(contents: str, schema: dict, widget_type: str | None) -> tuple[str, dict]:
+def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tuple[str, dict]:
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
@@ -341,7 +334,7 @@ def _call_model(contents: str, schema: dict, widget_type: str | None) -> tuple[s
         contents=contents,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
-            tools=_tools(schema, widget_type),
+            tools=_tools(ctx, widget_type),
             tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(
                 mode=types.FunctionCallingConfigMode.ANY,
                 allowed_function_names=[CREATE_TOOL, REJECT_TOOL],
@@ -368,7 +361,8 @@ def _audit(prompt, widget_type, attempt, call_name, args, errors):
 
 
 def _normalize(args: dict, source: str) -> tuple[str, dict, dict]:
-    """Separa la respuesta de la tool en (widget_type, data_spec, opciones de vista)."""
+    """Separa la respuesta de la tool en (widget_type, data_spec, opciones de vista en el
+    formato del request del builder)."""
     data_spec = copy.deepcopy(args.get("data_spec")) if isinstance(args.get("data_spec"), dict) else {}
     data_spec = {"source": source, **data_spec}
     view_options = args.get("view_options") if isinstance(args.get("view_options"), dict) else {}
@@ -390,41 +384,43 @@ def _normalize(args: dict, source: str) -> tuple[str, dict, dict]:
     return args.get("widget_type"), data_spec, options
 
 
-def generate_widget_spec(prompt: str, widget_type: str | None, schema: dict, source: str = "0") -> dict:
+def generate_widget_spec(prompt: str, widget_type: str | None, ctx: SheetContext) -> dict:
     """
-    Genera {widget_type, data_spec, view_spec} para `prompt`. `schema` es el de
-    sheets.get_sheet_schema (opcionalmente con "sample_values"); `source` es el gid de la hoja.
+    Genera {widget_type, data_spec, view_spec} para `prompt` sobre la hoja de `ctx` (con
+    `samples` para que la IA escriba los valores exactos).
 
     Si el primer spec no pasa la validación, reintenta UNA vez pasándole a la IA los errores;
     si vuelve a fallar, lanza SpecGenerationError con un mensaje legible. Nunca devuelve un
     spec inválido.
     """
-    if widget_type is not None and widget_type not in WIDGET_TYPES:
+    if widget_type is not None and widget_type not in WIDGETS:
         raise SpecGenerationError(f"Tipo de widget desconocido: {widget_type}.")
-    if not schema["all_fields"]:
+    if not ctx.fields:
         raise SpecGenerationError("La hoja no tiene columnas.")
 
-    contents = _user_message(prompt, widget_type, schema)
+    contents = _user_message(prompt, widget_type, ctx)
     errors: list[str] = []
     for attempt in (1, 2):
-        call_name, args = _call_model(contents, schema, widget_type)
+        call_name, args = _call_model(contents, ctx, widget_type)
 
         if call_name == REJECT_TOOL:
             _audit(prompt, widget_type, attempt, call_name, args, [])
             raise SpecGenerationError(args.get("reason") or "La IA no pudo interpretar el pedido.")
 
-        resolved_type, data_spec, options = _normalize(args, source)
-        if resolved_type not in WIDGET_TYPES:
-            errors = [f"widget_type: '{resolved_type}' no es válido; usa uno de {', '.join(WIDGET_TYPES)}."]
+        resolved_type, raw, options = _normalize(args, ctx.source)
+        if resolved_type not in WIDGETS:
+            errors = [f"widget_type: '{resolved_type}' no es válido; usa uno de {', '.join(WIDGETS.keys())}."]
         else:
-            errors = validate_widget_spec(resolved_type, data_spec, schema, source)
+            errors = WIDGETS.get(resolved_type).errors(raw, ctx)
         _audit(prompt, widget_type, attempt, call_name, args, errors)
 
         if not errors:
+            definition = WIDGETS.get(resolved_type)
+            spec = DataSpec.from_dict(raw)
             return {
                 "widget_type": resolved_type,
-                "data_spec": data_spec,
-                "view_spec": build_view_spec(resolved_type, data_spec, options),
+                "data_spec": spec.to_dict(),
+                "view_spec": definition.build_view(spec, definition.options(options)),
             }
 
         if errors[0].startswith(PIVOT_MULTIMETRIC_MSG):
@@ -432,7 +428,7 @@ def generate_widget_spec(prompt: str, widget_type: str | None, schema: dict, sou
             raise SpecGenerationError(errors[0])
 
         contents = (
-            f"{_user_message(prompt, widget_type, schema)}\n\n"
+            f"{_user_message(prompt, widget_type, ctx)}\n\n"
             f"Tu respuesta anterior fue:\n{json.dumps(args, ensure_ascii=False)}\n\n"
             f"No es válida por estos errores:\n- " + "\n- ".join(errors) +
             "\n\nCorrígela y vuelve a llamar a create_widget."

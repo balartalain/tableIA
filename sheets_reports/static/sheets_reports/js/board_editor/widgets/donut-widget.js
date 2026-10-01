@@ -22,7 +22,7 @@
 
     renderContent(container, data) {
       const payload = data || this.constructor.mockData();
-      // Formato nativo de ApexCharts para donut (ver apex_compiler._compile_donut).
+      // Formato nativo de ApexCharts para donut (ver widgets/donut.py: DonutWidget.compile).
       const series = (payload.series || []).map(v => v ?? 0);
       const labels = payload.labels || [];
       const options = {

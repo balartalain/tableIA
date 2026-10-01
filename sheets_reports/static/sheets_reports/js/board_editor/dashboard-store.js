@@ -36,14 +36,14 @@ const SHOW_AS_LABELS = {
   pct_total: '% del total general',
 };
 
-// Tipos de métrica (spec_validation.METRIC_TYPES). "Por grupo" es solo del KPI.
+// Tipos de métrica (dsl/metrics: METRICS). "Por grupo" es solo del KPI (DataCapabilities.metric_types).
 const METRIC_TYPE_OPTIONS = [
   { value: 'agg', label: 'Resumir una columna' },
   { value: 'calc', label: 'Cálculo entre métricas' },
   { value: 'grouped', label: 'Por grupo (condición / ranking)' },
 ];
 
-// Operaciones de una métrica calculada (spec_validation.CALC_OPS).
+// Operaciones de una métrica calculada (dsl/calc_ops.py: CALC_OPS).
 const CALC_OP_OPTIONS = [
   { value: 'sub', label: '− menos', word: 'dif' },
   { value: 'add', label: '+ más', word: 'suma' },
@@ -53,7 +53,7 @@ const CALC_OP_OPTIONS = [
   { value: 'diff_pct', label: 'variación % vs', word: 'var' },
 ];
 
-// Resultado de una métrica por grupo (spec_validation.GROUP_RESULTS).
+// Resultado de una métrica por grupo (dsl/metrics/grouped.py: GROUP_RESULTS).
 const GROUP_RESULT_OPTIONS = [
   { value: 'count', label: 'Cuántos grupos cumplen', word: 'grupos' },
   { value: 'pct_groups', label: '% de grupos que cumplen', word: 'pct_grupos' },
@@ -67,7 +67,7 @@ const GROUP_RESULT_OPTIONS = [
 const COUNT_RESULTS = ['count', 'pct_groups'];
 const RANKING_RESULTS = ['top', 'bottom'];
 
-// Operadores de las condiciones (spec_validation.FILTER_OPS). `numeric`: solo columnas numéricas.
+// Operadores de las condiciones (dsl/conditions.py: FILTER_OPS). `numeric`: solo columnas numéricas.
 const FILTER_OP_OPTIONS = [
   { value: 'eq', label: 'es igual a', short: '=' },
   { value: 'ne', label: 'es distinto de', short: '≠' },
@@ -84,10 +84,10 @@ const FILTER_OP_OPTIONS = [
 ];
 const LIST_OPS = ['in', 'not_in'];
 const EMPTY_OPS = ['is_empty', 'not_empty'];
-// Operadores que aceptan un valor relativo (spec_validation: eq, ne y comparaciones).
+// Operadores que aceptan un valor relativo (dsl/conditions.py: eq, ne y comparaciones).
 const RELATIVE_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte'];
 
-// De dónde sale el valor de una condición: fijo, o relativo (spec_validation.RELATIVE_VALUES).
+// De dónde sale el valor de una condición: fijo, o relativo (dsl/conditions.py: RELATIVE_VALUES).
 const VALUE_MODE_OPTIONS = [
   { value: 'value', label: 'Valor fijo…' },
   { value: 'current_year', label: 'Año actual' },
@@ -161,7 +161,7 @@ function metricAlias(agg, field, showAs, suffix = '') {
   return asAlias(suffix ? `${base}_${suffix}` : base);
 }
 
-// Cabecera por defecto de una columna: el mismo humanize() del backend (spec_validation), para
+// Cabecera por defecto de una columna: el mismo humanize() del backend (widgets/presentation.py), para
 // que el placeholder del campo "Nombre a mostrar" sea el título que se ve si no se personaliza.
 function defaultColumnName(name) {
   const text = String(name || '').replace(/_/g, ' ').trim();
@@ -270,7 +270,7 @@ function newMetric(type = 'agg', numericFields = []) {
     // calc
     op: 'sub', left: '', rightKind: 'metric', right: '',
     // grouped
-    group_by: '', inner: [newInnerMetric(numericFields)], having: [], result: 'count', value: '',
+    group_by: '', inner: [newInnerMetric(numericFields)], innerHaving: [], result: 'count', value: '',
   };
 }
 
@@ -286,7 +286,7 @@ function metricSignature(m, b) {
   const pick = {
     agg: () => [m.agg, isCountAgg(m.agg) ? '' : m.field, effectiveShowAs(b, m.show_as), withoutKeys(m.filters)],
     calc: () => [m.op, m.left, m.rightKind, m.right],
-    grouped: () => [m.group_by, JSON.stringify(m.inner), JSON.stringify(m.having), m.result, m.value, withoutKeys(m.filters)],
+    grouped: () => [m.group_by, JSON.stringify(m.inner), JSON.stringify(m.innerHaving), m.result, m.value, withoutKeys(m.filters)],
   }[m.type];
   return JSON.stringify([m.type, ...pick()]);
 }
@@ -313,7 +313,7 @@ function metricFromSpec(raw, b, idOf) {
     });
     Object.assign(m, {
       group_by: raw.group_by, result: raw.result, value: innerIds[raw.value] || '',
-      having: (raw.having || []).map(h => groupConditionFromSpec(h, innerIds)),
+      innerHaving: (raw.inner_having || []).map(h => groupConditionFromSpec(h, innerIds)),
     });
     m.filters = (raw.filters || []).map(conditionFromSpec);
     m.expanded = m.filters.length > 0;
@@ -358,6 +358,9 @@ function isRankingMetric(m) {
 // Una métrica aún incompleta (sin columna, cálculo sin operandos...) no tiene alias.
 // Separado de builderToPayload para que la UI pueda mostrar el nombre por defecto de una
 // métrica concreta, que depende también del orden (desempate de alias).
+// El alias de un cálculo se arma con los de sus operandos, así que los cálculos se resuelven
+// después de las demás y en orden de dependencias, no de posición: arrastrar un cálculo por
+// encima de las métricas que usa no lo rompe (el backend también evalúa en ese orden).
 function metricAliases(b) {
   const used = new Set();
   const aliasOf = {};
@@ -367,31 +370,44 @@ function metricAliases(b) {
     used.add(candidate);
     return candidate;
   };
-  const list = b.metrics.map(m => {
-    if (m.type === 'grouped' && b.widget !== 'kpi') return null;
-    let alias = null;
+  const defaultAlias = (m) => {
     if (m.type === 'agg') {
       if (!m.agg || (!isCountAgg(m.agg) && !m.field)) return null;
       const suffix = (m.filters || []).map(c => (c.mode !== 'value' && RELATIVE_OPS.includes(c.op) ? c.mode : c.value))
         .filter(Boolean).join('_');
-      alias = metricAlias(m.agg, m.field, effectiveShowAs(b, m.show_as), suffix);
-    } else if (m.type === 'calc') {
+      return metricAlias(m.agg, m.field, effectiveShowAs(b, m.show_as), suffix);
+    }
+    if (m.type === 'calc') {
       const left = aliasOf[m.left];
       const right = m.rightKind === 'number' ? String(m.right ?? '').trim() : aliasOf[m.right];
       if (!left || !right || (m.rightKind === 'number' && Number.isNaN(Number(right)))) return null;
       const word = (CALC_OP_OPTIONS.find(o => o.value === m.op) || { word: m.op }).word;
-      alias = asAlias(`${word}_${left}_${right}`);
-    } else {
-      if (!m.group_by || !m.inner.some(x => x.agg && (isCountAgg(x.agg) || x.field))) return null;
-      if (!COUNT_RESULTS.includes(m.result) && !m.inner.some(x => x._id === m.value)) return null;
-      const word = (GROUP_RESULT_OPTIONS.find(o => o.value === m.result) || { word: m.result }).word;
-      alias = asAlias(`${word}_${m.group_by}`);
+      return asAlias(`${word}_${left}_${right}`);
     }
+    if (!m.group_by || !m.inner.some(x => x.agg && (isCountAgg(x.agg) || x.field))) return null;
+    if (!COUNT_RESULTS.includes(m.result) && !m.inner.some(x => x._id === m.value)) return null;
+    const word = (GROUP_RESULT_OPTIONS.find(o => o.value === m.result) || { word: m.result }).word;
+    return asAlias(`${word}_${m.group_by}`);
+  };
+  const list = b.metrics.map(() => null);
+  const resolve = (m, i) => {
+    const alias = defaultAlias(m);
+    if (!alias) return false;
     const unchanged = m._origAs && m._origSig === metricSignature(m, b);
     const as = unique(unchanged ? m._origAs : alias);
     aliasOf[m._id] = as;
-    return { as, show_as: m.type === 'agg' ? effectiveShowAs(b, m.show_as) : 'value' };
-  });
+    list[i] = { as, show_as: m.type === 'agg' ? effectiveShowAs(b, m.show_as) : 'value' };
+    return true;
+  };
+  const active = b.metrics.map((m, i) => [m, i]).filter(([m]) => m.type !== 'grouped' || b.widget === 'kpi');
+  active.filter(([m]) => m.type !== 'calc').forEach(([m, i]) => resolve(m, i));
+  // Cálculos: en pasadas, cada uno cuando ya tiene el alias de sus operandos.
+  let pending = active.filter(([m]) => m.type === 'calc');
+  while (pending.length) {
+    const next = pending.filter(([m, i]) => !resolve(m, i));
+    if (next.length === pending.length) break;  // operandos incompletos o un ciclo
+    pending = next;
+  }
   return { list, aliasOf };
 }
 
@@ -424,7 +440,7 @@ function metricToSpec(m, alias, aliasOf, numericFields) {
   });
   const metric = {
     type: 'grouped', as: alias.as, group_by: m.group_by, inner,
-    having: m.having.map(h => groupConditionToSpec(h, innerAlias)).filter(Boolean),
+    inner_having: m.innerHaving.map(h => groupConditionToSpec(h, innerAlias)).filter(Boolean),
     result: m.result,
   };
   if (!COUNT_RESULTS.includes(m.result)) metric.value = innerAlias[m.value];

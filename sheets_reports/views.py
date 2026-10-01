@@ -12,10 +12,10 @@ from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from sheets_reports.models import Dashboard, Widget, default_position
+from sheets_reports.dsl.context import SheetContext
+from sheets_reports.dsl.errors import SpecValidationError
+from sheets_reports.models import Dashboard, Widget
 from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_spec
-from sheets_reports.services.apex_compiler import compile_view
-from sheets_reports.services.query_engine import ResultTooLargeError, apply_filters, run_data_spec
 from sheets_reports.services.sheets import (
     SheetError,
     get_dimension_fields,
@@ -24,12 +24,8 @@ from sheets_reports.services.sheets import (
     get_sheet_schema,
     invalidate_sheet_cache,
 )
-from sheets_reports.services.spec_validation import (
-    WIDGET_TYPES,
-    build_view_spec,
-    condition_errors,
-    validate_widget_spec,
-)
+from sheets_reports.services.widget_service import WidgetService, clean_position
+from sheets_reports.widgets import WIDGETS
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +97,8 @@ def _gid_from_url(url: str) -> str | None:
 
 
 def _load_sheet(dashboard):
-    """(df, schema) de la hoja del tablero, desde la caché."""
-    df = get_sheet_dataframe(dashboard.sheet_id, dashboard.sheet_gid)
-    return df, get_sheet_schema(df)
+    """La hoja del tablero, desde la caché."""
+    return get_sheet_dataframe(dashboard.sheet_id, dashboard.sheet_gid)
 
 
 def _serialize_dashboard(dashboard):
@@ -129,44 +124,12 @@ def _serialize_widget(widget):
     }
 
 
-def _clean_position(value, fallback=None) -> dict:
-    position = dict(fallback or default_position())
-    if isinstance(value, dict):
-        for key in ("x", "y", "w", "h"):
-            if isinstance(value.get(key), (int, float)) and not isinstance(value.get(key), bool):
-                position[key] = int(value[key])
-    position["w"] = min(max(position["w"], 1), 12)
-    position["x"] = min(max(position["x"], 0), 12)
-    position["h"] = min(max(position["h"], 100), 3000)
-    return position
-
-
-def _render_widget(widget, df, extra_filters=None) -> dict:
-    """Ejecuta y compila un widget. Un error en un widget no tumba el tablero."""
-    try:
-        # Los filtros del tablero se aplican antes: definen el universo del widget (el
-        # denominador de sus porcentajes), mientras que los del propio widget lo recortan.
-        if extra_filters:
-            df = apply_filters(df, extra_filters)
-        layout = "table" if widget.type == "table" else "auto"
-        result = run_data_spec(df, widget.data_spec, layout=layout)
-        return {"data": compile_view(widget.type, result, widget.view_spec)}
-    except ResultTooLargeError as e:
-        return {"error": str(e)}
-    except KeyError as e:
-        # La hoja cambió y ya no tiene una columna que el spec usa.
-        return {"error": f"La columna {e} ya no existe en la hoja. Edita el widget."}
-    except Exception:
-        logger.exception("Error renderizando el widget %s", widget.id)
-        return {"error": "No se pudo calcular este widget."}
-
-
-def _board_filters(request, schema) -> list[dict]:
+def _board_filters(request, ctx: SheetContext) -> list[dict]:
     """
     Filtros del tablero, desde la query string:
       ?filters=[{"field": ..., "op": ..., "value": ...}]   (JSON)
       ?filtro_<columna>=<valor>                             (atajo: eq)
-    Se validan con las mismas reglas que las condiciones del data_spec.
+    El servicio los valida con las mismas reglas que las condiciones del data_spec.
     """
     filters = []
     raw = request.GET.get("filters")
@@ -181,16 +144,12 @@ def _board_filters(request, schema) -> list[dict]:
     for key, value in request.GET.items():
         if key.startswith("filtro_") and value != "":
             field = key[len("filtro_"):]
-            if field in schema["numeric_fields"]:
+            if ctx.is_numeric(field):
                 try:
                     value = float(value)
                 except ValueError:
                     pass
             filters.append({"field": field, "op": "eq", "value": value})
-
-    errors = condition_errors(filters, schema)
-    if errors:
-        raise ValueError(f"Filtro del tablero inválido: {errors[0]}")
     return filters
 
 
@@ -292,11 +251,11 @@ def dashboard_schema(request, dashboard_id):
     if request.GET.get("refresh"):
         invalidate_sheet_cache(dashboard.sheet_id, dashboard.sheet_gid)
     try:
-        df, schema = _load_sheet(dashboard)
+        df = _load_sheet(dashboard)
     except SheetError as e:
         return _error(str(e), status=502)
     return JsonResponse({
-        **schema, "dimension_fields": get_dimension_fields(df), "sample_values": get_field_samples(df),
+        **get_sheet_schema(df), "dimension_fields": get_dimension_fields(df), "sample_values": get_field_samples(df),
     })
 
 
@@ -309,18 +268,18 @@ def dashboard_render(request, dashboard_id):
     """
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     try:
-        df, schema = _load_sheet(dashboard)
+        service = WidgetService(dashboard, _load_sheet(dashboard))
     except SheetError as e:
         return _error(str(e), status=502)
     try:
-        filters = _board_filters(request, schema)
+        filters = service.board_filters(_board_filters(request, service.ctx))
     except ValueError as e:
         return _error(str(e))
 
     widgets = sorted(dashboard.widgets.all(), key=lambda w: (w.position.get("y", 0), w.id))
     return JsonResponse({
         "dashboard": _serialize_dashboard(dashboard),
-        "widgets": [{**_serialize_widget(w), **_render_widget(w, df, filters)} for w in widgets],
+        "widgets": [{**_serialize_widget(w), **service.render(w, filters)} for w in widgets],
     })
 
 
@@ -350,14 +309,13 @@ def table_assistant(request, dashboard_id):
         return _error("El prompt es obligatorio")
 
     try:
-        df, schema = _load_sheet(dashboard)
+        df = _load_sheet(dashboard)
     except SheetError as e:
         return _error(str(e), status=502)
 
     try:
-        spec = generate_widget_spec(
-            prompt, "table", {**schema, "sample_values": get_field_samples(df)}, source=dashboard.sheet_gid,
-        )
+        ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid, samples=get_field_samples(df))
+        spec = generate_widget_spec(prompt, "table", ctx)
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     except Exception:
@@ -367,58 +325,16 @@ def table_assistant(request, dashboard_id):
     return JsonResponse({"data_spec": spec["data_spec"], "view_spec": spec["view_spec"]})
 
 
-def _clean_labels(data: dict, previous: dict | None = None) -> dict:
-    """
-    Cabeceras de columna ({columna o alias: "Texto"}) que llegan del builder; las vacías se
-    ignoran en build_view_spec. Sin `labels` en el request se conserva el que ya tenía el widget.
-    """
-    labels = data.get("labels")
-    if isinstance(labels, dict):
-        return labels
-    return (previous or {}).get("labels") or {}
-
-
-# Claves del data_spec que manda el builder (todas; sin ellas se usa el valor por defecto).
-_BUILDER_DEFAULTS = {
-    "dimensions": [], "pivots": [], "filters": [], "metrics": [], "having": [],
-    "sort": None, "limit": None, "trend_by": None,
-}
-
-
-def _builder_data_spec(data: dict, dashboard, widget_type: str, schema: dict):
-    """
-    data_spec a partir de los controles del builder ({dimensions, pivots, filters, metrics,
-    having, sort, limit, trend_by}). Retorna (data_spec, errores). Mismas validaciones que el
-    camino de IA.
-    """
-    data_spec = {"source": dashboard.sheet_gid}
-    for key, default in _BUILDER_DEFAULTS.items():
-        value = data.get(key, default)
-        data_spec[key] = default if value is None and isinstance(default, list) else value
-    return data_spec, validate_widget_spec(widget_type, data_spec, schema, dashboard.sheet_gid)
-
-
-def _view_options(data: dict, previous: dict | None = None) -> dict:
-    """Opciones de build_view_spec desde el request; lo que no viene se toma del widget."""
-    previous = previous or {}
-    options = {
-        "title": data.get("title", previous.get("title")),
-        "labels": _clean_labels(data, previous),
-        "stacked": bool(data.get("stacked", previous.get("stacked", False))),
-    }
-    if isinstance(data.get("kpi"), dict):
-        options["kpi"] = data["kpi"]
-    elif previous.get("widget") == "kpi":
-        options["kpi"] = {k: previous.get(k) for k in (
-            "primary", "compare", "compare_mode", "target", "higher_is_better", "status")}
-    return options
+def _validation_error(e: SpecValidationError):
+    return _error(e.errors[0], status=422, errors=e.errors)
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_widget(request, dashboard_id):
     """
-    POST {type, <claves del data_spec>, stacked?, labels?, kpi?, title?, position?, display?}
+    POST {type, <claves del data_spec>, <opciones de vista del tipo>, title?, labels?,
+          position?, display?}
     Crea un widget desde el builder (el usuario elige columnas y métricas). NUNCA llama a la IA.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
@@ -429,34 +345,25 @@ def create_widget(request, dashboard_id):
     except ValueError as e:
         return _error(str(e))
     widget_type = data.get("type")
-    if widget_type not in WIDGET_TYPES:
+    if widget_type not in WIDGETS:
         return _error(f"Tipo de widget desconocido: {widget_type}")
 
     try:
-        df, schema = _load_sheet(dashboard)
+        service = WidgetService(dashboard, _load_sheet(dashboard))
     except SheetError as e:
         return _error(str(e), status=502)
-
-    data_spec, errors = _builder_data_spec(data, dashboard, widget_type, schema)
-    if errors:
-        return _error(errors[0], status=422, errors=errors)
-
-    display = data.get("display") if isinstance(data.get("display"), dict) else {}
-    widget = Widget.objects.create(
-        dashboard=dashboard,
-        type=widget_type,
-        position=_clean_position(data.get("position")),
-        data_spec=data_spec,
-        view_spec=build_view_spec(widget_type, data_spec, {**_view_options(data), "display": display}),
-    )
-    return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)}, status=201)
+    try:
+        widget = service.create(widget_type, data)
+    except SpecValidationError as e:
+        return _validation_error(e)
+    return JsonResponse({**_serialize_widget(widget), **service.render(widget)}, status=201)
 
 
 @csrf_exempt
 @require_http_methods(["PUT"])
 def update_widget_spec(request, widget_id):
     """
-    PUT {<claves del data_spec>, stacked?, labels?, kpi?, title?}
+    PUT {<claves del data_spec>, <opciones de vista del tipo>, title?, labels?}
     Edición manual desde el builder: aplica las mismas validaciones que el camino de IA,
     reconstruye view_spec y guarda. Este camino NUNCA llama a la IA.
     """
@@ -469,21 +376,14 @@ def update_widget_spec(request, widget_id):
         return _error(str(e))
 
     try:
-        df, schema = _load_sheet(widget.dashboard)
+        service = WidgetService(widget.dashboard, _load_sheet(widget.dashboard))
     except SheetError as e:
         return _error(str(e), status=502)
-
-    data_spec, errors = _builder_data_spec(data, widget.dashboard, widget.type, schema)
-    if errors:
-        return _error(errors[0], status=422, errors=errors)
-
-    previous = widget.view_spec or {}
-    widget.data_spec = data_spec
-    widget.view_spec = build_view_spec(widget.type, data_spec, {
-        **_view_options(data, previous), "display": previous.get("display"),
-    })
-    widget.save()
-    return JsonResponse({**_serialize_widget(widget), **_render_widget(widget, df)})
+    try:
+        service.update_spec(widget, data)
+    except SpecValidationError as e:
+        return _validation_error(e)
+    return JsonResponse({**_serialize_widget(widget), **service.render(widget)})
 
 
 @csrf_exempt
@@ -503,7 +403,7 @@ def widget_detail(request, widget_id):
     except ValueError as e:
         return _error(str(e))
     if "position" in data:
-        widget.position = _clean_position(data["position"], fallback=widget.position)
+        widget.position = clean_position(data["position"], fallback=widget.position)
     view_spec = dict(widget.view_spec)
     if "title" in data:
         view_spec["title"] = str(data["title"] or "").strip() or view_spec.get("title", "")

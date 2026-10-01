@@ -1,16 +1,6 @@
 from django.test import SimpleTestCase
 
-from sheets_reports.services.apex_compiler import compile_view
-from sheets_reports.services.query_engine import run_data_spec
-from sheets_reports.services.spec_validation import build_view_spec
-from sheets_reports.tests.fixtures import agg, sales_df, sellers_df, spec
-
-
-def compiled(widget_type, data_spec, options=None, df=None):
-    view_spec = build_view_spec(widget_type, data_spec, options)
-    layout = "table" if widget_type == "table" else "auto"
-    df = sales_df() if df is None else df
-    return compile_view(widget_type, run_data_spec(df, data_spec, layout=layout), view_spec)
+from sheets_reports.tests.fixtures import agg, compiled, sellers_df, spec
 
 
 class CompileViewTests(SimpleTestCase):
@@ -150,7 +140,7 @@ class KpiCompileTests(SimpleTestCase):
 
     def test_top_muestra_el_grupo(self):
         metric = {"type": "grouped", "as": "lider", "group_by": "categoria", "inner": [agg("v")],
-                  "having": [], "result": "top", "value": "v"}
+                  "inner_having": [], "result": "top", "value": "v"}
         out = compiled("kpi", self.data_spec(metric), {"labels": {"lider": "Ventas"}})
         self.assertEqual(out, {"label": "Ventas", "text": "Electrónica", "value": 500.0})
 

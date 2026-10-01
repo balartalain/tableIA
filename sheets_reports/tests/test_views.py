@@ -6,8 +6,8 @@ from django.test import TestCase
 
 from sheets_reports.models import Dashboard, Widget
 from sheets_reports.services.ai_spec import SpecGenerationError
-from sheets_reports.services.spec_validation import build_view_spec
 from sheets_reports.tests.fixtures import agg, sales_df, spec
+from sheets_reports.tests.fixtures import view as build_view_spec
 
 
 @mock.patch("sheets_reports.views.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
@@ -174,7 +174,7 @@ class ViewsTests(TestCase):
         data_spec = spec(pivots=["mes"])
         Widget.objects.create(dashboard=self.dashboard, type="table",
                               data_spec=data_spec, view_spec=build_view_spec("table", data_spec))
-        with mock.patch("sheets_reports.services.query_engine.MAX_TABLE_CELLS", 5):
+        with mock.patch("sheets_reports.engine.plans.pivot_table.MAX_TABLE_CELLS", 5):
             r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/")
         table = next(w for w in r.json()["widgets"] if w["type"] == "table")
         self.assertIn("celdas", table["error"])

@@ -266,7 +266,7 @@ function newMetric(type = 'agg', numericFields = []) {
   return {
     _id: newId(), type, label: '', _origAs: '', _origSig: '',
     // agg
-    agg: firstNumeric ? 'sum' : 'count', field: firstNumeric, show_as: 'value', filters: [], filtersOpen: false,
+    agg: firstNumeric ? 'sum' : 'count', field: firstNumeric, show_as: 'value', filters: [], expanded: false,
     // calc
     op: 'sub', left: '', rightKind: 'metric', right: '',
     // grouped
@@ -297,7 +297,7 @@ function metricFromSpec(raw, b, idOf) {
   if (raw.type === 'agg') {
     Object.assign(m, { agg: raw.agg, field: raw.field || '', show_as: raw.show_as || 'value' });
     m.filters = (raw.filters || []).map(conditionFromSpec);
-    m.filtersOpen = m.filters.length > 0;
+    m.expanded = m.filters.length > 0;
   } else if (raw.type === 'calc') {
     const numeric = typeof raw.right === 'number';
     Object.assign(m, {
@@ -316,7 +316,7 @@ function metricFromSpec(raw, b, idOf) {
       having: (raw.having || []).map(h => groupConditionFromSpec(h, innerIds)),
     });
     m.filters = (raw.filters || []).map(conditionFromSpec);
-    m.filtersOpen = m.filters.length > 0;
+    m.expanded = m.filters.length > 0;
   }
   idOf[raw.as] = m._id;
   return m;
@@ -607,6 +607,9 @@ document.addEventListener('alpine:init', () => {
     compareOpOptions: COMPARE_OP_OPTIONS,
     isCountAgg,
     _nextId: -1,
+    // Sortable de la lista de métricas del drawer (se crea al abrirse y se destruye al cerrarse).
+    metricsListEl: null,
+    metricsSortable: null,
 
     schemaError: '',
 
@@ -1123,6 +1126,7 @@ document.addEventListener('alpine:init', () => {
       this.editingId = null;
       this.editingType = null;
       this.drawerDraft = {};
+      this.destroyMetricsList();
       this.drawerAskError = '';
       this.drawerAdvice = null;
       this.drawerAskOpen = false;
@@ -1141,6 +1145,49 @@ document.addEventListener('alpine:init', () => {
       const b = this.builder;
       if (!b || b.metrics.length <= 1) return;
       b.metrics.splice(index, 1);
+    },
+
+    // Arrastre de métricas: Sortable mueve los nodos y al soltar el orden del DOM se copia
+    // al builder. El alias de cada métrica se recalcula después (metricAliases), así que los
+    // cálculos entre métricas y los roles del KPI la siguen aunque cambie de posición.
+    initMetricsList(el) {
+      if (!el || typeof Sortable === 'undefined') return;
+      // El bloque del builder se crea y se destruye al cambiar de pestaña o de widget.
+      this.destroyMetricsList();
+      this.metricsListEl = el;
+      this.metricsSortable = new Sortable(el, {
+        draggable: '[data-metric-id]',
+        handle: '.metric-drag-handle',
+        animation: 150,
+        ghostClass: 'metric-ghost-preview',
+        onEnd: () => this.reorderMetrics(),
+      });
+    },
+
+    destroyMetricsList() {
+      if (this.metricsSortable) {
+        this.metricsSortable.destroy();
+        this.metricsSortable = null;
+      }
+      this.metricsListEl = null;
+    },
+
+    reorderMetrics() {
+      const b = this.builder;
+      const el = this.metricsListEl;
+      if (!b || !el) return;
+      const byId = new Map(b.metrics.map(m => [m._id, m]));
+      const ordered = Array.from(el.querySelectorAll('[data-metric-id]'))
+        .map(node => byId.get(node.dataset.metricId))
+        .filter(Boolean);
+      if (ordered.length !== b.metrics.length) return;
+      b.metrics.splice(0, b.metrics.length, ...ordered);
+    },
+
+    // Etiqueta completa de un tipo de métrica (el selector es angosto y la recorta).
+    metricTypeLabel(type) {
+      const found = METRIC_TYPE_OPTIONS.find(o => o.value === type);
+      return found ? found.label : '';
     },
 
     // Al pasar una métrica a "por grupo", arranca agrupando por la primera columna agrupable.

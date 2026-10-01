@@ -27,6 +27,12 @@
     );
   }
   .is-snapping { transition: height 0.16s ease-out; }
+  /* Fantasma de la métrica que se está arrastrando dentro del panel de edición. */
+  .metric-ghost-preview {
+    background-color: #f1f5f9 !important;
+    opacity: 0.6;
+    border-radius: 0.375rem;
+  }
   .grid-ghost-preview {
     background-color: #f1f5f9 !important;
     border: 2px dashed #cbd5e1 !important;
@@ -255,19 +261,21 @@
             </template>
 
             <template x-if="field.type === 'builder'">
-              <div class="rounded-xl border border-line p-3 space-y-3">
-                <div class="flex items-center gap-1.5 text-xs font-semibold text-ink/70">
-                  <i class="ti ti-adjustments-horizontal text-sm" aria-hidden="true"></i>
-                  <span>Constructor de datos</span>
-                </div>
+              <div class="space-y-3">
                 <p x-show="$store.dashboard.schemaError" x-text="$store.dashboard.schemaError" class="text-[11px] text-red-600"></p>
                 <p x-show="!$store.dashboard.schemaError && !($store.dashboard.schema.all_fields || []).length" class="text-[11px] text-ink/50">
                   Cargando columnas de la hoja…
                 </p>
 
-                <!-- 1-2. Filas y columnas (el KPI es un único total: no agrupa). La tabla admite
-                     varios niveles anidados, como una tabla dinámica de Sheets. -->
-                <div class="grid grid-cols-2 gap-2" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
+                <!-- Agrupar datos: qué filas y qué columnas forman la tabla. El KPI es un único
+                     total: no agrupa. La tabla admite varios niveles anidados, como una tabla
+                     dinámica de Sheets. -->
+                <div class="space-y-2" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Agrupar datos</h3>
+                    <p class="text-[11px] text-ink/40">qué filas y qué columnas de la hoja se usan</p>
+                  </div>
+                  <div class="grid grid-cols-2 gap-2">
                   <div>
                     <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-text="$store.dashboard.dimensionLabel"></label>
                     <div class="space-y-1">
@@ -346,56 +354,57 @@
                   </div>
                 </div>
 
-                <!-- 3. Apiladas: solo barras con pivote -->
-                <label x-show="$store.dashboard.showStacked" class="flex items-center gap-2 text-xs font-semibold text-ink/70">
-                  <input type="checkbox" x-model="$store.dashboard.drawerDraft.builder.stacked" class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
-                  Apiladas en vez de lado a lado
-                </label>
+                  <!-- Apiladas: solo barras con pivote -->
+                  <label x-show="$store.dashboard.showStacked" class="flex items-center gap-2 text-xs font-semibold text-ink/70">
+                    <input type="checkbox" x-model="$store.dashboard.drawerDraft.builder.stacked" class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+                    Apiladas en vez de lado a lado
+                  </label>
+                </div>
 
-                <!-- Valores de ejemplo de las columnas de texto (autocompletar de las condiciones) -->
+                <hr class="border-line/70 !mt-6" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
+
+                <!-- Valores de ejemplo de las columnas de texto (autocompletar de los filtros) -->
                 <template x-for="l in $store.dashboard.sampleLists" :key="l.id">
                   <datalist x-bind:id="l.id">
                     <template x-for="v in l.values" :key="v"><option x-bind:value="v"></option></template>
                   </datalist>
                 </template>
 
-                <!-- 4. Condiciones: qué filas entran al widget (WHERE) -->
-                <div>
-                  <label class="block text-[11px] font-semibold text-ink/60 mb-1">Condiciones <span class="font-normal text-ink/40">· qué filas de la hoja se usan</span></label>
-                  {% include "partials/builder_conditions.html" with list="$store.dashboard.drawerDraft.builder.filters" %}
-                </div>
-
-                <!-- 5. Métricas -->
-                <div>
-                  <label class="block text-[11px] font-semibold text-ink/60 mb-1">Métricas</label>
-                  <div class="space-y-1.5">
+                <!-- Métricas: cada una es una fila compacta; el detalle se despliega con el chevron. -->
+                <div class="space-y-2 pt-3">
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Métricas</h3>
+                    <p class="text-[11px] text-ink/40">lo que se mide y cómo se muestra</p>
+                  </div>
+                  <div class="divide-y divide-line/60 rounded-lg border border-line/70"
+                       x-init="$store.dashboard.initMetricsList($el)">
                     <template x-for="(m, i) in $store.dashboard.drawerDraft.builder.metrics" :key="m._id">
-                      <div class="space-y-1 rounded-lg border border-line/70 p-1.5">
+                      <div class="p-1.5" x-bind:data-metric-id="m._id">
+                        <!-- Fila compacta -->
                         <div class="flex items-center gap-1.5">
-                          <span class="shrink-0 h-5 w-5 rounded-full bg-paper border border-line text-[10px] font-semibold text-ink/60 flex items-center justify-center" x-text="i + 1"></span>
+                          <i class="ti ti-grip-vertical metric-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+                             aria-hidden="true" title="Arrastra para reordenar"></i>
+
                           <select x-model="m.type" x-on:change="$store.dashboard.onMetricTypeChange(m)" aria-label="Tipo de métrica"
-                                  class="flex-1 min-w-0 text-xs font-semibold text-ink/70 border border-line rounded-lg px-2 py-1 bg-paper/60 focus:outline-none focus:border-moss-500">
+                                  x-bind:title="$store.dashboard.metricTypeLabel(m.type)"
+                                  class="w-32 shrink-0 text-[11px] font-semibold text-ink/70 border border-line rounded-md px-1.5 py-1 bg-paper/60 focus:outline-none focus:border-moss-500">
                             <template x-for="t in $store.dashboard.metricTypes" :key="t.value">
                               <option x-bind:value="t.value" x-text="t.label" x-bind:selected="t.value === m.type"></option>
                             </template>
                           </select>
-                          <button type="button" x-on:click="$store.dashboard.removeBuilderMetric(i)"
-                                  x-bind:disabled="$store.dashboard.drawerDraft.builder.metrics.length <= 1"
-                                  class="text-ink/40 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-ink/40 transition cursor-pointer px-1.5 text-base leading-none"
-                                  title="Quitar métrica" aria-label="Quitar métrica">×</button>
-                        </div>
 
-                        <!-- Resumir una columna -->
-                        <template x-if="m.type === 'agg'">
-                          <div class="space-y-1">
-                            <div class="flex items-center gap-1.5">
-                              <select x-model="m.agg" title="Resumir por" class="w-32 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                          <!-- Resumir una columna -->
+                          <template x-if="m.type === 'agg'">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                              <select x-model="m.agg" title="Resumir por" aria-label="Resumir por"
+                                      class="w-28 shrink-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
                                 <template x-for="a in $store.dashboard.aggOptions" :key="a.value">
                                   <option x-bind:value="a.value" x-text="a.label" x-bind:selected="a.value === m.agg"></option>
                                 </template>
                               </select>
                               <template x-if="!$store.dashboard.isCountAgg(m.agg)">
-                                <select x-model="m.field" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                                <select x-model="m.field" aria-label="Columna"
+                                        class="w-28 shrink-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
                                   <option value="" x-text="m.agg === 'count_distinct' ? 'Elige una columna…' : 'Elige una columna numérica…'"></option>
                                   <template x-for="f in $store.dashboard.fieldOptionsFor(m.agg, m.field)" :key="f">
                                     <option x-bind:value="f" x-text="f" x-bind:selected="f === m.field"></option>
@@ -403,152 +412,163 @@
                                 </select>
                               </template>
                               <template x-if="$store.dashboard.isCountAgg(m.agg)">
-                                <span class="flex-1 min-w-0 text-sm text-ink/60 border border-dashed border-line rounded-lg px-2 py-1.5">Cantidad de filas</span>
+                                <span class="w-28 shrink-0 truncate text-xs text-ink/50">Cantidad de filas</span>
                               </template>
                             </div>
+                          </template>
+
+                          <template x-if="m.type === 'calc'">
+                            <span class="flex-1 min-w-0 truncate text-xs text-ink/50">Cálculo entre las métricas anteriores</span>
+                          </template>
+
+                          <template x-if="m.type === 'grouped'">
+                            <span class="flex-1 min-w-0 truncate text-xs text-ink/50">Condición o ranking por grupo</span>
+                          </template>
+
+                          <input type="text" x-model="m.label" x-show="$store.dashboard.drawerSupportsLabels"
+                                 x-bind:placeholder="$store.dashboard.metricLabelPlaceholder(i)"
+                                 aria-label="Nombre a mostrar de la métrica"
+                                 class="flex-1 min-w-[5rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+
+                          <button type="button" x-on:click="m.expanded = !m.expanded"
+                                  class="shrink-0 text-ink/40 hover:text-ink/70 transition cursor-pointer px-0.5 text-sm leading-none"
+                                  x-bind:aria-expanded="!!m.expanded"
+                                  x-bind:title="m.expanded ? 'Ocultar el detalle de la métrica' : 'Ver el detalle de la métrica'"
+                                  aria-label="Ver el detalle de la métrica">
+                            <i class="ti" x-bind:class="m.expanded ? 'ti-chevron-down' : 'ti-chevron-right'" aria-hidden="true"></i>
+                          </button>
+
+                          <button type="button" x-on:click="$store.dashboard.removeBuilderMetric(i)"
+                                  x-bind:disabled="$store.dashboard.drawerDraft.builder.metrics.length <= 1"
+                                  class="shrink-0 text-ink/40 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-ink/40 transition cursor-pointer px-0.5 text-base leading-none"
+                                  title="Quitar métrica" aria-label="Quitar métrica">×</button>
+                        </div>
+
+                        <!-- Detalle desplegable -->
+                        <div x-show="m.expanded" class="mt-2 pl-5 space-y-1.5 border-t border-dashed border-line/60 pt-2">
+                          <template x-if="m.type === 'agg'">
                             <div class="flex items-center gap-1.5">
-                              <span class="w-32 text-[11px] font-semibold text-ink/50 pl-1">Mostrar como</span>
-                              <select x-model="m.show_as" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                              <span class="w-28 shrink-0 text-[11px] font-semibold text-ink/50">Mostrar como</span>
+                              <select x-model="m.show_as" aria-label="Mostrar como" class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
                                 <template x-for="o in $store.dashboard.showAsOptions" :key="o.value">
                                   <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.showAsValue(m)"></option>
                                 </template>
                               </select>
                             </div>
-                            <!-- El filtro por métrica solo se ofrece en el KPI, que es donde su
-                                 porcentaje se calcula sobre el valor SIN esas condiciones. -->
-                            <template x-if="$store.dashboard.drawerIsKpi">
-                              <div>
-                                <button type="button" x-on:click="m.filtersOpen = !m.filtersOpen"
-                                        class="pl-1 text-[11px] font-semibold text-ink/50 hover:text-ink/70 cursor-pointer flex items-center gap-1">
-                                  <i class="ti text-sm" x-bind:class="m.filtersOpen ? 'ti-chevron-down' : 'ti-chevron-right'" aria-hidden="true"></i>
-                                  <span x-text="`Condiciones solo de esta métrica${m.filters.length ? ` (${m.filters.length})` : ''}`"></span>
-                                </button>
-                                <div x-show="m.filtersOpen" class="pl-1">
-                                  {% include "partials/builder_conditions.html" with list="m.filters" %}
-                                </div>
-                              </div>
-                            </template>
-                          </div>
-                        </template>
+                          </template>
 
-                        <!-- Cálculo entre métricas anteriores -->
-                        <template x-if="m.type === 'calc'">
-                          <div class="space-y-1">
-                            <p x-show="!$store.dashboard.metricRefOptions(i).length" class="text-[11px] text-clay-600 pl-1">
-                              Agrega antes las métricas con las que quieres calcular.
-                            </p>
-                            <div class="flex flex-wrap items-center gap-1">
-                              <select x-model="m.left" aria-label="Primera métrica" class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                                <option value="">Elige una métrica…</option>
-                                <template x-for="o in $store.dashboard.metricRefOptions(i)" :key="o.value">
-                                  <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.left"></option>
-                                </template>
-                              </select>
-                              <select x-model="m.op" aria-label="Operación" class="w-32 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                                <template x-for="o in $store.dashboard.calcOpOptions" :key="o.value">
-                                  <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.op"></option>
-                                </template>
-                              </select>
-                              <select x-model="m.rightKind" aria-label="Operar con" class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                                <option value="metric">métrica</option>
-                                <option value="number">número</option>
-                              </select>
-                              <template x-if="m.rightKind === 'metric'">
-                                <select x-model="m.right" aria-label="Segunda métrica" class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                          <!-- Cálculo entre métricas anteriores -->
+                          <template x-if="m.type === 'calc'">
+                            <div class="space-y-1">
+                              <p x-show="!$store.dashboard.metricRefOptions(i).length" class="text-[11px] text-clay-600">
+                                Agrega antes las métricas con las que quieres calcular.
+                              </p>
+                              <div class="flex flex-wrap items-center gap-1">
+                                <select x-model="m.left" aria-label="Primera métrica" class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
                                   <option value="">Elige una métrica…</option>
                                   <template x-for="o in $store.dashboard.metricRefOptions(i)" :key="o.value">
-                                    <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.right"></option>
+                                    <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.left"></option>
                                   </template>
                                 </select>
-                              </template>
-                              <template x-if="m.rightKind === 'number'">
-                                <input type="number" x-model="m.right" placeholder="Número" aria-label="Número" class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                              </template>
-                            </div>
-                          </div>
-                        </template>
-
-                        <!-- Por grupo (solo KPI): condición sobre grupos o ranking -->
-                        <template x-if="m.type === 'grouped'">
-                          <div class="space-y-1.5">
-                            <div class="flex items-center gap-1.5">
-                              <span class="w-32 text-[11px] font-semibold text-ink/50 pl-1">Agrupar por</span>
-                              <select x-model="m.group_by" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                                <option value="">Elige una columna…</option>
-                                <template x-for="f in $store.dashboard.schema.dimension_fields" :key="f">
-                                  <option x-bind:value="f" x-text="f" x-bind:selected="f === m.group_by"></option>
+                                <select x-model="m.op" aria-label="Operación" class="w-28 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                  <template x-for="o in $store.dashboard.calcOpOptions" :key="o.value">
+                                    <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.op"></option>
+                                  </template>
+                                </select>
+                                <select x-model="m.rightKind" aria-label="Operar con" class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                  <option value="metric">métrica</option>
+                                  <option value="number">número</option>
+                                </select>
+                                <template x-if="m.rightKind === 'metric'">
+                                  <select x-model="m.right" aria-label="Segunda métrica" class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                    <option value="">Elige una métrica…</option>
+                                    <template x-for="o in $store.dashboard.metricRefOptions(i)" :key="o.value">
+                                      <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.right"></option>
+                                    </template>
+                                  </select>
                                 </template>
-                              </select>
-                            </div>
-                            <div class="pl-1">
-                              <span class="block text-[11px] font-semibold text-ink/50 mb-0.5">En cada grupo, calcular</span>
-                              <div class="space-y-1">
-                                <template x-for="(x, xi) in m.inner" :key="x._id">
-                                  <div class="flex items-center gap-1">
-                                    <select x-model="x.agg" aria-label="Resumir por" class="w-28 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                                      <template x-for="a in $store.dashboard.aggOptions" :key="a.value">
-                                        <option x-bind:value="a.value" x-text="a.label" x-bind:selected="a.value === x.agg"></option>
-                                      </template>
-                                    </select>
-                                    <template x-if="!$store.dashboard.isCountAgg(x.agg)">
-                                      <select x-model="x.field" aria-label="Columna" class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                                        <option value="">Elige una columna…</option>
-                                        <template x-for="f in $store.dashboard.fieldOptionsFor(x.agg, x.field)" :key="f">
-                                          <option x-bind:value="f" x-text="f" x-bind:selected="f === x.field"></option>
-                                        </template>
-                                      </select>
-                                    </template>
-                                    <template x-if="$store.dashboard.isCountAgg(x.agg)">
-                                      <span class="flex-1 min-w-0 text-xs text-ink/60 border border-dashed border-line rounded-md px-1.5 py-1">Cantidad de filas</span>
-                                    </template>
-                                    <button type="button" x-on:click="$store.dashboard.removeInnerMetric(m, xi)" x-bind:disabled="m.inner.length <= 1"
-                                            class="text-ink/40 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer px-1 text-base leading-none"
-                                            title="Quitar" aria-label="Quitar métrica del grupo">×</button>
-                                  </div>
+                                <template x-if="m.rightKind === 'number'">
+                                  <input type="number" x-model="m.right" placeholder="Número" aria-label="Número" class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
                                 </template>
                               </div>
-                              <button type="button" x-show="m.inner.length < 3" x-on:click="$store.dashboard.addInnerMetric(m)"
-                                      class="mt-1 text-xs font-medium text-moss-700 hover:text-moss-800 cursor-pointer flex items-center gap-1">
-                                <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar cálculo
-                              </button>
                             </div>
-                            <div class="pl-1">
-                              <span class="block text-[11px] font-semibold text-ink/50 mb-0.5">Solo los grupos donde <span class="font-normal text-ink/40">(opcional)</span></span>
-                              {% include "partials/builder_group_conditions.html" with list="m.having" options="$store.dashboard.innerRefOptions(m)" %}
-                            </div>
-                            <div class="flex flex-wrap items-center gap-1.5">
-                              <span class="w-32 text-[11px] font-semibold text-ink/50 pl-1">Mostrar</span>
-                              <select x-model="m.result" class="flex-1 min-w-[8rem] text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                                <template x-for="o in $store.dashboard.groupResultOptions" :key="o.value">
-                                  <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.result"></option>
-                                </template>
-                              </select>
-                              <template x-if="$store.dashboard.groupResultNeedsValue(m)">
-                                <select x-model="m.value" aria-label="De qué cálculo" class="flex-1 min-w-[8rem] text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                                  <option value="">Elige un cálculo…</option>
-                                  <template x-for="o in $store.dashboard.innerRefOptions(m)" :key="o.value">
-                                    <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.value"></option>
+                          </template>
+
+                          <!-- Por grupo (solo KPI): condición sobre grupos o ranking -->
+                          <template x-if="m.type === 'grouped'">
+                            <div class="space-y-1.5">
+                              <div class="flex items-center gap-1.5">
+                                <span class="w-28 shrink-0 text-[11px] font-semibold text-ink/50">Agrupar por</span>
+                                <select x-model="m.group_by" class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                  <option value="">Elige una columna…</option>
+                                  <template x-for="f in $store.dashboard.schema.dimension_fields" :key="f">
+                                    <option x-bind:value="f" x-text="f" x-bind:selected="f === m.group_by"></option>
                                   </template>
                                 </select>
-                              </template>
+                              </div>
+                              <div class="pl-1">
+                                <span class="block text-[11px] font-semibold text-ink/50 mb-0.5">En cada grupo, calcular</span>
+                                <div class="space-y-1">
+                                  <template x-for="(x, xi) in m.inner" :key="x._id">
+                                    <div class="flex items-center gap-1">
+                                      <select x-model="x.agg" aria-label="Resumir por" class="w-28 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                        <template x-for="a in $store.dashboard.aggOptions" :key="a.value">
+                                          <option x-bind:value="a.value" x-text="a.label" x-bind:selected="a.value === x.agg"></option>
+                                        </template>
+                                      </select>
+                                      <template x-if="!$store.dashboard.isCountAgg(x.agg)">
+                                        <select x-model="x.field" aria-label="Columna" class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                          <option value="">Elige una columna…</option>
+                                          <template x-for="f in $store.dashboard.fieldOptionsFor(x.agg, x.field)" :key="f">
+                                            <option x-bind:value="f" x-text="f" x-bind:selected="f === x.field"></option>
+                                          </template>
+                                        </select>
+                                      </template>
+                                      <template x-if="$store.dashboard.isCountAgg(x.agg)">
+                                        <span class="flex-1 min-w-0 text-xs text-ink/50">Cantidad de filas</span>
+                                      </template>
+                                      <button type="button" x-on:click="$store.dashboard.removeInnerMetric(m, xi)" x-bind:disabled="m.inner.length <= 1"
+                                              class="text-ink/40 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer px-1 text-base leading-none"
+                                              title="Quitar" aria-label="Quitar métrica del grupo">×</button>
+                                    </div>
+                                  </template>
+                                </div>
+                                <button type="button" x-show="m.inner.length < 3" x-on:click="$store.dashboard.addInnerMetric(m)"
+                                        class="mt-1 text-xs font-medium text-moss-700 hover:text-moss-800 cursor-pointer flex items-center gap-1">
+                                  <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar cálculo
+                                </button>
+                              </div>
+                              <div class="pl-1">
+                                <span class="block text-[11px] font-semibold text-ink/50 mb-0.5">Solo los grupos donde <span class="font-normal text-ink/40">(opcional)</span></span>
+                                {% include "partials/builder_group_conditions.html" with list="m.having" options="$store.dashboard.innerRefOptions(m)" %}
+                              </div>
+                              <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="w-28 shrink-0 text-[11px] font-semibold text-ink/50">Mostrar</span>
+                                <select x-model="m.result" class="flex-1 min-w-[8rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                  <template x-for="o in $store.dashboard.groupResultOptions" :key="o.value">
+                                    <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.result"></option>
+                                  </template>
+                                </select>
+                                <template x-if="$store.dashboard.groupResultNeedsValue(m)">
+                                  <select x-model="m.value" aria-label="De qué cálculo" class="flex-1 min-w-[8rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                                    <option value="">Elige un cálculo…</option>
+                                    <template x-for="o in $store.dashboard.innerRefOptions(m)" :key="o.value">
+                                      <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === m.value"></option>
+                                    </template>
+                                  </select>
+                                </template>
+                              </div>
                             </div>
-                            <button type="button" x-on:click="m.filtersOpen = !m.filtersOpen"
-                                    class="pl-1 text-[11px] font-semibold text-ink/50 hover:text-ink/70 cursor-pointer flex items-center gap-1">
-                              <i class="ti text-sm" x-bind:class="m.filtersOpen ? 'ti-chevron-down' : 'ti-chevron-right'" aria-hidden="true"></i>
-                              <span x-text="`Condiciones solo de esta métrica${m.filters.length ? ` (${m.filters.length})` : ''}`"></span>
-                            </button>
-                            <div x-show="m.filtersOpen" class="pl-1">
+                          </template>
+
+                          <!-- El filtro por métrica solo se ofrece en el KPI, que es donde su
+                               porcentaje se calcula sobre el valor SIN esas condiciones. -->
+                          <template x-if="$store.dashboard.drawerIsKpi && m.type !== 'calc'">
+                            <div class="pl-1">
+                              <span class="block text-[11px] font-semibold text-ink/50 mb-0.5">Usar solo algunas filas de la hoja para esta métrica</span>
                               {% include "partials/builder_conditions.html" with list="m.filters" %}
                             </div>
-                          </div>
-                        </template>
-
-                        <!-- Cabecera / etiqueta. Vacío = la de por defecto (el placeholder). -->
-                        <div class="flex items-center gap-1.5" x-show="$store.dashboard.drawerSupportsLabels">
-                          <span class="w-32 text-[11px] font-semibold text-ink/50 pl-1">Nombre a mostrar</span>
-                          <input type="text" x-model="m.label" x-bind:placeholder="$store.dashboard.metricLabelPlaceholder(i)"
-                                 aria-label="Nombre a mostrar de la métrica"
-                                 class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                          </template>
                         </div>
                       </div>
                     </template>
@@ -556,16 +576,15 @@
                   <button type="button" x-show="$store.dashboard.maxMetrics > 1"
                           x-on:click="$store.dashboard.addBuilderMetric()"
                           x-bind:disabled="$store.dashboard.drawerDraft.builder.metrics.length >= $store.dashboard.maxMetrics"
-                          class="mt-1.5 text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1">
+                          class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1">
                     <i class="ti ti-plus text-sm" aria-hidden="true"></i>
                     <span x-text="$store.dashboard.drawerDraft.builder.metrics.length >= $store.dashboard.maxMetrics ? `Máximo ${$store.dashboard.maxMetrics} métricas` : 'Agregar métrica'"></span>
                   </button>
-                </div>
 
-                <!-- 6. Tarjeta KPI: roles de las métricas (solo presentación) -->
-                <template x-if="$store.dashboard.drawerIsKpi">
-                  <div class="rounded-lg border border-line/70 p-2 space-y-1.5">
-                    <span class="block text-[11px] font-semibold text-ink/60">Tarjeta</span>
+                  <!-- Tarjeta KPI: roles de las métricas (solo presentación) -->
+                  <template x-if="$store.dashboard.drawerIsKpi">
+                    <div class="rounded-lg border border-line/70 p-2 space-y-1.5">
+                      <span class="block text-[11px] font-semibold text-ink/60">Tarjeta</span>
                     <div class="flex items-center gap-1.5">
                       <span class="w-32 text-[11px] font-semibold text-ink/50 pl-1">Número principal</span>
                       <select x-model="$store.dashboard.drawerDraft.builder.kpi.primary" class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
@@ -642,50 +661,71 @@
                     </div>
                   </div>
                 </template>
-
-                <div class="grid grid-cols-2 gap-2" x-show="$store.dashboard.drawerWidgetClass.supportsDimension">
-                  <div>
-                    <label class="block text-[11px] font-semibold text-ink/60 mb-1">Ordenar por</label>
-                    <select x-model="$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                      <option value="">Orden de la hoja</option>
-                      <template x-for="o in $store.dashboard.sortOptions" :key="o.value">
-                        <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.drawerDraft.builder.sortBy"></option>
-                      </template>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="block text-[11px] font-semibold text-ink/60 mb-1">Dirección</label>
-                    <select x-model="$store.dashboard.drawerDraft.builder.sortDir" x-bind:disabled="!$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50">
-                      <option value="desc">Mayor a menor</option>
-                      <option value="asc">Menor a mayor</option>
-                    </select>
-                  </div>
                 </div>
 
-                <!-- 7. Grupos: condición sobre los grupos de la primera fila/categoría y Top N -->
+                <hr class="border-line/70 !mt-6">
+
+                <!-- Filtros: qué filas de la hoja entran al widget (WHERE) -->
+                <div class="space-y-2 pt-3">
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Filtros</h3>
+                    <p class="text-[11px] text-ink/40">qué filas de la hoja se usan</p>
+                  </div>
+                  {% include "partials/builder_conditions.html" with list="$store.dashboard.drawerDraft.builder.filters" %}
+                </div>
+
+                <hr class="border-line/70 !mt-6">
+
+                <!-- Filtrar resultado: condición sobre los grupos de la primera fila/categoría y Top N.
+                     Solo donde hay grupos: el KPI es un único total. -->
                 <template x-if="$store.dashboard.drawerWidgetClass.supportsDimension">
-                  <div class="space-y-1.5">
-                    <div>
-                      <label class="block text-[11px] font-semibold text-ink/60 mb-1">Mostrar solo los grupos donde <span class="font-normal text-ink/40">(opcional)</span></label>
+                  <div class="space-y-3">
+                    <div class="space-y-2 pt-3">
+                      <div class="flex items-center gap-2">
+                        <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Filtrar resultado</h3>
+                        <p class="text-[11px] text-ink/40">según el valor ya calculado</p>
+                      </div>
                       {% include "partials/builder_group_conditions.html" with list="$store.dashboard.drawerDraft.builder.having" options="$store.dashboard.metricRefOptions()" %}
                     </div>
-                    <div class="flex items-center gap-2">
-                      <label class="text-[11px] font-semibold text-ink/60">Mostrar solo los primeros</label>
-                      <input type="number" min="1" max="100" x-model="$store.dashboard.drawerDraft.builder.limitN" placeholder="Todos"
-                             aria-label="Top N" class="w-20 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
-                      <label x-show="$store.dashboard.drawerDraft.builder.limitN" class="flex items-center gap-1.5 text-[11px] text-ink/60 cursor-pointer">
-                        <input type="checkbox" x-model="$store.dashboard.drawerDraft.builder.limitOthers"
-                               class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
-                        Agrupar el resto en «Otros»
-                      </label>
+
+                    <div class="grid grid-cols-2 gap-2">
+                      <div>
+                        <label class="block text-[11px] font-semibold text-ink/60 mb-1">Ordenar por</label>
+                        <select x-model="$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                          <option value="">Orden de la hoja</option>
+                          <template x-for="o in $store.dashboard.sortOptions" :key="o.value">
+                            <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.drawerDraft.builder.sortBy"></option>
+                          </template>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="block text-[11px] font-semibold text-ink/60 mb-1">Dirección</label>
+                        <select x-model="$store.dashboard.drawerDraft.builder.sortDir" x-bind:disabled="!$store.dashboard.drawerDraft.builder.sortBy" class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                          <option value="desc">Mayor a menor</option>
+                          <option value="asc">Menor a mayor</option>
+                        </select>
+                      </div>
                     </div>
-                    <p x-show="$store.dashboard.limitNeedsMetricSort" class="text-[11px] text-clay-600">
-                      Para un Top N elige en «Ordenar por» la métrica que define quiénes son los primeros.
-                    </p>
+
+                    <div class="space-y-1">
+                      <div class="flex items-center gap-2">
+                        <label class="text-[11px] font-semibold text-ink/60">Mostrar solo los primeros</label>
+                        <input type="number" min="1" max="100" x-model="$store.dashboard.drawerDraft.builder.limitN" placeholder="Todos"
+                               aria-label="Top N" class="w-20 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                        <label x-show="$store.dashboard.drawerDraft.builder.limitN" class="flex items-center gap-1.5 text-[11px] text-ink/60 cursor-pointer">
+                          <input type="checkbox" x-model="$store.dashboard.drawerDraft.builder.limitOthers"
+                                 class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+                          Agrupar el resto en «Otros»
+                        </label>
+                      </div>
+                      <p x-show="$store.dashboard.limitNeedsMetricSort" class="text-[11px] text-clay-600">
+                        Para un Top N elige en «Ordenar por» la métrica que define quiénes son los primeros.
+                      </p>
+                    </div>
                   </div>
                 </template>
 
-                <!-- 8. Visor JSON de solo lectura -->
+                <!-- Visor JSON de solo lectura -->
                 <details class="text-[11px]">
                   <summary class="cursor-pointer text-ink/50 hover:text-ink/70 select-none">Ver JSON del widget</summary>
                   <div class="mt-2 space-y-2">

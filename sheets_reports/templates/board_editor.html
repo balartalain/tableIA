@@ -41,7 +41,6 @@
   .grid-numbers-header {
     position: sticky;
     top: 0;
-    z-index: 10;
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
     gap: 1rem;
@@ -248,7 +247,7 @@
                       <i class="ti ti-wand text-base" aria-hidden="true"></i>
                       Aplicar pasos
                     </button>
-                    <p class="text-[11px] text-ink/50">Rellena el constructor con esta configuración; revisa y pulsa «Aplicar al widget».</p>
+                    <p class="text-[11px] text-ink/50">Rellena el constructor con esta configuración; revisa y pulsa «Guardar».</p>
                   </div>
                 </template>
                 </div>
@@ -680,15 +679,7 @@
                   </div>
                 </template>
 
-                <!-- 8. Aplicar: PUT /api/widget/<id>/spec/, nunca llama a la IA -->
-                <button type="button" x-on:click="$store.dashboard.applyBuilder()"
-                        x-bind:disabled="$store.dashboard.drawerApplying || !$store.dashboard.builderDirty"
-                        class="w-full text-sm font-medium text-moss-700 border border-moss-300 hover:bg-moss-tint disabled:opacity-40 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
-                  <i class="ti text-base" x-bind:class="$store.dashboard.drawerApplying ? 'ti-loader-2 animate-spin' : 'ti-check'" aria-hidden="true"></i>
-                  <span x-text="$store.dashboard.drawerApplying ? 'Aplicando…' : ($store.dashboard.editingId < 0 ? 'Crear widget con estos datos' : 'Aplicar al widget seleccionado')"></span>
-                </button>
-
-                <!-- 9. Visor JSON de solo lectura -->
+                <!-- 8. Visor JSON de solo lectura -->
                 <details class="text-[11px]">
                   <summary class="cursor-pointer text-ink/50 hover:text-ink/70 select-none">Ver JSON del widget</summary>
                   <div class="mt-2 space-y-2">

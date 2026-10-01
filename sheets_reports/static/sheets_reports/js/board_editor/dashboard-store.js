@@ -792,7 +792,7 @@ document.addEventListener('alpine:init', () => {
       if (b.limitN) {
         steps.push({ title: 'Top', detail: `Mostrar solo los primeros ${b.limitN}${b.limitOthers ? ' y agrupar el resto en «Otros»' : ''}` });
       }
-      steps.push({ title: 'Listo', detail: 'Pulsa «Aplicar al widget» para ver la tabla.' });
+      steps.push({ title: 'Listo', detail: 'Pulsa «Guardar» para ver la tabla.' });
       return steps;
     },
 
@@ -1148,9 +1148,9 @@ document.addEventListener('alpine:init', () => {
       if (m.type === 'grouped' && !m.group_by) m.group_by = (this.schema.dimension_fields || [])[0] || '';
     },
 
-    // "Aplicar al widget seleccionado": escribe data_spec vía update_widget_spec. NUNCA llama a
-    // la IA. Si el backend rechaza la combinación, muestra su mensaje en el banner y no toca el
-    // widget. Retorna true si se aplicó.
+    // Escritura del data_spec vía update_widget_spec, desde "Guardar". NUNCA llama a la IA. Si
+    // el backend rechaza la combinación, muestra su mensaje en el banner y no toca el widget.
+    // Retorna true si se aplicó.
     async applyBuilder() {
       const w = this.editingWidget;
       const b = this.builder;
@@ -1250,8 +1250,7 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Rellena el constructor con la sugerencia. No guarda: el usuario revisa y pulsa
-    // "Aplicar al widget".
+    // Rellena el constructor con la sugerencia. No guarda: el usuario revisa y pulsa "Guardar".
     applyAdvice() {
       const a = this.drawerAdvice;
       if (!a) return;
@@ -1265,6 +1264,9 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    // Guardar es el único punto de confirmación del panel: aplica el spec de datos (si
+    // cambió) y persiste la presentación. Siempre guarda, aunque no haya cambios, y NO cierra
+    // el panel: se sigue editando sobre el mismo widget.
     async saveDrawer() {
       const w = this.editingWidget;
       if (!w) return;
@@ -1272,19 +1274,21 @@ document.addEventListener('alpine:init', () => {
       this.drawerSaveError = '';
       try {
         const { prompt, builder, ...presentation } = this.drawerDraft;
-        // Cambios del builder sin aplicar: se aplican con el mismo camino que el botón.
+        // Cambios del builder sin aplicar: se aplican con el mismo camino que antes el botón.
         if (builder && this.builderDirty && !(await this.applyBuilder())) return;
 
         // Última barrera antes de guardar: si el ancho y la columna de inicio no caben en las
         // 12 columnas del grid, se ajusta el inicio en vez de persistir un diseño inválido.
         presentation.startCol = BaseWidget.fitStartCol(presentation.startCol, presentation.width);
         Object.assign(w, presentation);
-        await this._saveWidget(w);
+        if (!await this._saveWidget(w)) {
+          this.drawerSaveError = 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
+          return;
+        }
         w.updateChrome();
         // Opciones de presentación que cambian el contenido (ej. totales de la tabla): se
         // redibuja con los datos ya calculados, sin volver a pedirlos.
         if (w._lastEntry) w.applyRender(w._lastEntry);
-        this.closeDrawer();
       } catch (e) {
         this.drawerSaveError = e.message;
       } finally {

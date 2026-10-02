@@ -46,9 +46,8 @@
     min-height: 10px !important;
     grid-column: span var(--ghost-span, 6) / span var(--ghost-span, 6) !important;
   }
-  /* Sticky la ancla solo en vertical; en horizontal se desplaza junto a las columnas.
-     El ancho en px lo copia setupColumnRulerSync del lienzo, así sus 12 pistas miden
-     exactamente lo mismo que las del grid de abajo. */
+  /* Fija arriba al hacer scroll vertical. Es un bloque del mismo contenedor que el lienzo:
+     mide lo mismo que él y, con el mismo padding, sus 12 pistas coinciden con las del grid. */
   .grid-numbers-header {
     position: sticky;
     top: 0;

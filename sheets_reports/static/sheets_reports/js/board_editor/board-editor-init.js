@@ -143,42 +143,19 @@ async function copyToClipboard(text) {
   document.body.removeChild(textarea);
 }
 
-// Al abrir el panel de edición el lienzo conserva el ancho que tenía (los widgets no se
-// redimensionan) y #board-main saca scroll horizontal; al cerrarlo vuelve a ser fluido.
-function setupCanvasFreeze(canvasEl, store) {
-  let wasOpen = false;
-  Alpine.effect(() => {
-    const isOpen = !!store.editingId;
-    if (isOpen === wasOpen) return;
-    wasOpen = isOpen;
-    canvasEl.style.width = isOpen ? `${canvasEl.offsetWidth}px` : '';
-  });
-}
-
-// La regla de columnas es un bloque normal dentro del contenedor de scroll, así que su
-// ancho es el del viewport y no el del lienzo. Cuando el lienzo se congela al abrir el
-// panel (setupCanvasFreeze) queda más ancho que el viewport y los números se descuadran.
-// Se le copia el ancho real del lienzo para que sus 12 pistas midan lo mismo que las suyas.
-function setupColumnRulerSync(canvasEl, rulerEl) {
-  const sync = () => {
-    const width = canvasEl.getBoundingClientRect().width;
-    if (width > 0) rulerEl.style.width = `${width}px`;
-  };
-  new ResizeObserver(sync).observe(canvasEl);
-  window.addEventListener('resize', sync);
-  sync();
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
   const canvasEl = document.getElementById('dashboard-canvas');
   const sidebarEl = document.getElementById('sidebar-components');
   const store = Alpine.store('dashboard');
 
-  setupCanvasFreeze(canvasEl, store);
-  const rulerEl = document.querySelector('.grid-numbers-header');
-  if (rulerEl) setupColumnRulerSync(canvasEl, rulerEl);
   renderPalette(sidebarEl);
   initRail(sidebarEl);
+
+  // El panel cambia el ancho del lienzo: gráficos y tablas se reajustan al terminar la animación.
+  const drawerEl = document.getElementById('edit-drawer');
+  drawerEl.addEventListener('transitionend', (e) => {
+    if (e.target === drawerEl && e.propertyName === 'width') window.dispatchEvent(new Event('resize'));
+  });
 
   store.loadSchema();
 

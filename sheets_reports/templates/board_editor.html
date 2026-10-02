@@ -17,14 +17,19 @@
 
 <style>
   #dashboard-filters:empty { display: none; }
-  #dashboard-canvas {
-    background-origin: content-box;
+  /* Franjas de columnas en todo el área del lienzo (detrás de filtros y debajo del último
+     widget). Va en el contenedor de scroll y no en <main>: su 100% excluye la barra de scroll
+     vertical, así que coincide con el ancho del grid. El inset de 16px es el p-4 del lienzo. */
+  #board-scroll {
+    background-position: 16px 0;
+    background-size: calc(100% - 32px) 100%;
+    background-repeat: no-repeat;
     background-image: repeating-linear-gradient(
         90deg,
         transparent 0,
         transparent calc(100% / 12),
-        rgba(148, 163, 184, 0.07) calc(100% / 12),
-        rgba(148, 163, 184, 0.07) calc(100% / 12 * 2)
+        rgba(0, 0, 0, 0.035) calc(100% / 12),
+        rgba(0, 0, 0, 0.035) calc(100% / 12 * 2)
     );
   }
   .is-snapping { transition: height 0.16s ease-out; }
@@ -66,6 +71,7 @@
     background: rgba(255, 255, 255, 0.9);
     border-bottom: 1px dashed rgba(239, 68, 68, 0.4);
     text-align: center;
+    z-index: 10;
   }
   /* El header real mide 4rem + el 1px de su border-b, así que en vez de calcularlo
      con un calc se deja que flexbox mida el header de verdad. */
@@ -109,7 +115,7 @@
       if (localStorage.getItem('tableia:rail-collapsed') === '1') document.documentElement.dataset.rail = 'collapsed';
     } catch (e) {}
   </script>
-  <aside id="module-rail" class="relative shrink-0 bg-white border-r border-line shadow-sm z-10">
+  <aside id="module-rail" class="relative shrink-0 bg-white border-r border-line shadow-sm z-20">
     <div class="rail-body h-full overflow-y-auto overflow-x-hidden px-4 py-5">
       <div class="rail-header mb-4">
         <h2 class="text-base font-bold text-ink whitespace-nowrap">Módulos</h2>
@@ -150,8 +156,8 @@
         <span>12</span>
       </div>
       <!-- Caja de filtros (widgets con placement 'header'): arriba del grid, bajo la regla. -->
-      <div id="dashboard-filters" class="bg-paper px-4 pt-4"></div>
-      <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start flex-1 bg-paper p-4">
+      <div id="dashboard-filters" class="px-4 pt-4"></div>
+      <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start flex-1 p-4">
       </div>
     </div>
   </main>

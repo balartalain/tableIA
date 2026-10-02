@@ -99,8 +99,14 @@
         container.style.overflowY = '';
       }
 
+      // Si todas las series son %, el eje de valores lleva "%". En horizontal ApexCharts cambia
+      // los ejes: los valores van en el X y las categorías en el Y (allí el formatter daría NaN).
+      const percentAxis = BaseWidget.allSeriesPercent(payload, series)
+        ? { formatter: (val) => `${Math.round(val)}%` }
+        : {};
+
       const options = {
-        chart: { type: 'bar', stacked: !!payload.stacked, height: '90%', width: this.chartWidth || '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
+        chart: { type: 'bar', stacked: !!payload.stacked, height: '100%', width: this.chartWidth || '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
         colors: series.map((s, i) => this._seriesColors.get(s.name) || COLOR_PALETTE[i % COLOR_PALETTE.length]),
         series,
         xaxis: {
@@ -111,7 +117,8 @@
             style: {
               fontSize: '12px',
               cssClass: 'apexcharts-xaxis-label-centered'
-            }
+            },
+            ...(this.horizontal && percentAxis),
           },
           maxHeight: 150
         },
@@ -171,7 +178,7 @@
         yaxis: {
           labels: {
             ...(this.yAxisWidth && { maxWidth: this.yAxisWidth }),
-            ...(BaseWidget.allSeriesPercent(payload, series) && { formatter: (val) => `${Math.round(val)}%` }),
+            ...(!this.horizontal && percentAxis),
           },
           min: (min) => Math.min(min, 0),
           max: (max) => max * 1.12,

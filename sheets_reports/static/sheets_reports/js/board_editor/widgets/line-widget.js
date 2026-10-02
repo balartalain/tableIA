@@ -26,7 +26,7 @@
       const categories = payload.categories || [];
       const options = {
         chart: {
-          type: 'line', height: '90%', width: '100%', fontFamily: 'inherit',
+          type: 'line', height: '100%', width: '100%', fontFamily: 'inherit',
           // Solo descargar (igual que barras y dona): el zoom/pan no sirve en un eje de
           // categorías y sus íconos se dibujaban encima del gráfico.
           toolbar: this.chartExportToolbar(),

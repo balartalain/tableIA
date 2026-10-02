@@ -211,6 +211,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     animation: 150,
     ghostClass: 'grid-ghost-preview',
     handle: '.drag-handle',
+    // Arrastre de Sortable en vez del nativo: la copia del navegador se dibuja encima del widget
+    // reducida y desvanecida (si es grande) y, al mover despacio, se ve como un flash. La de
+    // Sortable es un clon del mismo tamaño que sigue al cursor.
+    forceFallback: true,
+    fallbackTolerance: 3,
+    // El clon va en <body>: dentro del lienzo sería otro hijo del grid con el mismo data-widget-id.
+    fallbackOnBody: true,
 
     onAdd: function (evt) {
       const type = evt.item.getAttribute('data-type');

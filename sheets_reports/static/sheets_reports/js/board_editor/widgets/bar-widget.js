@@ -218,7 +218,14 @@
       this._legendSortable = null;
       if (!sortable) return;
       if (Sortable.active || Sortable.dragged) {
-        document.addEventListener('dragend', () => sortable.destroy(), { once: true });
+        // dragend en el arrastre nativo (paleta) y mouseup/touchend en el de Sortable (lienzo):
+        // los mismos con los que Sortable lo cierra. El setTimeout lo deja terminar antes.
+        const endEvents = ['dragend', 'mouseup', 'touchend'];
+        const done = () => {
+          endEvents.forEach(type => document.removeEventListener(type, done));
+          setTimeout(() => sortable.destroy());
+        };
+        endEvents.forEach(type => document.addEventListener(type, done));
       } else {
         sortable.destroy();
       }

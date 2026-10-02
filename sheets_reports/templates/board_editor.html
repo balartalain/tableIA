@@ -36,7 +36,11 @@
   }
   .grid-ghost-preview {
     background-color: #f1f5f9 !important;
-    border: 2px dashed #cbd5e1 !important;
+    /* El contorno punteado va en outline (no ocupa espacio): un border más grueso que el de
+       la tarjeta achicaría la gráfica y ApexCharts la redibujaría entera (parpadeo). */
+    border-color: transparent !important;
+    outline: 2px dashed #cbd5e1;
+    outline-offset: -2px;
     border-radius: 0.75rem;
     opacity: 0.5;
     min-height: 10px !important;

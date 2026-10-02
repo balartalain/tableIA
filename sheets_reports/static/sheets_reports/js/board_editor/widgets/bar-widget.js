@@ -105,6 +105,11 @@
         ? { formatter: (val) => `${Math.round(val)}%` }
         : {};
 
+      const roundLabel = (val) => (val == null || isNaN(val) ? val : Math.round(Number(val)));
+      // Plantilla del usuario ("$ {value}"): manda sobre el "%" automático, en etiquetas y tooltip.
+      const template = this.dataLabelFormatter;
+      const withTemplate = (format) => (val) => (val == null ? val : template.replace('{value}', format(val)));
+
       const options = {
         chart: { type: 'bar', stacked: !!payload.stacked, height: '100%', width: this.chartWidth || '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
         colors: series.map((s, i) => this._seriesColors.get(s.name) || COLOR_PALETTE[i % COLOR_PALETTE.length]),
@@ -134,9 +139,10 @@
         dataLabels: {
           enabled: true,
           // El formato configurado por el usuario manda; si no hay, las series % llevan "%".
-          formatter: this.dataLabelFormatter
-            ? (val) => this.dataLabelFormatter.replace('{value}', val)
-            : BaseWidget.percentAwareFormatter(payload.percent),
+          // Sin decimales: el valor real se ve en el tooltip.
+          formatter: template
+            ? withTemplate(roundLabel)
+            : BaseWidget.percentAwareFormatter(payload.percent, roundLabel, 0),
           //crop: false,
           offsetY: !this.horizontal && !payload.stacked ? -20 : 0,
           offsetX: this.horizontal && !payload.stacked ? 20 : 0,
@@ -173,7 +179,8 @@
         tooltip: {
           shared: true,
           intersect: false,
-          y: { formatter: BaseWidget.percentAwareFormatter(payload.percent) },
+          // Misma plantilla que las etiquetas, pero con el valor real (sin redondear).
+          y: { formatter: template ? withTemplate((val) => val) : BaseWidget.percentAwareFormatter(payload.percent) },
         },
         yaxis: {
           labels: {

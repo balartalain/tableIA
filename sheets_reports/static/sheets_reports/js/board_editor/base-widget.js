@@ -173,12 +173,12 @@
 
     // Formateador de ApexCharts que agrega "%" a las series de métricas pct_* (payload.percent
     // trae sus nombres). `fallback(val)` formatea el resto de las series.
-    static percentAwareFormatter(percentNames, fallback = (val) => val) {
+    static percentAwareFormatter(percentNames, fallback = (val) => val, maxDigits = 2) {
       const names = new Set(percentNames || []);
       return (val, opts) => {
         const name = opts && opts.w ? opts.w.globals.seriesNames[opts.seriesIndex] : null;
         if (val == null || !names.has(name)) return fallback(val);
-        return `${Number(val).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+        return `${Number(val).toLocaleString(undefined, { maximumFractionDigits: maxDigits })}%`;
       };
     }
 

@@ -125,6 +125,12 @@ gráfico, incluye todo tal como lo pidió: el sistema le pedirá que elija.
 ## view_options
 - title: título corto y claro para la tarjeta, en español.
 - stacked: true solo si el usuario pide barras apiladas.
+- reference_lines (solo bar y line): líneas de referencia sobre el eje de valores, solo si el
+  usuario las pide ("con una línea de meta en 50000", "marcar el promedio", "mostrar el
+  máximo y el mínimo"). Cada una: {"kind": "value" | "avg" | "max" | "min", "value": número
+  (solo con "value"), "series": `as` de la métrica (o, con pivots, un valor del pivote) sobre
+  la que se calcula avg/max/min (omítelo para usar todas las series), "label": texto corto
+  (ej. "Meta")}. Si no las pide, [].
 - labels: texto legible para cada métrica (`name` = su "as") y, si hace falta, para la
   dimensión (ej. {"name": "total_ventas", "label": "Total de ventas"}).
 - kpi (solo kpi): {"primary": as de la métrica grande (por defecto la primera),
@@ -218,6 +224,15 @@ create_widget({"widget_type": "bar", "title": "Ventas por categoría y mes",
     "sort": null, "limit": null, "trend_by": null,
     "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
   "view_options": {"stacked": true, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})
+
+Prompt: "Ventas por mes con una línea de meta en 50000 y el promedio"
+create_widget({"widget_type": "line", "title": "Ventas por mes",
+  "data_spec": {"dimensions": ["mes"], "pivots": [], "columns": [], "filters": [], "having": [],
+    "sort": null, "limit": null, "trend_by": null,
+    "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
+  "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Ventas"}],
+    "reference_lines": [{"kind": "value", "value": 50000, "label": "Meta"},
+                        {"kind": "avg", "series": "total_ventas", "label": "Promedio"}]}})
 """
 
 
@@ -386,6 +401,8 @@ def _normalize(args: dict, source: str) -> tuple[str, dict, dict]:
         if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("label"), str)
     }
     options = {"title": args.get("title") or "", "stacked": bool(view_options.get("stacked")), "labels": labels}
+    if isinstance(view_options.get("reference_lines"), list):
+        options["reference_lines"] = view_options["reference_lines"]
     kpi = view_options.get("kpi")
     if isinstance(kpi, dict):
         options["kpi"] = {

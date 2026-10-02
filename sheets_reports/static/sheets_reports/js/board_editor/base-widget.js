@@ -24,6 +24,8 @@
     // Capacidades del builder por tipo (las reglas reales las valida el backend).
     // Solo las barras tienen "apiladas", y solo con pivote.
     static supportsStacked = false;
+    // Líneas de referencia (meta, promedio, máximo, mínimo): barras y líneas.
+    static supportsReferenceLines = false;
     // El KPI no agrupa: su builder no muestra dimensión ni pivote.
     static supportsDimension = true;
     static supportsPivot = true;
@@ -186,6 +188,72 @@
     static allSeriesPercent(payload, series) {
       const names = new Set(payload.percent || []);
       return series.length > 0 && series.every(s => names.has(s.name));
+    }
+
+    // Líneas de referencia de barras y líneas (view_spec.reference_lines; el render las trae en
+    // `referenceLines` con la serie ya resuelta a su nombre): un valor fijo o el
+    // promedio/máximo/mínimo de una serie (o de todas), calculado con los datos dibujados.
+    static REFERENCE_KINDS = [
+      { value: 'value', label: 'Valor fijo' },
+      { value: 'avg', label: 'Promedio' },
+      { value: 'max', label: 'Máximo' },
+      { value: 'min', label: 'Mínimo' },
+    ];
+    static REFERENCE_DEFAULT_LABELS = { avg: 'Promedio', max: 'Máx.', min: 'Mín.' };
+    static REFERENCE_COLOR = '#d97706';
+
+    // Valor de una línea de referencia, o null si no se puede calcular (serie que ya no está,
+    // valor fijo vacío).
+    static referenceValue(line, series) {
+      if (line.kind === 'value') {
+        return line.value === '' || line.value == null || isNaN(line.value) ? null : Number(line.value);
+      }
+      const source = line.series ? series.filter(s => s.name === line.series) : series;
+      const values = source.flatMap(s => s.data || [])
+        .filter(v => v != null && v !== '' && !isNaN(v)).map(Number);
+      if (!values.length) return null;
+      if (line.kind === 'max') return Math.max(...values);
+      if (line.kind === 'min') return Math.min(...values);
+      if (line.kind === 'avg') return values.reduce((a, b) => a + b, 0) / values.length;
+      return null;
+    }
+
+    // Anotaciones de ApexCharts para las líneas: en el eje de valores, que en barras
+    // horizontales es el X. `format(val)` da el texto del valor en la etiqueta.
+    static referenceAnnotations(lines, series, { horizontal = false, format = (v) => v } = {}) {
+      const items = (lines || []).map((line) => {
+        const value = BaseWidget.referenceValue(line, series);
+        if (value == null) return null;
+        const color = line.color || BaseWidget.REFERENCE_COLOR;
+        const name = (line.label || '').trim() || BaseWidget.REFERENCE_DEFAULT_LABELS[line.kind] || '';
+        const text = name ? `${name}: ${format(value)}` : `${format(value)}`;
+        return {
+          [horizontal ? 'x' : 'y']: value,
+          borderColor: color,
+          strokeDashArray: 4,
+          label: {
+            text,
+            borderColor: color,
+            orientation: 'horizontal',
+            ...(horizontal ? { position: 'top' } : { position: 'right', textAnchor: 'end' }),
+            style: { color: '#fff', background: color, fontSize: '10px' },
+          },
+        };
+      }).filter(Boolean);
+      return {
+        annotations: { [horizontal ? 'xaxis' : 'yaxis']: items },
+        // Para que una línea fuera del rango de los datos (ej. una meta) no quede cortada.
+        max: items.length ? Math.max(...items.map(a => a.x ?? a.y)) : null,
+        min: items.length ? Math.min(...items.map(a => a.x ?? a.y)) : null,
+      };
+    }
+
+    // Formato del valor en la etiqueta de una línea: "%" si todas las series lo son.
+    static referenceFormat(percentAxis) {
+      return (val) => {
+        const text = Number(val).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        return percentAxis ? `${text}%` : text;
+      };
     }
 
     static DOWNLOAD_ICON_SVG = `<svg viewBox="0 0 14 14" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">

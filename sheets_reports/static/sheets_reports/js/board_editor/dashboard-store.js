@@ -532,7 +532,35 @@ function builderFromSpec(spec, view, widget) {
   b.having = (spec.having || []).map(h => groupConditionFromSpec(h, idOf));
   if (spec.sort) b.sortBy = idOf[spec.sort.by] ? `#${idOf[spec.sort.by]}` : spec.sort.by;
   b.kpi = kpiFromView(widget === 'kpi' ? view : null, idOf);
+  b.referenceLines = referenceLinesFromView(view, idOf, (spec.pivots || []).length > 0);
   return b;
+}
+
+// Líneas de referencia del view_spec -> builder. `series`: sin pivote, el _id de la métrica
+// (como los roles del KPI); con pivote, el valor del pivote; '' = todas las series.
+function referenceLinesFromView(view, idOf, withPivot) {
+  return ((view && view.reference_lines) || []).map(l => ({
+    kind: l.kind,
+    value: l.value == null ? '' : String(l.value),
+    series: l.series == null ? '' : (withPivot ? l.series : (idOf[l.series] || '')),
+    label: l.label || '',
+    color: l.color || BaseWidget.REFERENCE_COLOR,
+  }));
+}
+
+function referenceLinesToPayload(lines, aliasOf, withPivot) {
+  const number = (v) => (String(v ?? '').trim() === '' || Number.isNaN(Number(v)) ? null : Number(v));
+  return (lines || []).map((l) => {
+    const isValue = l.kind === 'value';
+    const series = isValue || !l.series ? null : (withPivot ? l.series : (aliasOf[l.series] || null));
+    return {
+      kind: l.kind,
+      value: isValue ? number(l.value) : null,
+      series,
+      label: (l.label || '').trim(),
+      color: l.color || BaseWidget.REFERENCE_COLOR,
+    };
+  }).filter(l => l.kind !== 'value' || l.value !== null);
 }
 
 // Body de POST/PUT del builder: las claves del data_spec más las de presentación (labels,
@@ -578,6 +606,9 @@ function builderToPayload(b, numericFields = new Set()) {
     stacked: !!(b.stacked && pivots.length),
   };
   if (isKpi) payload.kpi = kpiToPayload(b.kpi, aliasOf);
+  if (builderClass(b).supportsReferenceLines) {
+    payload.reference_lines = referenceLinesToPayload(b.referenceLines, aliasOf, pivots.length > 0);
+  }
   const controlTypes = builderClass(b).columnControls;
   if (controlTypes) {
     const fallback = controlTypes.find(o => !o.disabled).value;
@@ -840,6 +871,28 @@ document.addEventListener('alpine:init', () => {
       ));
     },
 
+    // Series sobre las que se calcula una línea de referencia: sin pivote, las métricas; con
+    // pivote, sus valores (los del último resultado dibujado).
+    referenceSeriesOptions(current) {
+      const b = this.builder;
+      if (!b) return [];
+      if (!builderPivots(b).length) return this.metricRefOptions(null, { numericOnly: false });
+      const data = this.editingWidget && this.editingWidget._lastData;
+      const names = ((data && data.series) || []).map(s => s.name);
+      return withCurrent(names, current).map(name => ({ value: name, label: name }));
+    },
+
+    addReferenceLine() {
+      const b = this.builder;
+      if (!b) return;
+      if (!b.referenceLines) b.referenceLines = [];
+      b.referenceLines.push({ kind: 'value', value: '', series: '', label: '', color: BaseWidget.REFERENCE_COLOR });
+    },
+
+    removeReferenceLine(i) {
+      this.builder.referenceLines.splice(i, 1);
+    },
+
     get drawerWidgetClass() {
       return this.editingType ? WidgetRegistry.get(this.editingType) : BaseWidget;
     },
@@ -868,6 +921,18 @@ document.addEventListener('alpine:init', () => {
       }
       if (b.limitN) {
         steps.push({ title: 'Top', detail: `Mostrar solo los primeros ${b.limitN}${b.limitOthers ? ' y agrupar el resto en «Otros»' : ''}` });
+      }
+      if ((b.referenceLines || []).length) {
+        const kindLabel = (k) => (BaseWidget.REFERENCE_KINDS.find(o => o.value === k) || { label: k }).label;
+        const seriesLabel = (l) => {
+          if (!l.series) return 'todas las series';
+          const i = b.metrics.findIndex(m => m._id === l.series);
+          return i >= 0 ? `la métrica ${i + 1}` : l.series;
+        };
+        steps.push({ title: 'Líneas de referencia', details: b.referenceLines.map(l => {
+          const what = l.kind === 'value' ? `${kindLabel(l.kind)} ${l.value}` : `${kindLabel(l.kind)} de ${seriesLabel(l)}`;
+          return l.label ? `${what} («${l.label}»)` : what;
+        }) });
       }
       steps.push({ title: 'Listo', detail: 'Pulsa «Guardar» para ver la tabla.' });
       return steps;

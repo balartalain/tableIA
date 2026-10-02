@@ -21,6 +21,7 @@
     static defaults = { title: 'Gráfico de Barras', width: 'md:col-span-6', height: 300 };
 
     static supportsStacked = true;
+    static supportsReferenceLines = true;
     static FIELD_HORIZONTAL = { key: 'horizontal', label: 'Horizontal', type: 'checkbox' };
 
     static get drawerFields() {
@@ -101,9 +102,17 @@
 
       // Si todas las series son %, el eje de valores lleva "%". En horizontal ApexCharts cambia
       // los ejes: los valores van en el X y las categorías en el Y (allí el formatter daría NaN).
-      const percentAxis = BaseWidget.allSeriesPercent(payload, series)
-        ? { formatter: (val) => `${Math.round(val)}%` }
-        : {};
+      const allPercent = BaseWidget.allSeriesPercent(payload, series);
+      const percentAxis = allPercent ? { formatter: (val) => `${Math.round(val)}%` } : {};
+
+      // Líneas de referencia: en el eje de valores (el X si las barras son horizontales).
+      const reference = BaseWidget.referenceAnnotations(payload.referenceLines, series, {
+        horizontal: this.horizontal, format: BaseWidget.referenceFormat(allPercent),
+      });
+      const valueRange = {
+        min: (min) => Math.min(min, 0, reference.min ?? 0),
+        max: (max) => Math.max(max, reference.max ?? max) * 1.12,
+      };
 
       const roundLabel = (val) => (val == null || isNaN(val) ? val : Math.round(Number(val)));
       // Plantilla del usuario ("$ {value}"): manda sobre el "%" automático, en etiquetas y tooltip.
@@ -127,6 +136,7 @@
           },
           maxHeight: 150
         },
+        annotations: reference.annotations,
         plotOptions: { bar: { horizontal: this.horizontal, borderRadius: 4, borderRadiusApplication: 'end',
           [this.horizontal ? 'barHeight' : 'columnWidth']: this.barWidth + '%',
           dataLabels:{
@@ -187,8 +197,8 @@
             ...(this.yAxisWidth && { maxWidth: this.yAxisWidth }),
             ...(!this.horizontal && percentAxis),
           },
-          min: (min) => Math.min(min, 0),
-          max: (max) => max * 1.12,
+          // ApexCharts aplica el min/max del yaxis al eje de valores también en horizontal.
+          ...valueRange,
         }
       };
       // Reordenar series arrastrando la leyenda edita el widget: no en la vista compartida.

@@ -95,6 +95,14 @@ class GenerateWidgetSpecTests(SimpleTestCase):
             view = generate_widget_spec("ventas", "kpi", sales_ctx())["view_spec"]
         self.assertEqual((view["primary"], view["compare"], view["target"]), ("actual", "promedio", 900))
 
+    def test_lineas_de_referencia(self, _audit):
+        lines = [{"kind": "value", "value": 400, "label": "Meta"}, {"kind": "avg", "series": "total_ventas"}]
+        args = {**VALID_ARGS, "view_options": {**VALID_ARGS["view_options"], "reference_lines": lines}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)):
+            view = generate_widget_spec("ventas con meta de 400 y el promedio", None, sales_ctx())["view_spec"]
+        self.assertEqual([(l["kind"], l["value"], l["series"]) for l in view["reference_lines"]],
+                         [("value", 400.0, None), ("avg", None, "total_ventas")])
+
     def test_audita_prompt_y_spec(self, _audit):
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", VALID_ARGS)):
             generate_widget_spec("ventas por categoría", None, sales_ctx())
@@ -140,6 +148,8 @@ class ToolSchemaTests(SimpleTestCase):
         bar = build_tool_parameters(sales_ctx(), widget_type="bar")
         self.assertEqual(metric_types(bar), ["agg", "calc"])
         self.assertEqual(bar["properties"]["view_options"]["required"], ["labels", "stacked"])
+        self.assertIn("reference_lines", bar["properties"]["view_options"]["properties"])
+        self.assertNotIn("reference_lines", kpi["properties"]["view_options"]["properties"])
 
     def test_metricas_agrupadas_usan_inner_having(self):
         params = build_tool_parameters(sales_ctx(), widget_type="kpi")

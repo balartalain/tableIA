@@ -2,12 +2,12 @@ import dataclasses
 from dataclasses import dataclass
 
 from sheets_reports.dsl.spec import DataSpec
-from sheets_reports.widgets.base import WIDGETS, ViewOptions
-from sheets_reports.widgets.chart import ChartWidget
+from sheets_reports.widgets.base import WIDGETS
+from sheets_reports.widgets.chart import ChartOptions, ChartWidget
 
 
 @dataclass(frozen=True)
-class BarOptions(ViewOptions):
+class BarOptions(ChartOptions):
     # Barras apiladas: solo visual, nunca cambia el cálculo.
     stacked: bool = False
 
@@ -22,7 +22,7 @@ class BarOptions(ViewOptions):
 
     @classmethod
     def ai_properties(cls):
-        return {"stacked": {"type": "boolean"}}
+        return {**super().ai_properties(), "stacked": {"type": "boolean"}}
 
     @classmethod
     def ai_required(cls):
@@ -33,7 +33,7 @@ class BarOptions(ViewOptions):
         return dataclasses.replace(super().reconcile(spec), stacked=self.stacked and bool(spec.pivots))
 
     def view_fields(self):
-        return {"stacked": self.stacked}
+        return {**super().view_fields(), "stacked": self.stacked}
 
 
 @WIDGETS.register

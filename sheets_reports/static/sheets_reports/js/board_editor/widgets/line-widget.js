@@ -9,6 +9,8 @@
     };
     static defaults = { title: 'Gráfico de Líneas', width: 'md:col-span-6', height: 300 };
 
+    static supportsReferenceLines = true;
+
     static mockData() {
       return {
         series: [{ name: 'Tendencia', data: [45, 52, 38, 65, 59, 87] }],
@@ -22,8 +24,13 @@
 
     renderContent(container, data) {
       const payload = data || this.constructor.mockData();
+      this._lastData = payload;
       const series = payload.series || [{ name: 'Datos', data: [] }];
       const categories = payload.categories || [];
+      const allPercent = BaseWidget.allSeriesPercent(payload, series);
+      const reference = BaseWidget.referenceAnnotations(payload.referenceLines, series, {
+        format: BaseWidget.referenceFormat(allPercent),
+      });
       const options = {
         chart: {
           type: 'line', height: '100%', width: '100%', fontFamily: 'inherit',
@@ -44,9 +51,15 @@
           tooltip: { enabled: false },
         },
         tooltip: { shared: true, intersect: false, y: { formatter: BaseWidget.percentAwareFormatter(payload.percent) } },
-        ...(BaseWidget.allSeriesPercent(payload, series) && {
-          yaxis: { labels: { formatter: (val) => `${Math.round(val)}%` } },
-        }),
+        annotations: reference.annotations,
+        yaxis: {
+          ...(allPercent && { labels: { formatter: (val) => `${Math.round(val)}%` } }),
+          // Que las líneas de referencia fuera del rango de los datos no queden cortadas.
+          ...(reference.max != null && {
+            min: (min) => Math.min(min, reference.min),
+            max: (max) => Math.max(max, reference.max),
+          }),
+        },
         // Margen a los lados para que las etiquetas de los extremos no queden cortadas.
         grid: { padding: { left: 12, right: 18 } },
       };

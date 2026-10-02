@@ -739,6 +739,58 @@
                 </template>
                 </div>
 
+                <hr class="border-line/70 !mt-6" x-show="$store.dashboard.drawerWidgetClass.supportsReferenceLines">
+
+                <!-- Líneas de referencia (barras y líneas; solo presentación): meta fija o
+                     promedio/máximo/mínimo de una serie, sobre el eje de valores. -->
+                <div class="space-y-2 pt-3" x-show="$store.dashboard.drawerWidgetClass.supportsReferenceLines">
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Líneas de referencia</h3>
+                    <p class="text-[11px] text-ink/40">metas, promedio, máximo o mínimo</p>
+                  </div>
+                  <div class="divide-y divide-line/60 rounded-lg border border-line/70"
+                       x-show="($store.dashboard.drawerDraft.builder.referenceLines || []).length">
+                    <template x-for="(line, i) in ($store.dashboard.drawerDraft.builder.referenceLines || [])" :key="i">
+                      <div class="p-1.5 space-y-1.5">
+                        <div class="flex items-center gap-1.5">
+                          <select x-model="line.kind" aria-label="Tipo de línea"
+                                  class="w-28 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                            <template x-for="opt in BaseWidget.REFERENCE_KINDS" :key="opt.value">
+                              <option x-bind:value="opt.value" x-text="opt.label" x-bind:selected="opt.value === line.kind"></option>
+                            </template>
+                          </select>
+                          <template x-if="line.kind === 'value'">
+                            <input type="number" x-model="line.value" placeholder="Ej. 50000" step="any" aria-label="Valor"
+                                   class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                          </template>
+                          <template x-if="line.kind !== 'value'">
+                            <select x-model="line.series" aria-label="Serie"
+                                    class="flex-1 min-w-0 text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                              <option value="">Todas las series</option>
+                              <template x-for="o in $store.dashboard.referenceSeriesOptions(line.series)" :key="o.value">
+                                <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === line.series"></option>
+                              </template>
+                            </select>
+                          </template>
+                          <input type="color" x-model="line.color" title="Color"
+                                 class="h-8 w-8 shrink-0 rounded border border-line cursor-pointer bg-white p-0.5">
+                          <button type="button" x-on:click="$store.dashboard.removeReferenceLine(i)" title="Quitar línea"
+                                  class="shrink-0 text-ink/40 hover:text-red-600 transition cursor-pointer p-1">
+                            <i class="ti ti-x text-sm" aria-hidden="true"></i>
+                          </button>
+                        </div>
+                        <input type="text" x-model="line.label" aria-label="Etiqueta"
+                               x-bind:placeholder="line.kind === 'value' ? 'Etiqueta (ej. Meta)' : 'Etiqueta (opcional)'"
+                               class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500">
+                      </div>
+                    </template>
+                  </div>
+                  <button type="button" x-on:click="$store.dashboard.addReferenceLine()"
+                          class="text-xs font-medium text-moss-700 hover:text-moss-800 cursor-pointer flex items-center gap-1">
+                    <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar línea
+                  </button>
+                </div>
+
                 <hr class="border-line/70 !mt-6" x-show="$store.dashboard.drawerWidgetClass.supportsConditions">
 
                 <!-- Filtros: qué filas de la hoja entran al widget (WHERE) -->

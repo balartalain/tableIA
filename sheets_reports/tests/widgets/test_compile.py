@@ -223,3 +223,24 @@ class LineOrderTests(SimpleTestCase):
 
     def test_las_barras_mantienen_el_orden_de_la_hoja(self):
         self.assertEqual(self.categories("bar", dimensions=["anio"]), ["2026", "2024", "2025"])
+
+
+class ReferenceLinesTests(SimpleTestCase):
+    META = {"kind": "value", "value": 300, "label": "Meta"}
+
+    def test_sin_lineas_no_agrega_la_clave(self):
+        self.assertNotIn("referenceLines", compiled("bar", spec()))
+
+    def test_valor_fijo_y_serie_por_su_etiqueta(self):
+        lines = [self.META, {"kind": "avg", "series": "total_ventas", "color": "#112233"}]
+        out = compiled("line", spec(), {"labels": {"total_ventas": "Ventas"}, "reference_lines": lines})
+        self.assertEqual(out["referenceLines"], [
+            {"kind": "value", "value": 300.0, "series": None, "label": "Meta", "color": "#d97706"},
+            {"kind": "avg", "value": None, "series": "Ventas", "label": "", "color": "#112233"},
+        ])
+
+    def test_con_pivote_la_serie_es_un_valor_del_pivote(self):
+        lines = [{"kind": "max", "series": "Ene"}, {"kind": "min", "series": "Dic"}]
+        out = compiled("bar", spec(pivots=["mes"]), {"reference_lines": lines})
+        # "Dic" no está en el resultado: no se dibuja.
+        self.assertEqual([l["series"] for l in out["referenceLines"]], ["Ene"])

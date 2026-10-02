@@ -3,6 +3,7 @@ nunca invalidan un spec."""
 from django.test import SimpleTestCase
 
 from sheets_reports.tests.fixtures import agg, spec, view
+from sheets_reports.widgets import WIDGETS
 
 
 def kpi_view(*metrics, **roles):
@@ -36,6 +37,25 @@ class ReconcileTests(SimpleTestCase):
     def test_stacked_sin_pivote(self):
         self.assertFalse(view("bar", spec(), {"stacked": True})["stacked"])
         self.assertTrue(view("bar", spec(pivots=["mes"]), {"stacked": True})["stacked"])
+
+    def test_lineas_de_referencia_invalidas_o_de_metricas_que_no_estan(self):
+        lines = [
+            {"kind": "value", "value": 100},
+            {"kind": "value"},                                  # sin valor
+            {"kind": "mediana"},                                # tipo desconocido
+            {"kind": "avg", "series": "vieja"},                 # métrica que ya no está
+            {"kind": "max", "series": "total_ventas", "color": "rojo"},
+        ]
+        out = view("bar", spec(), {"reference_lines": lines})["reference_lines"]
+        self.assertEqual([(l["kind"], l["series"], l["color"]) for l in out],
+                         [("value", None, "#d97706"), ("max", "total_ventas", "#d97706")])
+
+    def test_lineas_de_referencia_se_conservan_si_no_vienen(self):
+        line = {"kind": "value", "value": 5, "series": None, "label": "", "color": "#d97706"}
+        definition = WIDGETS.get("line")
+        previous = view("line", spec(), {"reference_lines": [line]})
+        options = definition.options({"title": "Otro"}, previous)
+        self.assertEqual(list(options.reference_lines), [{**line, "value": 5.0}])
 
     def test_labels_de_lo_que_ya_no_existe_se_descartan(self):
         labels = {"total_ventas": "Ventas", "categoria": "Categoría", "vieja": "Ya no está"}

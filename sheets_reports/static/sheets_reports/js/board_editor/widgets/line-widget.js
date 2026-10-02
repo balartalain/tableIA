@@ -9,8 +9,6 @@
     };
     static defaults = { title: 'Gráfico de Líneas', width: 'md:col-span-6', height: 300 };
 
-    static supportsReferenceLines = true;
-
     static mockData() {
       return {
         series: [{ name: 'Tendencia', data: [45, 52, 38, 65, 59, 87] }],

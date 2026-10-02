@@ -20,8 +20,6 @@
     };
     static defaults = { title: 'Gráfico de Barras', width: 'md:col-span-6', height: 300 };
 
-    static supportsStacked = true;
-    static supportsReferenceLines = true;
     static FIELD_HORIZONTAL = { key: 'horizontal', label: 'Horizontal', type: 'checkbox' };
 
     static get drawerFields() {

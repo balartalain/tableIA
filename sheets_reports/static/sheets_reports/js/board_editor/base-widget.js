@@ -21,28 +21,53 @@
     // Constructor estructurado (dimensión, pivote, métricas, apiladas): edita data_spec sin IA.
     static FIELD_BUILDER = { key: 'builder', label: 'Datos', type: 'builder', tab: 'data' };
 
-    // Capacidades del builder por tipo (las reglas reales las valida el backend).
-    // Solo las barras tienen "apiladas", y solo con pivote.
-    static supportsStacked = false;
-    // Líneas de referencia (meta, promedio, máximo, mínimo): barras y líneas.
-    static supportsReferenceLines = false;
+    // Capacidades del tipo: NO se declaran aquí, salen del manifiesto que publica el backend
+    // (WidgetType.manifest: DataCapabilities + campos de su options_cls; ver board_editor.html).
+    // Sin manifiesto (vista compartida, o el panel sin tipo elegido) valen las de un gráfico.
+    static DEFAULT_MANIFEST = {
+      data: { dimensions: [0, 1], pivots: [0, 1], columns: [0, 0], metrics: [1, 5],
+        metric_types: ['agg', 'calc'], show_as: true, sort: true },
+      view: [],
+      max_per_dashboard: null,
+    };
+
+    static get manifest() {
+      return (window.WIDGET_MANIFEST || {})[this.type] || BaseWidget.DEFAULT_MANIFEST;
+    }
+
+    // Opción de vista propia del tipo (un campo de su options_cls), ej. 'stacked'.
+    static supportsView(key) {
+      return (this.manifest.view || []).includes(key);
+    }
+
+    static get maxDimensions() { return this.manifest.data.dimensions[1]; }
+    static get maxPivots() { return this.manifest.data.pivots[1]; }
+    static get maxMetrics() { return this.manifest.data.metrics[1]; }
+    static get maxColumns() { return this.manifest.data.columns[1]; }
     // El KPI no agrupa: su builder no muestra dimensión ni pivote.
-    static supportsDimension = true;
-    static supportsPivot = true;
+    static get supportsDimension() { return this.maxDimensions > 0; }
+    static get supportsPivot() { return this.maxPivots > 0; }
+    // Métricas: el builder las muestra salvo en widgets que no resumen datos.
+    static get supportsMetrics() { return this.maxMetrics > 0; }
+    // Columnas que se muestran tal cual, sin agrupar (data_spec.columns).
+    static get usesColumns() { return this.maxColumns > 0; }
+    // "Mostrar como" porcentaje en las métricas (la dona no: ApexCharts calcula sus %).
+    static get supportsShowAs() { return !!this.manifest.data.show_as; }
+    static get supportsSort() { return !!this.manifest.data.sort; }
+    static get metricTypes() { return this.manifest.data.metric_types || []; }
+    // Solo las barras tienen "apiladas" (y solo con pivote); barras y líneas, líneas de referencia.
+    static get supportsStacked() { return this.supportsView('stacked'); }
+    static get supportsReferenceLines() { return this.supportsView('reference_lines'); }
+    // Solo uno por tablero (la caja de filtros).
+    static get singleton() { return this.manifest.max_per_dashboard === 1; }
+
+    // --- Lo que sigue es solo de interfaz: no tiene equivalente en el backend.
     // Mismos nombres en todos los widgets (y en la sugerencia de la IA): en una gráfica las
     // filas son el eje X y las columnas, las series.
     static pivotLabel = 'Columnas';
     static dimensionLabel = 'Filas';
-    // Niveles anidados de filas/columnas: solo la tabla admite más de uno.
-    static maxDimensions = 1;
-    static maxPivots = 1;
-    static maxMetrics = 5;
-    // Métricas: el builder las muestra salvo en widgets que no resumen datos.
-    static supportsMetrics = true;
-    // Columnas que se muestran tal cual, sin agrupar (data_spec.columns), y cómo se llama ese
-    // bloque en el builder. `columnControls`: tipos a elegir por columna (caja de filtros).
-    static usesColumns = false;
-    static maxColumns = 0;
+    // Cómo se llama el bloque de columnas en el builder. `columnControls`: tipos a elegir por
+    // columna (caja de filtros).
     static defaultColumns = 5;
     static defaultColumnsFrom = 'all_fields';
     static columnsLabel = 'Columnas';
@@ -52,15 +77,10 @@
     static columnControls = null;
     // "Nombre a mostrar" por columna (view_spec.labels), ej. la etiqueta de cada filtro.
     static supportsColumnLabels = false;
-    // Condiciones sobre filas (bloque «Filtros» del builder) y orden.
+    // Condiciones sobre filas (bloque «Filtros» del builder).
     static supportsConditions = true;
-    static supportsSort = true;
     // Dónde se monta: 'canvas' (grid de 12 columnas) o 'header' (fijo arriba, a todo el ancho).
     static placement = 'canvas';
-    // Solo uno por tablero (el backend también lo valida: max_per_dashboard).
-    static singleton = false;
-    // "Mostrar como" porcentaje en las métricas (la dona no: ApexCharts calcula sus %).
-    static supportsShowAs = true;
     // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).
     static supportsLabels = false;
     // "Mostrar totales" por nivel de filas/columnas (props rowTotals/columnTotals).

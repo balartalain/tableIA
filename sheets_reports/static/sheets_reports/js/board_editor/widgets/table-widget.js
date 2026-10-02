@@ -13,12 +13,6 @@
       description: 'Las filas de la hoja, con las columnas que elijas',
     };
     static defaults = { title: 'Tabla', width: 'md:col-span-6', height: 300 };
-    // Builder: columnas a mostrar en vez de agrupar y métricas.
-    static supportsDimension = false;
-    static supportsPivot = false;
-    static supportsMetrics = false;
-    static usesColumns = true;
-    static maxColumns = 50;
     static supportsLabels = false;
     static supportsTotals = false;
 

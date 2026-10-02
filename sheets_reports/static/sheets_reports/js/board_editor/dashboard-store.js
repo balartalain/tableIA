@@ -1142,9 +1142,10 @@ document.addEventListener('alpine:init', () => {
       return builderToPayload(b, this._numericSet);
     },
 
-    // Tipos de métrica disponibles: "por grupo" solo en el KPI.
+    // Tipos de métrica que admite el widget (DataCapabilities.metric_types del backend).
     get metricTypes() {
-      return this.drawerIsKpi ? METRIC_TYPE_OPTIONS : METRIC_TYPE_OPTIONS.filter(o => o.value !== 'grouped');
+      const allowed = this.drawerWidgetClass.metricTypes;
+      return METRIC_TYPE_OPTIONS.filter(o => allowed.includes(o.value));
     },
 
     // Nombre corto de la métrica `id` en los selects (su nombre a mostrar o el de por defecto).

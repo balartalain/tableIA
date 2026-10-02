@@ -1,7 +1,8 @@
+from sheets_reports.dsl.parts import Dimensions, Metrics, Pivots
 from sheets_reports.dsl.schema import MAX_DIMENSIONS, MAX_PIVOTS
-from sheets_reports.dsl.spec import DataSpec
+from sheets_reports.dsl.spec import DataSpec, GroupedSpec, with_parts
 from sheets_reports.engine.plans import PivotTableResult
-from sheets_reports.widgets.base import WIDGETS, DataCapabilities, ViewOptions, WidgetType, percent_metrics
+from sheets_reports.widgets.base import WIDGETS, ViewOptions, WidgetType, percent_metrics
 from sheets_reports.widgets.presentation import TOTAL_LABEL, cell_field, total_field
 
 
@@ -46,6 +47,12 @@ def _pivot_columns(result: PivotTableResult, options: ViewOptions) -> list[dict]
     ]}]
 
 
+class DynamicTableSpec(GroupedSpec):
+    """Filas y columnas anidadas, y varias métricas a la vez que un pivote."""
+    parts = with_parts(GroupedSpec, Dimensions(1, MAX_DIMENSIONS), Pivots(0, MAX_PIVOTS),
+                       Metrics(multi_with_pivot=True))
+
+
 @WIDGETS.register
 class DynamicTableWidget(WidgetType[PivotTableResult, ViewOptions]):
     """Tabla dinámica: siempre agrupa por al menos una fila (hasta 3 anidadas) y opcionalmente
@@ -53,10 +60,33 @@ class DynamicTableWidget(WidgetType[PivotTableResult, ViewOptions]):
     métrica en cada valor)."""
     key = "dynamic_table"
     label = "Tabla dinámica"
-    capabilities = DataCapabilities(
-        dimensions=(1, MAX_DIMENSIONS), pivots=(0, MAX_PIVOTS), multi_metric_with_pivot=True,
-    )
+    spec_cls = DynamicTableSpec
     plan_key = "pivot_table"
+    ai_doc = ('tabla dinámica que agrupa (resúmenes por fila/columna, varias métricas por fila, '
+              '"tabla de ventas por ..."). Las filas (dimensions) van de la más general a la más '
+              'detallada (ej. ["sede", "carrera"]); las columnas (pivots) igual (ej. ["anio", "mes"]).')
+    ai_examples = (
+        ("Tabla de vendedores que no llegaron a su plan, con ventas, plan y % de cumplimiento", {
+            "widget_type": "dynamic_table", "title": "Vendedores bajo el plan",
+            "data_spec": {"dimensions": ["vendedor"], "pivots": [], "columns": [], "filters": [], "limit": None,
+                          "trend_by": None,
+                          "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
+                                      {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"},
+                                      {"type": "calc", "as": "cumplimiento", "op": "ratio_pct",
+                                       "left": "ventas", "right": "plan"}],
+                          "having": [{"left": "ventas", "op": "lt", "right": "plan"}],
+                          "sort": {"by": "cumplimiento", "dir": "asc"}},
+            "view_options": {"labels": [{"name": "cumplimiento", "label": "% cumplimiento"}]},
+        }),
+        ("Tabla de respuestas por categoría con la cantidad y el porcentaje de cada respuesta", {
+            "widget_type": "dynamic_table", "title": "Respuestas por categoría",
+            "data_spec": {"dimensions": ["categoria"], "pivots": ["respuesta"], "columns": [], "filters": [],
+                          "having": [], "sort": None, "limit": None, "trend_by": None,
+                          "metrics": [{"type": "agg", "as": "cantidad", "agg": "count"},
+                                      {"type": "agg", "as": "pct_cantidad", "agg": "count", "show_as": "pct_row"}]},
+            "view_options": {"labels": [{"name": "cantidad", "label": "Cant."}, {"name": "pct_cantidad", "label": "%"}]},
+        }),
+    )
 
     def data_view(self, spec: DataSpec) -> dict:
         return {}

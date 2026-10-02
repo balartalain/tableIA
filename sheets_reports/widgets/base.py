@@ -1,14 +1,16 @@
 """
 WidgetType: el núcleo del diseño. Cada tipo de widget es una clase registrada en WIDGETS que
 declara:
-- capacidades (DataCapabilities): qué data_spec admite; de ahí salen su JSON Schema y las
-  reglas genéricas (nada de `if widget_type == ...` en el resto del sistema);
+- su data_spec (`spec_cls`, una subclase de DataSpec): qué piezas admite y con qué cotas; de
+  ahí salen su JSON Schema, sus reglas y su manifiesto (nada de `if widget_type == ...` en el
+  resto del sistema);
 - opciones de vista (ViewOptions): su presentación, que genera el view_spec;
-- reglas propias: además de las genéricas (dsl/rules.py), cada una con su prioridad;
-- plan de ejecución (PLANS) y compilación al formato que dibuja el frontend.
+- reglas propias: además de las de sus piezas, cada una con su prioridad;
+- plan de ejecución y compilación al formato que dibuja el frontend.
 
 Agregar un widget = una subclase registrada (más su componente en el frontend). Si necesita
-una forma de datos que no existe, además un ResultPlan registrado (engine/plans/).
+una forma de datos que no existe, además su ResultPlan; si necesita un dato nuevo en el
+data_spec, además su SpecPart. Todo puede ir en un solo archivo (widgets/ext/).
 """
 import dataclasses
 from dataclasses import dataclass, field
@@ -18,9 +20,9 @@ import pandas as pd
 
 from sheets_reports.dsl.context import SheetContext
 from sheets_reports.dsl.errors import SpecValidationError, schema_errors, unique
+from sheets_reports.dsl.parts import SPEC_PARTS, UnsupportedPart
 from sheets_reports.dsl.registry import Registry
-from sheets_reports.dsl.rules import DEFAULT_RULES, Rule, Stage
-from sheets_reports.dsl.schema import MAX_METRICS
+from sheets_reports.dsl.rules import Rule, Stage
 from sheets_reports.dsl.spec import DataSpec
 from sheets_reports.engine import run
 from sheets_reports.engine.plans import PLANS, PlanResult, ResultPlan
@@ -28,25 +30,6 @@ from sheets_reports.widgets.presentation import humanize
 
 R = TypeVar("R", bound=PlanResult)
 V = TypeVar("V", bound="ViewOptions")
-
-
-@dataclass(frozen=True)
-class DataCapabilities:
-    dimensions: tuple[int, int]          # (mín, máx) de columnas de filas / eje X (agrupan)
-    pivots: tuple[int, int]              # (mín, máx) de columnas de pivote / series (agrupan)
-    columns: tuple[int, int] = (0, 0)    # (mín, máx) de columnas que se muestran tal cual
-    metrics: tuple[int, int] = (1, MAX_METRICS)
-    # Tipos de métrica que admite (claves de METRICS). Lo declara el widget, no la métrica.
-    metric_types: frozenset = frozenset({"agg", "calc"})
-    # Varias métricas a la vez que un pivote (una subcolumna por métrica en cada valor).
-    multi_metric_with_pivot: bool = False
-    # Métricas agg «mostradas como» porcentaje (show_as). La dona no: ApexCharts ya calcula la
-    # participación de cada porción.
-    show_as: bool = True
-    having: bool = True
-    sort: bool = True
-    limit: bool = True
-    trend: bool = False
 
 
 @dataclass(frozen=True)
@@ -101,6 +84,10 @@ class ViewOptions:
 
     # --- IA
 
+    # Cómo usar las opciones que agrega ESTA clase (no las heredadas), para el prompt de la
+    # IA: una línea por propiedad, "- clave: …". El prompt agrega a qué widgets aplica.
+    ai_doc: ClassVar[str] = ""
+
     @classmethod
     def ai_properties(cls) -> dict:
         """Propiedades que este widget agrega a `view_options` en la tool de la IA."""
@@ -110,14 +97,25 @@ class ViewOptions:
     def ai_required(cls) -> list[str]:
         return []
 
+    @classmethod
+    def from_ai(cls, view_options: dict) -> dict:
+        """`view_options` de la tool de la IA -> body del builder (lo que lee from_request).
+        Por defecto pasa tal cual las propiedades de ai_properties(); una subclase lo
+        sobrescribe si su forma para la IA es distinta (ej. los roles del KPI)."""
+        labels = {
+            item["name"]: item["label"]
+            for item in view_options.get("labels") or []
+            if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("label"), str)
+        }
+        own = {key: view_options[key] for key in cls.ai_properties() if key in view_options}
+        return {"labels": labels, **own}
+
     # --- reglas vista → datos
 
     def reconcile(self, spec: DataSpec):
         """Copia sin referencias a lo que el data_spec ya no tiene (ver la tabla de la
         arquitectura). Las subclases agregan las suyas."""
-        names = {*spec.dimensions, *spec.pivots, *spec.columns, *spec.aliases}
-        if spec.trend_by:
-            names.add(spec.trend_by)
+        names = spec.names()
         return dataclasses.replace(self, labels={k: v for k, v in self.labels.items() if k in names})
 
     def view_fields(self) -> dict:
@@ -133,7 +131,8 @@ class ViewOptions:
 class WidgetType(Generic[R, V]):
     key: ClassVar[str]
     label: ClassVar[str]
-    capabilities: ClassVar[DataCapabilities]
+    # Su data_spec: las piezas que admite y con qué cotas.
+    spec_cls: ClassVar[type[DataSpec]]
     options_cls: ClassVar[type[ViewOptions]] = ViewOptions
     # Clave del plan en PLANS; un widget cuya forma depende del spec sobrescribe plan().
     plan_key: ClassVar[str]
@@ -144,28 +143,49 @@ class WidgetType(Generic[R, V]):
     max_per_dashboard: ClassVar[int | None] = None
     # La IA puede proponer este tipo de widget.
     ai_enabled: ClassVar[bool] = True
+    # Para el prompt de la IA: cuándo elegir este widget (lo que admite se agrega solo desde
+    # sus capacidades) y ejemplos [(pedido del usuario, argumentos de create_widget)].
+    ai_doc: ClassVar[str] = ""
+    ai_examples: ClassVar[tuple[tuple[str, dict], ...]] = ()
+
+    # --- manifiesto ----------------------------------------------------------------------
+
+    def manifest(self) -> dict:
+        """Lo que el editor necesita saber de este tipo para armar su panel: qué admite su
+        data_spec y qué opciones de vista propias tiene. Sale de sus piezas (lo que aporta cada
+        una, o lo que vale si no la tiene) y de los campos de `options_cls`, así el frontend no
+        repite flags (agregar una pieza o un campo ya lo publica)."""
+        data = {}
+        for part_cls in SPEC_PARTS:
+            part = self.spec_cls.part(part_cls.key)
+            data.update(part.manifest() if part is not None else part_cls.absent_manifest())
+        base = {f.name for f in dataclasses.fields(ViewOptions)}
+        return {
+            "data": data,
+            "view": sorted(f.name for f in dataclasses.fields(self.options_cls) if f.name not in base),
+            "max_per_dashboard": self.max_per_dashboard,
+        }
 
     # --- data_spec ----------------------------------------------------------------------
 
     def data_schema(self, ctx: SheetContext, *, for_ai: bool = False) -> dict:
-        caps = self.capabilities
-        return DataSpec.schema(
-            ctx, for_ai=for_ai, dimensions=caps.dimensions, pivots=caps.pivots, columns=caps.columns,
-            metrics=caps.metrics, metric_types=caps.metric_types,
-        )
+        return self.spec_cls.schema(ctx, for_ai=for_ai)
 
     def rules(self) -> list[Rule]:
-        return list(DEFAULT_RULES)
+        """Las claves que no admite y las reglas de cada una de sus piezas."""
+        return [UnsupportedPart(), *(rule for part in self.spec_cls.parts for rule in part.rules())]
 
     def errors(self, raw, ctx: SheetContext) -> list[str]:
         """
         Errores legibles de `raw` (vacío si es válido). Nunca lanza. Template method:
-        1. reglas PRE_SCHEMA sobre el dict crudo;
-        2. JSON Schema construido desde la hoja real y las capacidades;
+        0. `spec_cls.normalize`: sin las claves ajenas vacías, con los valores por defecto;
+        1. reglas PRE_SCHEMA sobre el dict crudo (ej. claves que el widget no admite);
+        2. JSON Schema de su data_spec, construido desde la hoja real y sus piezas;
         3. reglas SEMANTIC sobre el DataSpec.
         Las reglas se ordenan por (etapa, prioridad); una regla `blocking` que falla devuelve
         solo sus errores.
         """
+        raw = self.spec_cls.normalize(raw)
         rules = sorted(self.rules(), key=lambda r: (r.stage, r.priority))
         errors: list[str] = []
         for rule in [r for r in rules if r.stage == Stage.PRE_SCHEMA]:
@@ -173,10 +193,12 @@ class WidgetType(Generic[R, V]):
             if found and rule.blocking:
                 return unique(found)
             errors += found
-        errors += schema_errors(self.data_schema(ctx), raw, ctx)
+        # Lo ajeno ya lo reportó UnsupportedPart: el schema valida solo sus claves.
+        own = self.spec_cls.own(raw) if isinstance(raw, dict) else raw
+        errors += schema_errors(self.data_schema(ctx), own, ctx, self.spec_cls.parts)
         if errors:
             return unique(errors)
-        spec = DataSpec.from_dict(raw)
+        spec = self.spec_cls.from_dict(raw)
         for rule in [r for r in rules if r.stage == Stage.SEMANTIC]:
             found = rule.check(spec, self, ctx)
             if found and rule.blocking:
@@ -188,7 +210,7 @@ class WidgetType(Generic[R, V]):
         errors = self.errors(raw, ctx)
         if errors:
             raise SpecValidationError(errors)
-        return DataSpec.from_dict(raw)
+        return self.spec_cls.from_dict(self.spec_cls.normalize(raw))
 
     # --- view_spec ----------------------------------------------------------------------
 
@@ -214,8 +236,11 @@ class WidgetType(Generic[R, V]):
         return {}
 
     def default_title(self, spec: DataSpec, options: V) -> str:
+        """La primera métrica (y por qué se agrupa); sin métricas, las columnas que muestra."""
+        if not spec.metrics:
+            return ", ".join(options.label(c) for c in spec.get("columns", [])) or self.label
         metric = options.label(spec.metrics[0].alias)
-        if spec.dimensions:
+        if spec.get("dimensions"):
             return f"{metric} por {' y '.join(spec.dimensions)}"
         return metric
 
@@ -233,7 +258,7 @@ class WidgetType(Generic[R, V]):
 
     def render(self, data_spec: dict, view_spec: dict, df: pd.DataFrame) -> dict:
         """Calcula y compila un widget guardado (data_spec ya validado al guardarse)."""
-        spec = DataSpec.from_dict(data_spec)
+        spec = self.spec_cls.from_dict(data_spec)
         return self.compile(self.execute(spec, df), self.options_cls.from_view(view_spec), spec)
 
 

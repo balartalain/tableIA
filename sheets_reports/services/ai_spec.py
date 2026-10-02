@@ -13,9 +13,9 @@ from google import genai
 from google.genai import types
 
 from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.rules import PIVOT_MULTIMETRIC_MSG
-from sheets_reports.dsl.spec import DataSpec
-from sheets_reports.widgets import WIDGETS
+from sheets_reports.dsl.parts import PIVOT_MULTIMETRIC_MSG, SPEC_PARTS
+from sheets_reports.dsl.spec import union_schema
+from sheets_reports.widgets import WIDGETS, ViewOptions
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("tableia.ai_audit")
@@ -38,7 +38,7 @@ class SpecGenerationError(Exception):
     """Error legible para el usuario: la IA no produjo un spec válido."""
 
 
-SYSTEM_PROMPT = """\
+CORE_PROMPT = """\
 Eres el asistente de un constructor de tableros de reportes sobre una hoja de cálculo. El
 usuario describe en español un widget y tú respondes SIEMPRE llamando a una función:
 - `create_widget` con la especificación del widget, o
@@ -49,14 +49,12 @@ Tú NO calculas nada ni ves los datos: solo describes QUÉ calcular. El backend 
 consulta.
 
 ## data_spec
-- dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). En
-  gráficos, UNA sola. En una tabla dinámica, hasta 3 anidadas de la más general a la más
-  detallada (ej. ["sede", "carrera"]). Lista VACÍA para widget_type "kpi" y "table".
-- pivots: lista de columnas para desagregar además de la dimensión (columnas en una tabla
-  dinámica, series en un gráfico). [] si no aplica. Tabla dinámica: hasta 2 (ej. ["anio", "mes"]);
-  gráficos: 1.
-- columns: SOLO en widget_type "table" (datos tal cual, sin agrupar): las columnas de la hoja a
-  mostrar, en orden. En los demás widgets, [].
+Lleva siempre todas sus claves. Cada tipo de widget admite solo algunas (ver «Tipos de
+widget»): las que no admite van vacías ([] o null).
+- dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla).
+- pivots: columnas para desagregar además de la dimensión (columnas en una tabla dinámica,
+  series en un gráfico). [] si no aplica.
+- columns: columnas de la hoja que se muestran tal cual, sin agrupar, en orden.
 - filters: condiciones sobre las FILAS que entran al widget. [] si no hay.
 - metrics: lista de métricas; cada una lleva "type" y un "as" único en snake_case
   (ej. "total_ventas", "cantidad"). Tipos:
@@ -67,8 +65,9 @@ consulta.
      - show_as (opcional, default "value"), como en las tablas dinámicas de Sheets:
        "pct_row" (% de su fila; solo con pivots), "pct_column" (% de su columna; sin pivots,
        cada grupo como % del total: "participación", "qué % representa cada..."),
-       "pct_total" (% del total general). En un kpi, cualquier porcentaje es el valor con las
-       condiciones (del widget y de la métrica) sobre el valor sin ellas: NECESITA condiciones.
+       "pct_total" (% del total general). Sin dimensiones (un número suelto), cualquier
+       porcentaje es el valor con las condiciones (del widget y de la métrica) sobre el valor
+       sin ellas: NECESITA condiciones.
      - filters propios (opcional): condiciones SOLO para esa métrica. Sirven para poner en el
        mismo widget "ventas 2026" y "ventas 2025", o "ventas de Hogar" junto al total.
   2. {"type": "calc", "as", "op", "left", "right"}: cálculo entre otras métricas de la lista
@@ -77,24 +76,24 @@ consulta.
      op: "add", "sub", "mul", "div", "ratio_pct" (left/right×100: margen, % de cumplimiento),
      "diff_pct" ((left−right)/right×100: variación, crecimiento).
   3. {"type": "grouped", "as", "group_by", "inner", "inner_having", "result", "value"?, "filters"?}:
-     SOLO en kpi. Agrupa por `group_by`, calcula las métricas `inner` (agg o calc) de cada
-     grupo, se queda con los grupos que cumplen `inner_having` (condiciones sobre sus métricas
-     internas; no confundir con el `having` del widget) y los resume en un número:
+     agrupa por `group_by`, calcula las métricas `inner` (agg o calc) de cada grupo, se queda
+     con los grupos que cumplen `inner_having` (condiciones sobre sus métricas internas; no
+     confundir con el `having` del widget) y los resume en un número:
      - result "count": cuántos grupos cumplen ("cuántos vendedores no cumplieron el plan").
      - result "pct_groups": qué % de los grupos cumple.
      - result "sum"/"avg"/"min"/"max": de la métrica interna `value` ("venta promedio por
        vendedor").
      - result "top"/"bottom": el grupo con el mayor/menor `value` ("la categoría que más
-       vendió", "el vendedor con menos ventas"); el kpi muestra el nombre del grupo.
+       vendió", "el vendedor con menos ventas"); el widget muestra el nombre del grupo.
      `value` es el "as" de una métrica interna; count y pct_groups no lo llevan.
-- having: condiciones sobre los GRUPOS de la primera dimensión, con las métricas del widget
-  (solo widgets con dimensión): [{"left": "total_ventas", "op": "lt", "right": "total_plan"}]
-  o contra un número ("right": 1000). op: eq ne lt lte gt gte. Ej. "vendedores que no
-  llegaron a la meta" en una tabla o barras. [] si no aplica.
-- sort: {by, dir} o null. by es la dimensión o el "as" de una métrica. En el kpi, null.
+- having: condiciones sobre los GRUPOS de la primera dimensión, con las métricas del widget:
+  [{"left": "total_ventas", "op": "lt", "right": "total_plan"}] o contra un número
+  ("right": 1000). op: eq ne lt lte gt gte. Ej. "vendedores que no llegaron a la meta" en una
+  tabla o barras. [] si no aplica.
+- sort: {by, dir} o null. by es una dimensión, una columna o el "as" de una métrica.
 - limit: {"n": 5, "others": false} o null: Top N grupos de la dimensión ("top 5", "los 10
   mejores"). Requiere sort por una métrica. others true agrega el resto como «Otros».
-- trend_by: solo kpi, columna para una mini tendencia bajo el número ("por mes"); o null.
+- trend_by: columna para una mini tendencia bajo el número ("por mes"); o null.
 
 ## Condiciones (filters)
 {"field", "op", "value"} o {"field", "op", "relative"}:
@@ -107,133 +106,70 @@ consulta.
   último), "min". Úsalo para "este año", "el año actual", "el último mes" en vez de fijar
   un número.
 Usa los valores de ejemplo de las columnas para escribir el valor exacto.
-
-## Tipo de widget (si no viene fijado)
-- kpi: uno o pocos números ("total de ventas", "cuántos vendedores...", "la categoría que
-  más vendió", "ventas de este año vs el anterior"). Hasta 4 métricas.
-- bar: comparar categorías ("ventas por región", "top 5 de productos").
-- line: evolución en el tiempo ("por mes", "tendencia").
-- donut: cómo se reparte un total entre pocas categorías. Una dimensión, UNA métrica, sin pivots.
-- dynamic_table: tabla dinámica que agrupa (resúmenes por fila/columna, varias métricas por
-  fila, "tabla de ventas por ...").
-- table: las filas de la hoja tal cual, sin agrupar ni resumir ("listado", "mostrar los datos",
-  "tabla con las columnas ..."): columns con las columnas pedidas, metrics [], dimensions [],
-  pivots []. Admite filters y sort por una de sus columnas.
-Con pivots, los gráficos admiten UNA métrica; si el usuario pide varias y un cruce en un
-gráfico, incluye todo tal como lo pidió: el sistema le pedirá que elija.
-
-## view_options
-- title: título corto y claro para la tarjeta, en español.
-- stacked: true solo si el usuario pide barras apiladas.
-- reference_lines (solo bar y line): líneas de referencia sobre el eje de valores, solo si el
-  usuario las pide ("con una línea de meta en 50000", "marcar el promedio", "mostrar el
-  máximo y el mínimo"). Cada una: {"kind": "value" | "avg" | "max" | "min", "value": número
-  (solo con "value"), "series": `as` de la métrica (o, con pivots, un valor del pivote) sobre
-  la que se calcula avg/max/min (omítelo para usar todas las series), "label": texto corto
-  (ej. "Meta")}. Si no las pide, [].
-- labels: texto legible para cada métrica (`name` = su "as") y, si hace falta, para la
-  dimensión (ej. {"name": "total_ventas", "label": "Total de ventas"}).
-- kpi (solo kpi): {"primary": as de la métrica grande (por defecto la primera),
-  "compare": as de la métrica contra la que se muestra la variación ▲/▼ ("vs el año
-  anterior"), "compare_mode": "pct" | "abs", "target_metric": as de la meta, o
-  "target_value": número de la meta ("meta de 50000"), "higher_is_better": false si menos es
-  mejor (costos, quejas)}.
-
-## Ejemplos (columnas ilustrativas; usa SOLO las columnas reales de la hoja)
-
-Prompt: "Ventas de este año comparadas con el año anterior"
-create_widget({"widget_type": "kpi", "title": "Ventas del año",
-  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
-    "limit": null, "trend_by": null,
-    "metrics": [
-      {"type": "agg", "as": "ventas_actual", "agg": "sum", "field": "ventas",
-       "filters": [{"field": "anio", "op": "eq", "relative": "current_year"}]},
-      {"type": "agg", "as": "ventas_anterior", "agg": "sum", "field": "ventas",
-       "filters": [{"field": "anio", "op": "eq", "relative": "previous_year"}]}]},
-  "view_options": {"stacked": false, "labels": [{"name": "ventas_actual", "label": "Ventas"},
-    {"name": "ventas_anterior", "label": "Año anterior"}],
-    "kpi": {"primary": "ventas_actual", "compare": "ventas_anterior", "compare_mode": "pct"}}})
-
-Prompt: "Cuántos vendedores no cumplieron el plan de ventas"
-create_widget({"widget_type": "kpi", "title": "Vendedores bajo el plan",
-  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
-    "limit": null, "trend_by": null,
-    "metrics": [{"type": "grouped", "as": "vendedores_bajo_plan", "group_by": "vendedor",
-      "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
-                {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"}],
-      "inner_having": [{"left": "ventas", "op": "lt", "right": "plan"}], "result": "count"}]},
-  "view_options": {"stacked": false, "labels": [{"name": "vendedores_bajo_plan", "label": "Vendedores"}]}})
-
-Prompt: "La categoría que más vendió"
-create_widget({"widget_type": "kpi", "title": "Categoría líder",
-  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
-    "limit": null, "trend_by": null,
-    "metrics": [{"type": "grouped", "as": "categoria_top", "group_by": "categoria",
-      "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"}],
-      "inner_having": [], "result": "top", "value": "ventas"}]},
-  "view_options": {"stacked": false, "labels": [{"name": "categoria_top", "label": "Ventas"}]}})
-
-Prompt: "Margen de ganancia en porcentaje"
-create_widget({"widget_type": "kpi", "title": "Margen",
-  "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": null,
-    "limit": null, "trend_by": null,
-    "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
-                {"type": "agg", "as": "costo", "agg": "sum", "field": "costo"},
-                {"type": "calc", "as": "ganancia", "op": "sub", "left": "ventas", "right": "costo"},
-                {"type": "calc", "as": "margen", "op": "ratio_pct", "left": "ganancia", "right": "ventas"}]},
-  "view_options": {"stacked": false, "labels": [{"name": "margen", "label": "Margen"}],
-    "kpi": {"primary": "margen"}}})
-
-Prompt: "Top 5 productos por ventas en 2026"
-create_widget({"widget_type": "bar", "title": "Top 5 productos 2026",
-  "data_spec": {"dimensions": ["producto"], "pivots": [], "columns": [], "having": [], "trend_by": null,
-    "filters": [{"field": "anio", "op": "eq", "value": 2026}],
-    "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}],
-    "sort": {"by": "total_ventas", "dir": "desc"}, "limit": {"n": 5, "others": false}},
-  "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})
-
-Prompt: "Tabla de vendedores que no llegaron a su plan, con ventas, plan y % de cumplimiento"
-create_widget({"widget_type": "dynamic_table", "title": "Vendedores bajo el plan",
-  "data_spec": {"dimensions": ["vendedor"], "pivots": [], "columns": [], "filters": [], "limit": null, "trend_by": null,
-    "metrics": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
-                {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"},
-                {"type": "calc", "as": "cumplimiento", "op": "ratio_pct", "left": "ventas", "right": "plan"}],
-    "having": [{"left": "ventas", "op": "lt", "right": "plan"}],
-    "sort": {"by": "cumplimiento", "dir": "asc"}},
-  "view_options": {"stacked": false, "labels": [{"name": "cumplimiento", "label": "% cumplimiento"}]}})
-
-Prompt: "Tabla de respuestas por categoría con la cantidad y el porcentaje de cada respuesta"
-create_widget({"widget_type": "dynamic_table", "title": "Respuestas por categoría",
-  "data_spec": {"dimensions": ["categoria"], "pivots": ["respuesta"], "columns": [], "filters": [], "having": [],
-    "sort": null, "limit": null, "trend_by": null,
-    "metrics": [{"type": "agg", "as": "cantidad", "agg": "count"},
-                {"type": "agg", "as": "pct_cantidad", "agg": "count", "show_as": "pct_row"}]},
-  "view_options": {"stacked": false, "labels": [{"name": "cantidad", "label": "Cant."},
-    {"name": "pct_cantidad", "label": "%"}]}})
-
-Prompt: "Listado de las ventas de 2026 con producto, vendedor y monto, de mayor a menor"
-create_widget({"widget_type": "table", "title": "Ventas 2026",
-  "data_spec": {"dimensions": [], "pivots": [], "columns": ["producto", "vendedor", "ventas"],
-    "filters": [{"field": "anio", "op": "eq", "value": 2026}], "metrics": [], "having": [],
-    "sort": {"by": "ventas", "dir": "desc"}, "limit": null, "trend_by": null},
-  "view_options": {"stacked": false, "labels": []}})
-
-Prompt: "Barras apiladas de ventas por categoría y por mes"
-create_widget({"widget_type": "bar", "title": "Ventas por categoría y mes",
-  "data_spec": {"dimensions": ["categoria"], "pivots": ["mes"], "columns": [], "filters": [], "having": [],
-    "sort": null, "limit": null, "trend_by": null,
-    "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
-  "view_options": {"stacked": true, "labels": [{"name": "total_ventas", "label": "Ventas"}]}})
-
-Prompt: "Ventas por mes con una línea de meta en 50000 y el promedio"
-create_widget({"widget_type": "line", "title": "Ventas por mes",
-  "data_spec": {"dimensions": ["mes"], "pivots": [], "columns": [], "filters": [], "having": [],
-    "sort": null, "limit": null, "trend_by": null,
-    "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
-  "view_options": {"stacked": false, "labels": [{"name": "total_ventas", "label": "Ventas"}],
-    "reference_lines": [{"kind": "value", "value": 50000, "label": "Meta"},
-                        {"kind": "avg", "series": "total_ventas", "label": "Promedio"}]}})
 """
+
+PIVOT_PROMPT = """\
+Con pivots, los gráficos admiten UNA métrica; si el usuario pide varias y un cruce en un
+gráfico, incluye todo tal como lo pidió: el sistema le pedirá que elija."""
+
+VIEW_PROMPT = """\
+- title: título corto y claro para la tarjeta, en español.
+- labels: texto legible para cada métrica (`name` = su "as") y, si hace falta, para la
+  dimensión (ej. {"name": "total_ventas", "label": "Total de ventas"})."""
+
+
+def capabilities_text(widget) -> str:
+    """Qué admite un widget, en una línea, desde las piezas de su data_spec: lo que describe
+    cada una que tiene, y "sin X" por las que no tiene (las que lo piden) y por lo que alguna
+    de las suyas no admite (ej. show_as en la dona)."""
+    spec_cls = widget.spec_cls
+    admits, without = [], []
+    for part_cls in SPEC_PARTS:
+        part = spec_cls.part(part_cls.key)
+        if part is not None:
+            admits += part.describe()
+        elif part_cls.describe_absent:
+            without.append(part_cls.key)
+    without += [name for part in spec_cls.parts for name in part.missing()]
+    text = ", ".join(admits)
+    return f"{text}; sin {', '.join(without)}" if without else text
+
+
+def _view_docs(widgets) -> list[str]:
+    """El ai_doc de cada clase de opciones que lo define, con los widgets a los que aplica."""
+    owners: dict[type, list[str]] = {}
+    for widget in widgets:
+        for cls in widget.options_cls.__mro__:
+            if "ai_doc" in vars(cls) and cls.ai_doc:
+                owners.setdefault(cls, []).append(widget.key)
+    return [f"{cls.ai_doc} (solo {', '.join(keys)})" for cls, keys in owners.items()]
+
+
+def build_system_prompt(widgets=None) -> str:
+    """El prompt de la IA: lo del core más lo que declara cada widget que la IA puede proponer
+    (cuándo usarlo, qué admite, sus opciones de vista y sus ejemplos)."""
+    widgets = list(widgets) if widgets is not None else [w for w in WIDGETS if w.ai_enabled]
+    types_section = [
+        f"- {w.key}: {w.ai_doc + ' ' if w.ai_doc else ''}Admite: {capabilities_text(w)}." for w in widgets
+    ]
+    examples = [
+        f'Prompt: "{prompt}"\ncreate_widget({json.dumps(args, ensure_ascii=False)})'
+        for w in widgets for prompt, args in w.ai_examples
+    ]
+    return "\n".join([
+        CORE_PROMPT,
+        "## Tipos de widget (si no viene fijado)",
+        *types_section,
+        PIVOT_PROMPT,
+        "",
+        "## view_options",
+        VIEW_PROMPT,
+        *_view_docs(widgets),
+        "",
+        "## Ejemplos (columnas ilustrativas; usa SOLO las columnas reales de la hoja)",
+        "",
+        "\n\n".join(examples),
+    ]) + "\n"
 
 
 def gemini_client(api_key: str) -> genai.Client:
@@ -280,7 +216,7 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
     de vista de cada ViewOptions. Con el tipo fijado, el data_spec trae sus capacidades."""
     widgets = [WIDGETS.get(widget_type)] if widget_type else [w for w in WIDGETS if w.ai_enabled]
     data_spec = (widgets[0].data_schema(ctx, for_ai=True) if widget_type
-                 else DataSpec.schema(ctx, for_ai=True))
+                 else union_schema([w.spec_cls for w in widgets], ctx, for_ai=True))
     view_properties = {
         "labels": {
             "type": "array",
@@ -298,7 +234,9 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
     view_required = ["labels"]
     for widget in widgets:
         view_properties.update(widget.options_cls.ai_properties())
-        view_required += [k for k in widget.options_cls.ai_required() if k not in view_required]
+    # Con el tipo fijado, sus opciones obligatorias; sin fijar, ninguna (no aplican a todos).
+    if widget_type:
+        view_required += widgets[0].options_cls.ai_required()
     return {
         "type": "object",
         "additionalProperties": False,
@@ -362,7 +300,7 @@ def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tu
         model=settings.GEMINI_MODEL,
         contents=contents,
         config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=build_system_prompt(),
             tools=_tools(ctx, widget_type),
             tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(
                 mode=types.FunctionCallingConfigMode.ANY,
@@ -391,28 +329,14 @@ def _audit(prompt, widget_type, attempt, call_name, args, errors):
 
 def _normalize(args: dict, source: str) -> tuple[str, dict, dict]:
     """Separa la respuesta de la tool en (widget_type, data_spec, opciones de vista en el
-    formato del request del builder)."""
+    formato del request del builder). Las opciones las traduce el `options_cls` del widget."""
     data_spec = copy.deepcopy(args.get("data_spec")) if isinstance(args.get("data_spec"), dict) else {}
     data_spec = {"source": source, **data_spec}
     view_options = args.get("view_options") if isinstance(args.get("view_options"), dict) else {}
-    labels = {
-        item["name"]: item["label"]
-        for item in view_options.get("labels") or []
-        if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("label"), str)
-    }
-    options = {"title": args.get("title") or "", "stacked": bool(view_options.get("stacked")), "labels": labels}
-    if isinstance(view_options.get("reference_lines"), list):
-        options["reference_lines"] = view_options["reference_lines"]
-    kpi = view_options.get("kpi")
-    if isinstance(kpi, dict):
-        options["kpi"] = {
-            "primary": kpi.get("primary"),
-            "compare": kpi.get("compare"),
-            "compare_mode": kpi.get("compare_mode"),
-            "target": kpi.get("target_metric") or kpi.get("target_value"),
-            "higher_is_better": kpi.get("higher_is_better", True),
-        }
-    return args.get("widget_type"), data_spec, options
+    widget_type = args.get("widget_type")
+    options_cls = WIDGETS.get(widget_type).options_cls if widget_type in WIDGETS else ViewOptions
+    options = {"title": args.get("title") or "", **options_cls.from_ai(view_options)}
+    return widget_type, data_spec, options
 
 
 def generate_widget_spec(prompt: str, widget_type: str | None, ctx: SheetContext) -> dict:
@@ -443,12 +367,15 @@ def generate_widget_spec(prompt: str, widget_type: str | None, ctx: SheetContext
             allowed = ", ".join(w.key for w in WIDGETS if w.ai_enabled)
             errors = [f"widget_type: '{resolved_type}' no es válido; usa uno de {allowed}."]
         else:
+            if widget_type is None:
+                # Sin tipo fijado, la tool no exige ninguna clave: se completan las del elegido.
+                raw = WIDGETS.get(resolved_type).spec_cls.with_defaults(raw)
             errors = WIDGETS.get(resolved_type).errors(raw, ctx)
         _audit(prompt, widget_type, attempt, call_name, args, errors)
 
         if not errors:
             definition = WIDGETS.get(resolved_type)
-            spec = DataSpec.from_dict(raw)
+            spec = definition.spec_cls.from_dict(definition.spec_cls.normalize(raw))
             return {
                 "widget_type": resolved_type,
                 "data_spec": spec.to_dict(),

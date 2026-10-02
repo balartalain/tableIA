@@ -5,7 +5,6 @@ import re
 from jsonschema import Draft202012Validator
 
 from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.schema import MAX_DIMENSIONS, MAX_PIVOTS
 
 
 class SpecValidationError(Exception):
@@ -31,11 +30,16 @@ def _path(error) -> str:
 _METRIC_TYPE_PATH = re.compile(r"(^|\.)metrics\[\d+\]\.type$")
 
 
-def _readable(error, ctx: SheetContext) -> str:
+def _readable(error, ctx: SheetContext, parts) -> str:
     path = _path(error)
-    is_column = (path.endswith(("field", "group_by", "trend_by"))
-                 or any(f"{key}[" in path for key in ("dimensions", "pivots", "columns")))
-    if error.validator == "enum" and is_column:
+    # Primero la pieza dueña de la clave (dimensions, metrics, ...): conoce sus mensajes.
+    key = path.split(".")[0].split("[")[0]
+    part = next((p for p in parts if p.key == key), None)
+    if part is not None:
+        message = part.readable(error, path, ctx)
+        if message:
+            return message
+    if error.validator == "enum" and path.endswith(("field", "group_by")):
         value = error.instance
         if value in ctx.fields and not ctx.is_numeric(value):
             return (f"{path}: la columna '{value}' no es numérica; solo se puede usar con "
@@ -45,30 +49,6 @@ def _readable(error, ctx: SheetContext) -> str:
         from sheets_reports.dsl.metrics import METRICS
         label = METRICS.get(error.instance).label if error.instance in METRICS else f"'{error.instance}'"
         return f"{path}: las métricas {label} no están disponibles en este tipo de widget."
-    if error.validator == "maxItems" and path.endswith("dimensions"):
-        if error.validator_value == 0:
-            return f"{path}: este tipo de widget no admite dimensión."
-        if error.validator_value == 1:
-            return f"{path}: solo se admite una dimensión (las tablas admiten hasta {MAX_DIMENSIONS})."
-        return f"{path}: se admiten como máximo {error.validator_value} dimensiones."
-    if error.validator == "minItems" and path.endswith("dimensions"):
-        return f"{path}: se requiere una dimensión (campo por el que agrupar)."
-    if error.validator == "maxItems" and path.endswith("pivots"):
-        if error.validator_value == 0:
-            return f"{path}: este tipo de widget no admite pivote."
-        if error.validator_value == 1:
-            return f"{path}: los gráficos admiten un solo pivote (las tablas hasta {MAX_PIVOTS})."
-        return f"{path}: se admiten como máximo {error.validator_value} columnas de pivote."
-    if error.validator == "minItems" and path.endswith("columns"):
-        return f"{path}: elige al menos una columna para mostrar."
-    if error.validator == "maxItems" and path.endswith("columns"):
-        if error.validator_value == 0:
-            return f"{path}: este tipo de widget no muestra columnas sueltas (agrupa con dimensiones)."
-        return f"{path}: se pueden mostrar como máximo {error.validator_value} columnas."
-    if error.validator == "maxItems" and path.endswith("metrics") and error.validator_value == 0:
-        return f"{path}: este tipo de widget no lleva métricas (muestra los datos tal cual)."
-    if error.validator == "maxItems" and path.endswith("metrics"):
-        return f"{path}: se permiten como máximo {error.validator_value} métricas aquí."
     if error.validator == "pattern" and path.endswith(".as"):
         return f"{path}: '{error.instance}' debe ser snake_case en minúsculas (ej. 'total_ventas')."
     return f"{path}: {error.message}"
@@ -85,8 +65,9 @@ def _leaf_errors(errors):
             yield e
 
 
-def schema_errors(schema: dict, instance, ctx: SheetContext) -> list[str]:
+def schema_errors(schema: dict, instance, ctx: SheetContext, parts=()) -> list[str]:
     """Errores de `instance` contra `schema`, como mensajes legibles y sin repetir (los if/then
-    generan un error por rama)."""
+    generan un error por rama). `parts`: las piezas del data_spec, que dan los mensajes de sus
+    claves."""
     errors = sorted(Draft202012Validator(schema).iter_errors(instance), key=lambda e: list(e.absolute_path))
-    return unique(_readable(e, ctx) for e in _leaf_errors(errors))
+    return unique(_readable(e, ctx, parts) for e in _leaf_errors(errors))

@@ -42,6 +42,8 @@ def board_editor(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
+        # Capacidades de cada tipo de widget: el panel de edición se arma con ellas.
+        "widget_manifest": {w.key: w.manifest() for w in WIDGETS},
     })
 
 

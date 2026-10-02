@@ -68,3 +68,16 @@ class ReconcileTests(SimpleTestCase):
             for compare in (None, "b"):
                 data_spec = spec(dimensions=[], metrics=[agg("a"), agg("b")], trend_by=trend_by)
                 self.assertEqual(view("kpi", data_spec, {"kpi": {"compare": compare}})["compare"], compare)
+
+
+class ManifestTests(SimpleTestCase):
+    def test_opciones_de_vista_salen_de_los_campos_de_options_cls(self):
+        self.assertEqual(WIDGETS.get("bar").manifest()["view"], ["reference_lines", "stacked"])
+        self.assertEqual(WIDGETS.get("line").manifest()["view"], ["reference_lines"])
+        self.assertEqual(WIDGETS.get("donut").manifest()["view"], [])
+
+    def test_capacidades_de_datos(self):
+        kpi = WIDGETS.get("kpi").manifest()
+        self.assertEqual(kpi["data"]["metrics"], [1, 4])
+        self.assertIn("grouped", kpi["data"]["metric_types"])
+        self.assertEqual(WIDGETS.get("filter").manifest()["max_per_dashboard"], 1)

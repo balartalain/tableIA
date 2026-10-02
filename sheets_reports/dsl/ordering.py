@@ -48,3 +48,14 @@ def chronological(values: list) -> list:
     if not dates.isna().any():
         return [values[i] for i in dates.argsort(kind="stable")]
     return sorted(values, key=_natural_key)
+
+
+# Etiqueta del grupo que junta lo que queda fuera del Top N.
+OTHERS_LABEL = "Otros"
+
+
+def sorted_table(table: pd.DataFrame, sort) -> pd.DataFrame:
+    """Tabla plana ordenada por una de sus columnas; los vacíos siempre al final."""
+    return table.sort_values(
+        sort.by, ascending=not sort.descending, na_position="last", kind="stable",
+    ).reset_index(drop=True)

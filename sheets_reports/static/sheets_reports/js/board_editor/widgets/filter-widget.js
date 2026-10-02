@@ -26,15 +26,8 @@
     };
     static defaults = { title: 'Filtros', width: 'md:col-span-12', height: 300 };
     static placement = 'header';
-    static singleton = true;
-    // Builder: solo la lista de filtros (columna + tipo), reordenable.
-    static supportsDimension = false;
-    static supportsPivot = false;
-    static supportsMetrics = false;
+    // Builder: solo la lista de filtros (columna + tipo), reordenable; sin condiciones.
     static supportsConditions = false;
-    static supportsSort = false;
-    static usesColumns = true;
-    static maxColumns = 10;
     static defaultColumns = 1;
     static defaultColumnsFrom = 'dimension_fields';
     static columnsLabel = 'Filtros';

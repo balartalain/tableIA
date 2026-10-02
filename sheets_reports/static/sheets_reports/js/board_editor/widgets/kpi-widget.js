@@ -13,10 +13,6 @@
       description: 'Indicador con comparación, meta y tendencia',
     };
     static defaults = { title: 'Tarjeta KPI', width: 'md:col-span-4', height: 300 };
-    static supportsDimension = false;
-    static supportsPivot = false;
-    // Principal + comparación + meta + auxiliares de un cálculo.
-    static maxMetrics = 4;
     // El nombre a mostrar de cada métrica es su etiqueta en la tarjeta.
     static supportsLabels = true;
 

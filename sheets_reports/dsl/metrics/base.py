@@ -4,7 +4,7 @@ registrada en METRICS que declara su schema, sus reglas y cómo se calcula. El r
 sistema nunca pregunta `if m["type"] == ...`.
 
 La capa dsl/ no conoce widgets: qué tipos de métrica admite cada widget lo declara el widget
-(DataCapabilities.metric_types).
+(los `types` de su pieza `Metrics`, dsl/parts/metrics.py).
 
 Orden de evaluación ≠ orden de presentación: las métricas se evalúan en orden topológico
 según `depends_on()` (evaluation_order). El orden de la lista solo decide el de las columnas,

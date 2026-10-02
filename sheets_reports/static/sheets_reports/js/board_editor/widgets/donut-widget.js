@@ -8,12 +8,6 @@
       description: 'Proporciones por categoría',
     };
     static defaults = { title: 'Gráfico de Dona', width: 'md:col-span-4', height: 300 };
-    // Reparte UNA métrica entre las categorías: sin pivote.
-    static supportsPivot = false;
-    static maxMetrics = 1;
-    // Sin "Mostrar como": el porcentaje de cada porción lo calcula ApexCharts (labelMode).
-    static supportsShowAs = false;
-
     // Qué se ve en cada porción. El backend siempre manda los valores; el porcentaje lo
     // calcula ApexCharts sobre el total de las porciones.
     static FIELD_LABEL_MODE = {

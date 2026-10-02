@@ -1,8 +1,7 @@
-from sheets_reports.dsl.schema import MAX_COLUMNS
-from sheets_reports.dsl.spec import DataSpec
+from sheets_reports.dsl.spec import DataSpec, RowsSpec
 from sheets_reports.dsl.values import to_python
 from sheets_reports.engine.plans.rows import RowsResult
-from sheets_reports.widgets.base import WIDGETS, DataCapabilities, ViewOptions, WidgetType
+from sheets_reports.widgets.base import WIDGETS, ViewOptions, WidgetType
 
 
 @WIDGETS.register
@@ -11,11 +10,20 @@ class TableWidget(WidgetType[RowsResult, ViewOptions]):
     lleva métricas; admite filtros y orden por una columna."""
     key = "table"
     label = "Tabla"
-    capabilities = DataCapabilities(
-        dimensions=(0, 0), pivots=(0, 0), columns=(1, MAX_COLUMNS), metrics=(0, 0),
-        metric_types=frozenset(), having=False, limit=False,
-    )
+    spec_cls = RowsSpec
     plan_key = "rows"
+    ai_doc = ('las filas de la hoja tal cual, sin agrupar ni resumir ("listado", "mostrar los datos", '
+              '"tabla con las columnas ..."): columns con las columnas pedidas, en orden; admite '
+              'filters y sort por una de sus columnas.')
+    ai_examples = (
+        ("Listado de las ventas de 2026 con producto, vendedor y monto, de mayor a menor", {
+            "widget_type": "table", "title": "Ventas 2026",
+            "data_spec": {"dimensions": [], "pivots": [], "columns": ["producto", "vendedor", "ventas"],
+                          "filters": [{"field": "anio", "op": "eq", "value": 2026}], "metrics": [], "having": [],
+                          "sort": {"by": "ventas", "dir": "desc"}, "limit": None, "trend_by": None},
+            "view_options": {"labels": []},
+        }),
+    )
 
     def data_view(self, spec: DataSpec) -> dict:
         return {"columns": list(spec.columns)}

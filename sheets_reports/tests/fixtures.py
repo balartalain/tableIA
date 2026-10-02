@@ -1,7 +1,8 @@
 import pandas as pd
 
 from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.spec import DataSpec
+from sheets_reports.dsl.parts import Dimensions, Pivots
+from sheets_reports.dsl.spec import GroupedSpec, RowsSpec, ScalarSpec, with_parts
 from sheets_reports.engine import PLANS, run
 from sheets_reports.widgets import WIDGETS
 
@@ -65,7 +66,8 @@ def errors_for(widget_type: str, data_spec: dict, ctx: SheetContext | None = Non
 def view(widget_type: str, data_spec: dict, options: dict | None = None) -> dict:
     """view_spec de un widget, como lo construye el builder."""
     definition = WIDGETS.get(widget_type)
-    return definition.build_view(DataSpec.from_dict(data_spec), definition.options(options))
+    spec_cls = definition.spec_cls
+    return definition.build_view(spec_cls.from_dict(spec_cls.normalize(data_spec)), definition.options(options))
 
 
 def compiled(widget_type: str, data_spec: dict, options: dict | None = None, df=None) -> dict:
@@ -74,9 +76,15 @@ def compiled(widget_type: str, data_spec: dict, options: dict | None = None, df=
     return WIDGETS.get(widget_type).render(data_spec, view(widget_type, data_spec, options), df)
 
 
+class PLAN_GROUPED(GroupedSpec):
+    """Los planes que agrupan, con las cotas de la tabla dinámica (la más amplia)."""
+    parts = with_parts(GroupedSpec, Dimensions(1, 3), Pivots(0, 2))
+
+
 def execute(df: pd.DataFrame, data_spec: dict, plan: str | None = None):
     """Resultado tipado del plan (por defecto, el que corresponde a la forma del spec)."""
     if plan is None:
         plan = ("scalar" if not data_spec["dimensions"]
                 else "pivot_chart" if data_spec["pivots"] else "flat")
-    return run(DataSpec.from_dict(data_spec), df, PLANS.get(plan))
+    spec_cls = {"scalar": ScalarSpec, "rows": RowsSpec, "column_values": RowsSpec}.get(plan, PLAN_GROUPED)
+    return run(spec_cls.from_dict(data_spec), df, PLANS.get(plan))

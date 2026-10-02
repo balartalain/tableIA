@@ -11,6 +11,7 @@ from sheets_reports.services.ai_spec import (
 )
 from sheets_reports.dsl.context import SheetContext
 from sheets_reports.tests.fixtures import sales_ctx
+from sheets_reports.widgets import WIDGETS
 
 VALID_ARGS = {
     "widget_type": "bar",
@@ -156,3 +157,43 @@ class ToolSchemaTests(SimpleTestCase):
         grouped = params["properties"]["data_spec"]["properties"]["metrics"]["items"]["anyOf"][2]
         self.assertIn("inner_having", grouped["required"])
         self.assertNotIn("having", grouped["properties"])
+
+
+def examples_ctx() -> SheetContext:
+    """Una hoja con las columnas que usan los ejemplos del prompt."""
+    df = pd.DataFrame({
+        "producto": ["A"], "vendedor": ["Ana"], "categoria": ["Hogar"], "mes": ["Ene"],
+        "respuesta": ["Sí"], "anio": [2026], "ventas": [1.0], "costo": [1.0], "plan": [1.0],
+    })
+    return SheetContext.from_dataframe(df, "0")
+
+
+class PromptFromRegistryTests(SimpleTestCase):
+    """El prompt sale de los widgets registrados: cada uno aporta cuándo usarlo, lo que admite
+    (desde sus capacidades), sus opciones de vista y sus ejemplos."""
+
+    def test_ejemplos_de_cada_widget_son_specs_validos(self):
+        ctx = examples_ctx()
+        for widget in WIDGETS:
+            for prompt, args in widget.ai_examples:
+                with self.subTest(widget=widget.key, prompt=prompt):
+                    widget_type, raw, options = ai_spec._normalize(args, ctx.source)
+                    self.assertEqual(widget_type, widget.key)
+                    self.assertEqual(widget.errors(raw, ctx), [])
+                    widget.build_view(widget.validate(raw, ctx), widget.options(options))
+
+    def test_describe_los_widgets_que_la_ia_puede_proponer(self):
+        prompt = ai_spec.build_system_prompt()
+        for widget in WIDGETS:
+            self.assertEqual(f"- {widget.key}: " in prompt, widget.ai_enabled, widget.key)
+        self.assertIn("- kpi: uno o pocos números", prompt)
+        self.assertIn("Admite: metrics 1–4 (agg, calc, grouped), trend_by; sin having, sort, limit.", prompt)
+
+    def test_opciones_de_vista_con_los_widgets_a_los_que_aplican(self):
+        prompt = ai_spec.build_system_prompt()
+        self.assertIn("- stacked: true solo si el usuario pide barras apiladas. (solo bar)", prompt)
+        self.assertIn("(solo bar, line)", prompt)
+
+    def test_sin_tipo_fijado_no_exige_opciones_de_un_widget(self):
+        params = build_tool_parameters(sales_ctx(), widget_type=None)
+        self.assertEqual(params["properties"]["view_options"]["required"], ["labels"])

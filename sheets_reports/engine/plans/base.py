@@ -9,11 +9,9 @@ from typing import ClassVar, Generic, TypeVar
 
 import pandas as pd
 
+from sheets_reports.dsl.ordering import OTHERS_LABEL, sorted_table  # noqa: F401
 from sheets_reports.dsl.registry import Registry
 from sheets_reports.dsl.spec import DataSpec
-
-# Etiqueta del grupo que junta lo que queda fuera del Top N.
-OTHERS_LABEL = "Otros"
 
 
 class ResultTooLargeError(ValueError):
@@ -49,9 +47,3 @@ PLANS: Registry[ResultPlan] = Registry("Plan de resultado")
 def others_last(values: list, key=lambda v: v) -> list:
     return [v for v in values if key(v) != OTHERS_LABEL] + [v for v in values if key(v) == OTHERS_LABEL]
 
-
-def sorted_table(table: pd.DataFrame, sort) -> pd.DataFrame:
-    """Tabla plana ordenada por una de sus columnas; los vacíos siempre al final."""
-    return table.sort_values(
-        sort.by, ascending=not sort.descending, na_position="last", kind="stable",
-    ).reset_index(drop=True)

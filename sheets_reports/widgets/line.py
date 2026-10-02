@@ -16,6 +16,18 @@ def _ascending(values: list) -> list:
 class LineWidget(ChartWidget):
     key = "line"
     label = "Gráfico de Líneas"
+    ai_doc = 'evolución en el tiempo ("por mes", "tendencia").'
+    ai_examples = (
+        ("Ventas por mes con una línea de meta en 50000 y el promedio", {
+            "widget_type": "line", "title": "Ventas por mes",
+            "data_spec": {"dimensions": ["mes"], "pivots": [], "columns": [], "filters": [], "having": [],
+                          "sort": None, "limit": None, "trend_by": None,
+                          "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
+            "view_options": {"labels": [{"name": "total_ventas", "label": "Ventas"}],
+                             "reference_lines": [{"kind": "value", "value": 50000, "label": "Meta"},
+                                                 {"kind": "avg", "series": "total_ventas", "label": "Promedio"}]},
+        }),
+    )
 
     def compile(self, result, options, spec):
         """Una línea muestra una evolución: sin un orden elegido en el panel, el eje X (casi

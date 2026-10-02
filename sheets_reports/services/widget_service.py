@@ -10,19 +10,13 @@ import pandas as pd
 from sheets_reports.dsl.conditions import Condition, apply_filters, condition_errors, parse_conditions
 from sheets_reports.dsl.context import SheetContext
 from sheets_reports.dsl.errors import SpecValidationError
+from sheets_reports.dsl.parts import SPEC_PARTS
 from sheets_reports.dsl.schema import MAX_BOARD_IN_VALUES
 from sheets_reports.engine import ResultTooLargeError
 from sheets_reports.models import Widget, default_position
 from sheets_reports.widgets import WIDGETS
 
 logger = logging.getLogger(__name__)
-
-# Valor de cada clave del data_spec que el builder no manda.
-_BUILDER_DEFAULTS = {
-    "dimensions": [], "pivots": [], "columns": [], "filters": [], "metrics": [], "having": [],
-    "sort": None, "limit": None, "trend_by": None,
-}
-
 
 def clean_position(value, fallback=None) -> dict:
     position = dict(fallback or default_position())
@@ -42,13 +36,12 @@ class WidgetService:
         self.df = df
         self.ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid)
 
-    def _raw_data_spec(self, payload: dict) -> dict:
-        """data_spec desde los controles del builder; sin una clave, su valor por defecto."""
+    def _raw_data_spec(self, definition, payload: dict) -> dict:
+        """data_spec desde el body del builder: las claves de las piezas conocidas (el resto
+        son opciones de vista), con el valor por defecto de las que el builder no manda."""
         raw = {"source": self.dashboard.sheet_gid}
-        for key, default in _BUILDER_DEFAULTS.items():
-            value = payload.get(key, default)
-            raw[key] = default if value is None and isinstance(default, list) else value
-        return raw
+        raw.update({key: payload[key] for key in SPEC_PARTS.keys() if key in payload})
+        return definition.spec_cls.with_defaults(raw)
 
     def create(self, widget_type: str, payload: dict) -> Widget:
         """Widget desde el builder. NUNCA llama a la IA. Lanza UnknownKeyError o
@@ -57,7 +50,7 @@ class WidgetService:
         limit = definition.max_per_dashboard
         if limit is not None and self.dashboard.widgets.filter(type=widget_type).count() >= limit:
             raise SpecValidationError([f"Solo se puede agregar un widget «{definition.label}» por tablero."])
-        spec = definition.validate(self._raw_data_spec(payload), self.ctx)
+        spec = definition.validate(self._raw_data_spec(definition, payload), self.ctx)
         return Widget.objects.create(
             dashboard=self.dashboard,
             type=widget_type,
@@ -70,7 +63,7 @@ class WidgetService:
         """Edición manual desde el builder: valida, reconstruye view_spec (lo que no viene se
         conserva del widget) y guarda. NUNCA llama a la IA."""
         definition = widget.definition
-        spec = definition.validate(self._raw_data_spec(payload), self.ctx)
+        spec = definition.validate(self._raw_data_spec(definition, payload), self.ctx)
         widget.data_spec = spec.to_dict()
         widget.view_spec = definition.build_view(spec, definition.options(payload, widget.view_spec or {}))
         widget.save()

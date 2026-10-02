@@ -3,10 +3,10 @@ import dataclasses
 import re
 from dataclasses import dataclass, field
 
-from sheets_reports.dsl.spec import DataSpec
+from sheets_reports.dsl.spec import DataSpec, GroupedSpec
 from sheets_reports.dsl.values import is_number
 from sheets_reports.engine.plans import PLANS, FlatResult, PivotChartResult
-from sheets_reports.widgets.base import DataCapabilities, ViewOptions, WidgetType, percent_metrics
+from sheets_reports.widgets.base import ViewOptions, WidgetType, percent_metrics
 from sheets_reports.widgets.presentation import column_values
 
 REFERENCE_KINDS = ["value", "avg", "max", "min"]
@@ -63,6 +63,14 @@ class ChartOptions(ViewOptions):
     def _view_fields(cls, view):
         return {**super()._view_fields(view), "reference_lines": clean_reference_lines(view.get("reference_lines"))}
 
+    ai_doc = """\
+- reference_lines: líneas de referencia sobre el eje de valores, solo si el usuario las pide
+  ("con una línea de meta en 50000", "marcar el promedio", "mostrar el máximo y el mínimo").
+  Cada una: {"kind": "value" | "avg" | "max" | "min", "value": número (solo con "value"),
+  "series": `as` de la métrica (o, con pivots, un valor del pivote) sobre la que se calcula
+  avg/max/min (omítelo para usar todas las series), "label": texto corto (ej. "Meta")}. Si no
+  las pide, []."""
+
     @classmethod
     def ai_properties(cls):
         return {"reference_lines": {
@@ -97,7 +105,7 @@ class ChartOptions(ViewOptions):
 class ChartWidget(WidgetType[FlatResult | PivotChartResult, ChartOptions]):
     """Una dimensión en el eje X; sin pivote, una serie por métrica; con pivote, UNA métrica y
     una serie por cada valor del pivote."""
-    capabilities = DataCapabilities(dimensions=(1, 1), pivots=(0, 1))
+    spec_cls = GroupedSpec
     options_cls = ChartOptions
 
     def plan(self, spec):

@@ -8,9 +8,10 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from sheets_reports.dsl.registry import Registry
-from sheets_reports.dsl.spec import DataSpec
+from sheets_reports.dsl.parts import Columns
+from sheets_reports.dsl.spec import DataSpec, RowsSpec, with_parts
 from sheets_reports.engine.plans.column_values import ColumnValuesResult
-from sheets_reports.widgets.base import WIDGETS, DataCapabilities, ViewOptions, WidgetType
+from sheets_reports.widgets.base import WIDGETS, ViewOptions, WidgetType
 
 FILTER_CONTROLS: Registry["FilterControl"] = Registry("Tipo de filtro")
 
@@ -72,14 +73,16 @@ class FilterOptions(ViewOptions):
         return {"controls": self.controls}
 
 
+class FilterSpec(RowsSpec):
+    """Un control por columna, en el orden del panel: sin orden de filas."""
+    parts = with_parts(RowsSpec, Columns(1, MAX_FILTERS_PER_BOX), without=("sort",))
+
+
 @WIDGETS.register
 class FilterWidget(WidgetType[ColumnValuesResult, FilterOptions]):
     key = "filter"
     label = "Filtros"
-    capabilities = DataCapabilities(
-        dimensions=(0, 0), pivots=(0, 0), columns=(1, MAX_FILTERS_PER_BOX), metrics=(0, 0),
-        metric_types=frozenset(), having=False, sort=False, limit=False,
-    )
+    spec_cls = FilterSpec
     options_cls = FilterOptions
     plan_key = "column_values"
     # Sus opciones son de toda la hoja: no se recortan con la selección del propio tablero.

@@ -944,7 +944,9 @@
 
 </div>
 
+{{ widget_manifest|json_script:"widget-manifest" }}
 <script>
+  window.WIDGET_MANIFEST = JSON.parse(document.getElementById('widget-manifest').textContent);
   window.DASHBOARD_ID = {{ dashboard.id }};
   window.SHARE_PATH = "{% url 'board_view' dashboard_id=dashboard.id %}";
   window.REFRESH_MINUTES = {{ refresh_minutes|default:0 }};

@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from sheets_reports.dsl.rules import REFERENCES, Rule
-from sheets_reports.dsl.spec import DataSpec
+from sheets_reports.dsl.spec import DataSpec, ScalarSpec
 from sheets_reports.dsl.values import is_number
 from sheets_reports.engine.plans import ScalarResult
-from sheets_reports.widgets.base import WIDGETS, DataCapabilities, ViewOptions, WidgetType, percent_metrics
+from sheets_reports.widgets.base import WIDGETS, ViewOptions, WidgetType, percent_metrics
 from sheets_reports.widgets.presentation import number
 
 STATUS_BASES = ["target_pct", "value"]
@@ -55,6 +55,29 @@ class KpiOptions(ViewOptions):
     @classmethod
     def _view_fields(cls, view):
         return {**super()._view_fields(view), **cls._roles(view)}
+
+    ai_doc = """\
+- kpi: {"primary": as de la métrica grande (por defecto la primera), "compare": as de la
+  métrica contra la que se muestra la variación ▲/▼ ("vs el año anterior"), "compare_mode":
+  "pct" | "abs", "target_metric": as de la meta, o "target_value": número de la meta ("meta
+  de 50000"), "higher_is_better": false si menos es mejor (costos, quejas)}."""
+
+    @classmethod
+    def from_ai(cls, view_options):
+        """La IA da la meta como `target_metric` o `target_value`; el builder, como `target`."""
+        options = super().from_ai(view_options)
+        kpi = view_options.get("kpi")
+        if isinstance(kpi, dict):
+            options["kpi"] = {
+                "primary": kpi.get("primary"),
+                "compare": kpi.get("compare"),
+                "compare_mode": kpi.get("compare_mode"),
+                "target": kpi.get("target_metric") or kpi.get("target_value"),
+                "higher_is_better": kpi.get("higher_is_better", True),
+            }
+        else:
+            options.pop("kpi", None)
+        return options
 
     @classmethod
     def ai_properties(cls):
@@ -127,13 +150,57 @@ def _status(value, status: dict, higher_is_better: bool):
 class KpiWidget(WidgetType[ScalarResult, KpiOptions]):
     key = "kpi"
     label = "Tarjeta KPI"
-    capabilities = DataCapabilities(
-        dimensions=(0, 0), pivots=(0, 0), metrics=(1, 4),
-        metric_types=frozenset({"agg", "calc", "grouped"}),
-        having=False, sort=False, limit=False, trend=True,
-    )
+    spec_cls = ScalarSpec
     options_cls = KpiOptions
     plan_key = "scalar"
+    ai_doc = ('uno o pocos números ("total de ventas", "cuántos vendedores...", "la categoría que '
+              'más vendió", "ventas de este año vs el anterior").')
+    ai_examples = (
+        ("Ventas de este año comparadas con el año anterior", {
+            "widget_type": "kpi", "title": "Ventas del año",
+            "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": None,
+                         "limit": None, "trend_by": None,
+                          "metrics": [
+                              {"type": "agg", "as": "ventas_actual", "agg": "sum", "field": "ventas",
+                               "filters": [{"field": "anio", "op": "eq", "relative": "current_year"}]},
+                              {"type": "agg", "as": "ventas_anterior", "agg": "sum", "field": "ventas",
+                               "filters": [{"field": "anio", "op": "eq", "relative": "previous_year"}]}]},
+            "view_options": {"labels": [{"name": "ventas_actual", "label": "Ventas"},
+                                        {"name": "ventas_anterior", "label": "Año anterior"}],
+                             "kpi": {"primary": "ventas_actual", "compare": "ventas_anterior", "compare_mode": "pct"}},
+        }),
+        ("Cuántos vendedores no cumplieron el plan de ventas", {
+            "widget_type": "kpi", "title": "Vendedores bajo el plan",
+            "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": None,
+                         "limit": None, "trend_by": None,
+                          "metrics": [{"type": "grouped", "as": "vendedores_bajo_plan", "group_by": "vendedor",
+                                       "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
+                                                 {"type": "agg", "as": "plan", "agg": "sum", "field": "plan"}],
+                                       "inner_having": [{"left": "ventas", "op": "lt", "right": "plan"}],
+                                       "result": "count"}]},
+            "view_options": {"labels": [{"name": "vendedores_bajo_plan", "label": "Vendedores"}]},
+        }),
+        ("La categoría que más vendió", {
+            "widget_type": "kpi", "title": "Categoría líder",
+            "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": None,
+                         "limit": None, "trend_by": None,
+                          "metrics": [{"type": "grouped", "as": "categoria_top", "group_by": "categoria",
+                                       "inner": [{"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"}],
+                                       "inner_having": [], "result": "top", "value": "ventas"}]},
+            "view_options": {"labels": [{"name": "categoria_top", "label": "Ventas"}]},
+        }),
+        ("Margen de ganancia en porcentaje", {
+            "widget_type": "kpi", "title": "Margen",
+            "data_spec": {"dimensions": [], "pivots": [], "columns": [], "filters": [], "having": [], "sort": None,
+                         "limit": None, "trend_by": None,
+                          "metrics": [
+                              {"type": "agg", "as": "ventas", "agg": "sum", "field": "ventas"},
+                              {"type": "agg", "as": "costo", "agg": "sum", "field": "costo"},
+                              {"type": "calc", "as": "ganancia", "op": "sub", "left": "ventas", "right": "costo"},
+                              {"type": "calc", "as": "margen", "op": "ratio_pct", "left": "ganancia", "right": "ventas"}]},
+            "view_options": {"labels": [{"name": "margen", "label": "Margen"}], "kpi": {"primary": "margen"}},
+        }),
+    )
 
     def rules(self):
         return [*super().rules(), TrendNeedsTrendableMetric()]

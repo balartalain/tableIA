@@ -27,8 +27,10 @@
     // El KPI no agrupa: su builder no muestra dimensión ni pivote.
     static supportsDimension = true;
     static supportsPivot = true;
-    static pivotLabel = 'Dividir en series por';
-    static dimensionLabel = 'Agrupar por';
+    // Mismos nombres en todos los widgets (y en la sugerencia de la IA): en una gráfica las
+    // filas son el eje X y las columnas, las series.
+    static pivotLabel = 'Columnas';
+    static dimensionLabel = 'Filas';
     // Niveles anidados de filas/columnas: solo la tabla admite más de uno.
     static maxDimensions = 1;
     static maxPivots = 1;

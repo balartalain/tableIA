@@ -38,8 +38,6 @@
     static defaults = { title: 'Tabla dinámica', width: 'md:col-span-6', height: 300 };
     // Formatos de columna (menú de la cabecera); reutilizables por otros widgets de tabla.
     static formats = formattersMap;
-    static pivotLabel = 'Columnas';
-    static dimensionLabel = 'Filas';
     static maxDimensions = 3;
     static maxPivots = 2;
     // Cada métrica es una columna con cabecera: se puede renombrar.

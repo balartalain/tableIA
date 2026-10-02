@@ -176,11 +176,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     setInterval(() => store.refreshData(), window.REFRESH_MINUTES * 60 * 1000);
   }
 
+  // Con forceFallback el arrastre son eventos de mouse normales: sin esto, mover el mouse con el
+  // botón presionado va seleccionando el texto de la página. Se corta mientras haya algo agarrado.
+  const noTextSelection = {
+    onChoose: () => { document.body.style.userSelect = 'none'; },
+    onUnchoose: () => { document.body.style.userSelect = ''; },
+  };
+
   new Sortable(sidebarEl, {
     group: { name: 'shared', pull: 'clone', put: false },
     sort: false,
     draggable: '[data-type]',
     animation: 150,
+    // Mismo modo de arrastre que el lienzo: con forceFallback el lienzo no escucha los eventos
+    // nativos (dragover/drop), así que un arrastre nativo desde aquí no podría soltarse en él.
+    forceFallback: true,
+    fallbackTolerance: 3,
+    // En <body>: dentro de la barra lateral el clon quedaría recortado por su overflow.
+    fallbackOnBody: true,
+    ...noTextSelection,
   });
 
   new Sortable(canvasEl, {
@@ -195,6 +209,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     fallbackTolerance: 3,
     // El clon va en <body>: dentro del lienzo sería otro hijo del grid con el mismo data-widget-id.
     fallbackOnBody: true,
+    ...noTextSelection,
 
     onAdd: function (evt) {
       const type = evt.item.getAttribute('data-type');

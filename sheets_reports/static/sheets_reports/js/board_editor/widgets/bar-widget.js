@@ -184,7 +184,7 @@
     }
 
     _wireLegendDrag(container, series) {
-      if (this._legendSortable) { this._legendSortable.destroy(); this._legendSortable = null; }
+      this._destroyLegendSortable();
       if (this._legendObserver) { this._legendObserver.disconnect(); this._legendObserver = null; }
       if (series.length <= 1 || typeof Sortable === 'undefined') return;
       const legendEl = container.querySelector('.apexcharts-legend');
@@ -210,6 +210,20 @@
       this._legendObserver.observe(container, { childList: true, subtree: true });
     }
 
+    // Sortable.destroy() llama a _onDrop(), que cierra el arrastre en curso de CUALQUIER
+    // Sortable (el estado es global): si se está arrastrando un widget del lienzo, este
+    // quedaría con la clase del fantasma y sin guardar el orden. Se destruye al terminar.
+    _destroyLegendSortable() {
+      const sortable = this._legendSortable;
+      this._legendSortable = null;
+      if (!sortable) return;
+      if (Sortable.active || Sortable.dragged) {
+        document.addEventListener('dragend', () => sortable.destroy(), { once: true });
+      } else {
+        sortable.destroy();
+      }
+    }
+
     _onLegendReorder(legendEl) {
       const names = [...legendEl.querySelectorAll('.apexcharts-legend-series')]
         .map(el => el.querySelector('.apexcharts-legend-text')?.textContent)
@@ -230,7 +244,7 @@
     }
 
     destroy() {
-      if (this._legendSortable) { this._legendSortable.destroy(); this._legendSortable = null; }
+      this._destroyLegendSortable();
       if (this._legendObserver) { this._legendObserver.disconnect(); this._legendObserver = null; }
       super.destroy();
     }

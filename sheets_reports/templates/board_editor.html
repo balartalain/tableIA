@@ -278,13 +278,6 @@
                 <p x-show="!$store.dashboard.schemaError && !($store.dashboard.schema.all_fields || []).length" class="text-[11px] text-ink/50">
                   Cargando columnas de la hoja…
                 </p>
-                <div x-show="$store.dashboard.drawerLoading" class="flex items-center justify-center py-8 text-ink/50">
-                  <svg class="animate-spin h-5 w-5 text-moss-500 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span class="text-sm">Cargando configuración del widget…</span>
-                </div>
 
                 <!-- Valores de ejemplo de las columnas de texto (autocompletar de los filtros) -->
                 <template x-for="l in $store.dashboard.sampleLists" :key="l.id">
@@ -294,12 +287,12 @@
                 </template>
 
                 <!-- Piezas del data_spec, en el orden y con los controles del manifiesto. -->
-                <div x-show="!$store.dashboard.drawerLoading" class="space-y-3">
+                <div class="space-y-3">
                   {% include "partials/panel/panel.html" %}
                 </div>
 
                 <!-- Visor JSON de solo lectura -->
-                <details x-show="!$store.dashboard.drawerLoading" class="text-[11px]">
+                <details class="text-[11px]">
                   <summary class="cursor-pointer text-ink/50 hover:text-ink/70 select-none">Ver JSON del widget</summary>
                   <div class="mt-2 space-y-2">
                     <div>

@@ -167,24 +167,6 @@
       ];
     }
 
-    // Reconstruye view_spec completo a partir de data_spec + view_options (solo lo editable).
-    // Lo usa applyServerState cuando el backend devuelve view_options en lugar de view_spec.
-    static reconstructViewSpec(dataSpec, viewOptions) {
-      const spec = dataSpec || {};
-      const dims = spec.dimensions || [];
-      const metrics = (spec.metrics || []).map(m => m.as).filter(Boolean);
-      const percent = (spec.metrics || []).filter(m => m.show_as && m.show_as !== 'value').map(m => m.as);
-      return {
-        widget: this.type,
-        x: dims[0] || '',
-        metrics,
-        percent,
-        title: viewOptions.title || '',
-        labels: viewOptions.labels || {},
-        display: viewOptions.display || {},
-      };
-    }
-
     static _parseSpan(widthClass) {
       const m = /md:col-span-(\d+)/.exec(widthClass);
       return m ? parseInt(m[1], 10) : 6;
@@ -373,10 +355,8 @@
       this._chart = null;
     }
 
-    // Widget serializado por el backend ({id, type, position, data_spec?, view_spec?, ...}) ->
+    // Widget serializado por el backend ({id, type, position, data_spec, view_spec, ...}) ->
     // instancia de la clase registrada para `type`.
-    // data_spec y view_spec son opcionales: en la carga inicial del tablero no vienen
-    // (se piden vía AJAX al editar). El widget renderiza solo con datos compilados.
     static fromServer(w) {
       const pos = w.position || {};
       const view = w.view_spec || {};
@@ -384,9 +364,9 @@
         ...(view.display || {}),
         id: w.id,
         title: view.title,
-        data_spec: w.data_spec || null,
-        view_spec: w.view_spec || null,
-        source_prompt: w.source_prompt || '',
+        data_spec: w.data_spec,
+        view_spec: w.view_spec,
+        source_prompt: w.source_prompt,
         width: `md:col-span-${pos.w || 6}`,
         startCol: pos.x ? `md:col-start-${pos.x}` : '',
         height: pos.h,
@@ -395,22 +375,11 @@
     }
 
     // Actualiza el widget con la versión que devolvió el backend (tras generar/editar el spec).
-    // Acepta tanto view_spec (respuesta antigua) como view_options (nueva respuesta de /config/).
     applyServerState(w) {
-      if (w.data_spec !== undefined) this.data_spec = w.data_spec;
-      if (w.source_prompt !== undefined) this.source_prompt = w.source_prompt || '';
-
-      // Nuevo formato: view_options (solo lo editable)
-      if (w.view_options !== undefined) {
-        const viewSpec = this.constructor.reconstructViewSpec?.(this.data_spec, w.view_options) || w.view_options;
-        this.view_spec = viewSpec;
-        if (viewSpec.title) this.title = viewSpec.title;
-      }
-      // Formato antiguo: view_spec completo
-      else if (w.view_spec !== undefined) {
-        this.view_spec = w.view_spec;
-        if (w.view_spec.title) this.title = w.view_spec.title;
-      }
+      this.data_spec = w.data_spec;
+      this.view_spec = w.view_spec;
+      this.source_prompt = w.source_prompt || '';
+      if (w.view_spec && w.view_spec.title) this.title = w.view_spec.title;
     }
 
     get hasSpec() {

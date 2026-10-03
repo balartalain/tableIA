@@ -12,7 +12,7 @@ from sheets_reports.dsl.groups import (
 )
 from sheets_reports.dsl.metrics import flat_table
 from sheets_reports.dsl.ordering import OTHERS_LABEL, sorted_table
-from sheets_reports.dsl.parts.base import SPEC_PARTS, Rows, SpecPart
+from sheets_reports.dsl.parts.base import SPEC_PARTS, Rows, SpecPart, choices
 from sheets_reports.dsl.rules import METRICS, REFERENCES, Rule
 from sheets_reports.dsl.schema import MAX_LIMIT, nullable
 
@@ -44,6 +44,11 @@ class Filters(SpecPart):
     """Condiciones sobre las FILAS que entran al widget (WHERE)."""
     key = "filters"
     order = 10
+
+    ui = "condition-list"
+    panel_order = 50
+    label = "Filtros"
+    hint = "qué filas de la hoja se usan"
 
     def schema(self, ctx, *, for_ai=False):
         return conditions_schema(ctx)
@@ -83,6 +88,11 @@ class Having(SpecPart):
     order = 20
     describe_absent = True
 
+    ui = "condition-list-metric"
+    panel_order = 60
+    label = "Filtrar resultado"
+    hint = "según el valor ya calculado"
+
     def schema(self, ctx, *, for_ai=False):
         return group_conditions_schema()
 
@@ -121,6 +131,10 @@ class Having(SpecPart):
 
 # --- sort -----------------------------------------------------------------------------------
 
+SORT_DIRECTIONS = ["desc", "asc"]
+SORT_DIRECTION_LABELS = {"desc": "Mayor a menor", "asc": "Menor a mayor"}
+
+
 @dataclass(frozen=True)
 class Sort:
     by: str
@@ -153,12 +167,15 @@ class OrderBy(SpecPart):
     key = "sort"
     describe_absent = True
 
+    ui = "field-group"
+    panel_order = 70
+
     def schema(self, ctx, *, for_ai=False):
         return nullable({
             "type": "object",
             "additionalProperties": False,
             "required": ["by", "dir"],
-            "properties": {"by": {"type": "string"}, "dir": {"enum": ["asc", "desc"]}},
+            "properties": {"by": {"type": "string"}, "dir": {"enum": SORT_DIRECTIONS}},
         })
 
     def parse(self, raw):
@@ -172,6 +189,20 @@ class OrderBy(SpecPart):
 
     def absent_hint(self, widget):
         return f"sort: «{widget.label}» no se ordena."
+
+    def panel_fields(self, columns):
+        # Por qué se ordena depende de lo elegido en el panel (filas, columnas, métricas):
+        # lo resuelve el frontend con la fuente «sort_targets».
+        return {
+            "layout": "columns",
+            "required": "by",
+            "item_fields": [
+                {"key": "by", "ui": "select", "label": "Ordenar por", "options_from": "sort_targets",
+                 "empty_label": "Orden de la hoja"},
+                {"key": "dir", "ui": "select", "label": "Dirección", "enable_if": "by", "default": "desc",
+                 "options": choices(SORT_DIRECTIONS, SORT_DIRECTION_LABELS)},
+            ],
+        }
 
     def manifest(self):
         return {"sort": True}
@@ -208,6 +239,9 @@ class TopN(SpecPart):
     key = "limit"
     order = 30
     describe_absent = True
+
+    ui = "field-group"
+    panel_order = 80
 
     def schema(self, ctx, *, for_ai=False):
         return nullable({
@@ -248,6 +282,20 @@ class TopN(SpecPart):
 
     def absent_hint(self, widget):
         return f"limit: «{widget.label}» no agrupa{grouped_hint(widget, ', result top')}"
+
+    def panel_fields(self, columns):
+        return {
+            "layout": "inline",
+            "required": "n",
+            "item_fields": [
+                {"key": "n", "ui": "number", "label": "Mostrar solo los primeros", "min": 1, "max": MAX_LIMIT,
+                 "placeholder": "Todos"},
+                {"key": "others", "ui": "checkbox", "label": "Agrupar el resto en «Otros»", "show_if": "n"},
+            ],
+            # El aviso se evalúa en el frontend (la regla LimitNeedsMetricSort lo valida al guardar).
+            "notes": [{"when": "limit_without_metric_sort",
+                       "text": "Para un Top N elige en «Ordenar por» la métrica que define quiénes son los primeros."}],
+        }
 
     def manifest(self):
         return {"limit": True}

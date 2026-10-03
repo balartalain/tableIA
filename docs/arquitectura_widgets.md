@@ -178,6 +178,8 @@ class SpecPart:
     readable(error, path, ctx)            # mensaje legible de un error de su schema
     absent_hint(widget)                   # mensaje si viene con valor y el widget no la tiene
     manifest() / absent_manifest()        # lo que aporta al manifiesto, con o sin ella
+    ui, panel_order, label, hint, group   # su control en el panel del editor (§4.3)
+    panel(columns) / panel_fields(columns)  # su entrada en manifest()["parts"]
     describe() / missing()                # lo que aporta a la ficha de la IA
     loose()                               # la pieza con los límites del lenguaje
 ```
@@ -339,14 +341,45 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 2. JSON Schema de su `spec_cls` sobre `own(raw)` (sin lo que ya reportó `UnsupportedPart`; una clave desconocida sigue siendo un error), con mensajes legibles de sus piezas.
 3. `spec_cls.from_dict` y luego las reglas SEMANTIC, ordenadas por `(stage, priority)`.
 
-`manifest()` resume el tipo para el editor: `data` es lo que aporta cada pieza de `SPEC_PARTS` (`manifest()` si el widget la tiene, `absent_manifest()` si no: cotas `[0, 0]`, `having`/`sort`/`limit`/`trend` en `false`), `view` los campos propios de su `options_cls` (sin `title`, `labels` ni `display`) y `max_per_dashboard`. Sale de las mismas declaraciones que usa el backend, así que una pieza o un campo nuevo queda publicado sin más:
+`manifest(columns=None)` resume el tipo para el editor:
+- `data`: lo que aporta cada pieza de `SPEC_PARTS` (`manifest()` si el widget la tiene, `absent_manifest()` si no: cotas `[0, 0]`, `having`/`sort`/`limit`/`trend` en `false`);
+- `parts`: los controles del panel de datos, uno por pieza del widget con `ui`, ordenados por `panel_order` (sin las de `panel_hidden`);
+- `view`: los campos propios de su `options_cls` (sin `title`, `labels` ni `display`);
+- `max_per_dashboard`.
+
+Sale de las mismas declaraciones que usa el backend, así que una pieza o un campo nuevo queda publicado sin más:
 
 ```json
 {"data": {"dimensions": [1, 1], "pivots": [0, 1], "columns": [0, 0], "metrics": [1, 5],
           "metric_types": ["agg", "calc"], "show_as": true, "sort": true, "...": "..."},
+ "parts": [{"key": "dimensions", "ui": "column-list", "label": "Filas", "min": 1, "max": 1,
+            "options": [{"value": "Categoría", "label": "Categoría"}], "excludes": ["dimensions", "pivots"],
+            "group": {"key": "grouping", "label": "Agrupar datos", "...": "..."}, "...": "..."},
+           {"key": "limit", "ui": "field-group", "layout": "inline", "required": "n",
+            "item_fields": [{"key": "n", "ui": "number", "min": 1, "max": 100, "...": "..."},
+                            {"key": "others", "ui": "checkbox", "show_if": "n", "...": "..."}],
+            "notes": [{"when": "limit_without_metric_sort", "text": "..."}]},
+           "..."],
  "view": ["reference_lines", "stacked"],
  "max_per_dashboard": null}
 ```
+
+**El panel de datos.** Ningún widget tiene panel propio: el frontend recorre `parts` y monta el componente de cada `ui`. Cada pieza declara el suyo (`SpecPart.ui`, `label`, `hint`, `group`, `panel_order` y `panel_fields`):
+
+| `ui` | Piezas | Qué dibuja |
+|---|---|---|
+| `column-list` | `Dimensions`, `Pivots`, `Columns` | lista de columnas con «Agregar» y ×; `min`/`max`, `options`, `excludes` (listas cuyas columnas no se ofrecen), `empty_label`/`empty_selectable`, `add_label`, `sortable` (arrastrar), `allow_all` («Usar todas») |
+| `column-picker` | `TrendBy` | una columna, opcional (`options`, `empty_label`) |
+| `field-group` | `OrderBy`, `TopN` | campos sueltos de una pieza (`item_fields`: `select`, `number`, `text`, `checkbox`, con `show_if`/`enable_if`), en `layout` `columns` o `inline`; `required`: sin ese campo la pieza vale `null`; `notes`: avisos según lo elegido |
+| `metric-list` | `Metrics` | las métricas, con sus tipos y referencias entre ellas |
+| `condition-list` | `Filters` | condiciones `{field, op, valor}` |
+| `condition-list-metric` | `Having` | condiciones sobre métricas, contra un número o una métrica |
+
+Reglas del manifiesto del panel:
+- **Opciones resueltas en el backend.** Cada select trae sus `[{value, label}]`: catálogos fijos (direcciones de orden) y columnas de la hoja (`PanelColumns`: `all`, `numeric`, `dimension`). `board_editor` arma el manifiesto sin leer la hoja (selects vacíos); `/schema/` lo devuelve completo en `widget_manifest` y el editor lo reemplaza.
+- **Opciones que dependen del panel.** Lo que sale de lo que el usuario ya eligió (por qué se ordena: filas, columnas y métricas del builder) se declara con `options_from` y lo resuelve el frontend (`PANEL_SOURCES` en `panel.js`). Es un vocabulario cerrado: hoy, `sort_targets`. Los avisos (`notes[].when`) igual, con `PANEL_CHECKS`.
+- **Textos propios de un widget.** Van en la pieza al declararla: `Columns(1, 10, label="Filtros", add_label="Agregar filtro", allow_all=False)` en la caja de filtros.
+- **Piezas sin control.** `panel_hidden` en el `WidgetType` (la caja de filtros no edita sus `filters`); una pieza sin `ui` tampoco aparece. Su valor se conserva tal cual al guardar.
 
 `build_view` guarda en el `view_spec`: `widget`, lo derivado del spec (`data_view`), los campos de las opciones ya reconciliadas, `percent`, `title` (o el título por defecto), `labels` y `display`.
 
@@ -395,7 +428,7 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
     - Cada filtro se valida con las mismas reglas que las condiciones. Un `in` admite hasta 5 000 valores (`MAX_BOARD_IN_VALUES`).
     - Un filtro inválido (por ejemplo, una URL compartida con una columna que ya no existe) **se ignora** y se informa en `filter_errors` de la respuesta, sin tumbar el tablero. Solo un parámetro que no es una lista JSON responde 400.
   - `render(widget, board_filters)`: aplica los filtros del tablero, que definen el universo y los denominadores de los %, salvo en los widgets con `board_filtered = False` (la caja de filtros, para que sus opciones no se achiquen con su propia selección). Luego llama a `widget.definition.render(...)`. Un error en un widget no tumba el tablero: devuelve `{"error": ...}`.
-- **`views.py`**: es un adaptador HTTP. Carga la hoja (cacheada), llama al servicio y responde 422 con `SpecValidationError`. `board_editor` publica en la página el manifiesto de todos los tipos (`{key: manifest()}`, con `json_script`), que el editor lee en `window.WIDGET_MANIFEST`.
+- **`views.py`**: es un adaptador HTTP. Carga la hoja (cacheada), llama al servicio y responde 422 con `SpecValidationError`. `board_editor` publica en la página el manifiesto de todos los tipos (`{key: manifest()}`, con `json_script`, sin las columnas de la hoja), que el editor lee en `window.WIDGET_MANIFEST`; `dashboard_schema` devuelve, además de las columnas, `widget_manifest` con las opciones de los selects ya resueltas (`manifest(PanelColumns(...))`).
 - **IA (`services/ai_spec.py`)**: la tool, el prompt y la lectura de la respuesta salen de los registros; ningún widget está nombrado en este módulo.
   - `build_tool_parameters(ctx, widget_type)` arma la tool de Gemini. Los tipos de widget salen de `WIDGETS`, solo los que tienen `ai_enabled`. El `data_spec` sale de `widget.data_schema(ctx, for_ai=True)` si el tipo está fijado (solo sus claves), o de `union_schema` de los widgets con `ai_enabled` si no (ninguna clave obligatoria; el widget elegido completa las suyas con `with_defaults`). `view_options` se arma con `ai_properties()` de cada `ViewOptions` (por ejemplo `stacked`, `kpi` o `reference_lines`); sus `ai_required()` se exigen solo con el tipo fijado, porque sin fijar no aplican a todos.
   - `build_system_prompt()` arma el prompt. `CORE_PROMPT` explica el DSL (claves del `data_spec`, tipos de métrica, condiciones) sin nombrar widgets: dice que cada tipo admite solo algunas claves y que las demás van vacías. Después vienen:
@@ -412,8 +445,9 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
     - de `view`: `supportsView(key)`, con atajos como `supportsStacked` y `supportsReferenceLines`;
     - de `max_per_dashboard`: `singleton`.
 
-    Las clases de los widgets declaran solo lo de interfaz: `placement`, textos del builder (`pivotLabel`, `columnsLabel`…), `columnControls`, `supportsLabels`, `supportsColumnLabels`, `supportsTotals` (los totales viven en `display`) y `supportsConditions`. Sin manifiesto (la vista compartida) rige `BaseWidget.DEFAULT_MANIFEST`.
-  - **Builder:** `builderFromSpec` y `builderToPayload` (`dashboard-store.js`) son la ida y vuelta entre el `data_spec`/`view_spec` y el estado del panel, incluidas las opciones de vista que se editan en «Configurar» (`stacked`, roles del KPI, `reference_lines`). Las métricas se identifican por un `_id` interno y se traducen a su `as` al enviar.
+    Las clases de los widgets declaran solo lo de interfaz: `placement`, `defaultColumns`/`defaultColumnsFrom` (con qué arranca un widget nuevo), `columnControls`, `supportsLabels`, `supportsColumnLabels` y `supportsTotals` (los totales viven en `display`). Sin manifiesto (la vista compartida) rige `BaseWidget.DEFAULT_MANIFEST`.
+  - **Panel de datos** (`partials/panel/`): `panel.html` recorre `store.panelSections` (piezas seguidas con el mismo `group` van juntas bajo su título) y `part.html` monta el partial de cada `ui` (`column_list.html`, `column_picker.html`, `field_group.html`, `metric_list.html` y los de condiciones). Las opciones de vista que se editan junto a los datos (apiladas, totales por nivel, tipo y nombre de cada filtro, tarjeta del KPI, líneas de referencia) siguen escritas a mano, ancladas a su sección o a su fila (`section_addons.html`, `column_row_inline.html`, `column_row_below.html`).
+  - **Builder:** `builderFromSpec` y `builderToPayload` (`dashboard-store.js`) son la ida y vuelta entre el `data_spec`/`view_spec` y el estado del panel, en el que cada pieza vive en `builder[<clave>]`. `metrics`, `having`, `filters`, `sort` y las listas de columnas tienen adaptador propio (alias de métricas, ids locales, conversión de valores); las demás piezas usan el genérico de su `ui` (`panel.js`: `partStateFromSpec`/`partStateToPayload`), así que una pieza nueva `column-list`, `column-picker` o `field-group` no necesita JS. Las métricas se identifican por un `_id` interno y se traducen a su `as` al enviar.
   - `TableWidget` (`table-widget.js`) extiende `DynamicTableWidget` (`dynamic-table-widget.js`) para reutilizar formatos, paginación, orden de columnas y descarga CSV.
   - **Caja de filtros** (`filter-widget.js`):
     - **Montaje y unicidad:** `placement = 'header'` la monta en `#dashboard-filters`, fuera del grid. `singleton` (su `max_per_dashboard = 1`) impide soltar una segunda.
@@ -425,7 +459,8 @@ class WidgetType(Generic[R, V]):           # R: resultado del plan; V: sus ViewO
 ### Flujos
 
 ```
-Editor: board_editor ─► window.WIDGET_MANIFEST = {key: manifest()} ─► el panel muestra lo que admite cada tipo
+Editor: board_editor ─► window.WIDGET_MANIFEST = {key: manifest()} ─► /schema/ lo reemplaza con las columnas
+        ─► panel.html recorre manifest.parts y monta el componente de cada ui
 
 Builder (crear/editar)                 Render del tablero                    IA
 POST/PUT ─► WidgetService              GET ─► parse_board_filters (?filters=) prompt ─► Gemini (tool desde registros)
@@ -448,8 +483,8 @@ El paquete se divide en **core** (todo lo de §1 salvo `widgets/ext/`) y **exten
 - **Sin imports entre extensiones.** Si dos extensiones comparten comportamiento, cada una lo tiene en su archivo; esa duplicación queda a la vista y se resuelve subiéndolo al core y publicándolo en el `sdk`.
 - **Plan propio.** Una extensión con una forma de datos nueva define su `ResultPlan` y su `PlanResult` en el mismo archivo y los devuelve desde `plan()`, sin registrarlos en `PLANS`. `PLANS` es el registro de las formas que comparten los widgets del core.
 - **Garantías** (`tests/test_architecture.py`): las extensiones solo importan el `sdk` (ni otro módulo del core ni otra extensión, ni imports relativos), el core no importa extensiones, el `sdk` exporta todo lo que declara, y un widget de extensión escrito en un único archivo, con su propia pieza del `data_spec`, funciona de punta a punta. `ready` rechaza una clave de widget más larga que `Widget.type` (20 caracteres).
-- **Dato propio.** Una extensión que necesita un dato que ninguna pieza tiene define su `SpecPart` en el mismo archivo, la registra con `@SPEC_PARTS.register` y la usa en su subclase de `DataSpec`. Su schema, sus reglas, sus mensajes, su paso en el pipeline, el manifiesto y la tool de la IA salen de la pieza; los demás widgets la rechazan con su `absent_hint`.
-- **Alcance.** El panel de «Configurar» edita las piezas del core; una sección nueva del panel (por ejemplo, para editar una pieza propia desde el builder) es un cambio del frontend del core. La IA conoce a la extensión por su `ai_doc`, sus `ai_examples`, sus capacidades y el `ai_doc`/`from_ai` de sus opciones, todo en el mismo archivo. Su componente del frontend (`<nombre>-widget.js` y su `<script>` en `board_editor.html` y `board_view.html`) se agrega como el de cualquier widget.
+- **Dato propio.** Una extensión que necesita un dato que ninguna pieza tiene define su `SpecPart` en el mismo archivo, la registra con `@SPEC_PARTS.register` y la usa en su subclase de `DataSpec`. Su schema, sus reglas, sus mensajes, su paso en el pipeline, el manifiesto, su control en el panel y la tool de la IA salen de la pieza; los demás widgets la rechazan con su `absent_hint`.
+- **Alcance.** El panel de «Configurar» edita cualquier pieza con una `ui` existente: una pieza propia declara su `ui` y su `panel_fields` (ej. un `field-group`) y no necesita frontend. Una interacción que ninguna `ui` cubre (ej. un calendario) es un componente nuevo del core: su partial y su línea en `part.html`. La IA conoce a la extensión por su `ai_doc`, sus `ai_examples`, sus capacidades y el `ai_doc`/`from_ai` de sus opciones, todo en el mismo archivo. Su componente del frontend (`<nombre>-widget.js` y su `<script>` en `board_editor.html` y `board_view.html`) se agrega como el de cualquier widget.
 
 ### 6.2 Qué se toca para cada cosa
 
@@ -457,7 +492,7 @@ El paquete se divide en **core** (todo lo de §1 salvo `widgets/ext/`) y **exten
 |---|---|
 | Widget nuevo **con una forma de datos que ya existe** (ej. `area` = `flat`/`pivot_chart`, `funnel` = `flat`, `scatter` = `rows` con dos columnas) | `widgets/ext/<nuevo>.py`: una subclase con `spec_cls` (una forma del core, o ajustada con `with_parts`), `options_cls` (si tiene opciones propias), `plan_key` (o `plan()`), `compile`, `ai_doc` y `ai_examples` (si la IA lo propone) y `@WIDGETS.register`, importando solo del `sdk`. Más su componente en el frontend: `type`, interfaz y `renderContent`, sin capacidades (las toma del manifiesto). Nada más en el backend: el schema, la IA, los choices del modelo, la validación y el manifiesto lo toman de los registros. |
 | Widget nuevo **con una forma de datos nueva** (ej. `histogram`: conteo de filas por intervalos de una columna numérica) | El mismo archivo, con su `ResultPlan` y su `PlanResult`, devuelto desde `plan()`. Es lógica de procesamiento de datos, pero queda aislada en su clase. No se edita `executor.py` ni otro plan. |
-| Widget nuevo **con un dato nuevo en el `data_spec`** (ej. `bins` del histograma) | El mismo archivo, con su `SpecPart` registrada en `SPEC_PARTS` y una subclase de `DataSpec` que la use. |
+| Widget nuevo **con un dato nuevo en el `data_spec`** (ej. `bins` del histograma) | El mismo archivo, con su `SpecPart` registrada en `SPEC_PARTS` y una subclase de `DataSpec` que la use. Para editarla en el panel, su `ui` y su `panel_fields` (ej. un `field-group` con un select de columnas numéricas y un número). |
 | Opción de vista (ej. `reference_lines`) | Backend: un campo en el `options_cls` con `_request_fields`, `_view_fields`, `reconcile` (si nombra algo del `data_spec`), `view_fields`, `ai_properties` y su línea en `ai_doc` (más `from_ai` si su forma para la IA es distinta); y en `compile`, si el frontend la necesita para dibujar. El manifiesto la publica sola. Frontend: su bloque en el panel, visible con `supportsView('<campo>')`; su ida y vuelta en `builderFromSpec`/`builderToPayload`; y el dibujo en `renderContent`. Para dársela a otro widget basta con su `options_cls` y su dibujo. |
 | Tipo de métrica (ej. `running_total`) | `dsl/metrics/<tipo>.py` con una subclase de `Metric` registrada en `METRICS`, importada en `dsl/metrics/__init__.py`. Después se agrega su `key` a los `types` de la pieza `Metrics` de los widgets que la admitan. |
 | Agregación (ej. `stddev`) | Una clase `Aggregation` en `dsl/aggregations.py`. |
@@ -560,7 +595,7 @@ La tabla de datos (`table`), un widget del core, sigue el mismo esquema repartid
 
 ## 7. Pruebas
 
-`python manage.py test sheets_reports` corre 260 tests, organizados por capa:
+`python manage.py test sheets_reports` corre 270 tests, organizados por capa:
 
 | Archivo | Qué cubre |
 |---|---|
@@ -570,6 +605,7 @@ La tabla de datos (`table`), un widget del core, sigue el mismo esquema repartid
 | `tests/widgets/test_compile.py` | formato que recibe el frontend en cada widget, incluidas las `referenceLines` |
 | `tests/widgets/test_rule_order.py` | el orden de los errores lo deciden etapa y prioridad, no la posición en `rules()` |
 | `tests/widgets/test_view_options.py` | cada fila de la política vista → datos y el manifiesto de cada tipo |
+| `tests/widgets/test_panel.py` | `manifest()["parts"]`: orden y `ui` de cada pieza, opciones resueltas desde la hoja, textos propios, `panel_hidden`, y que cada `ui` tenga su componente en `part.html` |
 | `tests/widgets/test_table.py` | tabla de datos: validación, plan `rows`, compilación y creación por la API |
 | `tests/widgets/test_filter.py` | caja de filtros: validación, opciones (`distinct_values`, `column_values`), una por tablero, la selección filtra los widgets pero no la caja, la IA no la propone |
 | `tests/test_architecture.py` | extensión por registro y widgets de extensión de punta a punta (incluido el manifiesto del editor), reglas de capas y de imports de las extensiones |

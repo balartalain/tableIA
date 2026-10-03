@@ -103,6 +103,9 @@ const COMPARE_OP_OPTIONS = FILTER_OP_OPTIONS.filter(o => RELATIVE_OPS.includes(o
 
 const OP_SHORT = Object.fromEntries(FILTER_OP_OPTIONS.map(o => [o.value, o.short]));
 
+// Totales por nivel de cada lista de agrupación (opción de vista de la tabla dinámica).
+const LIST_TOTALS = { dimensions: 'rowTotals', pivots: 'columnTotals' };
+
 // Totales por nivel de filas/columnas (rowTotals/columnTotals) ajustados a `n` niveles;
 // los que faltan quedan visibles.
 function totalsLevels(list, n) {
@@ -120,19 +123,17 @@ function builderClass(b) {
   return b && b.widget && WidgetRegistry.has(b.widget) ? WidgetRegistry.get(b.widget) : BaseWidget;
 }
 
+// Filas, columnas de pivote y columnas sueltas elegidas (panel.js: builderList).
 function builderDims(b) {
-  return builderClass(b).supportsDimension ? chosen(b.dimensions) : [];
+  return builderList(b, 'dimensions');
 }
 
 function builderPivots(b) {
-  if (!builderClass(b).supportsPivot) return [];
-  const dims = new Set(builderDims(b));
-  return chosen(b.pivots).filter(p => !dims.has(p));
+  return builderList(b, 'pivots');
 }
 
-// Columnas que se muestran tal cual (widgets con usesColumns), en el orden elegido.
 function builderColumns(b) {
-  return builderClass(b).usesColumns ? chosen(b.columns) : [];
+  return builderList(b, 'columns');
 }
 
 // count cuenta filas y no usa campo.
@@ -515,13 +516,21 @@ function builderFromSpec(spec, view, widget) {
     // (las puso la IA) al aplicar un cambio.
     labels: { ...labels },
     stacked: !!(view && view.stacked),
-    sortBy: '',
-    sortDir: spec.sort ? spec.sort.dir : 'desc',
-    limitN: spec.limit ? String(spec.limit.n) : '',
-    limitOthers: !!(spec.limit && spec.limit.others),
-    trendBy: spec.trend_by || '',
+    // `by`: una columna o `#<_id>` de una métrica (su alias cambia al editarla).
+    sort: { by: '', dir: spec.sort ? spec.sort.dir : 'desc' },
     kpi: null,
+    // Piezas del data_spec sin control en el panel: se devuelven tal cual al guardar.
+    kept: {},
   };
+  // Piezas con estado genérico (panel.js): su valor con la forma de su ui.
+  const parts = panelParts(builderClass(b));
+  for (const part of parts) {
+    if (!CUSTOM_STATE_PARTS.has(part.key)) b[part.key] = partStateFromSpec(part, spec[part.key]);
+  }
+  const inPanel = new Set(parts.map(p => p.key));
+  for (const [key, value] of Object.entries(spec)) {
+    if (key !== 'source' && !inPanel.has(key) && !CUSTOM_STATE_PARTS.has(key)) b.kept[key] = value;
+  }
   b.metrics = (spec.metrics || []).map(raw => {
     const m = metricFromSpec(raw, b, idOf);
     m.label = labels[raw.as] || '';
@@ -530,7 +539,7 @@ function builderFromSpec(spec, view, widget) {
   // La firma se calcula con el builder completo (show_as depende de filas y columnas).
   b.metrics.forEach(m => { m._origSig = metricSignature(m, b); });
   b.having = (spec.having || []).map(h => groupConditionFromSpec(h, idOf));
-  if (spec.sort) b.sortBy = idOf[spec.sort.by] ? `#${idOf[spec.sort.by]}` : spec.sort.by;
+  if (spec.sort) b.sort.by = idOf[spec.sort.by] ? `#${idOf[spec.sort.by]}` : spec.sort.by;
   b.kpi = kpiFromView(widget === 'kpi' ? view : null, idOf);
   b.referenceLines = referenceLinesFromView(view, idOf, (spec.pivots || []).length > 0);
   return b;
@@ -588,11 +597,11 @@ function builderToPayload(b, numericFields = new Set()) {
     const label = (m.label || '').trim();
     if (label) labels[alias.as] = label;
   });
-  const sortBy = b.sortBy && b.sortBy.startsWith('#') ? aliasOf[b.sortBy.slice(1)] : b.sortBy;
+  const sortBy = b.sort.by && b.sort.by.startsWith('#') ? aliasOf[b.sort.by.slice(1)] : b.sort.by;
   const sortable = new Set([...dimensions, ...columns, ...metrics.map(m => m.as)]);
-  const sort = !isKpi && sortBy && sortable.has(sortBy) ? { by: sortBy, dir: b.sortDir || 'desc' } : null;
-  const limitN = parseInt(b.limitN, 10);
+  const sort = !isKpi && sortBy && sortable.has(sortBy) ? { by: sortBy, dir: b.sort.dir || 'desc' } : null;
   const payload = {
+    ...b.kept,
     dimensions,
     pivots,
     columns,
@@ -600,11 +609,12 @@ function builderToPayload(b, numericFields = new Set()) {
     metrics,
     having: isKpi ? [] : b.having.map(h => groupConditionToSpec(h, aliasOf)).filter(Boolean),
     sort,
-    limit: !isKpi && withMetrics && limitN > 0 ? { n: limitN, others: !!b.limitOthers } : null,
-    trend_by: isKpi && b.trendBy ? b.trendBy : null,
     labels,
     stacked: !!(b.stacked && pivots.length),
   };
+  for (const part of panelParts(builderClass(b))) {
+    if (!CUSTOM_STATE_PARTS.has(part.key)) payload[part.key] = partStateToPayload(part, b[part.key], b);
+  }
   if (isKpi) payload.kpi = kpiToPayload(b.kpi, aliasOf);
   if (builderClass(b).supportsReferenceLines) {
     payload.reference_lines = referenceLinesToPayload(b.referenceLines, aliasOf, pivots.length > 0);
@@ -679,8 +689,9 @@ document.addEventListener('alpine:init', () => {
     // Sortable de la lista de métricas del drawer (se crea al abrirse y se destruye al cerrarse).
     metricsListEl: null,
     metricsSortable: null,
-    // Sortable de "Columnas a mostrar" (mismo ciclo de vida que el de las métricas).
-    columnsSortable: null,
+    // Sortables de las listas de columnas arrastrables, por clave de la pieza (mismo ciclo de
+    // vida que el de las métricas).
+    listSortables: {},
 
     schemaError: '',
 
@@ -689,7 +700,13 @@ document.addEventListener('alpine:init', () => {
         const r = await fetch(apiUrl(`/api/dashboard/${this.dashboardId}/schema/`));
         const data = await r.json().catch(() => null);
         if (r.ok && data) {
-          this.schema = data;
+          const { widget_manifest: manifest, ...schema } = data;
+          this.schema = schema;
+          // Mismo manifiesto, con las columnas de la hoja en las opciones de los selects.
+          if (manifest) {
+            window.WIDGET_MANIFEST = manifest;
+            this.widgetManifest = manifest;
+          }
           this.schemaError = '';
         } else {
           this.schemaError = (data && data.error) || 'No se pudieron leer las columnas de la hoja.';
@@ -915,12 +932,12 @@ document.addEventListener('alpine:init', () => {
       if (a.having.length) {
         steps.push({ title: 'Mostrar solo grupos donde', details: a.having.map(h => `${h.left} ${OP_SHORT[h.op]} ${h.right}`) });
       }
-      if (b.sortBy) {
-        const target = b.sortBy.startsWith('#') ? `la métrica ${b.metrics.findIndex(m => `#${m._id}` === b.sortBy) + 1}` : b.sortBy;
-        steps.push({ title: 'Orden', detail: `Ordenar por ${target}, ${b.sortDir === 'asc' ? 'de menor a mayor' : 'de mayor a menor'}` });
+      if (b.sort.by) {
+        const target = b.sort.by.startsWith('#') ? `la métrica ${b.metrics.findIndex(m => `#${m._id}` === b.sort.by) + 1}` : b.sort.by;
+        steps.push({ title: 'Orden', detail: `Ordenar por ${target}, ${b.sort.dir === 'asc' ? 'de menor a mayor' : 'de mayor a menor'}` });
       }
-      if (b.limitN) {
-        steps.push({ title: 'Top', detail: `Mostrar solo los primeros ${b.limitN}${b.limitOthers ? ' y agrupar el resto en «Otros»' : ''}` });
+      if (b.limit && b.limit.n) {
+        steps.push({ title: 'Top', detail: `Mostrar solo los primeros ${b.limit.n}${b.limit.others ? ' y agrupar el resto en «Otros»' : ''}` });
       }
       if ((b.referenceLines || []).length) {
         const kindLabel = (k) => (BaseWidget.REFERENCE_KINDS.find(o => o.value === k) || { label: k }).label;
@@ -942,48 +959,92 @@ document.addEventListener('alpine:init', () => {
       return this.drawerDraft.builder || null;
     },
 
-    // Columnas agrupables para la fila `i`, sin las ya usadas en otras filas o en columnas
-    // (el backend también lo valida).
-    dimensionOptionsAt(i) {
+    // --- Panel de datos: secciones y piezas de manifest.parts (panel.js) ---
+
+    // Manifiesto reactivo: /schema/ lo reemplaza por el que trae las columnas de la hoja.
+    widgetManifest: window.WIDGET_MANIFEST || {},
+
+    get panelSections() {
+      const manifest = this.widgetManifest[this.editingType];
+      return panelSections((manifest && manifest.parts) || []);
+    },
+
+    // --- column-list ---
+
+    // Columnas para la posición `i` de la lista: sin las ya elegidas en ella ni en las listas
+    // de sus `excludes` (el backend también lo valida).
+    listOptions(part, i) {
       const b = this.builder;
       if (!b) return [];
-      const current = b.dimensions[i];
-      const used = new Set([...b.dimensions, ...b.pivots]);
-      return withCurrent(this.schema.dimension_fields || [], current).filter(f => f === current || !used.has(f));
+      const current = b[part.key][i];
+      const used = new Set((part.excludes || []).flatMap(k => b[k] || []));
+      const values = (part.options || []).map(o => o.value);
+      return withCurrent(values, current).filter(v => v === current || !used.has(v));
     },
 
-    // Columnas de la hoja para la posición `i` de "Columnas a mostrar", sin las ya elegidas.
-    columnOptionsAt(i) {
-      const b = this.builder;
-      if (!b) return [];
-      const current = b.columns[i];
-      const used = new Set(b.columns);
-      return withCurrent(this.schema.all_fields || [], current).filter(f => f === current || !used.has(f));
+    // Se agrega un elemento solo cuando el anterior ya tiene columna elegida.
+    canAddListItem(part) {
+      const list = this.builder && this.builder[part.key];
+      return !!list && list.length < part.max && list.every(Boolean);
     },
 
-    get canAddColumn() {
-      const b = this.builder;
-      return !!b && b.columns.length < this.drawerWidgetClass.maxColumns && b.columns.every(Boolean);
+    canRemoveListItem(part) {
+      const list = this.builder && this.builder[part.key];
+      return !!list && (list.length > 1 || part.min === 0);
     },
 
-    addColumn() {
-      if (this.canAddColumn) this.builder.columns.push('');
+    // Los totales de cada nivel (drawerDraft.rowTotals/columnTotals) siguen a su fila o
+    // columna al agregar o quitar niveles, como en Sheets.
+    _listTotals(part) {
+      return this.drawerDraft[LIST_TOTALS[part.key]] || null;
     },
 
-    removeColumn(i) {
+    addListItem(part) {
+      if (!this.canAddListItem(part)) return;
+      this.builder[part.key].push('');
+      this._listTotals(part)?.push(true);
+    },
+
+    removeListItem(part, i) {
+      const list = this.builder && this.builder[part.key];
+      if (!list) return;
+      const totals = this._listTotals(part);
+      if (list.length > 1) {
+        list.splice(i, 1);
+        totals?.splice(i, 1);
+      } else {
+        list[0] = '';
+        if (totals) totals[0] = true;
+      }
+    },
+
+    // Una columna recién elegida deja de estar en las listas que la excluyen (ej. una fila
+    // nueva sale de las columnas de pivote).
+    onListChange(part) {
       const b = this.builder;
       if (!b) return;
-      if (b.columns.length > 1) b.columns.splice(i, 1);
-      else b.columns[0] = '';
+      const picked = new Set(b[part.key].filter(Boolean));
+      for (const other of panelParts(this.drawerWidgetClass)) {
+        if (other.key === part.key || other.ui !== 'column-list' || !(other.excludes || []).includes(part.key)) continue;
+        b[other.key] = b[other.key].map(v => (picked.has(v) ? '' : v));
+      }
     },
 
-    // Arrastre de "Columnas a mostrar". Las filas se identifican por posición (una columna
-    // aún sin elegir no tiene nombre), así que Sortable no se queda con el DOM movido: al
-    // soltar se devuelve el nodo a su lugar y se reordena el array; Alpine redibuja la lista.
-    initColumnsList(el) {
+    // Atajo «Usar todas»: todas las columnas que ofrece la lista, en el orden de la hoja.
+    useAllListItems(part) {
+      const b = this.builder;
+      if (!b) return;
+      b[part.key] = (part.options || []).map(o => o.value).slice(0, part.max);
+    },
+
+    // Arrastre de una lista `sortable`. Las filas se identifican por posición (una columna aún
+    // sin elegir no tiene nombre), así que Sortable no se queda con el DOM movido: al soltar se
+    // devuelve el nodo a su lugar y se reordena el array; Alpine redibuja la lista.
+    initListSortable(el, part) {
       if (!el || typeof Sortable === 'undefined') return;
-      this.destroyColumnsList();
-      this.columnsSortable = new Sortable(el, {
+      this.listSortables = this.listSortables || {};
+      this.listSortables[part.key]?.destroy();
+      this.listSortables[part.key] = new Sortable(el, {
         draggable: '[data-column-row]',
         handle: '.column-drag-handle',
         animation: 150,
@@ -994,20 +1055,55 @@ document.addEventListener('alpine:init', () => {
           if (from === to || from == null || to == null) return;
           const rows = [...el.querySelectorAll('[data-column-row]')].filter(n => n !== evt.item);
           el.insertBefore(evt.item, rows[from] || null);
-          const columns = this.builder && this.builder.columns;
-          if (!columns) return;
-          const [moved] = columns.splice(from, 1);
-          columns.splice(to, 0, moved);
+          const list = this.builder && this.builder[part.key];
+          if (!list) return;
+          const [moved] = list.splice(from, 1);
+          list.splice(to, 0, moved);
         },
       });
     },
 
-    destroyColumnsList() {
-      if (this.columnsSortable) {
-        this.columnsSortable.destroy();
-        this.columnsSortable = null;
-      }
+    destroyListSortables() {
+      Object.values(this.listSortables || {}).forEach(s => s.destroy());
+      this.listSortables = {};
     },
+
+    // --- column-picker ---
+
+    pickerOptions(part) {
+      const current = this.builder && this.builder[part.key];
+      return withCurrent((part.options || []).map(o => o.value), current);
+    },
+
+    // --- field-group ---
+
+    // Opciones de un campo: las que trae resueltas el manifiesto, o las de una fuente que
+    // depende de lo elegido en el panel (PANEL_SOURCES).
+    fieldOptions(part, field) {
+      if (field.options) {
+        const current = this.builder && this.builder[part.key] && this.builder[part.key][field.key];
+        const known = field.options.some(o => o.value === current);
+        return current && !known ? [{ value: current, label: current }, ...field.options] : field.options;
+      }
+      const source = PANEL_SOURCES[field.options_from];
+      return source ? source(this) : [];
+    },
+
+    fieldVisible(part, field) {
+      const state = this.builder && this.builder[part.key];
+      return !field.show_if || !!(state && state[field.show_if]);
+    },
+
+    fieldEnabled(part, field) {
+      const state = this.builder && this.builder[part.key];
+      return !field.enable_if || !!(state && state[field.enable_if]);
+    },
+
+    partNotes(part) {
+      return (part.notes || []).filter(n => PANEL_CHECKS[n.when] && PANEL_CHECKS[n.when](this));
+    },
+
+    // --- Columnas de la caja de filtros (opciones de vista por columna) ---
 
     // Tipo de control de la columna `i` (caja de filtros); el primero habilitado por defecto.
     columnControl(i) {
@@ -1036,81 +1132,6 @@ document.addEventListener('alpine:init', () => {
       if ((value || '').trim()) labels[b.columns[i]] = value;
       else delete labels[b.columns[i]];
       b.labels = labels;
-    },
-
-    // Todas las columnas de la hoja, en su orden (atajo de "Columnas a mostrar").
-    useAllColumns() {
-      const b = this.builder;
-      if (!b) return;
-      b.columns = (this.schema.all_fields || []).slice(0, this.drawerWidgetClass.maxColumns);
-    },
-
-    pivotOptionsAt(i) {
-      const b = this.builder;
-      if (!b) return [];
-      const current = b.pivots[i];
-      const used = new Set([...b.dimensions, ...b.pivots]);
-      return withCurrent(this.schema.dimension_fields || [], current).filter(f => f === current || !used.has(f));
-    },
-
-    get dimensionLabel() {
-      return this.drawerWidgetClass.dimensionLabel;
-    },
-
-    get maxDimensions() {
-      return this.drawerWidgetClass.maxDimensions;
-    },
-
-    get maxPivots() {
-      return this.drawerWidgetClass.maxPivots;
-    },
-
-    // Se agrega un nivel solo cuando el anterior ya tiene columna elegida.
-    get canAddDimension() {
-      const b = this.builder;
-      return !!b && b.dimensions.length < this.maxDimensions && b.dimensions.every(Boolean);
-    },
-
-    get canAddPivot() {
-      const b = this.builder;
-      return !!b && b.pivots.length < this.maxPivots && b.pivots.every(Boolean);
-    },
-
-    // Los totales de cada nivel (drawerDraft.rowTotals/columnTotals) siguen a su fila o
-    // columna al agregar o quitar niveles, como en Sheets.
-    addDimension() {
-      if (!this.canAddDimension) return;
-      this.builder.dimensions.push('');
-      this.drawerDraft.rowTotals?.push(true);
-    },
-
-    removeDimension(i) {
-      const b = this.builder;
-      if (!b || b.dimensions.length <= 1) return;
-      b.dimensions.splice(i, 1);
-      this.drawerDraft.rowTotals?.splice(i, 1);
-    },
-
-    addPivot() {
-      if (!this.canAddPivot) return;
-      this.builder.pivots.push('');
-      this.drawerDraft.columnTotals?.push(true);
-    },
-
-    removePivot(i) {
-      const b = this.builder;
-      if (!b) return;
-      if (b.pivots.length > 1) {
-        b.pivots.splice(i, 1);
-        this.drawerDraft.columnTotals?.splice(i, 1);
-      } else {
-        b.pivots[0] = '';
-        if (this.drawerDraft.columnTotals) this.drawerDraft.columnTotals[0] = true;
-      }
-    },
-
-    get pivotLabel() {
-      return this.drawerWidgetClass.pivotLabel;
     },
 
     get maxMetrics() {
@@ -1242,7 +1263,7 @@ document.addEventListener('alpine:init', () => {
     // --- Top N ---
     get limitNeedsMetricSort() {
       const b = this.builder;
-      return !!b && parseInt(b.limitN, 10) > 0 && !(b.sortBy || '').startsWith('#');
+      return !!(b && b.limit) && parseInt(b.limit.n, 10) > 0 && !(b.sort.by || '').startsWith('#');
     },
 
     get showStacked() {
@@ -1273,13 +1294,6 @@ document.addEventListener('alpine:init', () => {
         if (list[i]) opts.push({ value: `#${m._id}`, label: this.metricName(m._id) });
       });
       return opts;
-    },
-
-    onDimensionChange() {
-      // Una columna elegida como fila deja de ser columna de pivote.
-      const b = this.builder;
-      if (!b) return;
-      b.pivots = b.pivots.map(p => (b.dimensions.includes(p) ? '' : p));
     },
 
     // Al cambiar el ancho, la columna de inicio elegida puede quedarse fuera del grid
@@ -1367,7 +1381,7 @@ document.addEventListener('alpine:init', () => {
       this.editingType = null;
       this.drawerDraft = {};
       this.destroyMetricsList();
-      this.destroyColumnsList();
+      this.destroyListSortables();
       this.drawerAskError = '';
       this.drawerAdvice = null;
       this.drawerAskOpen = false;

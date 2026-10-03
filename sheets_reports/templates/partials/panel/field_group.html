@@ -1,0 +1,54 @@
+{% comment %}
+ui «field-group» (OrderBy, TopN): un puñado de campos de una misma pieza, sin lista. Del
+manifiesto: layout ('columns' | 'inline'), item_fields ({key, ui: select|number|text|checkbox,
+label, options | options_from, empty_label, min, max, placeholder, show_if, enable_if}) y
+notes ({when, text}: avisos según PANEL_CHECKS).
+{% endcomment %}
+<div class="space-y-1">
+  <div x-bind:class="part.layout === 'columns' ? 'grid grid-cols-2 gap-2' : 'flex flex-wrap items-center gap-2'">
+    <template x-for="field in part.item_fields" :key="field.key">
+      <div x-show="$store.dashboard.fieldVisible(part, field)"
+           x-bind:class="part.layout === 'columns' ? '' : 'flex items-center gap-2'">
+        <template x-if="field.ui !== 'checkbox'">
+          <label class="text-[11px] font-semibold text-ink/60" x-bind:class="part.layout === 'columns' ? 'block mb-1' : ''"
+                 x-text="field.label"></label>
+        </template>
+        <template x-if="field.ui === 'select'">
+          <select x-model="$store.dashboard.drawerDraft.builder[part.key][field.key]" x-bind:aria-label="field.label"
+                  x-bind:disabled="!$store.dashboard.fieldEnabled(part, field)"
+                  class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+            <template x-if="field.empty_label">
+              <option value="" x-text="field.empty_label"></option>
+            </template>
+            <template x-for="o in $store.dashboard.fieldOptions(part, field)" :key="o.value">
+              <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.drawerDraft.builder[part.key][field.key]"></option>
+            </template>
+          </select>
+        </template>
+        <template x-if="field.ui === 'number'">
+          <input type="number" x-model="$store.dashboard.drawerDraft.builder[part.key][field.key]" x-bind:aria-label="field.label"
+                 x-bind:min="field.min" x-bind:max="field.max" x-bind:placeholder="field.placeholder || ''"
+                 x-bind:disabled="!$store.dashboard.fieldEnabled(part, field)"
+                 x-bind:class="part.layout === 'columns' ? 'w-full' : 'w-20'"
+                 class="text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+        </template>
+        <template x-if="field.ui === 'text'">
+          <input type="text" x-model="$store.dashboard.drawerDraft.builder[part.key][field.key]" x-bind:aria-label="field.label"
+                 x-bind:placeholder="field.placeholder || ''" x-bind:disabled="!$store.dashboard.fieldEnabled(part, field)"
+                 class="w-full text-sm border border-line rounded-lg px-2 py-1.5 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+        </template>
+        <template x-if="field.ui === 'checkbox'">
+          <label class="flex items-center gap-1.5 text-[11px] text-ink/60 cursor-pointer">
+            <input type="checkbox" x-model="$store.dashboard.drawerDraft.builder[part.key][field.key]"
+                   x-bind:disabled="!$store.dashboard.fieldEnabled(part, field)"
+                   class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+            <span x-text="field.label"></span>
+          </label>
+        </template>
+      </div>
+    </template>
+  </div>
+  <template x-for="note in $store.dashboard.partNotes(part)" :key="note.when">
+    <p class="text-[11px] text-clay-600" x-text="note.text"></p>
+  </template>
+</div>

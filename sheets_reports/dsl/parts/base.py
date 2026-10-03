@@ -22,6 +22,21 @@ from sheets_reports.dsl.schema import field_enum
 SPEC_PARTS: Registry[type["SpecPart"]] = Registry("Pieza del data_spec", instantiate=False)
 
 
+@dataclass(frozen=True)
+class PanelColumns:
+    """Columnas de la hoja que ofrecen los selects del panel del editor. Vacías cuando el
+    manifiesto se arma sin leer la hoja (al cargar la página); /schema/ lo devuelve con ellas."""
+    all: tuple[str, ...] = ()
+    numeric: tuple[str, ...] = ()
+    dimension: tuple[str, ...] = ()
+
+
+def choices(values, labels: dict | None = None) -> list[dict]:
+    """Opciones de un select del panel, ya resueltas: [{value, label}]."""
+    labels = labels or {}
+    return [{"value": v, "label": labels.get(v, str(v))} for v in values]
+
+
 @dataclass
 class Rows:
     """Estado del pipeline de ejecución: las filas que siguen en juego."""
@@ -115,6 +130,29 @@ class SpecPart:
         """Lo que NO admite aun teniéndola, para la ficha ("show_as")."""
         return []
 
+    # --- panel del editor ---------------------------------------------------------------
+    # Cómo se edita en el panel: el frontend recorre manifest()["parts"] y monta el componente
+    # de cada `ui` (partials/panel/part.html). Sin `ui`, la pieza no tiene control en el panel.
+
+    ui: ClassVar[str | None] = None
+    panel_order: ClassVar[int] = 100   # menor = más arriba en el panel
+    label: ClassVar[str] = ""
+    hint: ClassVar[str] = ""
+    # Piezas seguidas con el mismo grupo se dibujan juntas bajo su título: {key, label, hint}.
+    group: ClassVar[dict | None] = None
+
+    def panel(self, columns: PanelColumns) -> dict | None:
+        """{key, ui, label, hint, group, ...lo propio de su ui}, con las opciones de cada
+        select ya resueltas. None si la pieza no tiene control en el panel."""
+        if self.ui is None:
+            return None
+        return {"key": self.key, "ui": self.ui, "label": self.label, "hint": self.hint,
+                "group": self.group, **self.panel_fields(columns)}
+
+    def panel_fields(self, columns: PanelColumns) -> dict:
+        """Lo propio de su `ui` (ej. item_fields de un field-group)."""
+        return {}
+
 
 # --- Piezas de columnas: lista de columnas de la hoja con cotas -----------------------------
 
@@ -126,9 +164,36 @@ class ColumnListPart(SpecPart):
     """Una lista de columnas de la hoja, sin repetir, entre `low` y `high`."""
     limit: ClassVar[int]
 
-    def __init__(self, low: int = 0, high: int | None = None):
+    ui = "column-list"
+    # De qué columnas de PanelColumns se elige.
+    options_from: ClassVar[str] = "all"
+    add_label: ClassVar[str] = "Agregar columna"
+    # Opción vacía del select; `empty_selectable`: se puede elegir (si no, solo se ve mientras
+    # no hay columna elegida).
+    empty_label: ClassVar[str] = "Elige una columna…"
+    empty_selectable: ClassVar[bool] = False
+    # Listas cuyas columnas ya elegidas no se ofrecen (incluida la propia: sin repetidos).
+    excludes: ClassVar[tuple[str, ...]] = ()
+    sortable: ClassVar[bool] = False   # se reordena arrastrando
+    allow_all: ClassVar[bool] = False  # atajo «Usar todas»
+
+    def __init__(self, low: int = 0, high: int | None = None, **panel):
+        """`panel`: textos del panel propios del widget (label, hint, add_label, allow_all...)."""
         self.low = low
         self.high = self.limit if high is None else high
+        for name, value in panel.items():
+            if not hasattr(type(self), name):
+                raise TypeError(f"{type(self).__name__}: opción de panel desconocida '{name}'")
+            setattr(self, name, value)
+
+    def panel_fields(self, columns):
+        return {
+            "min": self.low, "max": self.high,
+            "options": choices(getattr(columns, self.options_from)),
+            "add_label": self.add_label,
+            "empty_label": self.empty_label, "empty_selectable": self.empty_selectable,
+            "excludes": list(self.excludes), "sortable": self.sortable, "allow_all": self.allow_all,
+        }
 
     @classmethod
     def loose(cls):

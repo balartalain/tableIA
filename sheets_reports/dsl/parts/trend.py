@@ -1,5 +1,5 @@
 """La mini tendencia de un número (trend_by)."""
-from sheets_reports.dsl.parts.base import SPEC_PARTS, SpecPart, column_message
+from sheets_reports.dsl.parts.base import SPEC_PARTS, SpecPart, choices, column_message
 from sheets_reports.dsl.schema import field_enum, nullable
 
 
@@ -7,6 +7,10 @@ from sheets_reports.dsl.schema import field_enum, nullable
 class TrendBy(SpecPart):
     """Columna de una mini tendencia (sparkline) bajo un número."""
     key = "trend_by"
+
+    ui = "column-picker"
+    panel_order = 45
+    label = "Tendencia por"
 
     def schema(self, ctx, *, for_ai=False):
         return nullable(field_enum(ctx.fields))
@@ -26,6 +30,9 @@ class TrendBy(SpecPart):
     @classmethod
     def absent_manifest(cls):
         return {"trend": False}
+
+    def panel_fields(self, columns):
+        return {"options": choices(columns.dimension), "empty_label": "Sin tendencia"}
 
     def describe(self):
         return ["trend_by"]

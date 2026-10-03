@@ -1,0 +1,15 @@
+{% comment %}
+Opciones de vista en la línea de cada columna de una column-list (fase 2: aún no salen del
+manifiesto). Caja de filtros: tipo de control de la columna.
+{% endcomment %}
+<template x-if="part.key === 'columns' && $store.dashboard.drawerWidgetClass.columnControls">
+  <select x-bind:value="$store.dashboard.columnControl(i)"
+          x-on:change="$store.dashboard.setColumnControl(i, $event.target.value)"
+          x-bind:disabled="!$store.dashboard.drawerDraft.builder.columns[i]" aria-label="Tipo de filtro"
+          class="w-40 shrink-0 text-xs border border-line rounded-lg px-1.5 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
+    <template x-for="o in $store.dashboard.drawerWidgetClass.columnControls" :key="o.value">
+      <option x-bind:value="o.value" x-text="o.label" x-bind:disabled="o.disabled"
+              x-bind:selected="o.value === $store.dashboard.columnControl(i)"></option>
+    </template>
+  </select>
+</template>

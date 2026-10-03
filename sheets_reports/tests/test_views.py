@@ -238,6 +238,14 @@ class ViewsTests(TestCase):
         self.assertEqual(r.json()["dimension_fields"], ["categoria", "mes", "anio"])
         self.assertEqual(r.json()["sample_values"]["mes"], ["Ene", "Feb", "Mar"])
 
+    def test_schema_trae_el_manifiesto_con_las_columnas_de_la_hoja(self, _df):
+        manifest = self.client.get(f"/api/dashboard/{self.dashboard.id}/schema/").json()["widget_manifest"]
+        dims = next(p for p in manifest["bar"]["parts"] if p["key"] == "dimensions")
+        self.assertEqual([o["value"] for o in dims["options"]], ["categoria", "mes", "anio"])
+        # La página del editor lo arma sin leer la hoja.
+        page = self.client.get(f"/tableros/{self.dashboard.id}/edit/").context["widget_manifest"]
+        self.assertEqual(next(p for p in page["bar"]["parts"] if p["key"] == "dimensions")["options"], [])
+
     def test_update_spec_rechaza_pivote_con_varias_metricas(self, _df):
         r = self.client.put(
             f"/api/widget/{self.widget.id}/spec/",

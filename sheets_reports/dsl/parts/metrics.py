@@ -56,6 +56,11 @@ class ShowAsAllowed(Rule):
 class Metrics(SpecPart):
     key = "metrics"
 
+    ui = "metric-list"
+    panel_order = 40
+    label = "Métricas"
+    hint = "lo que se mide y cómo se muestra"
+
     def __init__(self, low: int = 1, high: int = MAX_METRICS, *, types=DEFAULT_TYPES,
                  show_as: bool = True, multi_with_pivot: bool = False):
         """`types`: claves de METRICS que admite (None: todas). `show_as`: métricas «mostradas
@@ -117,6 +122,9 @@ class Metrics(SpecPart):
             "show_as": self.show_as,
             "multi_metric_with_pivot": self.multi_with_pivot,
         }
+
+    def panel_fields(self, columns):
+        return {"min": self.low, "max": self.high}
 
     @classmethod
     def absent_manifest(cls):

@@ -27,6 +27,7 @@
     static DEFAULT_MANIFEST = {
       data: { dimensions: [0, 1], pivots: [0, 1], columns: [0, 0], metrics: [1, 5],
         metric_types: ['agg', 'calc'], show_as: true, sort: true },
+      parts: [],
       view: [],
       max_per_dashboard: null,
     };
@@ -61,24 +62,16 @@
     // Solo uno por tablero (la caja de filtros).
     static get singleton() { return this.manifest.max_per_dashboard === 1; }
 
-    // --- Lo que sigue es solo de interfaz: no tiene equivalente en el backend.
-    // Mismos nombres en todos los widgets (y en la sugerencia de la IA): en una gráfica las
-    // filas son el eje X y las columnas, las series.
-    static pivotLabel = 'Columnas';
-    static dimensionLabel = 'Filas';
-    // Cómo se llama el bloque de columnas en el builder. `columnControls`: tipos a elegir por
-    // columna (caja de filtros).
+    // --- Lo que sigue es solo de interfaz: no tiene equivalente en el backend. Los controles
+    // del panel de datos (textos, listas, opciones) NO van aquí: salen de manifest.parts.
+    // Con cuántas columnas (y de dónde) arranca un widget nuevo con columnas sueltas.
     static defaultColumns = 5;
     static defaultColumnsFrom = 'all_fields';
-    static columnsLabel = 'Columnas';
-    static columnsHint = 'los datos de la hoja tal cual, en este orden';
-    static addColumnLabel = 'Agregar columna';
-    static allowAllColumns = true;
+    // Opciones de vista por columna de la lista de columnas. `columnControls`: tipos a elegir
+    // por columna (caja de filtros).
     static columnControls = null;
     // "Nombre a mostrar" por columna (view_spec.labels), ej. la etiqueta de cada filtro.
     static supportsColumnLabels = false;
-    // Condiciones sobre filas (bloque «Filtros» del builder).
-    static supportsConditions = true;
     // Dónde se monta: 'canvas' (grid de 12 columnas) o 'header' (fijo arriba, a todo el ancho).
     static placement = 'canvas';
     // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).

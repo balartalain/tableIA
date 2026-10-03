@@ -75,7 +75,10 @@ class FilterOptions(ViewOptions):
 
 class FilterSpec(RowsSpec):
     """Un control por columna, en el orden del panel: sin orden de filas."""
-    parts = with_parts(RowsSpec, Columns(1, MAX_FILTERS_PER_BOX), without=("sort",))
+    parts = with_parts(RowsSpec, Columns(1, MAX_FILTERS_PER_BOX, label="Filtros",
+                                         hint="un control por columna; arrastra para cambiar el orden",
+                                         add_label="Agregar filtro", allow_all=False),
+                       without=("sort",))
 
 
 @WIDGETS.register
@@ -89,6 +92,8 @@ class FilterWidget(WidgetType[ColumnValuesResult, FilterOptions]):
     board_filtered = False
     max_per_dashboard = 1
     ai_enabled = False
+    # Sus filtros de filas no se editan en el panel: la caja ES el filtro del tablero.
+    panel_hidden = ("filters",)
 
     def default_title(self, spec: DataSpec, options: FilterOptions) -> str:
         return "Filtros"

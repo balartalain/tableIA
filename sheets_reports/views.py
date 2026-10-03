@@ -14,6 +14,7 @@ from django.views.decorators.http import require_http_methods
 
 from sheets_reports.dsl.context import SheetContext
 from sheets_reports.dsl.errors import SpecValidationError
+from sheets_reports.dsl.parts import PanelColumns
 from sheets_reports.models import Dashboard, Widget
 from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_spec
 from sheets_reports.services.sheets import (
@@ -42,7 +43,8 @@ def board_editor(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
-        # Capacidades de cada tipo de widget: el panel de edición se arma con ellas.
+        # Capacidades de cada tipo de widget: el panel de edición se arma con ellas. Sin leer la
+        # hoja (sus selects llegan vacíos): /schema/ lo devuelve completo.
         "widget_manifest": {w.key: w.manifest() for w in WIDGETS},
     })
 
@@ -227,8 +229,13 @@ def dashboard_schema(request, dashboard_id):
         df = _load_sheet(dashboard)
     except SheetError as e:
         return _error(str(e), status=502)
+    schema = {**get_sheet_schema(df), "dimension_fields": get_dimension_fields(df)}
+    columns = PanelColumns(all=tuple(schema["all_fields"]), numeric=tuple(schema["numeric_fields"]),
+                           dimension=tuple(schema["dimension_fields"]))
     return JsonResponse({
-        **get_sheet_schema(df), "dimension_fields": get_dimension_fields(df), "sample_values": get_field_samples(df),
+        **schema, "sample_values": get_field_samples(df),
+        # El manifiesto con las columnas de la hoja en las opciones de los selects del panel.
+        "widget_manifest": {w.key: w.manifest(columns) for w in WIDGETS},
     })
 
 

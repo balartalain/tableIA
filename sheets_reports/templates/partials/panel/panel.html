@@ -1,0 +1,26 @@
+{% comment %}
+Panel de datos del editor: recorre las secciones de manifest.parts (panel.js: panelSections) y
+monta el componente de cada pieza según su `ui` (part.html). Ningún widget tiene panel propio:
+una pieza nueva aparece aquí con solo declararse en el backend (SpecPart.panel).
+{% endcomment %}
+<template x-for="(section, s) in $store.dashboard.panelSections" :key="section.key">
+  <div class="space-y-2" x-bind:class="s === 0 ? '' : (section.label ? 'border-t border-line/70 pt-5 !mt-6' : 'pt-1')">
+    <template x-if="section.label">
+      <div class="flex items-center gap-2">
+        <h3 class="text-[11px] font-semibold uppercase tracking-wide text-ink/60" x-text="section.label"></h3>
+        <p class="text-[11px] text-ink/40" x-text="section.hint"></p>
+      </div>
+    </template>
+    <div x-bind:class="section.grouped ? 'grid grid-cols-2 gap-2' : ''">
+      <template x-for="part in section.parts" :key="part.key">
+        <div>
+          <template x-if="section.grouped">
+            <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-text="part.label"></label>
+          </template>
+          {% include "partials/panel/part.html" %}
+        </div>
+      </template>
+    </div>
+    {% include "partials/panel/section_addons.html" %}
+  </div>
+</template>

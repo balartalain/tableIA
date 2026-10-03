@@ -195,7 +195,7 @@ import numpy as np
 
 from sheets_reports.sdk import (
     SPEC_PARTS, WIDGETS, DataSpec, Filters, PlanResult, ResultPlan, SpecPart, ViewOptions,
-    WidgetType, column_message,
+    WidgetType, choices, column_message,
 )
 
 
@@ -203,6 +203,17 @@ from sheets_reports.sdk import (
 class Bins(SpecPart):
     """Pieza nueva del data_spec: {"column": columna numérica, "n": cantidad de intervalos}."""
     key = "bins"
+
+    # Su control en el panel: un field-group, sin JS propio.
+    ui = "field-group"
+    panel_order = 5
+    label = "Intervalos"
+
+    def panel_fields(self, columns):
+        return {"layout": "columns", "required": "column", "item_fields": [
+            {"key": "column", "ui": "select", "label": "Columna", "options": choices(columns.numeric)},
+            {"key": "n", "ui": "number", "label": "Intervalos", "min": 2, "max": 30},
+        ]}
 
     def schema(self, ctx, *, for_ai=False):
         return {"type": "object", "additionalProperties": False, "required": ["column", "n"],
@@ -326,9 +337,14 @@ class ExtensionTests(TestCase):
         self.assertEqual(errors_for("histogram", {**spec(dimensions=[], metrics=[]), "bins": {"column": "ventas", "n": 4}}), [])
 
     def test_manifiesto_con_sus_opciones(self):
-        manifest = WIDGETS.get("histogram").manifest()
+        manifest = WIDGETS.get("histogram").manifest(sdk.PanelColumns(numeric=("ventas",)))
         self.assertEqual(manifest["data"]["dimensions"], [0, 0])
         self.assertEqual(manifest["view"], ["cumulative"])
+        # Su pieza propia aparece en el panel con sus opciones ya resueltas.
+        bins = manifest["parts"][0]
+        self.assertEqual((bins["key"], bins["ui"]), ("bins", "field-group"))
+        self.assertEqual(bins["item_fields"][0]["options"], [{"value": "ventas", "label": "ventas"}])
+        self.assertEqual([p["key"] for p in manifest["parts"]], ["bins", "filters"])
 
     def test_la_ia_lo_conoce_y_llena_sus_opciones(self):
         prompt = build_system_prompt()

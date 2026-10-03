@@ -26,14 +26,9 @@
     };
     static defaults = { title: 'Filtros', width: 'md:col-span-12', height: 300 };
     static placement = 'header';
-    // Builder: solo la lista de filtros (columna + tipo), reordenable; sin condiciones.
-    static supportsConditions = false;
+    // Builder: solo la lista de filtros (columna + tipo), reordenable (manifest.parts).
     static defaultColumns = 1;
     static defaultColumnsFrom = 'dimension_fields';
-    static columnsLabel = 'Filtros';
-    static columnsHint = 'un control por columna; arrastra para cambiar el orden';
-    static addColumnLabel = 'Agregar filtro';
-    static allowAllColumns = false;
     // Cada filtro lleva su etiqueta (por defecto, el nombre de la columna).
     static supportsColumnLabels = true;
     // Tipos de filtro (FILTER_CONTROLS del backend). El rango de fecha aún no está disponible.

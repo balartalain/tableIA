@@ -21,12 +21,14 @@ from sheets_reports.dsl.parts import (
     Limit,
     Metrics,
     OrderBy,
+    PanelColumns,
     Pivots,
     Rows,
     Sort,
     SpecPart,
     TopN,
     TrendBy,
+    choices,
     column_message,
 )
 from sheets_reports.dsl.registry import Registry
@@ -70,7 +72,7 @@ __all__ = [
     "WIDGETS", "WidgetType", "ViewOptions", "ChartWidget", "ChartOptions", "percent_metrics",
     # data_spec: la base, las formas del core y sus piezas
     "DataSpec", "GroupedSpec", "ScalarSpec", "RowsSpec", "with_parts",
-    "SpecPart", "SPEC_PARTS", "ColumnListPart", "Rows", "column_message",
+    "SpecPart", "SPEC_PARTS", "ColumnListPart", "Rows", "column_message", "PanelColumns", "choices",
     "Dimensions", "Pivots", "Columns", "Metrics", "Filters", "Having", "OrderBy", "TopN", "TrendBy",
     "Sort", "Limit", "SheetContext", "SpecValidationError",
     "MAX_COLUMNS", "MAX_DIMENSIONS", "MAX_METRICS", "MAX_PIVOTS", "field_enum", "nullable",

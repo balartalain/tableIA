@@ -4,10 +4,12 @@ extensión, en su mismo archivo)."""
 from sheets_reports.dsl.parts.base import (  # noqa: F401
     SPEC_PARTS,
     ColumnListPart,
+    PanelColumns,
     Rows,
     SpecPart,
     UnsupportedPart,
     bounds_text,
+    choices,
     column_message,
 )
 from sheets_reports.dsl.parts.columns import Columns, Dimensions, Pivots  # noqa: F401

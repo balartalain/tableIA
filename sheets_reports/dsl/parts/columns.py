@@ -4,12 +4,22 @@ from sheets_reports.dsl.parts.base import SPEC_PARTS, ColumnListPart
 from sheets_reports.dsl.rules import Rule
 from sheets_reports.dsl.schema import MAX_COLUMNS, MAX_DIMENSIONS, MAX_PIVOTS
 
+# Filas y columnas de agrupación: un solo bloque del panel.
+GROUPING = {"key": "grouping", "label": "Agrupar datos", "hint": "qué filas y qué columnas de la hoja se usan"}
+
 
 @SPEC_PARTS.register
 class Dimensions(ColumnListPart):
     """Filas / eje X: columnas por las que se agrupa, de la más general a la más detallada."""
     key = "dimensions"
     limit = MAX_DIMENSIONS
+
+    panel_order = 10
+    label = "Filas"
+    group = GROUPING
+    options_from = "dimension"
+    add_label = "Agregar fila"
+    excludes = ("dimensions", "pivots")
 
     def sort_targets(self, value):
         return list(value)
@@ -46,6 +56,14 @@ class Pivots(ColumnListPart):
     key = "pivots"
     limit = MAX_PIVOTS
 
+    panel_order = 20
+    label = "Columnas"
+    group = GROUPING
+    options_from = "dimension"
+    empty_label = "Sin agrupar"
+    empty_selectable = True
+    excludes = ("dimensions", "pivots")
+
     def readable(self, error, path, ctx):
         if error.validator == "maxItems" and path == self.key:
             if error.validator_value == 1:
@@ -65,6 +83,13 @@ class Columns(ColumnListPart):
     """Columnas que se muestran tal cual, sin agrupar, en orden (tabla de datos, filtros)."""
     key = "columns"
     limit = MAX_COLUMNS
+
+    panel_order = 30
+    label = "Columnas"
+    hint = "los datos de la hoja tal cual, en este orden"
+    excludes = ("columns",)
+    sortable = True
+    allow_all = True
 
     def sort_targets(self, value):
         return list(value)

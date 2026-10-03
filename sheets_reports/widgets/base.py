@@ -20,7 +20,7 @@ import pandas as pd
 
 from sheets_reports.dsl.context import SheetContext
 from sheets_reports.dsl.errors import SpecValidationError, schema_errors, unique
-from sheets_reports.dsl.parts import SPEC_PARTS, UnsupportedPart
+from sheets_reports.dsl.parts import SPEC_PARTS, PanelColumns, UnsupportedPart
 from sheets_reports.dsl.registry import Registry
 from sheets_reports.dsl.rules import Rule, Stage
 from sheets_reports.dsl.spec import DataSpec
@@ -139,6 +139,8 @@ class WidgetType(Generic[R, V]):
     # Se calcula con los filtros del tablero aplicados (False: la caja de filtros, cuyas
     # opciones no deben achicarse con su propia selección).
     board_filtered: ClassVar[bool] = True
+    # Piezas de su data_spec que el panel no muestra (se conservan tal cual al editar).
+    panel_hidden: ClassVar[tuple[str, ...]] = ()
     # Cuántos widgets de este tipo admite un tablero (None: sin límite).
     max_per_dashboard: ClassVar[int | None] = None
     # La IA puede proponer este tipo de widget.
@@ -150,18 +152,27 @@ class WidgetType(Generic[R, V]):
 
     # --- manifiesto ----------------------------------------------------------------------
 
-    def manifest(self) -> dict:
-        """Lo que el editor necesita saber de este tipo para armar su panel: qué admite su
-        data_spec y qué opciones de vista propias tiene. Sale de sus piezas (lo que aporta cada
-        una, o lo que vale si no la tiene) y de los campos de `options_cls`, así el frontend no
-        repite flags (agregar una pieza o un campo ya lo publica)."""
+    def manifest(self, columns: PanelColumns | None = None) -> dict:
+        """
+        Lo que el editor necesita saber de este tipo para armar su panel:
+        - data: qué admite su data_spec (lo que aporta cada pieza, o lo que vale si no la tiene);
+        - parts: los controles del panel, en orden (SpecPart.panel), con las opciones de sus
+          selects ya resueltas desde `columns` (la hoja; sin ella, vacías);
+        - view: las opciones de vista propias (campos de `options_cls`).
+        Así el frontend no repite flags ni dibuja un panel por widget: agregar una pieza o un
+        campo ya lo publica.
+        """
+        columns = columns or PanelColumns()
         data = {}
         for part_cls in SPEC_PARTS:
             part = self.spec_cls.part(part_cls.key)
             data.update(part.manifest() if part is not None else part_cls.absent_manifest())
+        shown = sorted((p for p in self.spec_cls.parts if p.key not in self.panel_hidden),
+                       key=lambda p: p.panel_order)
         base = {f.name for f in dataclasses.fields(ViewOptions)}
         return {
             "data": data,
+            "parts": [panel for p in shown if (panel := p.panel(columns)) is not None],
             "view": sorted(f.name for f in dataclasses.fields(self.options_cls) if f.name not in base),
             "max_per_dashboard": self.max_per_dashboard,
         }

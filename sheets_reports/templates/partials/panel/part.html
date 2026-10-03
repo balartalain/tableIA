@@ -1,0 +1,14 @@
+{% comment %}
+El componente de una pieza (`part`, de manifest.parts) según su `ui`. Agregar una ui nueva es
+una línea aquí y su partial; las piezas nuevas con una ui existente no tocan este archivo.
+{% endcomment %}
+<template x-if="part.ui === 'column-list'">{% include "partials/panel/column_list.html" %}</template>
+<template x-if="part.ui === 'column-picker'">{% include "partials/panel/column_picker.html" %}</template>
+<template x-if="part.ui === 'field-group'">{% include "partials/panel/field_group.html" %}</template>
+<template x-if="part.ui === 'metric-list'">{% include "partials/panel/metric_list.html" %}</template>
+<template x-if="part.ui === 'condition-list'">
+  {% include "partials/builder_conditions.html" with list="$store.dashboard.drawerDraft.builder[part.key]" %}
+</template>
+<template x-if="part.ui === 'condition-list-metric'">
+  {% include "partials/builder_group_conditions.html" with list="$store.dashboard.drawerDraft.builder[part.key]" options="$store.dashboard.metricRefOptions()" %}
+</template>

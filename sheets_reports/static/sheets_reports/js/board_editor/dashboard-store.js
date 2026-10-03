@@ -671,6 +671,7 @@ document.addEventListener('alpine:init', () => {
     drawerAdvice: null,
     drawerSaving: false,
     drawerSaveError: '',
+    drawerLoading: false,
     // Pestaña activa del panel: 'data' (filas, columnas, métricas) o 'style' (personalizar).
     drawerTab: 'data',
     // Banner de advertencia del builder: mensaje de rechazo del backend (no se aplica nada).
@@ -734,6 +735,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     // Carga widgets + datos ya calculados en un solo request. Retorna {id: entry}.
+    // La respuesta NO incluye data_spec/view_spec (solo datos de visualización compilados).
     async loadBoard() {
       const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
@@ -744,6 +746,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     // Recalcula todos los widgets (sin IA): refresco periódico, filtros, reintentos.
+    // La respuesta NO incluye data_spec/view_spec.
     async refreshData() {
       const saved = this.widgets.filter(w => w.id > 0 && w.hasSpec);
       saved.forEach(w => w.setLoading(true));
@@ -827,7 +830,21 @@ document.addEventListener('alpine:init', () => {
     async removeWidget(id) {
       const removed = this.widgets.find(w => w.id === id);
       if (removed && removed.constructor.placement === 'header' && this.clearBoardFilters) {
-        this.clearBoardFilters((removed.data_spec && removed.data_spec.columns) || []);
+        // El widget filtro necesita su data_spec.columns para limpiar los filtros del tablero.
+        // Si no lo tiene (carga inicial sin specs), lo pedimos al servidor.
+        let columns = (removed.data_spec && removed.data_spec.columns) || [];
+        if (!columns.length && id > 0) {
+          try {
+            const { r, data } = await fetchJsonSafe(apiUrl(`/api/widget/${id}/config/`), {}, RENDER_FETCH_TIMEOUT_MS);
+            if (r.ok && data && data.data_spec) {
+              columns = data.data_spec.columns || [];
+              removed.applyServerState(data);
+            }
+          } catch (e) {
+            // Si falla, intentamos con lo que tengamos (array vacío = limpiar todo).
+          }
+        }
+        this.clearBoardFilters(columns);
       }
       if (id > 0) {
         try { await fetch(apiUrl(`/api/widget/${id}/`), { method: 'DELETE' }); } catch (e) {}
@@ -1313,39 +1330,67 @@ document.addEventListener('alpine:init', () => {
       this.editingType = w.chart_type;
       // Un widget nuevo empieza por sus datos.
       if (w.id < 0) this.drawerTab = 'data';
-      const draft = {};
+
+      const openWithDraft = (draft) => {
+        // Un tablero guardado puede tener un inicio que hoy no cabe con su ancho (o que quedó
+        // de una versión anterior): se normaliza al abrir para que el desplegable no quede sin
+        // opción coincidente.
+        draft.startCol = BaseWidget.fitStartCol(draft.startCol, draft.width);
+        // Totales por nivel: van junto a cada fila/columna del builder, pero son presentación
+        // (se guardan con "Guardar" y no vuelven a pedir los datos).
+        if (this.drawerWidgetClass.supportsTotals) {
+          draft.rowTotals = totalsLevels(w.rowTotals, draft.builder.dimensions.length);
+          draft.columnTotals = totalsLevels(w.columnTotals, draft.builder.pivots.length);
+          // "Repetir etiquetas de fila" va, como en Sheets, bajo la primera fila.
+          draft.repeatRowLabels = !!w.repeatRowLabels;
+        }
+        this.drawerDraft = draft;
+        this.drawerAskError = '';
+        this.drawerAdvice = null;
+        this.drawerAskOpen = false;
+        this.drawerSaveError = '';
+        this.drawerSpecError = '';
+        this._syncDrawerSpecs(w);
+      };
+
+      const baseDraft = {};
       for (const field of this.drawerFields) {
         if (field.key === 'builder' || field.key === 'prompt') continue;
-        draft[field.key] = w[field.key];
+        baseDraft[field.key] = w[field.key];
       }
-      draft.prompt = '';
-      draft.builder = this._builderDraft(w) || this._defaultBuilder();
-      // Un tablero guardado puede tener un inicio que hoy no cabe con su ancho (o que quedó
-      // de una versión anterior): se normaliza al abrir para que el desplegable no quede sin
-      // opción coincidente.
-      draft.startCol = BaseWidget.fitStartCol(draft.startCol, draft.width);
-      // Totales por nivel: van junto a cada fila/columna del builder, pero son presentación
-      // (se guardan con "Guardar" y no vuelven a pedir los datos).
-      if (this.drawerWidgetClass.supportsTotals) {
-        draft.rowTotals = totalsLevels(w.rowTotals, draft.builder.dimensions.length);
-        draft.columnTotals = totalsLevels(w.columnTotals, draft.builder.pivots.length);
-        // "Repetir etiquetas de fila" va, como en Sheets, bajo la primera fila.
-        draft.repeatRowLabels = !!w.repeatRowLabels;
+      baseDraft.prompt = '';
+
+      if (w.id < 0) {
+        // Widget nuevo: no hay spec que cargar, usar builder por defecto.
+        baseDraft.builder = this._defaultBuilder();
+        openWithDraft(baseDraft);
+        return;
       }
-      this.drawerDraft = draft;
-      // Widget nuevo abierto antes de que llegaran las columnas: completar los valores por
-      // defecto cuando lleguen.
-      if (w.id < 0 && !(this.schema.all_fields || []).length) {
-        this.loadSchema().then(() => {
-          if (this.editingId === id) this.drawerDraft.builder = this._defaultBuilder();
+
+      // Widget existente: cargar su spec vía AJAX.
+      this.drawerLoading = true;
+      fetchJsonSafe(apiUrl(`/api/widget/${w.id}/config/`), {}, RENDER_FETCH_TIMEOUT_MS)
+        .then(({ r, data }) => {
+          this.drawerLoading = false;
+          if (!r.ok || !data) {
+            const message = (data && data.error) || 'No se pudo cargar la configuración del widget';
+            this.drawerSpecError = message;
+            // Fallback: builder por defecto
+            baseDraft.builder = this._defaultBuilder();
+            openWithDraft(baseDraft);
+            return;
+          }
+          // Actualizar el widget local con el spec recibido.
+          w.applyServerState(data);
+          baseDraft.builder = this._builderDraft(w) || this._defaultBuilder();
+          openWithDraft(baseDraft);
+        })
+        .catch(() => {
+          this.drawerLoading = false;
+          this.drawerSpecError = 'No se pudo conectar con el servidor';
+          baseDraft.builder = this._defaultBuilder();
+          openWithDraft(baseDraft);
         });
-      }
-      this.drawerAskError = '';
-      this.drawerAdvice = null;
-      this.drawerAskOpen = false;
-      this.drawerSaveError = '';
-      this.drawerSpecError = '';
-      this._syncDrawerSpecs(w);
     },
 
     _builderDraft(w) {
@@ -1387,6 +1432,7 @@ document.addEventListener('alpine:init', () => {
       this.drawerAskOpen = false;
       this.drawerSaveError = '';
       this.drawerSpecError = '';
+      this.drawerLoading = false;
       this.drawerTab = 'data';
     },
 

@@ -117,15 +117,17 @@ def _serialize_dashboard(dashboard):
     }
 
 
-def _serialize_widget(widget):
-    return {
+def _serialize_widget(widget, include_specs=True):
+    base = {
         "id": widget.id,
         "type": widget.type,
         "position": widget.position,
-        "data_spec": widget.data_spec,
-        "view_spec": widget.view_spec,
         "source_prompt": widget.source_prompt,
     }
+    if include_specs:
+        base["data_spec"] = widget.data_spec
+        base["view_spec"] = widget.view_spec
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +247,7 @@ def dashboard_render(request, dashboard_id):
     Datos listos para dibujar todos los widgets del tablero. NUNCA llama a la IA: es puro
     cálculo sobre la hoja cacheada, para que el refresco periódico del frontend sea barato.
     Es de solo lectura y sirve también a la vista compartida (board_view).
+    SOLO devuelve datos de visualización (compilados), NO data_spec/view_spec.
     """
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     try:
@@ -259,8 +262,42 @@ def dashboard_render(request, dashboard_id):
     widgets = sorted(dashboard.widgets.all(), key=lambda w: (w.position.get("y", 0), w.id))
     return JsonResponse({
         "dashboard": _serialize_dashboard(dashboard),
-        "widgets": [{**_serialize_widget(w), **service.render(w, filters)} for w in widgets],
+        "widgets": [{**_serialize_widget(w, include_specs=False), **service.render(w, filters)} for w in widgets],
         "filter_errors": filter_errors,
+    })
+
+
+@require_http_methods(["GET"])
+def widget_spec(request, widget_id):
+    """
+    Devuelve el data_spec y view_options de un widget individual para el panel de edición.
+    Se usa vía AJAX al abrir el drawer de edición.
+    NO devuelve los campos derivados del view_spec (x, metrics, percent) que solo usa el renderer.
+    """
+    widget = _owned_widget(request, widget_id)
+    if not widget:
+        return _error("Widget no encontrado", status=404)
+    
+    wtype = WIDGETS.get(widget.type)
+    if not wtype:
+        return _error("Tipo de widget desconocido", status=404)
+    
+    # Extraer solo view_options (lo editable) del view_spec guardado
+    view_spec = widget.view_spec or {}
+    view_options = wtype.options_cls.from_view(view_spec)
+    view_options_dict = {
+        "title": view_options.title,
+        "labels": view_options.labels,
+        "display": view_options.display,
+    }
+    
+    return JsonResponse({
+        "id": widget.id,
+        "type": widget.type,
+        "position": widget.position,
+        "source_prompt": widget.source_prompt,
+        "data_spec": widget.data_spec,
+        "view_options": view_options_dict,
     })
 
 

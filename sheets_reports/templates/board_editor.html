@@ -32,7 +32,8 @@
         rgba(0, 0, 0, 0.035) calc(100% / 12 * 2)
     );
   }
-  .is-snapping { transition: height 0.16s ease-out; }
+  /* interact.js arranca desde este asa; sin touch-action el navegador roba el gesto táctil. */
+  .resize-handle { touch-action: none; user-select: none; }
   /* Fila fantasma al arrastrar dimensiones, pivotes o métricas del panel. */
   .metric-ghost-preview {
     background-color: #f1f5f9 !important;
@@ -602,6 +603,7 @@
   window.REFRESH_MINUTES = {{ refresh_minutes|default:0 }};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.28/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@6.4.0/dist/apexcharts.min.js"></script>
 <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
 <link href="{% static 'sheets_reports/css/tabulator.css' %}" rel="stylesheet">

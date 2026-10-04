@@ -215,6 +215,7 @@
       this._lastData = null;
       this._legendSortable = null;
       this._legendObserver = null;
+      this._interactable = null;
       this._readOnly = false;
       this.order = raw.order ?? 0;
       this.syncLayoutFromPosition();
@@ -223,7 +224,7 @@
     // El ancho y el alto de la tarjeta salen de `position` (lo único que se guarda).
     syncLayoutFromPosition() {
       const pos = this.position || { x: 0, y: 0, w: 6, h: 300 };
-      this.width = `md:col-span-${Math.min(12, Math.max(1, pos.w || 6))}`;
+      this.width = `md:col-span-${Math.min(12, Math.max(2, pos.w || 6))}`;
       this.height = pos.h || 300;
       this.startCol = pos.x ? `md:col-start-${Math.min(12, pos.x + 1)}` : '';
     }
@@ -307,6 +308,7 @@
     rebuildElement() {
       const old = this.el;
       const parent = old && old.parentElement;
+      this._detachResize();
       this.el = null;
       const el = this.mount();
       if (parent) parent.replaceChild(el, old);
@@ -462,8 +464,7 @@
         });
       }
 
-      const resizeHandle = el.querySelector('.resize-handle');
-      if (resizeHandle) resizeHandle.addEventListener('mousedown', (e) => this._onResizeStart(e));
+      this.initResize();
     }
 
     destroy() {
@@ -473,41 +474,80 @@
       }
       this._destroyLegendSortable();
       if (this._legendObserver) { this._legendObserver.disconnect(); this._legendObserver = null; }
+      this._detachResize();
     }
 
-    _onResizeStart(e) {
-      e.preventDefault();
-      e.stopPropagation();
-
+    // interact.js arranca el resize desde el asa de la esquina: ancho y alto en el mismo
+    // gesto, con el snap hecho en `_onResizeMove` (una columna entera y múltiplos de 20 px).
+    initResize() {
       const el = this.el;
-      const minHeight = this.constructor.minHeight;
-      const stepHeight = 20;
-      const startY = e.clientY;
-      const startHeight = el.offsetHeight;
+      if (!el || this._readOnly || this._interactable || typeof interact === 'undefined') return;
+      if (!el.querySelector('.resize-handle')) return;
+      let moved = false;
+      this._interactable = interact(el).resizable({
+        edges: { bottom: '.resize-handle', right: '.resize-handle' },
+        listeners: {
+          start: () => { document.body.style.userSelect = 'none'; },
+          move: (event) => {
+            moved = true;
+            this._onResizeMove(event);
+          },
+          end: (event) => {
+            document.body.style.userSelect = '';
+            if (!moved) return;
+            moved = false;
+            // El ancho en px solo hace que el borde siga al cursor: al soltar manda la clase
+            // md:col-span-N, y en móvil col-span-12 (con px en línea se quedaría fijo).
+            const target = this.el || event.target;
+            if (target) target.style.width = '';
+            this._dirty = true;
+            Alpine.store('dashboard').scheduleLayoutSave();
+          },
+        },
+      });
+    }
 
-      function clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value));
+    _detachResize() {
+      if (!this._interactable) return;
+      this._interactable.unset();
+      this._interactable = null;
+    }
+
+    // Ancho de una columna del lienzo: 12 columnas con sus gutters, descontando el p-4.
+    _singleColumnWidth() {
+      const canvas = document.getElementById('dashboard-canvas');
+      if (!canvas) return null;
+      const css = window.getComputedStyle(canvas);
+      const gap = parseFloat(css.columnGap || css.gap) || 16;
+      const inner = canvas.clientWidth
+        - (parseFloat(css.paddingLeft) || 0)
+        - (parseFloat(css.paddingRight) || 0);
+      const colW = (inner - gap * 11) / 12;
+      return colW > 0 ? { colW, gap } : null;
+    }
+
+    _onResizeMove(event) {
+      const target = this.el || event.target;
+      if (!target) return;
+      const pos = this.position || { x: 0, y: 0, w: 6, h: 300 };
+      this.position = pos;
+
+      const step = 20;
+      this.height = Math.max(
+        this.constructor.minHeight,
+        Math.min(3000, Math.round(event.rect.height / step) * step),
+      );
+      pos.h = this.height;
+
+      const grid = this._singleColumnWidth();
+      if (grid) {
+        const cols = Math.max(2, Math.min(12 - (pos.x || 0),
+          Math.round((event.rect.width + grid.gap) / (grid.colW + grid.gap))));
+        pos.w = cols;
+        target.style.width = cols * grid.colW + (cols - 1) * grid.gap + 'px';
       }
-      const onMouseMove = (ev) => {
-        const newHeight = Math.max(minHeight, startHeight + (ev.clientY - startY));
-        el.style.height = newHeight + 'px';
-        window.dispatchEvent(new Event('resize'));
-      };
 
-      const onMouseUp = () => {
-        el.classList.add('is-snapping');
-        this.height = clamp(Math.round(el.offsetHeight / stepHeight) * stepHeight, minHeight, 3000);
-        el.style.height = this.height + 'px';
-        if (this.position) this.position.h = this.height;
-        this._dirty = true;
-        Alpine.store('dashboard').scheduleLayoutSave();
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
-        setTimeout(() => el.classList.remove('is-snapping'), 160);
-      };
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+      this.updateChrome();
     }
 
     _destroyLegendSortable() {

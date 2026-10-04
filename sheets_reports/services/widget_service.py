@@ -27,7 +27,7 @@ def clean_position(value, fallback=None) -> dict:
         for key in ("x", "y", "w", "h"):
             if isinstance(value.get(key), (int, float)) and not isinstance(value.get(key), bool):
                 position[key] = int(value[key])
-    position["w"] = min(max(position["w"], 1), 12)
+    position["w"] = min(max(position["w"], 2), 12)
     position["x"] = min(max(position["x"], 0), 12)
     position["h"] = min(max(position["h"], 100), 3000)
     return position

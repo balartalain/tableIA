@@ -391,21 +391,87 @@
                 <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none mt-0.5"
                    aria-hidden="true" title="Arrastra para reordenar"></i>
                 <div class="flex-1 min-w-0 space-y-1.5">
-                <select x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
+                <!-- Agregación o cálculo entre métricas -->
+                <select x-show="$store.dashboard.hasFormulaMetrics"
+                        x-bind:value="metric.type || 'agg'"
+                        x-on:change="$store.dashboard.onMetricTypeChange(idx, $event.target.value)"
+                        aria-label="Tipo de métrica"
                         class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                  <option value="" x-show="metric.agg === 'count' || !metric.field" x-text="metric.agg === 'count' ? 'Todas las filas' : '— elegir —'"></option>
-                  <template x-for="col in $store.dashboard.schema.all_fields || []" :key="col">
-                    <option x-bind:value="col" x-text="col"></option>
+                  <template x-for="o in $store.dashboard.metricTypeOptions" :key="o.value">
+                    <option x-bind:value="o.value" x-text="o.label"></option>
                   </template>
                 </select>
-                <div class="flex gap-1.5">
-                  <select x-model="metric.agg" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Agregación"
-                          class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                    <template x-for="o in $store.dashboard.aggOptions" :key="o.value">
-                      <option x-bind:value="o.value" x-text="o.label"></option>
-                    </template>
-                  </select>
-                </div>
+
+                <template x-if="(metric.type || 'agg') !== 'formula'">
+                  <div class="space-y-1.5">
+                    <select x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
+                            class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                      <option value="" x-show="metric.agg === 'count' || !metric.field" x-text="metric.agg === 'count' ? 'Todas las filas' : '— elegir —'"></option>
+                      <template x-for="col in $store.dashboard.schema.all_fields || []" :key="col">
+                        <option x-bind:value="col" x-text="col"></option>
+                      </template>
+                    </select>
+                    <div class="flex gap-1.5">
+                      <select x-model="metric.agg" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Agregación"
+                              class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                        <template x-for="o in $store.dashboard.aggOptions" :key="o.value">
+                          <option x-bind:value="o.value" x-text="o.label"></option>
+                        </template>
+                      </select>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- Cálculo entre las métricas anteriores -->
+                <template x-if="metric.type === 'formula'">
+                  <div class="space-y-1.5">
+                    <p x-show="!$store.dashboard.formulaOperandOptions(idx).length" class="text-[11px] text-clay-600">
+                      Agrega antes las métricas con las que quieres calcular.
+                    </p>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <select x-model="metric.left" x-on:change="$store.dashboard.onFormulaChange(idx)"
+                              aria-label="Primera métrica"
+                              class="flex-1 min-w-[6.5rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                        <option value="">Elige una métrica…</option>
+                        <template x-for="o in $store.dashboard.formulaOperandOptions(idx)" :key="o.value">
+                          <option x-bind:value="o.value" x-text="o.label"></option>
+                        </template>
+                      </select>
+                      <select x-model="metric.op" x-on:change="$store.dashboard.onFormulaChange(idx)"
+                              aria-label="Operación"
+                              class="w-32 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                        <template x-for="o in $store.dashboard.calcOpOptions" :key="o.value">
+                          <option x-bind:value="o.value" x-text="o.label"></option>
+                        </template>
+                      </select>
+                      <select x-model="metric.rightKind" x-on:change="$store.dashboard.onFormulaChange(idx)"
+                              aria-label="Operar con"
+                              class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                        <option value="metric">métrica</option>
+                        <option value="number">número</option>
+                      </select>
+                      <template x-if="(metric.rightKind || 'number') !== 'number'">
+                        <select x-model="metric.right" x-on:change="$store.dashboard.onFormulaChange(idx)"
+                                aria-label="Segunda métrica"
+                                class="flex-1 min-w-[6.5rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                          <option value="">Elige una métrica…</option>
+                          <template x-for="o in $store.dashboard.formulaOperandOptions(idx)" :key="o.value">
+                            <option x-bind:value="o.value" x-text="o.label"></option>
+                          </template>
+                        </select>
+                      </template>
+                      <template x-if="(metric.rightKind || 'number') === 'number'">
+                        <input type="text" x-model="metric.right" x-on:input="$store.dashboard.onFormulaChange(idx)"
+                               placeholder="Número" aria-label="Número"
+                               class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                      </template>
+                    </div>
+                    <p x-show="!metric.expression" class="text-[11px] text-clay-600">
+                      Cálculo incompleto: se descarta si guardas así.
+                    </p>
+                  </div>
+                </template>
+
                 <input type="text" x-model="metric.label" aria-label="Nombre a mostrar"
                        x-bind:title="'Se muestra: ' + $store.dashboard.metricName(metric)"
                        x-bind:placeholder="$store.dashboard.metricName(metric)"
@@ -416,6 +482,84 @@
             </div>
           </template>
           </div>
+        </div>
+
+        <!-- Bloque «Tarjeta KPI»: los roles del número (style declarado en el backend) -->
+        <div x-show="$store.dashboard.cardControls.length" class="space-y-3 rounded-xl border border-line/60 bg-paper/60 p-3">
+          <label class="block text-xs font-semibold text-ink/70">Tarjeta KPI</label>
+          <template x-for="control in $store.dashboard.cardControls" :key="control.key">
+            <div x-show="control.key !== 'target'">
+              <label class="block text-[11px] font-semibold text-ink/60 mb-1"
+                     x-show="control.ui !== 'checkbox'" x-text="control.label || control.key"
+                     x-bind:class="$store.dashboard.cardControlDisabled(control) ? 'opacity-40' : ''"></label>
+              <template x-if="control.ui === 'text'">
+                <input type="text" x-model="$store.dashboard.drawerDraft.style[control.key]"
+                       x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
+                       x-bind:placeholder="control.default != null ? String(control.default) : ''"
+                       class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+              </template>
+              <template x-if="control.ui === 'number'">
+                <input type="number" x-model.number="$store.dashboard.drawerDraft.style[control.key]"
+                       x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
+                       x-bind:min="control.min" x-bind:max="control.max" x-bind:step="control.step || 1"
+                       class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+              </template>
+              <template x-if="control.ui === 'checkbox'">
+                <label class="flex items-center gap-2 text-xs font-semibold text-ink/70 cursor-pointer"
+                       x-bind:class="$store.dashboard.cardControlDisabled(control) ? 'opacity-40 cursor-not-allowed' : ''">
+                  <input type="checkbox" x-model="$store.dashboard.drawerDraft.style[control.key]"
+                         x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
+                         class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+                  <span x-text="control.label || control.key"></span>
+                </label>
+              </template>
+              <template x-if="control.ui === 'select' && control.options_from === 'metrics' && control.key === 'targetMetric'">
+                <div class="flex gap-1.5">
+                  <select x-model="$store.dashboard.drawerDraft.style[control.key]"
+                          x-on:change="$store.dashboard.onTargetMetricChange()"
+                          class="flex-1 text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+                    <template x-for="o in $store.dashboard.metricRoleOptions(control)" :key="o.value">
+                      <option x-bind:value="o.value" x-text="o.label"></option>
+                    </template>
+                  </select>
+                  <input type="number" x-model.number="$store.dashboard.drawerDraft.style.target"
+                         placeholder="Valor" step="1"
+                         x-bind:disabled="$store.dashboard.drawerDraft.style.targetMetric !== 'fixed'"
+                         class="w-24 text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                </div>
+              </template>
+              <template x-if="control.ui === 'select' && control.options_from === 'metrics' && control.key !== 'targetMetric'">
+                <select x-model="$store.dashboard.drawerDraft.style[control.key]"
+                        class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+                  <template x-for="o in $store.dashboard.metricRoleOptions(control)" :key="o.value">
+                    <option x-bind:value="o.value" x-text="o.label"></option>
+                  </template>
+                </select>
+              </template>
+              <template x-if="control.ui === 'select' && !control.options_from">
+                <select x-model="$store.dashboard.drawerDraft.style[control.key]"
+                        x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
+                        class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                  <template x-for="o in control.options || []" :key="o.value">
+                    <option x-bind:value="o.value" x-text="o.label"></option>
+                  </template>
+                </select>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        <!-- Tendencia: la mini línea bajo el número -->
+        <div x-show="$store.dashboard.hasTrend" class="space-y-1">
+          <label class="block text-xs font-semibold text-ink/70">Tendencia por</label>
+          <select x-model="$store.dashboard.drawerDraft.fields.trend_by"
+                  class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500">
+            <option value="" x-text="'Sin tendencia'"></option>
+            <template x-for="f in $store.dashboard.trendOptions" :key="f">
+              <option x-bind:value="f" x-text="f"></option>
+            </template>
+          </select>
+          <p class="text-[11px] text-ink/50">Mini línea bajo el número: la evolución del número por esa columna.</p>
         </div>
 
         <!-- Filtros del widget -->

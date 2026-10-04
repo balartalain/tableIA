@@ -105,7 +105,8 @@ class ViewsTests(TestCase):
                                  agg("actual", filters=[{"field": "anio", "op": "eq", "relative": "max"}]),
                                  agg("anterior", filters=[{"field": "anio", "op": "eq", "relative": "second_max"}]),
                              ]},
-                style={"target": 1000, "targetLabel": "Meta", "status_good": 100, "status_warn": 50},
+                style={"compare": "anterior", "targetMetric": "fixed", "target": 1000,
+                       "targetLabel": "Meta", "status_good": 100, "status_warn": 50},
             )),
             content_type="application/json",
         )

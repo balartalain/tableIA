@@ -14,17 +14,20 @@ class WidgetFields:
     filters: List[Dict[str, Any]] = field(default_factory=list)
     pivots: List[str] = field(default_factory=list)
     columns: List[Dict[str, Any]] = field(default_factory=list)  # [{"field": "ventas", "label": "Monto"}]
+    trend_by: Optional[str] = None  # columna de la mini tendencia (sparkline) del KPI
     sort_by: Optional[str] = None
     limit: Optional[int] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "WidgetFields":
+        trend_by = data.get("trend_by")
         return cls(
             dimensions=data.get("dimensions", []),
             metrics=data.get("metrics", []),
             filters=data.get("filters", []),
             pivots=data.get("pivots", []),
             columns=_normalize_columns(data.get("columns", [])),
+            trend_by=str(trend_by).strip() if trend_by else None,
             sort_by=data.get("sort_by"),
             limit=data.get("limit"),
         )
@@ -36,6 +39,7 @@ class WidgetFields:
             "filters": self.filters,
             "pivots": self.pivots,
             "columns": self.columns,
+            "trend_by": self.trend_by,
             "sort_by": self.sort_by,
             "limit": self.limit,
         }

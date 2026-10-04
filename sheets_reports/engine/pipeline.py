@@ -545,6 +545,12 @@ class CalculatedMetricsStep(PipelineStep):
         if ctx.metadata.get("nested") is not None:
             # En la tabla dinámica la fórmula ya se calculó celda a celda (con sus subtotales).
             return ctx
+        scalar = ctx.metadata.get("scalar_result")
+        if scalar is not None:
+            # Sin dimensiones el resultado son los valores sueltos (KPI): la fórmula se
+            # evalúa sobre ellos, en el orden de la lista (una puede usar a la anterior).
+            self._scalar_formulas(scalar, ctx)
+            return ctx
         df = ctx.df
         for metric in ctx.fields.metrics or []:
             if metric.get("type") != "formula":
@@ -558,6 +564,23 @@ class CalculatedMetricsStep(PipelineStep):
                 df[alias] = None
         ctx.df = df
         return ctx
+
+    @staticmethod
+    def _scalar_formulas(scalar: dict, ctx: PipelineContext) -> None:
+        values = scalar.get("values")
+        if not isinstance(values, dict):
+            return
+        for metric in ctx.fields.metrics or []:
+            if metric.get("type") != "formula":
+                continue
+            alias, expression = metric.get("alias"), metric.get("expression")
+            if not (alias and expression):
+                continue
+            try:
+                values[alias] = pd.DataFrame([values]).eval(expression).iloc[0]
+            except Exception:  # noqa: BLE001 - una fórmula mala no tumba el widget entero
+                values[alias] = None
+        scalar["values"] = values
 
 
 class WindowFunctionsStep(PipelineStep):

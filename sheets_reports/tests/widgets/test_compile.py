@@ -71,26 +71,51 @@ class KpiCompileTests(SimpleTestCase):
     def kpi(self, *metrics, **overrides):
         return fields(dimensions=[], pivots=[], metrics=list(metrics), **overrides)
 
-    def test_comparacion_con_la_segunda_metrica(self):
+    def test_comparacion_con_la_metrica_elegida(self):
+        out = compiled("kpi", self.kpi(
+            agg("actual", filters=[{"field": "anio", "op": "eq", "value": 2026}]),
+            agg("anterior", filters=[{"field": "anio", "op": "eq", "value": 2025}]),
+        ), {"compare": "anterior"})
+        self.assertEqual(out["value"], 675.0)
+        # Sin label personalizado, se muestra «Agregación Campo»
+        self.assertEqual(out["compare"]["label"], "Suma Ventas")
+        self.assertEqual(out["compare"]["value"], 80.0)
+        self.assertEqual(out["compare"]["mode"], "pct")
+        self.assertTrue(out["compare"]["better"])
+
+    def test_sin_elegir_comparacion_no_compara(self):
         out = compiled("kpi", self.kpi(
             agg("actual", filters=[{"field": "anio", "op": "eq", "value": 2026}]),
             agg("anterior", filters=[{"field": "anio", "op": "eq", "value": 2025}]),
         ))
         self.assertEqual(out["value"], 675.0)
-        self.assertEqual(out["compare"]["label"], "Anterior")
-        self.assertEqual(out["compare"]["value"], 80.0)
-        self.assertEqual(out["compare"]["mode"], "pct")
-        self.assertTrue(out["compare"]["better"])
+        self.assertIsNone(out["compare"])
+
+    def test_comparacion_con_alias_inexistente_no_compara(self):
+        out = compiled("kpi", self.kpi(
+            agg("actual"), agg("anterior"),
+        ), {"compare": "inexistente"})
+        self.assertIsNone(out["compare"])
+
+    def test_el_numero_principal_puede_ser_otra_metrica(self):
+        out = compiled("kpi", self.kpi(
+            agg("actual", filters=[{"field": "anio", "op": "eq", "value": 2026}]),
+            agg("anterior", filters=[{"field": "anio", "op": "eq", "value": 2025}]),
+        ), {"primary": "anterior"})
+        self.assertEqual(out["value"], 80.0)
+        # Sin label personalizado, se muestra «Agregación Campo»
+        self.assertEqual(out["label"], "Suma Ventas")
 
     def test_comparacion_cuando_menos_es_mejor(self):
         out = compiled("kpi", self.kpi(
             agg("actual", filters=[{"field": "anio", "op": "eq", "value": 2026}]),
             agg("anterior", filters=[{"field": "anio", "op": "eq", "value": 2025}]),
-        ), {"higher_is_better": False})
+        ), {"compare": "anterior", "higher_is_better": False})
         self.assertFalse(out["compare"]["better"])
 
     def test_meta_y_semaforo(self):
-        out = compiled("kpi", self.kpi(agg("actual")), {"target": 1000, "status_good": 100, "status_warn": 60})
+        out = compiled("kpi", self.kpi(agg("actual")),
+                       {"targetMetric": "fixed", "target": 1000, "status_good": 100, "status_warn": 60})
         self.assertEqual(out["target"]["label"], "Meta")
         self.assertEqual(out["target"]["value"], 1000.0)
         self.assertEqual(out["status"], "warn")

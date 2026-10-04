@@ -1,12 +1,42 @@
 """
-Tarjeta KPI: consulta con `WidgetFields` (primera métrica = principal, segunda = comparación),
-apariencia con `WidgetStyle`.
+Tarjeta KPI: consulta con `WidgetFields` (roles del número elegidos en el style: `primary`,
+`compare`, `targetMetric`; tendencia con `trend_by`), apariencia con `WidgetStyle`.
 """
+import logging
 from typing import Any, ClassVar, Dict, List, Optional
 
+import pandas as pd
+
+from sheets_reports.dsl.ordering import chronological
+from sheets_reports.dsl.values import to_key
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
-from sheets_reports.widgets.presentation import humanize, metric_alias
+from sheets_reports.widgets.presentation import metric_alias, metric_label
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
+
+logger = logging.getLogger(__name__)
+
+# Grupos de la sparkline: más no se distinguen en una tarjeta.
+MAX_TREND_POINTS = 60
+
+
+def _chronological_keys(series: pd.Series) -> list:
+    """Valores distintos de la columna de la tendencia, de lo más antiguo a lo más reciente
+    (ver dsl/ordering.chronological). Nunca en el orden de la hoja."""
+    keys = list(pd.unique(series.dropna()))
+    if pd.api.types.is_numeric_dtype(series):
+        by_key = {to_key(k): k for k in keys}
+        return [by_key[k] for k in chronological(list(by_key))]
+    return chronological(keys)
+
+
+def _display_key(value):
+    """La clave en el JSON de dibujo: numpy → tipo nativo (el JSON no entiende np.int64)."""
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except ValueError:
+            return value
+    return value
 
 
 @WIDGETS.register
@@ -20,6 +50,7 @@ class KpiWidget(BaseWidget):
             {   'widget_type': 'kpi',
                 'title': 'Ventas del año',
                 'fields': {   'dimensions': [],
+                              'trend_by': 'mes',
                               'metrics': [   {   'agg': 'sum',
                                                  'field': 'ventas',
                                                  'alias': 'ventas_anio',
@@ -35,7 +66,8 @@ class KpiWidget(BaseWidget):
                                              {   'agg': 'sum',
                                                  'field': 'plan',
                                                  'alias': 'meta'}]},
-                'style': {   'target': 1000,
+                'style': {   'targetMetric': 'fixed',
+                             'target': 1000,
                              'targetLabel': 'Meta',
                              'status_good': 100,
                              'status_warn': 80}})
@@ -48,6 +80,7 @@ class KpiWidget(BaseWidget):
         "sort": False,
         "limit": False,
         "filters": True,
+        "trend": True,
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [
@@ -56,16 +89,88 @@ class KpiWidget(BaseWidget):
         {"key": "abbreviate", "label": "Abreviar (1.2M)", "ui": "checkbox", "default": False},
         {"key": "prefix", "label": "Prefijo (ej. RD$)", "ui": "text", "default": ""},
         {"key": "suffix", "label": "Sufijo (ej. uds.)", "ui": "text", "default": ""},
-        {"key": "compareMode", "label": "Modo de comparación", "ui": "select", "options": [
-            {"value": "pct", "label": "Porcentaje"},
-            {"value": "abs", "label": "Absoluto"},
-        ], "default": "pct"},
-        {"key": "higher_is_better", "label": "Más alto es mejor", "ui": "checkbox", "default": True},
-        {"key": "target", "label": "Meta (valor)", "ui": "number", "step": 1},
-        {"key": "targetLabel", "label": "Etiqueta de la meta", "ui": "text", "default": "Meta"},
-        {"key": "status_good", "label": "Umbral «bien» (%)", "ui": "number", "min": 0, "step": 1},
-        {"key": "status_warn", "label": "Umbral «ajuste» (%)", "ui": "number", "min": 0, "step": 1},
+        # Bloque «Tarjeta KPI» en «Configurar»: quién es el número, contra qué y su semáforo.
+        {"key": "primary", "label": "Número principal", "ui": "select", "group": "card",
+         "hidden": True, "options_from": "metrics",
+         "options": [{"value": "", "label": "Primera métrica"}], "default": ""},
+        {"key": "compare", "label": "Comparar con", "ui": "select", "group": "card",
+         "hidden": True, "options_from": "metrics",
+         "options": [{"value": "", "label": "Sin comparación"}], "default": ""},
+        {"key": "compareMode", "label": "Modo de comparación", "ui": "select", "group": "card",
+         "hidden": True, "options": [
+             {"value": "pct", "label": "Porcentaje"},
+             {"value": "abs", "label": "Absoluto"},
+         ], "default": "pct"},
+        {"key": "target", "label": "Meta (valor)", "ui": "number", "step": 1,
+         "group": "card", "hidden": True},
+        {"key": "targetMetric", "label": "Meta", "ui": "select", "group": "card",
+         "hidden": True, "options_from": "metrics",
+         "options": [{"value": "", "label": "— elegir —"},
+                     {"value": "fixed", "label": "Valor fijo"}], "default": ""},
+        {"key": "targetLabel", "label": "Nombre", "ui": "text", "group": "card",
+         "hidden": True, "default": "Meta"},
+        {"key": "statusBasis", "label": "Semáforo según", "ui": "select", "group": "card",
+         "hidden": True, "options": [
+             {"value": "", "label": "Automático"},
+             {"value": "target_pct", "label": "% de la meta"},
+             {"value": "value", "label": "Valor"},
+         ], "default": ""},
+        {"key": "status_good", "label": "Umbral «bien» (%)", "ui": "number", "min": 0, "step": 1,
+         "group": "card", "hidden": True},
+        {"key": "status_warn", "label": "Umbral «ajuste» (%)", "ui": "number", "min": 0, "step": 1,
+         "group": "card", "hidden": True},
+        {"key": "higher_is_better", "label": "Más alto es mejor", "ui": "checkbox",
+         "group": "card", "hidden": True, "default": True},
     ]
+
+    # ------------------------------------------------------------------ datos
+    def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:
+        """El número de siempre y, con `trend_by`, la serie de su mini tendencia."""
+        result = super().process_query(df, fields)
+        if fields.trend_by:
+            try:
+                trend = self._trend(df, fields, fields.trend_by)
+            except KeyError:
+                raise
+            except Exception:  # noqa: BLE001 - la tarjeta se dibuja aunque falle la línea
+                logger.exception("Tendencia del widget KPI (trend_by=%s)", fields.trend_by)
+            else:
+                if trend:
+                    result.metadata["trend"] = trend
+        return result
+
+    def _trend(self, df: pd.DataFrame, fields: WidgetFields, trend_by: str) -> Optional[dict]:
+        """{categories, series} con el KPI calculado por cada valor de `trend_by`, de lo más
+        antiguo a lo más reciente (con muchos valores, quedan los más recientes)."""
+        metrics = [self._without_eq_filter_on(m, trend_by) for m in (fields.metrics or [])]
+        point_fields = WidgetFields(dimensions=[trend_by], metrics=metrics,
+                                    filters=list(fields.filters or []))
+        rows = super().process_query(df, point_fields).rows
+        if rows.empty or trend_by not in rows.columns:
+            return None
+        keys = _chronological_keys(rows[trend_by])[-MAX_TREND_POINTS:]
+        indexed = rows.set_index(trend_by)
+        series: Dict[str, List[float]] = {}
+        for metric in metrics:
+            alias = metric_alias(metric)
+            if alias and alias in indexed.columns:
+                values = indexed[alias]
+                series[alias] = [self._number(values.get(key, 0)) for key in keys]
+        if not series:
+            return None
+        return {"categories": [_display_key(k) for k in keys], "series": series}
+
+    @staticmethod
+    def _without_eq_filter_on(metric: dict, column: str) -> dict:
+        """Dentro de un punto de la serie, una condición eq de la métrica sobre la columna de
+        la tendencia ya la fija el punto: sin quitarla vaciaría el valor."""
+        if metric.get("type") == "formula" or not metric.get("filters"):
+            return metric
+        kept = [c for c in metric["filters"]
+                if not (isinstance(c, dict) and c.get("field") == column and c.get("op") == "eq")]
+        if len(kept) == len(metric["filters"]):
+            return metric
+        return {**metric, "filters": kept}
 
     def compile(
         self,
@@ -77,16 +182,29 @@ class KpiWidget(BaseWidget):
         style_dict = style.to_dict()
         metrics = list(fields.metrics or []) if fields else []
         df = result.rows
+        aliases = [metric_alias(m) for m in metrics if metric_alias(m)]
 
-        primary = metric_alias(metrics[0]) if metrics else None
-        compare = metric_alias(metrics[1]) if len(metrics) > 1 else None
+        # Helper: buscar la métrica por alias
+        def _metric_by_alias(alias: str) -> Optional[dict]:
+            for m in metrics:
+                if metric_alias(m) == alias:
+                    return m
+            return None
+
+        # Roles del número: los elige el panel en «Tarjeta KPI», con respaldo en el orden
+        # de las métricas (principal = la primera; sin elección de comparación, no compara).
+        primary = style_dict.get("primary")
+        if primary not in aliases:
+            primary = aliases[0] if aliases else None
+        chosen_compare = style_dict.get("compare")
+        compare = chosen_compare if chosen_compare in aliases and chosen_compare != primary else None
 
         if df.empty:
             return {"type": "kpi", "value": 0, "formatted_value": "0", "label": "",
                     "compare": None, "target": None, "status": None, "style": style_dict}
 
         row = df.iloc[0]
-        primary_value = self._number(row.get(primary, 0))
+        primary_value = self._number(row.get(primary, 0)) if primary else 0.0
         compare_value = self._number(row.get(compare, 0)) if compare else 0
 
         decimals = int(style_dict.get("decimals", 0) or 0)
@@ -102,11 +220,14 @@ class KpiWidget(BaseWidget):
                     return f"{value / 1_000:.1f}K"
             return f"{value:,.{decimals}f}"
 
+        # Etiqueta del número principal: usa el «Nombre a mostrar» de la métrica si existe
+        primary_label = metric_label(_metric_by_alias(primary)) if primary else ""
+
         output: Dict[str, Any] = {
             "type": "kpi",
             "value": primary_value,
             "formatted_value": f"{prefix}{format_value(primary_value)}{suffix}",
-            "label": humanize(primary) if primary else "",
+            "label": primary_label,
             "compare": None,
             "target": None,
             "status": None,
@@ -118,8 +239,10 @@ class KpiWidget(BaseWidget):
         if compare and compare_value:
             delta = primary_value - compare_value
             delta_pct = (delta / compare_value * 100) if compare_value else 0
+            # Etiqueta de la comparación: usa el «Nombre a mostrar» de la métrica si existe
+            compare_label = metric_label(_metric_by_alias(compare))
             output["compare"] = {
-                "label": humanize(compare),
+                "label": compare_label,
                 "value": compare_value,
                 "delta": delta,
                 "delta_pct": round(delta_pct, 2),
@@ -127,9 +250,17 @@ class KpiWidget(BaseWidget):
                 "better": bool(delta > 0 if higher_is_better else delta < 0),
             }
 
-        target_value = style_dict.get("target")
-        if target_value not in (None, "", 0):
-            target_value = float(target_value)
+        # La meta la decide el selector: «— elegir —» no pinta barra aunque quede un valor
+        # viejo guardado; «Valor fijo» usa el número; un alias usa la cifra de esa métrica.
+        target_value = None
+        target_metric = style_dict.get("targetMetric")
+        if target_metric == "fixed":
+            raw_target = style_dict.get("target")
+            if raw_target not in (None, "", 0):
+                target_value = float(raw_target)
+        elif target_metric and target_metric in df.columns:
+            target_value = self._number(row.get(target_metric))
+        if target_value is not None:
             pct = (primary_value / target_value * 100) if target_value else 0
             output["target"] = {
                 "label": style_dict.get("targetLabel") or "Meta",
@@ -142,11 +273,25 @@ class KpiWidget(BaseWidget):
         if good is not None or warn is not None:
             good = float(good) if good not in (None, "") else 100
             warn = float(warn) if warn not in (None, "") else 80
-            basis = output["target"]["pct"] if output["target"] else primary_value
-            if higher_is_better:
-                output["status"] = "good" if basis >= good else ("warn" if basis >= warn else "bad")
-            else:
-                output["status"] = "good" if basis <= good else ("warn" if basis <= warn else "bad")
+            basis_mode = style_dict.get("statusBasis") or ""
+            if basis_mode == "value":
+                basis = primary_value
+            elif basis_mode == "target_pct":
+                basis = output["target"]["pct"] if output["target"] else None
+            else:  # automático: % de la meta si hay meta, si no el valor
+                basis = output["target"]["pct"] if output["target"] else primary_value
+            if basis is not None:
+                if higher_is_better:
+                    output["status"] = "good" if basis >= good else ("warn" if basis >= warn else "bad")
+                else:
+                    output["status"] = "good" if basis <= good else ("warn" if basis <= warn else "bad")
+
+        # Mini tendencia del número principal (si `trend_by` no produjo serie, no hay línea).
+        trend = metadata.get("trend") if isinstance(metadata, dict) else None
+        categories = (trend or {}).get("categories")
+        series = ((trend or {}).get("series") or {}).get(primary) if primary else None
+        if categories and series is not None and len(series) == len(categories):
+            output["trend"] = {"categories": categories, "data": series}
 
         return output
 

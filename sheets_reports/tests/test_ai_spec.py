@@ -206,6 +206,7 @@ class PromptTests(SimpleTestCase):
 
     def test_capabilities_text_en_una_linea(self):
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("kpi")),
-                         "sin dimensiones, sin pivotes, métricas de 1 a 4, sin orden, sin límite, filtros")
+                         "sin dimensiones, sin pivotes, métricas de 1 a 4, sin orden, sin límite, "
+                         "filtros, tendencia")
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("donut")),
                          "dimensiones 1, sin pivotes, métricas 1, orden, límite, filtros")

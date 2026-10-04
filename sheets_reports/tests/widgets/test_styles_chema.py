@@ -95,6 +95,58 @@ class CapabilitiesTests(SimpleTestCase):
             self.assertEqual(WIDGETS.get(key).capabilities["pivots"], [0, 0], key)
 
 
+class KpiCardBlockTests(SimpleTestCase):
+    """El bloque «Tarjeta KPI» de «Configurar»: los roles del número, ocultos en
+    «Personalizar» y con las opciones de las métricas resueltas desde el propio widget."""
+
+    ROLE_KEYS = ["primary", "compare", "compareMode", "target", "targetMetric",
+                 "targetLabel", "statusBasis", "status_good", "status_warn", "higher_is_better"]
+
+    def test_los_roles_viven_en_el_grupo_card_y_fuera_de_personalizar(self):
+        schema = {c["key"]: c for c in WIDGETS.get("kpi").style_schema}
+        for key in self.ROLE_KEYS:
+            with self.subTest(key=key):
+                self.assertIn(key, schema)
+                self.assertEqual(schema[key].get("group"), "card", key)
+                self.assertTrue(schema[key].get("hidden"), f"{key} debe salir de «Personalizar»")
+
+    def test_solo_el_kpi_tiene_bloque_de_tarjeta(self):
+        for key, widget in WIDGETS.items():
+            groups = {c.get("group") for c in widget.style_schema}
+            self.assertEqual("card" in groups, key == "kpi", f"{key}: ¿group card?")
+
+    def test_los_selects_de_rol_toman_sus_opciones_de_las_metricas(self):
+        schema = {c["key"]: c for c in WIDGETS.get("kpi").style_schema}
+        for key in ("primary", "compare", "targetMetric"):
+            with self.subTest(key=key):
+                control = schema[key]
+                self.assertEqual(control["ui"], "select")
+                self.assertEqual(control.get("options_from"), "metrics")
+                # El control sigue declarando options (la vacía) para el contrato del schema.
+                self.assertIn("", [o["value"] for o in control["options"]])
+
+    def test_semaforo_con_base_y_meta_en_el_bloque(self):
+        schema = {c["key"]: c for c in WIDGETS.get("kpi").style_schema}
+        self.assertEqual(schema["statusBasis"]["ui"], "select")
+        self.assertIn("", [o["value"] for o in schema["statusBasis"]["options"]])
+        defaults = WIDGETS.get("kpi").style_defaults()
+        self.assertEqual(defaults["statusBasis"], "")
+        self.assertEqual(defaults["primary"], "")
+        self.assertEqual(defaults["compare"], "")
+        self.assertEqual(defaults["targetMetric"], "")
+
+    def test_los_controles_de_la_tarjeta_si_llegan_al_form(self):
+        from sheets_reports.services.widget_service import WidgetService
+        service = WidgetService.__new__(WidgetService)
+        cleaned = service._clean_style("kpi", {
+            "primary": "plan", "compare": "actual", "targetMetric": "fixed",
+            "statusBasis": "target_pct", "target": 100, "inventada": 1,
+        })
+        self.assertEqual(cleaned, {"primary": "plan", "compare": "actual",
+                                   "targetMetric": "fixed", "statusBasis": "target_pct",
+                                   "target": 100})
+
+
 class TotalsByLevelTests(SimpleTestCase):
     """«Mostrar totales» por nivel de la tabla dinámica: un control oculto por fila de
     dimensiones/pivotes, en «Configurar» y no en «Personalizar»."""

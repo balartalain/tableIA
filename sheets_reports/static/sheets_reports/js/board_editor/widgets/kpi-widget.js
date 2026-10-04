@@ -59,7 +59,7 @@
       const title = `${compare.label}: ${this.format(compare.value, { percent })}`;
       return `<span class="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${color}" title="${esc(title)}">
           ${arrow ? `<span aria-hidden="true">${arrow}</span>` : ''}${esc(String(text))}
-          <span class="font-normal opacity-70">vs ${esc(compare.label)}</span>
+          <span class="font-normal opacity-70">respecto a ${esc(compare.label)}</span>
         </span>`;
     }
 

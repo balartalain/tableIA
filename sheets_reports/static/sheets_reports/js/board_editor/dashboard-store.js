@@ -22,6 +22,7 @@ const EMPTY_FIELDS = () => ({
   metrics: [],
   filters: [],
   columns: [],
+  trend_by: '',
   sort_by: null,
   limit: null,
 });
@@ -61,6 +62,23 @@ const AGG_OPTIONS = [
   { value: 'std', label: 'Desviación estándar' },
   { value: 'count', label: 'Conteo de filas' },
   { value: 'count_distinct', label: 'Valores distintos' },
+];
+
+// Tipos de fila de métrica: una agregación o un cálculo entre las métricas anteriores
+// (se serializa como {"type": "formula", "expression"}, que el motor ya evalúa).
+const METRIC_TYPE_OPTIONS = [
+  { value: 'agg', label: 'Agregación' },
+  { value: 'formula', label: 'Cálculo entre métricas' },
+];
+
+// Operaciones del cálculo: `symbol` para el nombre visible, `human` para el rótulo.
+const CALC_OP_OPTIONS = [
+  { value: 'sub', label: '− menos', symbol: '-', human: 'Diferencia' },
+  { value: 'add', label: '+ más', symbol: '+', human: 'Suma' },
+  { value: 'mul', label: '× por', symbol: '*', human: 'Producto' },
+  { value: 'div', label: '÷ entre', symbol: '/', human: 'División' },
+  { value: 'ratio_pct', label: 'como % de', symbol: '%', human: 'Porcentaje' },
+  { value: 'diff_pct', label: 'variación % vs', symbol: '±%', human: 'Variación' },
 ];
 
 let CONDITION_SEQ = 0;
@@ -387,6 +405,42 @@ document.addEventListener('alpine:init', () => {
     get maxMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1]; },
     get maxDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1]; },
     get maxPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1]; },
+    get hasTrend() { return !!this.drawerCapabilities.trend; },
+    // Columnas para la mini tendencia: las de dimensión (año, mes, categoría…), como en main.
+    get trendOptions() {
+      const dims = this.schema.dimension_fields || [];
+      return dims.length ? dims : (this.schema.all_fields || []);
+    },
+    get hasFormulaMetrics() {
+      const types = this.drawerCapabilities.metric_types;
+      return types ? types.indexOf('formula') >= 0 : this.hasMetrics;
+    },
+    get metricTypeOptions() { return METRIC_TYPE_OPTIONS; },
+    get calcOpOptions() { return CALC_OP_OPTIONS; },
+    // Controles del bloque «Tarjeta KPI»: el style_schema con `group: 'card'`.
+    get cardControls() {
+      return (this.drawerManifest.style_schema || []).filter(c => c.group === 'card');
+    },
+    // Sin meta elegida («— elegir —»), los controles que dependen de la meta quedan deshabilitados.
+    get noMeta() {
+      return !this.drawerDraft.style.targetMetric;
+    },
+    cardControlDisabled(control) {
+      if (!this.noMeta) return false;
+      return ['targetLabel', 'statusBasis', 'status_good', 'status_warn', 'higher_is_better'].includes(control.key);
+    },
+    // Opciones de un control de rol del KPI: su opción vacía + las métricas del borrador.
+    metricRoleOptions(control) {
+      const base = (control && control.options) || [];
+      const metrics = (this.drawerDraft.fields.metrics || []).filter(m => m && m.alias);
+      return [...base, ...metrics.map(m => ({ value: m.alias, label: this.metricName(m) }))];
+    },
+    // Métricas con las que se puede calcular en la fila `idx`: solo las anteriores.
+    formulaOperandOptions(idx) {
+      const list = this.drawerDraft.fields.metrics || [];
+      return list.slice(0, idx).filter(m => m && m.alias)
+        .map(m => ({ value: m.alias, label: this.metricName(m) }));
+    },
 
     openDrawer(id) {
       const w = this.widgets.find(x => x.id === id);
@@ -410,6 +464,10 @@ document.addEventListener('alpine:init', () => {
         if (!this.drawerDraft.fields.columns.length) this._autoPickColumns();
       } else if (!this.drawerDraft.fields.dimensions.length) {
         this._autoPickDimensions();
+      }
+      // No auto-agregar métrica si ya hay métricas en el widget (evita duplicados al editar).
+      if ((this.drawerCapabilities.metrics || [0, 0])[0] > 0 && !this.drawerDraft.fields.metrics.length) {
+        this.addMetric();
       }
       this.initListSortables();
     },
@@ -479,9 +537,11 @@ document.addEventListener('alpine:init', () => {
         columns.push(label ? { field, label } : { field });
       });
       f.columns = columns;
+      if (typeof f.trend_by !== 'string') f.trend_by = f.trend_by == null ? '' : String(f.trend_by);
       if (typeof f.sort_by !== 'string') f.sort_by = null;
       if (f.limit != null && f.limit !== '') f.limit = Number(f.limit);
       f.filters = f.filters.map(c => (c && typeof c === 'object' && c._k ? c : conditionFromPayload(c || {})));
+      this.reconcileFormulas();
     },
 
     // Un widget recién arrastrado empieza con las primeras columnas ya elegidas.
@@ -492,7 +552,6 @@ document.addEventListener('alpine:init', () => {
         ? this.schema.dimension_fields
         : this.schema.all_fields;
       this.drawerDraft.fields.dimensions = (source || []).slice(0, max);
-      if ((caps.metrics || [0, 0])[0] > 0) this.addMetric();
     },
 
     // Una Tabla nueva arranca con las primeras columnas de la hoja.
@@ -575,23 +634,175 @@ document.addEventListener('alpine:init', () => {
     addMetric() {
       const metrics = this.drawerDraft.fields.metrics;
       if (metrics.length >= (this.drawerCapabilities.metrics || [0, 99])[1]) return;
-      const field = (this.schema.numeric_fields || []).find(f => !metrics.some(m => m.field === f))
+      // Medidas de verdad primero: numéricas que no son dimensiones (año, mes...
+      // no se suman como métrica por defecto).
+      const dims = this.schema.dimension_fields || [];
+      const numeric = this.schema.numeric_fields || [];
+      const used = f => metrics.some(m => m && m.field === f);
+      const field = numeric.find(f => !dims.includes(f) && !used(f))
+        || numeric.find(f => !used(f))
         || (this.schema.all_fields || [])[0] || '';
       metrics.push({ field, agg: 'sum', alias: this._autoAlias('sum', field, metrics) });
     },
 
     removeMetric(index) {
-      this.drawerDraft.fields.metrics.splice(index, 1);
+      const removed = this.drawerDraft.fields.metrics.splice(index, 1)[0];
+      this._rebindAlias((removed || {}).alias, '');
+      this.reconcileFormulas();
     },
 
     onMetricFieldChange(metric) {
       const taken = this.drawerDraft.fields.metrics.filter(m => m !== metric).map(m => m.alias);
+      const oldAlias = metric.alias;
       metric.alias = this._autoAlias(metric.agg, metric.field, taken);
+      if (oldAlias !== metric.alias) this._rebindAlias(oldAlias, metric.alias);
+    },
+
+    // Agregación ↔ cálculo entre métricas: los operandos del cálculo usan el alias.
+    onMetricTypeChange(index, type) {
+      const list = this.drawerDraft.fields.metrics;
+      const metric = list[index];
+      if (!metric || (metric.type || 'agg') === type) return;
+      const taken = list.filter(m => m !== metric).map(m => m.alias);
+      const oldAlias = metric.alias || '';
+      if (type === 'formula') {
+        metric.type = 'formula';
+        delete metric.agg;
+        delete metric.field;
+        metric.op = 'div';
+        const prev = list.slice(0, index).find(m => m && m.alias);
+        metric.left = prev ? prev.alias : '';
+        metric.rightKind = 'metric';
+        metric.right = '';
+      } else {
+        delete metric.type;
+        delete metric.op;
+        delete metric.left;
+        delete metric.rightKind;
+        delete metric.right;
+        delete metric.expression;
+        metric.agg = metric.agg || 'sum';
+        metric.field = metric.field || (this.schema.numeric_fields || [])[0]
+          || (this.schema.all_fields || [])[0] || '';
+      }
+      metric.alias = type === 'formula'
+        ? this._autoAlias('', `calc_${index + 1}`, taken)
+        : this._autoAlias(metric.agg, metric.field, taken);
+      this._rebindAlias(oldAlias, metric.alias);
+      this.reconcileFormulas();
+    },
+
+    // El selector de Meta decide si hay barra: solo «Valor fijo» habilita el input numérico.
+    onTargetMetricChange() {
+      if (this.drawerDraft.style.targetMetric !== 'fixed') {
+        this.drawerDraft.style.target = '';
+      }
+    },
+
+    // La expression del cálculo: solo con los operandos completos y evaluables.
+    formulaExpression(metric, index) {
+      const list = this.drawerDraft.fields.metrics || [];
+      const idx = index != null ? index : list.indexOf(metric);
+      const op = (this.calcOpOptions || []).find(o => o.value === (metric && metric.op));
+      if (!op) return '';
+      const before = (alias) => !!alias && list.findIndex((m, i) => m && m.alias === alias && i < idx) >= 0;
+      const left = String((metric && metric.left) || '').trim();
+      if (!before(left)) return '';
+      if ((metric.rightKind || 'number') === 'number') {
+        const raw = String(metric.right ?? '').trim();
+        if (raw === '' || !Number.isFinite(Number(raw))) return '';
+        return this._formulaFor(op.value, left, raw);
+      }
+      const right = String(metric.right || '').trim();
+      if (!before(right)) return '';
+      return this._formulaFor(op.value, left, right);
+    },
+
+    _formulaFor(op, left, right) {
+      switch (op) {
+        case 'sub': return `(${left} - ${right})`;
+        case 'add': return `(${left} + ${right})`;
+        case 'mul': return `(${left} * ${right})`;
+        case 'div': return `(${left} / ${right})`;
+        case 'ratio_pct': return `(${left} / ${right} * 100)`;
+        case 'diff_pct': return `((${left} - ${right}) / ${right} * 100)`;
+        default: return '';
+      }
+    },
+
+    onFormulaChange(index) {
+      const metric = (this.drawerDraft.fields.metrics || [])[index];
+      if (!metric || metric.type !== 'formula' || !metric.op) return;
+      metric.expression = this.formulaExpression(metric, index);
+    },
+
+    // Recalcula las expressiones y limpia operandos que ya no existen (una fórmula que
+    // vino de la IA, sin `op`, se respeta tal cual).
+    reconcileFormulas() {
+      const list = this.drawerDraft.fields.metrics || [];
+      const aliases = new Set(list.map(m => (m || {}).alias).filter(Boolean));
+      list.forEach((metric, index) => {
+        if (!metric || metric.type !== 'formula' || !metric.op) return;
+        if (metric.left && !aliases.has(metric.left)) metric.left = '';
+        if ((metric.rightKind || 'number') !== 'number' && metric.right && !aliases.has(metric.right)) {
+          metric.right = '';
+        }
+        metric.expression = this.formulaExpression(metric, index);
+      });
+    },
+
+    // Un cálculo incompleto o que depende de una métrica posterior no se puede evaluar:
+    // se quita del borrador antes de guardar, en vez de mandar un form que el backend rechaza.
+    pruneFormulas() {
+      this.reconcileFormulas();
+      const list = this.drawerDraft.fields.metrics || [];
+      const positions = new Map();
+      list.forEach((m, i) => { if (m && m.alias) positions.set(m.alias, i); });
+      const kept = list.filter((metric, index) => {
+        if (!metric || metric.type !== 'formula') return true;
+        if (!metric.op) return !!metric.expression;
+        if (!metric.expression) return false;
+        const leftPos = positions.get(metric.left);
+        if (leftPos == null || leftPos >= index) return false;
+        if ((metric.rightKind || 'number') === 'metric') {
+          const rightPos = positions.get(metric.right);
+          if (rightPos == null || rightPos >= index) return false;
+        }
+        return true;
+      });
+      if (kept.length !== list.length) {
+        this.drawerDraft.fields.metrics = kept;
+        this.reconcileFormulas();
+      }
+    },
+
+    // Los roles del KPI (y los operandos de un cálculo) apuntan al alias: si cambia, siguen.
+    _rebindAlias(oldAlias, newAlias) {
+      if (!oldAlias) return;
+      const style = this.drawerDraft.style || {};
+      ['primary', 'compare', 'targetMetric'].forEach(key => {
+        if (style[key] === oldAlias) style[key] = newAlias || '';
+      });
+      (this.drawerDraft.fields.metrics || []).forEach(m => {
+        if (!m || m.type !== 'formula') return;
+        if (m.left === oldAlias) m.left = newAlias || '';
+        if ((m.rightKind || 'number') !== 'number' && m.right === oldAlias) m.right = newAlias || '';
+      });
     },
 
     // Nombre visible de la métrica: «Nombre a mostrar» o, si está vacío, el agg en español
     // con el campo («Promedio Ventas»), igual que en las cabeceras del backend.
     metricName(metric) {
+      if (metric && metric.type === 'formula') {
+        if (!metric.op || !metric.left || String(metric.right ?? '').trim() === '') {
+          return 'Cálculo entre métricas';
+        }
+        const op = (this.calcOpOptions || []).find(o => o.value === metric.op) || { human: 'Cálculo', symbol: '' };
+        const right = (metric.rightKind || 'number') === 'number'
+          ? String(metric.right)
+          : humanizeName(metric.right);
+        return `${op.human} ${humanizeName(metric.left)} ${op.symbol} ${right}`.trim();
+      }
       const agg = (this.aggOptions.find(o => o.value === (metric.agg || '')) || {}).label
         || (metric.agg || '');
       return `${agg} ${humanizeName(metric.field)}`.trim();
@@ -695,6 +906,8 @@ document.addEventListener('alpine:init', () => {
       this.drawerSaveError = '';
       try {
         const draft = this.drawerDraft;
+        // Un cálculo a medias no va al servidor: se descarta del borrador antes de copiarlo.
+        this.pruneFormulas();
         const fields = JSON.parse(JSON.stringify(draft.fields));
         // Una fila a medio elegir («— elegir —») no se envía al servidor.
         ['dimensions', 'pivots'].forEach(k => {
@@ -711,6 +924,8 @@ document.addEventListener('alpine:init', () => {
           });
         fields.filters = fields.filters.map(c => conditionToPayload(c, this.schema.numeric_fields || []));
         if (!fields.filters.length) fields.filters = [];
+        // Tendencia: sin columna elegida, «sin tendencia» (null, no "").
+        fields.trend_by = String(fields.trend_by || '').trim() || null;
         if (!fields.sort_by) fields.sort_by = null;
         if (fields.limit === '' || fields.limit == null || Number.isNaN(Number(fields.limit))) fields.limit = null;
         else fields.limit = Number(fields.limit);
@@ -718,6 +933,8 @@ document.addEventListener('alpine:init', () => {
         const style = JSON.parse(JSON.stringify(draft.style || {}));
         const title = String(draft.title || '').trim() || w.title;
         style.title = title;
+        // Meta: sin «Valor fijo» elegido, el valor numérico no se guarda (no hay barra).
+        if (style.targetMetric !== 'fixed') delete style.target;
 
         w.title = title;
         w.fields = fields;

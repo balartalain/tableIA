@@ -70,6 +70,8 @@ consulta.
 - pivots: columnas para desagregar además de la dimensión (columnas de una tabla dinámica,
   series de un gráfico). [] si no aplica.
 - filters: condiciones sobre las FILAS que entran al widget. [] si no hay.
+- trend_by: columna de la mini tendencia (sparkline) bajo el número del KPI (ej. "mes");
+  solo en widgets con tendencia. Omitir si no aplica.
 - metrics: lista de métricas, en orden. Cada una lleva un `alias` único en snake_case que es el
   nombre de la columna con la que se calcula (ej. "total_ventas") y, si hace falta un texto más
   claro para la persona que mira el widget, un `label` (nombre a mostrar, ej. "Costos totales";
@@ -93,6 +95,10 @@ consulta.
 ## style (la apariencia)
 Diccionario plano con SOLO las claves del widget. Cada control tiene un tipo fijo:
 `text` (texto), `number` (número), `checkbox` (booleano), `select` (uno de sus `options`).
+Los select marcados como «alias de una de las métricas» (los roles del KPI: `primary`,
+`compare`, `targetMetric`) llevan el `alias` de una de las métricas del propio widget, o ""
+para la opción por defecto. `targetMetric` además acepta "fixed" para una meta de valor
+fijo (el número va en `target`).
 No inventes claves: las que no están en el schema no existen. Puedes omitir `style` si no hace
 falta cambiar nada (usa los valores por defecto).
 
@@ -143,6 +149,8 @@ def capabilities_text(widget) -> str:
             parts.append(label)
         else:
             parts.append(f"sin {label}")
+    if caps.get("trend"):
+        parts.append("tendencia")
     return ", ".join(parts)
 
 
@@ -151,7 +159,10 @@ def _style_schema_docs(widget) -> list[str]:
     lines = []
     for control in widget.style_schema or []:
         ui = control.get("ui")
-        if ui == "select":
+        if control.get("options_from") == "metrics":
+            detail = (f"select con el alias de una de las métricas del widget "
+                      f"(o vacío: {control.get('label', control['key'])})")
+        elif ui == "select":
             options = ", ".join(f'"{o["value"]}"' for o in control.get("options", []))
             detail = f"select de {options}"
         else:
@@ -240,7 +251,14 @@ def _style_schema(style_schema: list[dict]) -> tuple[dict, list[str]]:
     properties: dict = {}
     for control in style_schema or []:
         ui = control.get("ui")
-        if ui == "select":
+        if control.get("options_from") == "metrics":
+            # El valor es un alias que la propia propuesta define: no puede vivir en un enum.
+            properties[control["key"]] = {
+                "type": "string",
+                "description": (f"{control.get('label', control['key'])}: alias de una de las "
+                                f"métricas del widget (vacío = la opción por defecto)."),
+            }
+        elif ui == "select":
             properties[control["key"]] = {
                 "enum": [o["value"] for o in control.get("options", [])],
                 "description": control.get("label", control["key"]),
@@ -306,6 +324,9 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
                     "description": "Métricas, en el orden en que se muestran."},
         "filters": {**condition_schema_for(ctx),
                     "description": "Condiciones sobre las filas del widget."},
+        "trend_by": {"type": "string", "enum": list(ctx.fields),
+                     "description": "Columna de la mini tendencia (sparkline) del número; "
+                                    "solo los widgets con tendencia. Omitir si no aplica."},
         "sort_by": {"type": "string",
                     "description": "Columna u alias de orden, con '-' delante para descendente."},
         "limit": {"type": "integer", "description": f"Máximo de filas/grupos (1 a {MAX_LIMIT})."},
@@ -521,7 +542,8 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[
     errors: list[str] = []
 
     for key in fields:
-        if key not in {"dimensions", "pivots", "metrics", "columns", "filters", "sort_by", "limit"}:
+        if key not in {"dimensions", "pivots", "metrics", "columns", "filters",
+                       "sort_by", "limit", "trend_by"}:
             errors.append(f"fields: '{key}' no es un campo de datos válido.")
 
     dimensions = fields.get("dimensions") or []
@@ -534,6 +556,15 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[
     for dim in dimensions:
         if dim not in ctx.fields:
             errors.append(f"fields.dimensions: la columna '{dim}' no existe en la hoja.")
+
+    trend_by = fields.get("trend_by")
+    if trend_by:
+        if not caps.get("trend"):
+            errors.append(f"fields.trend_by: «{definition.label}» no muestra tendencia.")
+        elif trend_by not in ctx.fields:
+            errors.append(f"fields.trend_by: la columna '{trend_by}' no existe en la hoja.")
+        elif trend_by in dimensions:
+            errors.append("fields.trend_by: ya está en las dimensiones.")
 
     pivots = fields.get("pivots") or []
     if not isinstance(pivots, list):
@@ -606,10 +637,18 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[
             continue
         control = known[key]
         if control.get("ui") == "select":
-            allowed = [o["value"] for o in control.get("options", [])]
-            if value not in allowed:
-                errors.append(f"style.{key}: '{value}' no es válido; usa uno de "
-                              f"{', '.join(str(v) for v in allowed)}.")
+            if control.get("options_from") == "metrics":
+                # Roles del KPI: el valor es un alias de las métricas propuestas, una
+                # opción estática del schema (ej. «Valor fijo») o vacío.
+                allowed = [""] + [o["value"] for o in control.get("options", []) if o["value"]] + aliases
+                if value not in allowed:
+                    errors.append(f"style.{key}: '{value}' no es una métrica de este widget; "
+                                  f"usa uno de sus alias ({', '.join(a for a in aliases) or 'ninguno'}).")
+            else:
+                allowed = [o["value"] for o in control.get("options", [])]
+                if value not in allowed:
+                    errors.append(f"style.{key}: '{value}' no es válido; usa uno de "
+                                  f"{', '.join(str(v) for v in allowed)}.")
         elif control.get("ui") == "number" and not isinstance(value, (int, float)):
             errors.append(f"style.{key}: debe ser un número.")
         elif control.get("ui") == "checkbox" and not isinstance(value, bool):
@@ -617,10 +656,23 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[
         elif control.get("ui") == "text" and not isinstance(value, str):
             errors.append(f"style.{key}: debe ser un texto.")
 
+    if style.get("statusBasis") == "target_pct" and not _has_target(style, aliases):
+        errors.append("style.statusBasis: «% de la meta» necesita una meta (target o targetMetric).")
+
     if not str(data.get("title") or "").strip():
         errors.append("title: el widget necesita un título.")
 
     return errors
+
+
+def _has_target(style: dict, aliases: list[str]) -> bool:
+    """¿El style define una meta: por métrica elegida o por valor fijo?"""
+    metric = style.get("targetMetric")
+    if metric == "fixed":
+        return style.get("target") not in (None, "", 0)
+    if metric:
+        return metric in aliases
+    return False
 
 
 def _normalize(args: dict) -> dict:

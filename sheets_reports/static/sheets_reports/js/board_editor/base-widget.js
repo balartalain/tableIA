@@ -1,8 +1,6 @@
 (function () {
   class BaseWidget {
     static type = null;
-    // Entrada en la barra de módulos: `icon` es una clase de Tabler Icons (de trazo) y
-    // `category` el grupo donde aparece ('charts' = Gráficos, 'data' = Datos).
     static palette = {
       icon: 'ti-square',
       category: 'data',
@@ -11,161 +9,38 @@
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;
-    // Paleta de las series de los gráficos (barras, líneas, dona), en este orden. Con más
-    // series de las que tiene, se repite desde el principio.
     static CHART_COLORS = ['#4285F4', '#f59e52', '#ad7fe6', '#b5c665', '#2bb8ca', '#4CC38A', '#E36BB3', '#EF6E6E'];
 
-    // Pestaña del panel de edición: 'data' (Configurar) o, si se omite, 'style' (Personalizar).
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
 
-    // Constructor estructurado (dimensión, pivote, métricas, apiladas): edita data_spec sin IA.
-    static FIELD_BUILDER = { key: 'builder', label: 'Datos', type: 'builder', tab: 'data' };
-
-    // Capacidades del tipo: NO se declaran aquí, salen del manifiesto que publica el backend
-    // (WidgetType.manifest: DataCapabilities + campos de su options_cls; ver board_editor.html).
-    // Sin manifiesto (vista compartida, o el panel sin tipo elegido) valen las de un gráfico.
-    static DEFAULT_MANIFEST = {
-      data: { dimensions: [0, 1], pivots: [0, 1], columns: [0, 0], metrics: [1, 5],
-        metric_types: ['agg', 'calc'], show_as: true, sort: true },
-      parts: [],
-      view: [],
-      max_per_dashboard: null,
-    };
-
+    // Lo que el backend declara del tipo: {label, style_schema, capabilities, max_per_dashboard}.
     static get manifest() {
-      return (window.WIDGET_MANIFEST || {})[this.type] || BaseWidget.DEFAULT_MANIFEST;
+      return (window.WIDGET_MANIFEST || {})[this.type] || {};
     }
 
-    // Opción de vista propia del tipo (un campo de su options_cls), ej. 'stacked'.
-    static supportsView(key) {
-      return (this.manifest.view || []).includes(key);
+    static get capabilities() {
+      return this.manifest.capabilities || {};
     }
 
-    static get maxDimensions() { return this.manifest.data.dimensions[1]; }
-    static get maxPivots() { return this.manifest.data.pivots[1]; }
-    static get maxMetrics() { return this.manifest.data.metrics[1]; }
-    static get maxColumns() { return this.manifest.data.columns[1]; }
-    // El KPI no agrupa: su builder no muestra dimensión ni pivote.
+    static _capRange(key) {
+      const range = this.capabilities[key];
+      return Array.isArray(range) ? range : [0, 0];
+    }
+
+    static get maxDimensions() { return this._capRange('dimensions')[1]; }
+    static get maxPivots() { return this._capRange('pivots')[1]; }
+    static get maxMetrics() { return this._capRange('metrics')[1]; }
+    static get minDimensions() { return this._capRange('dimensions')[0]; }
+    static get minMetrics() { return this._capRange('metrics')[0]; }
     static get supportsDimension() { return this.maxDimensions > 0; }
     static get supportsPivot() { return this.maxPivots > 0; }
-    // Métricas: el builder las muestra salvo en widgets que no resumen datos.
     static get supportsMetrics() { return this.maxMetrics > 0; }
-    // Columnas que se muestran tal cual, sin agrupar (data_spec.columns).
-    static get usesColumns() { return this.maxColumns > 0; }
-    // "Mostrar como" porcentaje en las métricas (la dona no: ApexCharts calcula sus %).
-    static get supportsShowAs() { return !!this.manifest.data.show_as; }
-    static get supportsSort() { return !!this.manifest.data.sort; }
-    static get metricTypes() { return this.manifest.data.metric_types || []; }
-    // Solo las barras tienen "apiladas" (y solo con pivote); barras y líneas, líneas de referencia.
-    static get supportsStacked() { return this.supportsView('stacked'); }
-    static get supportsReferenceLines() { return this.supportsView('reference_lines'); }
-    // Solo uno por tablero (la caja de filtros).
+    static get supportsSort() { return !!this.capabilities.sort; }
+    static get supportsLimit() { return !!this.capabilities.limit; }
+    static get supportsFilters() { return !!this.capabilities.filters; }
     static get singleton() { return this.manifest.max_per_dashboard === 1; }
 
-    // --- Lo que sigue es solo de interfaz: no tiene equivalente en el backend. Los controles
-    // del panel de datos (textos, listas, opciones) NO van aquí: salen de manifest.parts.
-    // Con cuántas columnas (y de dónde) arranca un widget nuevo con columnas sueltas.
-    static defaultColumns = 5;
-    static defaultColumnsFrom = 'all_fields';
-    // Opciones de vista por columna de la lista de columnas. `columnControls`: tipos a elegir
-    // por columna (caja de filtros).
-    static columnControls = null;
-    // "Nombre a mostrar" por columna (view_spec.labels), ej. la etiqueta de cada filtro.
-    static supportsColumnLabels = false;
-    // Dónde se monta: 'canvas' (grid de 12 columnas) o 'header' (fijo arriba, a todo el ancho).
     static placement = 'canvas';
-    // Nombre a mostrar de cada métrica (cabecera de columna, nombre de serie).
-    static supportsLabels = false;
-    // "Mostrar totales" por nivel de filas/columnas (props rowTotals/columnTotals).
-    static supportsTotals = false;
-
-    // El grid del lienzo tiene 12 columnas (position.w), así que el ancho se expresa en
-    // columnas y no en porcentaje: "12 columnas" es el ancho completo.
-    static FIELD_WIDTH = {
-      key: 'width',
-      label: 'Ancho',
-      type: 'select',
-      options: [
-        { value: 'md:col-span-2', label: '2 columnas' },
-        { value: 'md:col-span-3', label: '3 columnas' },
-        { value: 'md:col-span-4', label: '4 columnas' },
-        { value: 'md:col-span-5', label: '5 columnas' },
-        { value: 'md:col-span-6', label: '6 columnas' },
-        { value: 'md:col-span-7', label: '7 columnas' },
-        { value: 'md:col-span-8', label: '8 columnas' },
-        { value: 'md:col-span-9', label: '9 columnas' },
-        { value: 'md:col-span-10', label: '10 columnas' },
-        { value: 'md:col-span-11', label: '11 columnas' },
-        { value: 'md:col-span-12', label: '12 columnas' },
-      ],
-    };
-
-    static get FIELD_HEIGHT() {
-      return { key: 'height', label: 'Alto (px)', type: 'number', min: this.minHeight, step: 10 };
-    }
-
-    // El lienzo es un grid de 12 columnas: un widget que empieza en N y ocupa w columnas
-    // termina en N + w - 1, así que N no puede pasar de 13 - w.
-    static GRID_COLUMNS = 12;
-
-    static FIELD_START_COL = {
-      key: 'startCol',
-      label: 'Columna de inicio',
-      type: 'select',
-      options: [
-        { value: '', label: 'Fluido' },
-        { value: 'md:col-start-1', label: 'Al inicio' },
-        { value: 'md:col-start-2', label: 'Dejar 1 columna' },
-        { value: 'md:col-start-3', label: 'Dejar 2 columnas' },
-        { value: 'md:col-start-4', label: 'Dejar 3 columnas' },
-        { value: 'md:col-start-5', label: 'Dejar 4 columnas' },
-        { value: 'md:col-start-6', label: 'Dejar 5 columnas' },
-        { value: 'md:col-start-7', label: 'Dejar 6 columnas' },
-        { value: 'md:col-start-8', label: 'Dejar 7 columnas' },
-        { value: 'md:col-start-9', label: 'Dejar 8 columnas' },
-        { value: 'md:col-start-10', label: 'Dejar 9 columnas' },
-        { value: 'md:col-start-11', label: 'Dejar 10 columnas' },
-      ],
-    };
-
-    // Columna inicial (1..12) a la que deja una opción de FIELD_START_COL.
-    static _startColNumber(startCol) {
-      const m = /md:col-start-(\d+)/.exec(startCol || '');
-      return m ? parseInt(m[1], 10) : 0;
-    }
-
-    static _startColValue(n) {
-      return `md:col-start-${n}`;
-    }
-
-    // Última columna inicial posible para un widget de `width` columnas.
-    static _maxStartCol(width) {
-      return this.GRID_COLUMNS - BaseWidget._parseSpan(width) + 1;
-    }
-
-    // Opciones de inicio que no desbordan el grid con el ancho elegido. "Fluido" siempre vale.
-    static startColOptionsForWidth(width) {
-      const max = BaseWidget._maxStartCol(width);
-      return BaseWidget.FIELD_START_COL.options.filter(
-        (opt) => !opt.value || BaseWidget._startColNumber(opt.value) <= max
-      );
-    }
-
-    // Si al elegir un ancho más grande la columna de inicio quedó fuera, se ajusta al último
-    // inicio posible: si no, el <select> se quedaría sin opción coincidente con su valor.
-    static fitStartCol(startCol, width) {
-      const n = BaseWidget._startColNumber(startCol);
-      if (!n) return startCol || '';
-      const max = BaseWidget._maxStartCol(width);
-      return n <= max ? startCol : BaseWidget._startColValue(max);
-    }
-
-    static get drawerFields() {
-      return [
-        this.FIELD_TITLE, this.FIELD_BUILDER,
-        this.FIELD_WIDTH, this.FIELD_START_COL,
-      ];
-    }
 
     static _parseSpan(widthClass) {
       const m = /md:col-span-(\d+)/.exec(widthClass);
@@ -186,8 +61,6 @@
       return div.innerHTML;
     }
 
-    // Formateador de ApexCharts que agrega "%" a las series de métricas pct_* (payload.percent
-    // trae sus nombres). `fallback(val)` formatea el resto de las series.
     static percentAwareFormatter(percentNames, fallback = (val) => val, maxDigits = 2) {
       const names = new Set(percentNames || []);
       return (val, opts) => {
@@ -197,15 +70,11 @@
       };
     }
 
-    // true si todas las series del gráfico son porcentajes (el eje Y puede llevar "%").
     static allSeriesPercent(payload, series) {
       const names = new Set(payload.percent || []);
       return series.length > 0 && series.every(s => names.has(s.name));
     }
 
-    // Líneas de referencia de barras y líneas (view_spec.reference_lines; el render las trae en
-    // `referenceLines` con la serie ya resuelta a su nombre): un valor fijo o el
-    // promedio/máximo/mínimo de una serie (o de todas), calculado con los datos dibujados.
     static REFERENCE_KINDS = [
       { value: 'value', label: 'Valor fijo' },
       { value: 'avg', label: 'Promedio' },
@@ -215,8 +84,6 @@
     static REFERENCE_DEFAULT_LABELS = { avg: 'Promedio', max: 'Máx.', min: 'Mín.' };
     static REFERENCE_COLOR = '#d97706';
 
-    // Valor de una línea de referencia, o null si no se puede calcular (serie que ya no está,
-    // valor fijo vacío).
     static referenceValue(line, series) {
       if (line.kind === 'value') {
         return line.value === '' || line.value == null || isNaN(line.value) ? null : Number(line.value);
@@ -231,8 +98,6 @@
       return null;
     }
 
-    // Anotaciones de ApexCharts para las líneas: en el eje de valores, que en barras
-    // horizontales es el X. `format(val)` da el texto del valor en la etiqueta.
     static referenceAnnotations(lines, series, { horizontal = false, format = (v) => v } = {}) {
       const items = (lines || []).map((line) => {
         const value = BaseWidget.referenceValue(line, series);
@@ -255,13 +120,11 @@
       }).filter(Boolean);
       return {
         annotations: { [horizontal ? 'xaxis' : 'yaxis']: items },
-        // Para que una línea fuera del rango de los datos (ej. una meta) no quede cortada.
         max: items.length ? Math.max(...items.map(a => a.x ?? a.y)) : null,
         min: items.length ? Math.min(...items.map(a => a.x ?? a.y)) : null,
       };
     }
 
-    // Formato del valor en la etiqueta de una línea: "%" si todas las series lo son.
     static referenceFormat(percentAxis) {
       return (val) => {
         const text = Number(val).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -283,8 +146,6 @@
       return (this.title || fallback).trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || fallback;
     }
 
-    // Los widgets de tipo ApexChart no usan el botón de descarga genérico: usan el menú
-    // de exportación propio del toolbar de ApexCharts (PNG/SVG/CSV del gráfico).
     chartExportToolbar() {
       const filename = this._filenameSlug('grafico');
       return {
@@ -334,64 +195,70 @@
       </div>`;
     }
 
-    // `raw` son las preferencias de UI (view_spec.display) más title/width/height/startCol/order;
-    // ver BaseWidget.fromServer para el mapeo desde el widget serializado por el backend.
+    static EMPTY_FIELDS = { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null };
+
     constructor(raw = {}) {
       const defaults = this.constructor.defaults;
       this.id = raw.id;
+      this.type = raw.type || this.constructor.type;
       this.title = raw.title || defaults.title;
       this.chart_type = this.constructor.type;
-      this.prompt = '';
-      this.data_spec = raw.data_spec || null;
-      this.view_spec = raw.view_spec || null;
-      this.source_prompt = raw.source_prompt || '';
-      this.width = raw.width || defaults.width;
-      this.height = raw.height ?? defaults.height;
-      this.startCol = raw.startCol || '';
-      this.order = raw.order ?? 0;
+      this.position = raw.position || { x: 0, y: 0, w: 6, h: 300 };
+      this.fields = raw.fields || { ...BaseWidget.EMPTY_FIELDS };
+      this.style = raw.style || {};
+      this.data = raw.data || null;
       this._dirty = raw._dirty ?? false;
       this._loading = false;
       this.el = null;
       this._chart = null;
+      this._lastEntry = null;
+      this._lastData = null;
+      this._legendSortable = null;
+      this._legendObserver = null;
+      this._readOnly = false;
+      this.order = raw.order ?? 0;
+      this.syncLayoutFromPosition();
     }
 
-    // Widget serializado por el backend ({id, type, position, data_spec, view_spec, ...}) ->
-    // instancia de la clase registrada para `type`.
+    // El ancho y el alto de la tarjeta salen de `position` (lo único que se guarda).
+    syncLayoutFromPosition() {
+      const pos = this.position || { x: 0, y: 0, w: 6, h: 300 };
+      this.width = `md:col-span-${Math.min(12, Math.max(1, pos.w || 6))}`;
+      this.height = pos.h || 300;
+      this.startCol = pos.x ? `md:col-start-${Math.min(12, pos.x + 1)}` : '';
+    }
+
     static fromServer(w) {
+      // Un tipo que este navegador no conoce (widget de extensión no cargado, o borrado del
+      // core) no puede montarse: se omite en vez de tumbar todo el tablero.
+      if (!window.WidgetRegistry || !WidgetRegistry.has(w.type)) {
+        console.warn(`Widget de tipo "${w.type ?? '?'}" no registrado: se omite del tablero.`);
+        return null;
+      }
       const pos = w.position || {};
-      const view = w.view_spec || {};
       return WidgetRegistry.create(w.type, {
-        ...(view.display || {}),
         id: w.id,
-        title: view.title,
-        data_spec: w.data_spec,
-        view_spec: w.view_spec,
-        source_prompt: w.source_prompt,
-        width: `md:col-span-${pos.w || 6}`,
-        startCol: pos.x ? `md:col-start-${pos.x}` : '',
-        height: pos.h,
-        order: pos.y ?? 0,
+        type: w.type,
+        title: w.title,
+        position: { x: pos.x || 0, y: pos.y || 0, w: pos.w || 6, h: pos.h || 300 },
+        fields: w.fields || { ...BaseWidget.EMPTY_FIELDS },
+        style: w.style || {},
+        data: w.data || null,
       });
     }
 
-    // Actualiza el widget con la versión que devolvió el backend (tras generar/editar el spec).
-    applyServerState(w) {
-      this.data_spec = w.data_spec;
-      this.view_spec = w.view_spec;
-      this.source_prompt = w.source_prompt || '';
-      if (w.view_spec && w.view_spec.title) this.title = w.view_spec.title;
-    }
-
     get hasSpec() {
-      return !!this.data_spec;
+      return !!this.fields && ((this.fields.dimensions || []).length
+        || (this.fields.metrics || []).length
+        || (this.fields.columns || []).length);
     }
 
     buildElement() {
       throw new Error(`${this.constructor.name}: buildElement() no implementado`);
     }
 
-    renderContent(container, data) {
-      throw new Error(`${this.constructor.name}: renderContent() no implementado`);
+    draw(data, style, title) {
+      throw new Error(`${this.constructor.name}: draw() no implementado`);
     }
 
     loaderOverlayHTML() {
@@ -435,6 +302,18 @@
       return this.el;
     }
 
+    // Un widget recién creado cambia de id local (-1) al id real: el DOM se pinta otra vez
+    // porque los ids viven en el elemento (data-widget-id y el contenedor del gráfico).
+    rebuildElement() {
+      const old = this.el;
+      const parent = old && old.parentElement;
+      this.el = null;
+      const el = this.mount();
+      if (parent) parent.replaceChild(el, old);
+      this.applyRender(this._lastEntry);
+      return el;
+    }
+
     buildReadOnlyElement() {
       const el = document.createElement('div');
       el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded-xl shadow-sm p-4 flex flex-col justify-between relative`;
@@ -449,8 +328,6 @@
       return el;
     }
 
-    // Vista compartida: sin acciones de edición (arrastres, menús de formato...). Cada widget
-    // lo consulta en this._readOnly.
     mountReadOnly() {
       this._readOnly = true;
       this.el = this.buildReadOnlyElement();
@@ -470,6 +347,7 @@
 
     updateChrome() {
       if (!this.el) return;
+      this.syncLayoutFromPosition();
       const titleEl = this.el.querySelector('.title-display');
       if (titleEl) titleEl.textContent = this.title;
 
@@ -482,23 +360,29 @@
       window.dispatchEvent(new Event('resize'));
     }
 
-    // Preferencias puramente visuales del frontend; se guardan en view_spec.display.
     getProperties() {
-      return {};
+      return { ...this.style };
     }
 
     getPosition() {
-      const startMatch = /md:col-start-(\d+)/.exec(this.startCol || '');
+      const pos = this.position || { x: 0, y: 0, w: 6, h: 300 };
       return {
-        x: startMatch ? parseInt(startMatch[1], 10) : 0,
-        y: this.order,
-        w: BaseWidget._parseSpan(this.width),
-        h: this.height,
+        x: pos.x,
+        y: pos.y,
+        w: pos.w,
+        h: pos.h,
       };
     }
 
     toPayload() {
-      return { title: this.title, position: this.getPosition(), display: this.getProperties() };
+      return {
+        id: this.id,
+        type: this.type,
+        title: this.title,
+        position: this.getPosition(),
+        fields: this.fields,
+        style: this.style,
+      };
     }
 
     renderApexChart(container, options) {
@@ -506,11 +390,6 @@
         this._chart.destroy();
         this._chart = null;
       }
-      // ApexCharts pisa el min-height del elemento donde se monta (lo fuerza a "unset"),
-      // lo que anula nuestro min-h-0 y le impide encogerse dentro del flex-col de la
-      // tarjeta (por ej. para dejarle lugar al pie de resumen). Le damos un div interno
-      // para montar, así esa mutación cae sobre un hijo normal y nunca sobre `container`
-      // (el flex item real).
       container.innerHTML = '<div style="height:100%;width:100%;"></div>';
       const mountEl = container.firstElementChild;
       this._chart = new ApexCharts(mountEl, options);
@@ -534,6 +413,7 @@
         container.querySelector('.retry-widget-btn').addEventListener('click', () => Alpine.store('dashboard').refreshData());
       }
     }
+
     renderPlaceholder() {
       const container = this.getContentContainer();
       if (!container) return;
@@ -544,8 +424,12 @@
         </div>`;
     }
 
-    // `entry` es el item de este widget en la respuesta de /render/ (o de generar/editar el
-    // spec): {data} ya compilado por el backend, o {error}.
+    showEmptyState() {
+      const container = this.getContentContainer();
+      if (!container) return;
+      container.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm">Sin datos para mostrar</div>';
+    }
+
     applyRender(entry) {
       this.setLoading(false);
       if (!entry) return;
@@ -555,20 +439,28 @@
         return;
       }
       const container = this.getContentContainer();
-      if (container && entry.data) this.renderContent(container, entry.data);
+      if (container && entry.data) {
+        this.draw(entry.data, entry.style || {}, entry.title);
+      }
     }
 
     _attachCommonEvents() {
       const el = this.el;
-      el.querySelector('.edit-widget-btn').addEventListener('click', () => {
-        Alpine.store('dashboard').openDrawer(this.id);
-      });
-
-      el.querySelector('.delete-widget-btn').addEventListener('click', () => {
-        Alpine.store('dashboard').removeWidget(this.id);
-        this.destroy();
-        el.remove();
-      });
+      if (!el) return;
+      const editBtn = el.querySelector('.edit-widget-btn');
+      const deleteBtn = el.querySelector('.delete-widget-btn');
+      if (editBtn) {
+        editBtn.addEventListener('click', () => {
+          Alpine.store('dashboard').openDrawer(this.id);
+        });
+      }
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+          Alpine.store('dashboard').removeWidget(this.id);
+          this.destroy();
+          el.remove();
+        });
+      }
 
       const resizeHandle = el.querySelector('.resize-handle');
       if (resizeHandle) resizeHandle.addEventListener('mousedown', (e) => this._onResizeStart(e));
@@ -579,6 +471,8 @@
         this._chart.destroy();
         this._chart = null;
       }
+      this._destroyLegendSortable();
+      if (this._legendObserver) { this._legendObserver.disconnect(); this._legendObserver = null; }
     }
 
     _onResizeStart(e) {
@@ -602,17 +496,34 @@
 
       const onMouseUp = () => {
         el.classList.add('is-snapping');
-        this.height = clamp(Math.round(el.offsetHeight/stepHeight)*stepHeight, minHeight, 3000);//Max height 3000px
+        this.height = clamp(Math.round(el.offsetHeight / stepHeight) * stepHeight, minHeight, 3000);
         el.style.height = this.height + 'px';
+        if (this.position) this.position.h = this.height;
         this._dirty = true;
         Alpine.store('dashboard').scheduleLayoutSave();
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
-         setTimeout(() => el.classList.remove('is-snapping'), 160);
+        setTimeout(() => el.classList.remove('is-snapping'), 160);
       };
 
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
+    }
+
+    _destroyLegendSortable() {
+      const sortable = this._legendSortable;
+      this._legendSortable = null;
+      if (!sortable) return;
+      if (Sortable.active || Sortable.dragged) {
+        const endEvents = ['dragend', 'mouseup', 'touchend'];
+        const done = () => {
+          endEvents.forEach(type => document.removeEventListener(type, done));
+          setTimeout(() => sortable.destroy());
+        };
+        endEvents.forEach(type => document.addEventListener(type, done));
+      } else {
+        sortable.destroy();
+      }
     }
   }
 

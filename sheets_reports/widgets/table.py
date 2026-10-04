@@ -1,51 +1,96 @@
-from sheets_reports.dsl.spec import DataSpec, RowsSpec
-from sheets_reports.dsl.values import to_python
-from sheets_reports.engine.plans.rows import RowsResult
-from sheets_reports.widgets.base import WIDGETS, ViewOptions, WidgetType
+"""
+Tabla (filas de la hoja tal cual): las columnas a mostrar viven en `fields.columns`
+(`{"field": ..., "label": ...}`), en orden, sin agrupar ni métricas.
+"""
+from typing import Any, ClassVar, Dict, List, Optional
+
+from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
+from sheets_reports.widgets.presentation import humanize
+from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
+
+
+MAX_ROWS = 2000
 
 
 @WIDGETS.register
-class TableWidget(WidgetType[RowsResult, ViewOptions]):
-    """Tabla de datos: las filas de la hoja tal cual, con las columnas elegidas. No agrupa ni
-    lleva métricas; admite filtros y orden por una columna."""
+class TableWidget(BaseWidget):
     key = "table"
+    type_key = "table"
     label = "Tabla"
-    spec_cls = RowsSpec
-    plan_key = "rows"
-    ai_doc = ('las filas de la hoja tal cual, sin agrupar ni resumir ("listado", "mostrar los datos", '
-              '"tabla con las columnas ..."): columns con las columnas pedidas, en orden; admite '
-              'filters y sort por una de sus columnas.')
-    ai_examples = (
-        ("Listado de las ventas de 2026 con producto, vendedor y monto, de mayor a menor", {
-            "widget_type": "table", "title": "Ventas 2026",
-            "data_spec": {"dimensions": [], "pivots": [], "columns": ["producto", "vendedor", "ventas"],
-                          "filters": [{"field": "anio", "op": "eq", "value": 2026}], "metrics": [], "having": [],
-                          "sort": {"by": "ventas", "dir": "desc"}, "limit": None, "trend_by": None},
-            "view_options": {"labels": []},
-        }),
-    )
+    ai_doc = 'las filas de la hoja tal cual, con las columnas que el usuario elige (no agrupa).'
+    ai_examples = [
+       (   'muéstrame mes y ventas ordenado por ventas',
+            {   'widget_type': 'table',
+                'title': 'Ventas por mes',
+                'fields': {   'columns': [   {'field': 'mes'},
+                                            {'field': 'ventas', 'label': 'Ventas'}],
+                              'sort_by': '-ventas'},
+                'style': {'pageSize': 25}})
+    ]
 
-    def data_view(self, spec: DataSpec) -> dict:
-        return {"columns": list(spec.columns)}
+    capabilities: ClassVar[dict] = {
+        "columns": [1, 50],
+        "dimensions": [0, 0],
+        "pivots": [0, 0],
+        "metrics": [0, 0],
+        "sort": True,
+        "limit": True,
+        "filters": True,
+    }
 
-    def default_title(self, spec: DataSpec, options: ViewOptions) -> str:
-        return "Datos"
+    style_schema: ClassVar[List[Dict[str, Any]]] = [
+        {"key": "title", "label": "Título", "ui": "text", "default": "Tabla"},
+        {"key": "pageSize", "label": "Filas por página", "ui": "number", "min": 5, "step": 5, "default": 10},
+        {"key": "showPagination", "label": "Mostrar paginación", "ui": "checkbox", "default": True},
+        {"key": "boldLastRow", "label": "Resaltar última fila", "ui": "checkbox", "default": False},
+    ]
 
-    def compile(self, result: RowsResult, options, spec):
-        """
-        {"columns": [{"header", "field", "numeric"}], "rows": [{columna: valor}],
-         "total_rows": n, "truncated"?: True}
-        `numeric` marca las columnas numéricas (el frontend las alinea y formatea como número).
-        La cabecera es el nombre de la columna tal cual en la hoja, salvo que tenga etiqueta.
-        """
-        numeric = {c for c in result.columns if result.rows[c].dtype.kind in "iuf"}
-        compiled = {
-            "columns": [{"header": options.labels.get(c) or str(c), "field": c, "numeric": c in numeric}
-                        for c in result.columns],
-            "rows": [{k: to_python(v) for k, v in row.items()}
-                     for row in result.rows.to_dict(orient="records")],
-            "total_rows": result.total_rows,
+    def process_query(self, df, fields: WidgetFields) -> WidgetResult:
+        """Filtros/orden/límite del pipeline y, sin agrupar, las columnas pedidas en orden."""
+        result = super().process_query(df, fields)
+        frame = result.rows
+
+        # Las columnas pedidas, en ese orden (la hoja sin agrupar).
+        keep = [c["field"] for c in (fields.columns or []) if c["field"] in frame.columns]
+        if keep:
+            frame = frame[keep]
+
+        return WidgetResult(
+            data=frame.to_dict(orient="records"),
+            metadata={**result.metadata, "dimensions": list(frame.columns)},
+            fields=fields,
+            type="rows",
+            frame=frame,
+        )
+
+    def compile(
+        self,
+        result: WidgetResult,
+        style: WidgetStyle,
+        fields: Optional[WidgetFields] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        style_dict = style.to_dict()
+        frame = result.rows
+
+        # La hoja completa no entra en un JSON: se corta en MAX_ROWS y se avisa al frontend.
+        total_rows = len(frame)
+        truncated = total_rows > MAX_ROWS
+        frame = frame.head(MAX_ROWS)
+
+        numeric = set(frame.select_dtypes(include="number").columns)
+        headers: Dict[str, str] = {
+            c["field"]: (c.get("label") or humanize(c["field"])) for c in ((fields.columns if fields else None) or [])
         }
-        if result.truncated:
-            compiled["truncated"] = True
-        return compiled
+        columns = [
+            {"header": headers.get(col) or humanize(col), "field": col, "numeric": col in numeric}
+            for col in frame.columns
+        ]
+        return {
+            "type": "tabulator",
+            "columns": columns,
+            "rows": frame.to_dict(orient="records"),
+            "truncated": truncated,
+            "total_rows": total_rows,
+            "style": style_dict,
+        }

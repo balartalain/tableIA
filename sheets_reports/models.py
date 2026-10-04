@@ -1,5 +1,4 @@
 import re
-
 from django.conf import settings
 from django.db import models
 
@@ -40,28 +39,26 @@ class Dashboard(models.Model):
 
 
 def widget_type_choices():
-    """Los tipos de widget registrados (sheets_reports/widgets)."""
-    from sheets_reports.widgets import WIDGETS
-
-    return [(w.key, w.label) for w in WIDGETS]
+    from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
+    return [(key, widget_cls.label) for key, widget_cls in WIDGET_REGISTRY.items()]
 
 
 class Widget(models.Model):
     """
-    Widget de un tablero, definido por dos specs JSON independientes:
-    - data_spec: qué calcular (dsl.spec.DataSpec), agnóstico del tipo de widget.
-    - view_spec: cómo presentarlo; lo construye su WidgetType a partir de data_spec y sus
-      opciones de vista (WidgetType.build_view).
-    Nunca contiene código: solo valores de datos validados contra un JSON Schema cerrado.
+    Widget simplificado basado en contratos planos (fields, style).
     """
     dashboard = models.ForeignKey(Dashboard, on_delete=models.CASCADE, related_name="widgets")
-    type = models.CharField(max_length=20, choices=widget_type_choices)
+    type = models.CharField(max_length=50, choices=widget_type_choices)
+    title = models.CharField(max_length=255, default="Nuevo Widget")
     position = models.JSONField(
         default=default_position,
         help_text="Posición en el lienzo: x = columna inicial (0 = fluido), y = orden, w = columnas (1-12), h = alto en px.",
     )
-    data_spec = models.JSONField(help_text="Capa de datos: consulta (dimensiones, pivote, métricas, filtros, orden).")
-    view_spec = models.JSONField(help_text="Capa de presentación, derivada de data_spec + type.")
+    
+    # Contratos planos del nuevo approach
+    fields = models.JSONField(default=dict, help_text="Campos de datos (dimensions, metrics, filters, etc.)")
+    style = models.JSONField(default=dict, help_text="Opciones estéticas según el style_schema")
+    
     source_prompt = models.TextField(null=True, blank=True, help_text="Prompt original del usuario, si se generó con IA.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -72,11 +69,12 @@ class Widget(models.Model):
         ordering = ["created_at"]
 
     def __str__(self):
-        return (self.view_spec or {}).get("title") or f"{self.get_type_display()} ({self.id})"
+        return self.title or f"{self.get_type_display()} ({self.id})"
 
     @property
     def definition(self):
-        """El WidgetType de este widget."""
-        from sheets_reports.widgets import WIDGETS
-
-        return WIDGETS.get(self.type)
+        """El widget (instancia registrada) de este tipo, o None si el tipo ya no existe."""
+        from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
+        if self.type not in WIDGET_REGISTRY:
+            return None
+        return WIDGET_REGISTRY.get(self.type)

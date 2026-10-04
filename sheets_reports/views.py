@@ -4,7 +4,6 @@ import re
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.timesince import timesince
@@ -12,11 +11,7 @@ from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.errors import SpecValidationError
-from sheets_reports.dsl.parts import PanelColumns
 from sheets_reports.models import Dashboard, Widget
-from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_spec
 from sheets_reports.services.sheets import (
     SheetError,
     get_dimension_fields,
@@ -25,27 +20,32 @@ from sheets_reports.services.sheets import (
     get_sheet_schema,
     invalidate_sheet_cache,
 )
-from sheets_reports.services.widget_service import WidgetService, clean_position
-from sheets_reports.widgets import WIDGETS
+from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
+from sheets_reports.dsl.errors import SpecValidationError
+from sheets_reports.services.widget_service import WidgetService
 
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Páginas
-# ---------------------------------------------------------------------------
-
-def home(request):
-    return render(request, "home.html")
+def _widget_manifest() -> dict:
+    """Lo que la UI necesita de cada tipo: etiqueta, controles de estilo y capacidades de datos."""
+    return {
+        key: {
+            "label": widget_cls.label,
+            "style_schema": widget_cls.style_schema,
+            "style_defaults": widget_cls.style_defaults(),
+            "capabilities": widget_cls.capabilities,
+            "max_per_dashboard": widget_cls.max_per_dashboard,
+        }
+        for key, widget_cls in WIDGET_REGISTRY.items()
+    }
 
 
 def board_editor(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
-        # Capacidades de cada tipo de widget: el panel de edición se arma con ellas. Sin leer la
-        # hoja (sus selects llegan vacíos): /schema/ lo devuelve completo.
-        "widget_manifest": {w.key: w.manifest() for w in WIDGETS},
+        "widget_manifest": _widget_manifest(),
     })
 
 
@@ -56,12 +56,105 @@ def board_view(request, dashboard_id):
     })
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def dashboard_list(request):
+    """GET: tableros del usuario actual. POST {nombre, sheet_url}: crea uno."""
+    if request.method == "GET":
+        user = _get_user(request)
+        if user is None:
+            return _error("No hay usuarios creados. Crea uno con: python manage.py createsuperuser",
+                          status=401)
+        return JsonResponse([_serialize_dashboard(d) for d in Dashboard.objects.filter(owner=user)],
+                            safe=False)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    nombre = str(data.get("nombre") or "").strip()
+    sheet_url = str(data.get("sheet_url") or "").strip()
+    if not nombre:
+        return _error("El nombre es obligatorio")
+    if not sheet_url:
+        return _error("La URL de la hoja es obligatoria")
+    user = _get_user(request)
+    if user is None:
+        return _error("No hay usuarios creados. Crea uno con: python manage.py createsuperuser",
+                      status=401)
+    dashboard = Dashboard.objects.create(owner=user, nombre=nombre, sheet_url=sheet_url,
+                                         sheet_gid=str(data.get("sheet_gid") or "0"))
+    return JsonResponse(_serialize_dashboard(dashboard), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "PUT", "DELETE"])
+def dashboard_detail(request, dashboard_id):
+    """GET / PUT {nombre?, sheet_url?} / DELETE de un tablero del usuario."""
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    if request.method == "GET":
+        return JsonResponse(_serialize_dashboard(dashboard))
+    if request.method == "DELETE":
+        dashboard.delete()
+        return JsonResponse({"deleted": True})
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    if "nombre" in data:
+        nombre = str(data.get("nombre") or "").strip()
+        if not nombre:
+            return _error("El nombre es obligatorio")
+        dashboard.nombre = nombre
+    if "sheet_url" in data:
+        sheet_url = str(data.get("sheet_url") or "").strip()
+        if not sheet_url:
+            return _error("La URL de la hoja es obligatoria")
+        if sheet_url != dashboard.sheet_url:
+            # El cache viejo es el de la hoja ANTERIOR: se invalida antes de cambiar la URL.
+            previous_sheet_id = dashboard.sheet_id
+            dashboard.sheet_url = sheet_url
+            invalidate_sheet_cache(previous_sheet_id, dashboard.sheet_gid)
+    if "sheet_gid" in data:
+        dashboard.sheet_gid = str(data.get("sheet_gid") or "0")
+    dashboard.save()
+    return JsonResponse(_serialize_dashboard(dashboard))
+
+
+@require_http_methods(["POST"])
+def dashboard_duplicate(request, dashboard_id):
+    """Duplica un tablero (incluyendo widgets)."""
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    new_dashboard = Dashboard.objects.create(
+        owner=_get_user(request),
+        nombre=f"{dashboard.nombre} (copia)",
+        sheet_url=dashboard.sheet_url,
+        sheet_gid=dashboard.sheet_gid,
+    )
+    for widget in dashboard.widgets.all():
+        Widget.objects.create(
+            dashboard=new_dashboard,
+            type=widget.type,
+            title=widget.title,
+            position=widget.position,
+            fields=widget.fields,
+            style=widget.style,
+            source_prompt=widget.source_prompt,
+        )
+    return JsonResponse(_serialize_dashboard(new_dashboard), status=201)
+
+
+def home(request):
+    """Página de inicio - lista de tableros."""
+    user = _get_user(request)
+    dashboards = Dashboard.objects.filter(owner=user)
+    return render(request, "home.html", {"dashboards": dashboards})
+
 
 def _get_user(request):
-    # Todavía no hay login en la app: sin sesión se usa el primer superusuario.
     if request.user.is_authenticated:
         return request.user
     User = get_user_model()
@@ -76,9 +169,6 @@ def _json_body(request) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Se esperaba un objeto JSON")
     return data
-
-
-NO_USER_MESSAGE = "No hay ningún usuario. Crea uno con: python manage.py createsuperuser"
 
 
 def _error(message, status=400, **extra):
@@ -101,7 +191,6 @@ def _gid_from_url(url: str) -> str | None:
 
 
 def _load_sheet(dashboard):
-    """La hoja del tablero, desde la caché."""
     return get_sheet_dataframe(dashboard.sheet_id, dashboard.sheet_gid)
 
 
@@ -121,107 +210,16 @@ def _serialize_widget(widget):
     return {
         "id": widget.id,
         "type": widget.type,
+        "title": widget.title,
         "position": widget.position,
-        "data_spec": widget.data_spec,
-        "view_spec": widget.view_spec,
+        "fields": widget.fields,
+        "style": widget.style,
         "source_prompt": widget.source_prompt,
     }
 
 
-# ---------------------------------------------------------------------------
-# Dashboards
-# ---------------------------------------------------------------------------
-
-@csrf_exempt
-@require_http_methods(["GET", "POST"])
-def dashboard_list(request):
-    user = _get_user(request)
-    if not user:
-        return _error(NO_USER_MESSAGE, status=401)
-
-    if request.method == "GET":
-        dashboards = Dashboard.objects.filter(owner=user).prefetch_related("widgets")
-        return JsonResponse([_serialize_dashboard(d) for d in dashboards], safe=False)
-
-    try:
-        data = _json_body(request)
-    except ValueError as e:
-        return _error(str(e))
-    nombre = (data.get("nombre") or "").strip()
-    sheet_url = (data.get("sheet_url") or "").strip()
-    if not nombre:
-        return _error("El nombre es obligatorio")
-    dashboard = Dashboard(
-        nombre=nombre,
-        owner=user,
-        sheet_url=sheet_url,
-        sheet_gid=str(data.get("sheet_gid") or _gid_from_url(sheet_url) or "0"),
-    )
-    if not dashboard.sheet_id:
-        return _error("La URL no parece de una hoja de Google Sheets")
-    dashboard.save()
-    return JsonResponse(_serialize_dashboard(dashboard), status=201)
-
-
-@csrf_exempt
-@require_http_methods(["PUT", "DELETE"])
-def dashboard_detail(request, dashboard_id):
-    dashboard = _owned_dashboard(request, dashboard_id)
-    if not dashboard:
-        return _error("Dashboard no encontrado", status=404)
-
-    if request.method == "DELETE":
-        dashboard.delete()
-        return JsonResponse({"deleted": True})
-
-    try:
-        data = _json_body(request)
-    except ValueError as e:
-        return _error(str(e))
-    if "nombre" in data:
-        nombre = (data["nombre"] or "").strip()
-        if not nombre:
-            return _error("El nombre no puede estar vacío")
-        dashboard.nombre = nombre
-    if "sheet_url" in data:
-        dashboard.sheet_url = (data["sheet_url"] or "").strip()
-        dashboard.sheet_gid = str(data.get("sheet_gid") or _gid_from_url(dashboard.sheet_url) or "0")
-        if not dashboard.sheet_id:
-            return _error("La URL no parece de una hoja de Google Sheets")
-    dashboard.save()
-    return JsonResponse(_serialize_dashboard(dashboard))
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def dashboard_duplicate(request, dashboard_id):
-    original = _owned_dashboard(request, dashboard_id)
-    if not original:
-        return _error("Dashboard no encontrado", status=404)
-    with transaction.atomic():
-        copy = Dashboard.objects.create(
-            nombre=f"{original.nombre} (copia)",
-            owner=original.owner,
-            sheet_url=original.sheet_url,
-            sheet_gid=original.sheet_gid,
-        )
-        Widget.objects.bulk_create([
-            Widget(
-                dashboard=copy,
-                type=w.type,
-                position=w.position,
-                data_spec=w.data_spec,
-                view_spec=w.view_spec,
-                source_prompt=w.source_prompt,
-            )
-            for w in original.widgets.all()
-        ])
-    return JsonResponse(_serialize_dashboard(copy), status=201)
-
-
 @require_http_methods(["GET"])
 def dashboard_schema(request, dashboard_id):
-    """Columnas de la hoja (chips del frontend y selects del builder)."""
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     if request.GET.get("refresh"):
         invalidate_sheet_cache(dashboard.sheet_id, dashboard.sheet_gid)
@@ -230,12 +228,9 @@ def dashboard_schema(request, dashboard_id):
     except SheetError as e:
         return _error(str(e), status=502)
     schema = {**get_sheet_schema(df), "dimension_fields": get_dimension_fields(df)}
-    columns = PanelColumns(all=tuple(schema["all_fields"]), numeric=tuple(schema["numeric_fields"]),
-                           dimension=tuple(schema["dimension_fields"]))
     return JsonResponse({
         **schema, "sample_values": get_field_samples(df),
-        # El manifiesto con las columnas de la hoja en las opciones de los selects del panel.
-        "widget_manifest": {w.key: w.manifest(columns) for w in WIDGETS},
+        "widget_manifest": _widget_manifest(),
     })
 
 
@@ -248,34 +243,47 @@ def dashboard_render(request, dashboard_id):
     """
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     try:
-        service = WidgetService(dashboard, _load_sheet(dashboard))
+        df = _load_sheet(dashboard)
     except SheetError as e:
         return _error(str(e), status=502)
+
+    # Parse board filters
     try:
+        service = WidgetService(dashboard, df)
         filters, filter_errors = service.parse_board_filters(request.GET.get("filters"))
     except ValueError as e:
         return _error(str(e))
 
-    widgets = sorted(dashboard.widgets.all(), key=lambda w: (w.position.get("y", 0), w.id))
+    widgets_data = []
+    for widget in dashboard.widgets.all():
+        rendered = service.render(widget, filters)
+        widgets_data.append({
+            "id": widget.id,
+            "type": widget.type,
+            "title": widget.title,
+            "position": widget.position,
+            "fields": widget.fields,
+            "style": widget.style,
+            "source_prompt": widget.source_prompt,
+            "data": rendered.get("data"),
+            "error": rendered.get("error"),
+        })
+
     return JsonResponse({
         "dashboard": _serialize_dashboard(dashboard),
-        "widgets": [{**_serialize_widget(w), **service.render(w, filters)} for w in widgets],
+        "widgets": widgets_data,
         "filter_errors": filter_errors,
     })
 
-
-# ---------------------------------------------------------------------------
-# Widgets
-# ---------------------------------------------------------------------------
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def table_assistant(request, dashboard_id):
     """
     POST {prompt}
-    "Consulta con la IA" de las tablas: la IA propone la configuración (filas, columnas,
-    métricas, orden, filtros) como un data_spec validado contra la hoja, y el panel la muestra
-    como pasos a seguir en el constructor. NO crea ni modifica widgets.
+    "Consulta con la IA" de las tablas: la IA propone el `WidgetForm` (fields + style) validado
+    contra la hoja, y el panel lo muestra como pasos a seguir en el constructor.
+    NO crea ni modifica widgets.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
     if not dashboard:
@@ -295,28 +303,30 @@ def table_assistant(request, dashboard_id):
         return _error(str(e), status=502)
 
     try:
+        from sheets_reports.dsl.context import SheetContext
+        from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_form
         ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid, samples=get_field_samples(df))
-        spec = generate_widget_spec(prompt, "dynamic_table", ctx)
+        proposal = generate_widget_form(prompt, data.get("widget_type"), ctx)
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     except Exception:
-        logger.exception("Falló la consulta de tabla con IA")
+        logger.exception("Falló la consulta con IA")
         return _error("La IA no respondió correctamente. Intenta de nuevo.", status=502)
 
-    return JsonResponse({"data_spec": spec["data_spec"], "view_spec": spec["view_spec"]})
-
-
-def _validation_error(e: SpecValidationError):
-    return _error(e.errors[0], status=422, errors=e.errors)
+    return JsonResponse({
+        "widget_type": proposal["widget_type"],
+        "fields": proposal["fields"],
+        "style": proposal["style"],
+        "title": proposal.get("title", ""),
+    })
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_widget(request, dashboard_id):
     """
-    POST {type, <claves del data_spec>, <opciones de vista del tipo>, title?, labels?,
-          position?, display?}
-    Crea un widget desde el builder (el usuario elige columnas y métricas). NUNCA llama a la IA.
+    POST {type, fields?, style?, title?, position?}
+    Crea un widget desde el builder (o desde la IA). NUNCA llama a la IA por su cuenta.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
     if not dashboard:
@@ -325,52 +335,57 @@ def create_widget(request, dashboard_id):
         data = _json_body(request)
     except ValueError as e:
         return _error(str(e))
+
     widget_type = data.get("type")
-    if widget_type not in WIDGETS:
+    if widget_type not in WIDGET_REGISTRY:
         return _error(f"Tipo de widget desconocido: {widget_type}")
 
     try:
-        service = WidgetService(dashboard, _load_sheet(dashboard))
+        df = _load_sheet(dashboard)
     except SheetError as e:
         return _error(str(e), status=502)
+
+    service = WidgetService(dashboard, df)
     try:
         widget = service.create(widget_type, data)
     except SpecValidationError as e:
-        return _validation_error(e)
-    return JsonResponse({**_serialize_widget(widget), **service.render(widget)}, status=201)
+        return _error(str(e), status=422)
+
+    rendered = service.render(widget)
+    return JsonResponse({**_serialize_widget(widget), "data": rendered.get("data"),
+                         "error": rendered.get("error")}, status=201)
 
 
-@csrf_exempt
-@require_http_methods(["PUT"])
-def update_widget_spec(request, widget_id):
+@require_http_methods(["GET"])
+def widget_config(request, widget_id):
     """
-    PUT {<claves del data_spec>, <opciones de vista del tipo>, title?, labels?}
-    Edición manual desde el builder: aplica las mismas validaciones que el camino de IA,
-    reconstruye view_spec y guarda. Este camino NUNCA llama a la IA.
+    GET → {id, type, title, position, fields, style, style_schema}
+
+    La configuración guardada del widget junto con el esquema de estilos que la UI debe
+    construir para él (PASO 3 de la arquitectura).
     """
     widget = _owned_widget(request, widget_id)
     if not widget:
         return _error("Widget no encontrado", status=404)
-    try:
-        data = _json_body(request)
-    except ValueError as e:
-        return _error(str(e))
-
-    try:
-        service = WidgetService(widget.dashboard, _load_sheet(widget.dashboard))
-    except SheetError as e:
-        return _error(str(e), status=502)
-    try:
-        service.update_spec(widget, data)
-    except SpecValidationError as e:
-        return _validation_error(e)
-    return JsonResponse({**_serialize_widget(widget), **service.render(widget)})
+    handler = WIDGET_REGISTRY.get(widget.type) if widget.type in WIDGET_REGISTRY else None
+    return JsonResponse({
+        "id": widget.id,
+        "type": widget.type,
+        "title": widget.title,
+        "position": widget.position,
+        "fields": widget.fields or {},
+        "style": widget.style or {},
+        "style_schema": handler.style_schema if handler else [],
+    })
 
 
 @csrf_exempt
 @require_http_methods(["PUT", "DELETE"])
 def widget_detail(request, widget_id):
-    """PUT {position?, title?, display?}: solo presentación, no toca data_spec. DELETE: borra."""
+    """
+    PUT {position?, title?, fields?, style?}: guarda la configuración y devuelve el widget ya
+    calculado. DELETE: borra.
+    """
     widget = _owned_widget(request, widget_id)
     if not widget:
         return _error("Widget no encontrado", status=404)
@@ -383,13 +398,20 @@ def widget_detail(request, widget_id):
         data = _json_body(request)
     except ValueError as e:
         return _error(str(e))
-    if "position" in data:
-        widget.position = clean_position(data["position"], fallback=widget.position)
-    view_spec = dict(widget.view_spec)
-    if "title" in data:
-        view_spec["title"] = str(data["title"] or "").strip() or view_spec.get("title", "")
-    if isinstance(data.get("display"), dict):
-        view_spec["display"] = data["display"]
-    widget.view_spec = view_spec
-    widget.save()
-    return JsonResponse(_serialize_widget(widget))
+
+    try:
+        df = _load_sheet(widget.dashboard)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    service = WidgetService(widget.dashboard, df)
+    try:
+        service.update(widget, data)
+    except SpecValidationError as e:
+        return _error(str(e), status=422)
+    except Exception as e:
+        return _error(str(e), status=422)
+
+    rendered = service.render(widget)
+    return JsonResponse({**_serialize_widget(widget), "data": rendered.get("data"),
+                         "error": rendered.get("error")})

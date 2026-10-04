@@ -1,5 +1,4 @@
 (function () {
-  // Color del número según el semáforo (payload.status) y de la variación según si mejora.
   const STATUS_CLASS = { good: 'text-emerald-600', warn: 'text-amber-600', bad: 'text-red-600' };
   const STATUS_BAR = { good: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-red-500' };
   const SPARK_COLOR = '#16a34a';
@@ -13,17 +12,6 @@
       description: 'Indicador con comparación, meta y tendencia',
     };
     static defaults = { title: 'Tarjeta KPI', width: 'md:col-span-4', height: 300 };
-    // El nombre a mostrar de cada métrica es su etiqueta en la tarjeta.
-    static supportsLabels = true;
-
-    static get drawerFields() {
-      return [...super.drawerFields,
-        { key: 'decimals', label: 'Decimales', type: 'number', min: 0, step: 1 },
-        { key: 'abbreviate', label: 'Abreviar (1,2 M)', type: 'checkbox' },
-        { key: 'prefix', label: 'Prefijo (ej. RD$)', type: 'text' },
-        { key: 'suffix', label: 'Sufijo (ej. uds.)', type: 'text' },
-      ];
-    }
 
     static mockData() {
       return { value: 412900, label: 'Monto Consumido' };
@@ -31,35 +19,31 @@
 
     constructor(raw) {
       super(raw);
-      this.decimals = raw.decimals ?? '';
-      this.abbreviate = raw.abbreviate ?? false;
-      this.prefix = raw.prefix ?? '';
-      this.suffix = raw.suffix ?? '';
-    }
-
-    getProperties() {
-      return { ...super.getProperties(),
-        decimals: this.decimals, abbreviate: this.abbreviate, prefix: this.prefix, suffix: this.suffix,
-      };
     }
 
     buildElement() {
       return this.buildStandardCardElement();
     }
 
-    // Número con el formato de la tarjeta. Los porcentajes llevan "%" y no prefijo/sufijo.
+    getProperties() {
+      return { ...super.getProperties() };
+    }
+
     format(value, { percent = false, signed = false } = {}) {
       if (typeof value !== 'number') return value ?? '—';
-      const decimals = this.decimals === '' || this.decimals == null ? null : Number(this.decimals);
+      const decimals = this.style.decimals === '' || this.style.decimals == null ? null : Number(this.style.decimals);
+      const abbreviate = this.style.abbreviate ?? false;
+      const prefix = this.style.prefix ?? '';
+      const suffix = this.style.suffix ?? '';
       const options = decimals === null
         ? { maximumFractionDigits: 2 }
         : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
-      if (this.abbreviate && !percent) {
+      if (abbreviate && !percent) {
         Object.assign(options, { notation: 'compact', maximumFractionDigits: decimals ?? 1 });
       }
       if (signed) options.signDisplay = 'exceptZero';
       const text = value.toLocaleString(undefined, options);
-      return percent ? `${text}%` : `${this.prefix || ''}${text}${this.suffix ? ` ${this.suffix}` : ''}`;
+      return percent ? `${text}%` : `${prefix || ''}${text}${suffix ? ` ${suffix}` : ''}`;
     }
 
     _compareHTML(compare, percent) {
@@ -96,13 +80,18 @@
         </div>`;
     }
 
-    renderContent(container, data) {
+    draw(data, style, title) {
+      this.style = { ...this.style, ...style };
+      if (title) this.title = title;
+
       const payload = data || this.constructor.mockData();
+      this._lastData = payload;
+
       const esc = BaseWidget.escapeHTML;
       const percent = !!payload.percent;
       const statusClass = STATUS_CLASS[payload.status] || 'text-ink';
       const valueText = this.format(payload.value, { percent });
-      // Un ranking (top/bottom) muestra el grupo grande y su valor como detalle.
+
       const main = payload.text
         ? `<span class="text-2xl font-black tracking-tight text-center leading-tight ${statusClass}">${esc(payload.text)}</span>
            <span class="text-sm font-semibold text-ink/60 mt-0.5">${esc(String(valueText))}</span>`
@@ -112,6 +101,7 @@
         this._chart.destroy();
         this._chart = null;
       }
+      const container = this.getContentContainer();
       container.className = 'flex flex-col items-center justify-center h-full pb-3 min-h-0';
       container.innerHTML = `
         <div class="flex flex-col items-center justify-center flex-1 min-h-0 w-full">

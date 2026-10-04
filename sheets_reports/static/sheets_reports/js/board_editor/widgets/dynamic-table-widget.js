@@ -1,7 +1,6 @@
 (function () {
     const formattersMap = {
       "text": { hozAlign: "left", formatter: "plaintext" },
-      // Formato por defecto de las columnas de valores: a la derecha, con separador de miles.
       "number": {
           hozAlign: "right",
           formatter: (cell) => {
@@ -24,299 +23,245 @@
             legend: function(value) { return Number(value) + "%"; }
           }
       }
-  };
-  // Tabla dinámica: siempre agrupa por al menos una fila, con subtotales y totales
-  // (DynamicTableWidget del backend).
-  class DynamicTableWidget extends BaseWidget {
-    static type = 'dynamic_table';
-    static palette = {
-      icon: 'ti-table-options',
-      category: 'data',
-      label: 'Tabla dinámica',
-      description: 'Agrupa filas y columnas, con totales',
     };
-    static defaults = { title: 'Tabla dinámica', width: 'md:col-span-6', height: 300 };
-    // Formatos de columna (menú de la cabecera); reutilizables por otros widgets de tabla.
-    static formats = formattersMap;
-    // Cada métrica es una columna con cabecera: se puede renombrar.
-    static supportsLabels = true;
-    // "Mostrar totales" por cada nivel de filas/columnas, como en las tablas dinámicas de Sheets.
-    static supportsTotals = true;
 
-    static FIELD_PAGE_SIZE = { key: 'pageSize', label: 'Filas por página', type: 'number', min: 5, step: 5 };
-    static FIELD_SHOW_PAGINATION = { key: 'showPagination', label: 'Mostrar paginación', type: 'checkbox' };
-
-    // "Consulta con la IA": la IA responde con los pasos para configurar la tabla en el
-    // constructor (no modifica el widget).
-    static FIELD_ASSISTANT = { key: 'prompt', label: 'Consulta con la IA', type: 'assistant', tab: 'data' };
-
-    static get drawerFields() {
-      const [title, ...rest] = super.drawerFields;
-      return [title, this.FIELD_ASSISTANT, ...rest,
-        this.FIELD_PAGE_SIZE,
-        this.FIELD_SHOW_PAGINATION,
-        { key: 'boldLastRow', label: 'Resaltar última fila', type: 'checkbox' }
-      ];
-    }
-
-    static mockData() {
-      return {
-        columns: [
-          { header: 'Producto', field: 'Producto' },
-          { header: 'Unidades', field: 'Unidades' },
-          { header: 'Ventas', field: 'Ventas' },
-        ],
-        rows: [
-          { Producto: 'Producto A', Unidades: 42, Ventas: 14200 },
-          { Producto: 'Producto B', Unidades: 57, Ventas: 19800 },
-          { Producto: 'Producto C', Unidades: 23, Ventas: 8500 },
-        ],
-        rowFields: ['Producto'],
+    class DynamicTableWidget extends BaseWidget {
+      static type = 'dynamic_table';
+      static palette = {
+        icon: 'ti-table-options',
+        category: 'data',
+        label: 'Tabla dinámica',
+        description: 'Agrupa filas y columnas, con totales',
       };
-    }
+      static defaults = { title: 'Tabla dinámica', width: 'md:col-span-6', height: 300 };
+      static formats = formattersMap;
 
-    constructor(raw) {
-      super(raw);
-      this.pageSize = raw.pageSize ?? 10;
-      this.showPagination = raw.showPagination ?? true;
-      this.boldLastRow = raw.boldLastRow ?? false;
-      // Totales por nivel, como en Sheets (visibles por defecto): rowTotals[0] es la fila
-      // "Total general" y rowTotals[k] los subtotales "Total <valor>" del nivel k-1;
-      // columnTotals igual con los pivotes. Se migran los flags anteriores (showRowTotals,
-      // showColumnTotals, showSubtotals). Si la tabla ya resaltaba su última fila (hojas que
-      // traen su propia fila de total), no se agrega otra salvo que se active.
-      const sub = raw.showSubtotals ?? true;
-      this.rowTotals = raw.rowTotals ?? [raw.showRowTotals ?? !this.boldLastRow, sub, sub];
-      this.columnTotals = raw.columnTotals ?? [raw.showColumnTotals ?? true, sub];
-      this.repeatRowLabels = raw.repeatRowLabels ?? false;
-      this.columnOrder = raw.columnOrder ?? null;
-      this.formattersMap = raw.formattersMap ?? {};
-    }
-
-    getProperties() {
-      return { ...super.getProperties(), pageSize: this.pageSize, showPagination: this.showPagination,
-        boldLastRow: this.boldLastRow, rowTotals: this.rowTotals, columnTotals: this.columnTotals,
-        repeatRowLabels: this.repeatRowLabels,
-        columnOrder: this.columnOrder, formattersMap: this.formattersMap };
-    }
-
-    buildElement() {
-      return this.buildStandardCardElement();
-    }
-
-    buildReadOnlyElement() {
-      const el = super.buildReadOnlyElement();
-      el.querySelector('.actions-slot').innerHTML = this.downloadButtonHTML('Descargar CSV');
-      return el;
-    }
-    applyFormatter(fieldName, tipoFormato) {
-      const config = formattersMap[tipoFormato] || formattersMap["text"];
-      const update = (cols) => cols.map(col => {
-          if (col.columns) return { ...col, columns: update(col.columns) }; // grupo de pivote
-          if (col.field === fieldName) {
-            const updated = { ...col, ...config };
-            // La celda de la fila de totales usa el mismo formato que la columna.
-            if (col.bottomCalc) Object.assign(updated, DynamicTableWidget.calcFormatter(config));
-            return updated;
-          }
-          return col;
-      });
-      const cols = update(this._table.getColumnDefinitions());
-      this.formattersMap[fieldName] = tipoFormato; // Guarda el formato aplicado para persistencia
-      this._table.setColumns(cols); // Re-renderiza las columnas instantáneamente
-      this._dirty = true;
-      const store = window.Alpine && Alpine.store('dashboard');
-      if (store && typeof store._saveWidget === 'function') {
-        store._saveWidget(this);
+      static mockData() {
+        return {
+          columns: [
+            { header: 'Producto', field: 'Producto' },
+            { header: 'Unidades', field: 'Unidades' },
+            { header: 'Ventas', field: 'Ventas' },
+          ],
+          rows: [
+            { Producto: 'Producto A', Unidades: 42, Ventas: 14200 },
+            { Producto: 'Producto B', Unidades: 57, Ventas: 19800 },
+            { Producto: 'Producto C', Unidades: 23, Ventas: 8500 },
+          ],
+          rowFields: ['Producto'],
+        };
       }
-    }
-    static calcFormatter(config) {
-      return { bottomCalcFormatter: config.formatter, bottomCalcFormatterParams: config.formatterParams };
-    }
 
-    menuFormatter = [
-      { label: "📄 Texto", action: (e, column) => this.applyFormatter(column.getField(), "text") },
-      { label: "💲 Moneda / Número", action: (e, column) => this.applyFormatter(column.getField(), "currency") },
-      { label: "📊 Porcentaje (%)", action: (e, column) => this.applyFormatter(column.getField(), "percent") },
-      { label: "🔋 Barra de Progreso", action: (e, column) => this.applyFormatter(column.getField(), "progress") }
-    ];
-    renderContent(container, data) {
-      const payload = data || this.constructor.mockData();
-      if (this._table) {
-        this._table.destroy();
-        this._table = null;
+      constructor(raw) {
+        super(raw);
       }
-      container.innerHTML = '';
-      container.style.backgroundColor = '#fff';
-      // El contenedor viene con flex-1 (ocupa todo el alto de la tarjeta). La tabla no debe
-      // crecer más que su contenido, para que la fila de totales quede justo después de la
-      // última fila; sí puede encogerse (min-h-0) y entonces hace scroll (ver maxHeight).
-      container.style.flex = '0 1 auto';
-      container.classList.remove('tb-pivot');
-      // "Total general" viene marcada con total: true (nivel 0 de columnas) y los "Total <valor>"
-      // del pivote anidado con subtotal: true (nivel 1, hay como mucho dos pivotes); se quitan
-      // (con sus hijos) si ese nivel tiene los totales apagados.
-      const keep = (c) => !(c.total && !DynamicTableWidget.totalsOn(this.columnTotals, 0))
-        && !(c.subtotal && !DynamicTableWidget.totalsOn(this.columnTotals, 1));
-      const prune = (cols) => cols.filter(keep)
-        .map(c => (c.children ? { ...c, children: prune(c.children) } : c))
-        .filter(c => !c.children || c.children.length);
-      let columns = prune(payload.columns || []);
-      // Columnas de etiquetas de fila; el resto son valores. Payloads anteriores no traen
-      // rowFields: la primera columna es la dimensión.
-      const rowFields = payload.rowFields || (columns[0] && columns[0].field ? [columns[0].field] : []);
-      const rowFieldSet = new Set(rowFields);
-      // Con varios niveles de filas el orden es el de la jerarquía: ordenar por cabecera
-      // mezclaría los grupos con sus subtotales.
-      const hierarchical = rowFields.length > 1;
-      const rows = this._displayRows(payload.rows || [], rowFields);
-      // La fila de totales se muestra como fila de pie (bottomCalc): no se ordena ni pagina.
-      const totals = DynamicTableWidget.totalsOn(this.rowTotals, 0) ? payload.totals : null;
-      const hasGroups = columns.some(c => c.children);
-      // Tabla dinámica (columnas anidadas o varios niveles de filas): separadores de grupos,
-      // columnas de filas fijas al hacer scroll horizontal, etc. (estilos en .tb-pivot).
-      const pivotMode = hasGroups || hierarchical;
-      if (pivotMode) container.classList.add('tb-pivot');
-      if (!hasGroups) columns = this._orderedColumns(columns);
-      // Las métricas pct_* se muestran como porcentaje salvo que el usuario elija otro formato.
-      const percentFields = new Set(payload.percent || []);
-      // {header, field} / {header, children} (formato de compile_view) -> columnas de Tabulator.
-      // `inherited` son las clases de un grupo de total/subtotal, que se pasan a sus hijos.
-      const toTabulator = (col, inherited = []) => {
-        const classes = [...inherited];
-        if (col.subtotal) classes.push('tb-subtotal-col');
-        if (col.total) classes.push('tb-total-col');
-        if (col.children) {
-          const children = col.children.map(child => toTabulator(child, classes));
-          // Separador a la izquierda de cada grupo, para ver dónde empieza.
-          if (children.length) children[0].cssClass = [children[0].cssClass, 'tb-group-start'].filter(Boolean).join(' ');
-          return { title: col.header, columns: children, headerHozAlign: 'center', cssClass: classes.join(' ') || undefined };
-        }
-        const isDimension = rowFieldSet.has(col.field);
-        const defaultFormat = isDimension ? "text" : (percentFields.has(col.field) ? "percent" : "number");
-        const format = this.formattersMap[col.field] || defaultFormat;
-        const formatterConfig = formattersMap[format] || formattersMap[defaultFormat];
-        const result = { title: col.header, field: col.field, ...formatterConfig };
-        classes.push(isDimension ? 'tb-dim' : 'tb-num');
-        // "Total general" suelto (una métrica): marca el inicio de su bloque.
-        if (col.total) classes.push('tb-group-start');
-        result.cssClass = classes.join(' ');
-        if (!isDimension) result.headerHozAlign = 'right';
-        if (isDimension && pivotMode) result.frozen = true;
-        if (hierarchical) result.headerSort = false;
-        if (totals) {
-          result.bottomCalc = () => totals[col.field] ?? null;
-          Object.assign(result, DynamicTableWidget.calcFormatter(formatterConfig));
-        }
-        if (!this._readOnly) result.headerMenu = this.menuFormatter;
-        return result;
-      };
-      columns = columns.map(col => toTabulator(col));
-      this._table = new Tabulator(container, {
-        data: rows,
-        // Los campos del pivote ("__pivots.Ene.total_ventas") son claves planas, no rutas.
-        nestedFieldSeparator: false,
-        movableColumns: !hasGroups,
-        columnCalcs: "table",
-        columns,
-        // Tabla dinámica: cada columna a su contenido (estirar "Total general" no aporta).
-        // Tabla plana: el ancho se reparte entre todas las columnas; estirar solo la última
-        // dejaba sus números (alineados a la derecha) lejos del resto.
-        layout: pivotMode ? 'fitData' : 'fitColumns',
-        // Encabezados de distinta profundidad (ej. "Total general" junto a "2026 › Ene")
-        // alineados abajo, junto a los datos.
-        columnHeaderVertAlign: 'bottom',
-        pagination: this.showPagination,
-        paginationSize: this.pageSize,
-        // maxHeight y no height: con altura fija Tabulator dibuja la fila de totales (bottomCalc)
-        // al fondo de la tarjeta, lejos de la última fila. Así la tabla crece con su contenido
-        // (totales justo debajo) y solo al llenar la tarjeta hace scroll con los totales al pie.
-        maxHeight: '100%',
-        rowFormatter: (row) => this._formatRow(row),
-      });
-      this._wireTableEvents();
-    }
 
-    _formatRow(row) {
-      // Quitamos la clase por defecto para evitar residuos al alternar el checkbox
-      row.getElement().classList.remove("tabulator-row-bold");
-      row.getElement().classList.toggle("tabulator-row-subtotal", !!row.getData().__subtotal);
-
-      // Si la opción está activa y es la última fila del set de datos actual
-      if (this.boldLastRow) {
-        const todasLasFilas = row.getTable().getRows("active"); // Obtiene las filas activas/filtradas
-        const ultimaFila = todasLasFilas[todasLasFilas.length - 1];
-
-        // Si la fila actual que se está dibujando es idéntica a la última fila
-        if (ultimaFila && row.getPosition() === ultimaFila.getPosition()) {
-          row.getElement().classList.add("tabulator-row-bold");
-        }
+      getProperties() {
+        return { ...super.getProperties() };
       }
-    }
 
-    // Orden de columnas arrastradas (se guarda) y botón "Descargar CSV".
-    _wireTableEvents() {
-      this._table.on("columnMoved", (_column, columns) => {
-        this.columnOrder = columns.map(col => col.getField());
+      buildElement() {
+        return this.buildStandardCardElement();
+      }
+
+      buildReadOnlyElement() {
+        const el = super.buildReadOnlyElement();
+        el.querySelector('.actions-slot').innerHTML = this.downloadButtonHTML('Descargar CSV');
+        return el;
+      }
+
+      applyFormatter(fieldName, tipoFormato) {
+        const config = formattersMap[tipoFormato] || formattersMap["text"];
+        const update = (cols) => cols.map(col => {
+            if (col.columns) return { ...col, columns: update(col.columns) };
+            if (col.field === fieldName) {
+              const updated = { ...col, ...config };
+              if (col.bottomCalc) Object.assign(updated, DynamicTableWidget.calcFormatter(config));
+              return updated;
+            }
+            return col;
+        });
+        const cols = update(this._table.getColumnDefinitions());
+        this.style.formattersMap = { ...this.style.formattersMap, [fieldName]: tipoFormato };
+        this._table.setColumns(cols);
         this._dirty = true;
         const store = window.Alpine && Alpine.store('dashboard');
         if (store && typeof store._saveWidget === 'function') {
           store._saveWidget(this);
         }
-      });
-      const downloadBtn = this.el && this.el.querySelector('.download-csv-btn');
-      if (downloadBtn) {
-        downloadBtn.onclick = () => {
-          this._table.download('csv', `${this._filenameSlug('tabla')}.csv`);
+      }
+
+      static calcFormatter(config) {
+        return { bottomCalcFormatter: config.formatter, bottomCalcFormatterParams: config.formatterParams };
+      }
+
+      menuFormatter = [
+        { label: "📄 Texto", action: (e, column) => this.applyFormatter(column.getField(), "text") },
+        { label: "💲 Moneda / Número", action: (e, column) => this.applyFormatter(column.getField(), "currency") },
+        { label: "📊 Porcentaje (%)", action: (e, column) => this.applyFormatter(column.getField(), "percent") },
+        { label: "🔋 Barra de Progreso", action: (e, column) => this.applyFormatter(column.getField(), "progress") }
+      ];
+
+      draw(data, style, title) {
+        this.style = { ...this.style, ...style };
+        if (title) this.title = title;
+
+        const payload = data || this.constructor.mockData();
+        this._lastData = payload;
+
+        if (this._table) {
+          this._table.destroy();
+          this._table = null;
+        }
+        const container = this.getContentContainer();
+        container.innerHTML = '';
+        container.style.backgroundColor = '#fff';
+        container.style.flex = '0 1 auto';
+        container.classList.remove('tb-pivot');
+
+        // «Mostrar totales» por nivel (estilo del widget): la columna «Total general» y las
+        // «Total <valor>» de cada pivote se quitan (con sus hijos) si ese nivel está apagado.
+        let columns = this._visibleColumns(payload.columns);
+        const rowFields = payload.rowFields || (columns[0] && columns[0].field ? [columns[0].field] : []);
+        const rowFieldSet = new Set(rowFields);
+        const hierarchical = rowFields.length > 1;
+        const rows = this._displayRows(payload.rows || [], rowFields);
+        const totals = this.style.showTotals !== false ? payload.totals : null;
+        const hasGroups = columns.some(c => c.children);
+        const pivotMode = hasGroups || hierarchical;
+        if (pivotMode) container.classList.add('tb-pivot');
+        if (!hasGroups) columns = this._orderedColumns(columns);
+        const percentFields = new Set(payload.percent || []);
+
+        const toTabulator = (col, inherited = []) => {
+          const classes = [...inherited];
+          if (col.subtotal) classes.push('tb-subtotal-col');
+          if (col.total) classes.push('tb-total-col');
+          if (col.children) {
+            const children = col.children.map(child => toTabulator(child, classes));
+            if (children.length) children[0].cssClass = [children[0].cssClass, 'tb-group-start'].filter(Boolean).join(' ');
+            return { title: col.header, columns: children, headerHozAlign: 'center', cssClass: classes.join(' ') || undefined };
+          }
+          const isDimension = rowFieldSet.has(col.field);
+          const defaultFormat = isDimension ? "text" : (percentFields.has(col.field) ? "percent" : "number");
+          const format = this.style.formattersMap?.[col.field] || defaultFormat;
+          const formatterConfig = formattersMap[format] || formattersMap[defaultFormat];
+          const result = { title: col.header, field: col.field, ...formatterConfig };
+          classes.push(isDimension ? 'tb-dim' : 'tb-num');
+          if (col.total) classes.push('tb-group-start');
+          result.cssClass = classes.join(' ');
+          if (!isDimension) result.headerHozAlign = 'right';
+          if (isDimension && pivotMode) result.frozen = true;
+          if (hierarchical) result.headerSort = false;
+          if (totals) {
+            result.bottomCalc = () => totals[col.field] ?? null;
+            Object.assign(result, DynamicTableWidget.calcFormatter(formatterConfig));
+          }
+          if (!this._readOnly) result.headerMenu = this.menuFormatter;
+          return result;
         };
+
+        columns = columns.map(col => toTabulator(col));
+
+        this._table = new Tabulator(container, {
+          data: rows,
+          nestedFieldSeparator: false,
+          movableColumns: !hasGroups,
+          columnCalcs: "table",
+          columns,
+          layout: pivotMode ? 'fitData' : 'fitColumns',
+          columnHeaderVertAlign: 'bottom',
+          pagination: this.style.showPagination ?? true,
+          paginationSize: this.style.pageSize ?? 10,
+          maxHeight: '100%',
+          rowFormatter: (row) => this._formatRow(row),
+        });
+        this._wireTableEvents();
+      }
+
+      _formatRow(row) {
+        row.getElement().classList.remove("tabulator-row-bold");
+        row.getElement().classList.toggle("tabulator-row-subtotal", !!row.getData().__subtotal);
+
+        if (this.style.boldLastRow) {
+          const todasLasFilas = row.getTable().getRows("active");
+          const ultimaFila = todasLasFilas[todasLasFilas.length - 1];
+          if (ultimaFila && row.getPosition() === ultimaFila.getPosition()) {
+            row.getElement().classList.add("tabulator-row-bold");
+          }
+        }
+      }
+
+      _wireTableEvents() {
+        this._table.on("columnMoved", (_column, columns) => {
+          this.style.columnOrder = columns.map(col => col.getField());
+          this._dirty = true;
+          const store = window.Alpine && Alpine.store('dashboard');
+          if (store && typeof store._saveWidget === 'function') {
+            store._saveWidget(this);
+          }
+        });
+        const downloadBtn = this.el && this.el.querySelector('.download-csv-btn');
+        if (downloadBtn) {
+          downloadBtn.onclick = () => {
+            this._table.download('csv', `${this._filenameSlug('tabla')}.csv`);
+          };
+        }
+      }
+
+      _orderedColumns(columns) {
+        if (!this.style.columnOrder || !this.style.columnOrder.length) return columns;
+        const byField = new Map(columns.map(c => [c.field, c]));
+        const ordered = this.style.columnOrder.map(f => byField.get(f)).filter(Boolean);
+        const remaining = columns.filter(c => !this.style.columnOrder.includes(c.field));
+        return [...ordered, ...remaining];
+      }
+
+      // Columnas visibles: se cae la «Total general» (showColumnTotals) y cada columna
+      // «Total <valor>» (columnSubtotal1) si su checkbox está apagado, y sus hijos con ella.
+      _visibleColumns(columns) {
+        const keep = (c) => !(c.total && this.style.showColumnTotals !== true)
+          && !(c.subtotal && this.style.columnSubtotal1 !== true);
+        const prune = (cols) => cols.filter(keep)
+          .map(c => (c.children ? { ...c, children: prune(c.children) } : c))
+          .filter(c => !c.children || c.children.length);
+        return prune(columns || []);
+      }
+
+      _displayRows(rows, rowFields) {
+        // Nivel de una fila «Total <valor>»: el primer campo de fila nulo (0 = total
+        // general, 1 = subtotal de la 1ª dimensión, 2 = de la 2ª) y se dibuja solo si su
+        // checkbox de «Mostrar totales» está activo.
+        const visible = (level) => level <= 0
+          ? this.style.showTotals !== false
+          : (level === 1 ? this.style.rowSubtotal1 === true : this.style.rowSubtotal2 === true);
+        const levelOf = (row) => rowFields.findIndex(f => row[f] == null);
+        rows = rows.filter(r => !r.__subtotal || visible(levelOf(r)));
+        if (this.style.repeatRowLabels || rowFields.length < 2) return rows;
+        let previous = null;
+        return rows.map(row => {
+          if (row.__subtotal) {
+            previous = null;
+            return row;
+          }
+          const shown = { ...row };
+          for (let i = 0; previous && i < rowFields.length - 1; i++) {
+            if (!rowFields.slice(0, i + 1).every(f => row[f] === previous[f])) break;
+            shown[rowFields[i]] = '';
+          }
+          previous = row;
+          return shown;
+        });
+      }
+
+      destroy() {
+        if (this._table) {
+          this._table.destroy();
+          this._table = null;
+        }
+        super.destroy();
       }
     }
 
-    // Columnas en el orden que dejó el usuario al arrastrarlas; las nuevas, al final.
-    _orderedColumns(columns) {
-      if (!this.columnOrder || !this.columnOrder.length) return columns;
-      const byField = new Map(columns.map(c => [c.field, c]));
-      const ordered = this.columnOrder.map(f => byField.get(f)).filter(Boolean);
-      const remaining = columns.filter(c => !this.columnOrder.includes(c.field));
-      return [...ordered, ...remaining];
-    }
-
-    static totalsOn(levels, level) {
-      return (levels || [])[level] !== false;
-    }
-
-    // Filas a mostrar: sin los subtotales de los niveles apagados y, salvo "Repetir etiquetas
-    // de fila", con la etiqueta de un nivel en blanco cuando repite la de la fila anterior
-    // (como Sheets). Un subtotal "Total <valor>" del nivel k-1 deja en blanco los niveles
-    // desde k, así que su primera etiqueta vacía dice qué checkbox lo controla.
-    _displayRows(rows, rowFields) {
-      rows = rows.filter(r => !r.__subtotal
-        || DynamicTableWidget.totalsOn(this.rowTotals, rowFields.findIndex(f => r[f] == null)));
-      if (this.repeatRowLabels || rowFields.length < 2) return rows;
-      let previous = null;
-      return rows.map(row => {
-        if (row.__subtotal) {
-          previous = null;
-          return row;
-        }
-        const shown = { ...row };
-        for (let i = 0; previous && i < rowFields.length - 1; i++) {
-          if (!rowFields.slice(0, i + 1).every(f => row[f] === previous[f])) break;
-          shown[rowFields[i]] = '';
-        }
-        previous = row;
-        return shown;
-      });
-    }
-
-    destroy() {
-      if (this._table) {
-        this._table.destroy();
-        this._table = null;
-      }
-      super.destroy();
-    }
-  }
-
-  WidgetRegistry.register(DynamicTableWidget);
+    WidgetRegistry.register(DynamicTableWidget);
 })();

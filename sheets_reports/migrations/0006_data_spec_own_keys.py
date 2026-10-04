@@ -2,22 +2,16 @@ from django.db import migrations
 
 
 def keep_own_keys(apps, schema_editor):
-    """Cada data_spec guarda solo las claves de las piezas de su widget (spec_cls): las de
-    otras piezas, que antes iban siempre vacías, se quitan."""
-    from sheets_reports.widgets import WIDGETS
+    """Histórico: normalizaba el `data_spec` guardado contra el `spec_cls` de cada widget.
 
-    Widget = apps.get_model("sheets_reports", "Widget")
-    for widget in Widget.objects.all():
-        if widget.type not in WIDGETS:
-            continue
-        spec_cls = WIDGETS.get(widget.type).spec_cls
-        data_spec = spec_cls.from_dict(spec_cls.with_defaults(widget.data_spec or {})).to_dict()
-        if data_spec != widget.data_spec:
-            widget.data_spec = data_spec
-            widget.save(update_fields=["data_spec"])
+    El campo `data_spec` se eliminó en 0007 y el registro de widgets ya no tiene `spec_cls`,
+    así que la operación queda vacía. Los widgets existentes se resetean en 0002 al migrar desde
+    cero; en una base ya migrada, 0007 elimina las claves viejas.
+    """
+    return None
 
 
 class Migration(migrations.Migration):
-    dependencies = [("sheets_reports", "0005_data_spec_columns")]
+    dependencies = [("sheets_reports", "0004_rename_table_to_dynamic_table")]
 
     operations = [migrations.RunPython(keep_own_keys, migrations.RunPython.noop)]

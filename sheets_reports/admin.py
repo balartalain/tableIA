@@ -31,13 +31,13 @@ class WidgetAdmin(admin.ModelAdmin):
     list_display = ["__str__", "dashboard", "type", "updated_at"]
     list_filter = ["type", "updated_at"]
     search_fields = ["source_prompt"]
-    fields = ["dashboard", "type", "position", "source_prompt", "data_spec_pretty", "view_spec_pretty", "created_at", "updated_at"]
-    readonly_fields = ["type", "source_prompt", "data_spec_pretty", "view_spec_pretty", "created_at", "updated_at"]
+    fields = ["dashboard", "type", "position", "source_prompt", "fields_pretty", "style_pretty", "created_at", "updated_at"]
+    readonly_fields = ["type", "source_prompt", "fields_pretty", "style_pretty", "created_at", "updated_at"]
 
-    @admin.display(description="data_spec")
-    def data_spec_pretty(self, obj):
-        return _pretty_json(obj.data_spec)
+    @admin.display(description="fields")
+    def fields_pretty(self, obj):
+        return _pretty_json(obj.fields)
 
-    @admin.display(description="view_spec")
-    def view_spec_pretty(self, obj):
-        return _pretty_json(obj.view_spec)
+    @admin.display(description="style")
+    def style_pretty(self, obj):
+        return _pretty_json(obj.style)

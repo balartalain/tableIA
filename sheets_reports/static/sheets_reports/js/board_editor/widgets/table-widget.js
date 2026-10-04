@@ -1,7 +1,4 @@
 (function () {
-  // Tabla de datos: las filas de la hoja tal cual, con las columnas elegidas (TableWidget del
-  // backend). No agrupa ni lleva métricas: reutiliza de la tabla dinámica el menú de formatos,
-  // la paginación, el orden de columnas arrastradas y la descarga CSV.
   const DynamicTableWidget = WidgetRegistry.get('dynamic_table');
 
   class TableWidget extends DynamicTableWidget {
@@ -13,20 +10,13 @@
       description: 'Las filas de la hoja, con las columnas que elijas',
     };
     static defaults = { title: 'Tabla', width: 'md:col-span-6', height: 300 };
-    static supportsLabels = false;
-    static supportsTotals = false;
-
-    static get drawerFields() {
-      // Sin "Consulta con la IA" (es de la tabla dinámica).
-      return super.drawerFields.filter(f => f.key !== 'prompt');
-    }
 
     static mockData() {
       return {
         columns: [
-          { header: 'Producto', field: 'Producto', numeric: false },
-          { header: 'Vendedor', field: 'Vendedor', numeric: false },
-          { header: 'Ventas', field: 'Ventas', numeric: true },
+          { header: 'Producto', field: 'Producto' },
+          { header: 'Vendedor', field: 'Vendedor' },
+          { header: 'Ventas', field: 'Ventas' },
         ],
         rows: [
           { Producto: 'Producto A', Vendedor: 'Ana', Ventas: 14200 },
@@ -36,12 +26,18 @@
       };
     }
 
-    renderContent(container, data) {
+    draw(data, style, title) {
+      this.style = { ...this.style, ...style };
+      if (title) this.title = title;
+
       const payload = data || this.constructor.mockData();
+      this._lastData = payload;
+
       if (this._table) {
         this._table.destroy();
         this._table = null;
       }
+      const container = this.getContentContainer();
       container.innerHTML = '';
       container.style.backgroundColor = '#fff';
       container.style.flex = '0 1 auto';
@@ -50,7 +46,7 @@
       const formats = this.constructor.formats;
       const columns = this._orderedColumns(payload.columns || []).map(col => {
         const defaultFormat = col.numeric ? 'number' : 'text';
-        const format = this.formattersMap[col.field] || defaultFormat;
+        const format = this.style.formattersMap?.[col.field] || defaultFormat;
         const result = {
           title: col.header,
           field: col.field,
@@ -64,16 +60,14 @@
       const rows = payload.rows || [];
       this._table = new Tabulator(container, {
         data: rows,
-        // Los nombres de columna de la hoja pueden tener puntos: son claves planas.
         nestedFieldSeparator: false,
         movableColumns: true,
         columns,
         layout: 'fitColumns',
         columnHeaderVertAlign: 'bottom',
-        pagination: this.showPagination,
-        paginationSize: this.pageSize,
+        pagination: this.style.showPagination ?? true,
+        paginationSize: this.style.pageSize ?? 10,
         maxHeight: '100%',
-        // Hojas muy grandes: el backend envía hasta un tope de filas y avisa cuántas había.
         footerElement: payload.truncated
           ? `<span class="text-[11px] text-ink/50 px-2">Mostrando ${rows.length.toLocaleString()} de ${Number(payload.total_rows).toLocaleString()} filas; usa filtros para acotar.</span>`
           : undefined,

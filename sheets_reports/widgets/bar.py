@@ -1,66 +1,117 @@
-import dataclasses
-from dataclasses import dataclass
+"""
+Gráfico de Barras: consulta con `WidgetFields`, apariencia con `WidgetStyle`.
+"""
+from typing import Any, ClassVar, Dict, List, Optional
 
-from sheets_reports.dsl.spec import DataSpec
-from sheets_reports.widgets.base import WIDGETS
-from sheets_reports.widgets.chart import ChartOptions, ChartWidget
-
-
-@dataclass(frozen=True)
-class BarOptions(ChartOptions):
-    # Barras apiladas: solo visual, nunca cambia el cálculo.
-    stacked: bool = False
-
-    @classmethod
-    def _request_fields(cls, data, previous):
-        fallback = previous.stacked if previous is not None else False
-        return {**super()._request_fields(data, previous), "stacked": bool(data.get("stacked", fallback))}
-
-    @classmethod
-    def _view_fields(cls, view):
-        return {**super()._view_fields(view), "stacked": bool(view.get("stacked"))}
-
-    ai_doc = "- stacked: true solo si el usuario pide barras apiladas."
-
-    @classmethod
-    def ai_properties(cls):
-        return {**super().ai_properties(), "stacked": {"type": "boolean"}}
-
-    @classmethod
-    def ai_required(cls):
-        return ["stacked"]
-
-    def reconcile(self, spec: DataSpec):
-        # Apilar solo tiene sentido con series por pivote.
-        return dataclasses.replace(super().reconcile(spec), stacked=self.stacked and bool(spec.pivots))
-
-    def view_fields(self):
-        return {**super().view_fields(), "stacked": self.stacked}
+from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
+from sheets_reports.widgets.presentation import chart_series, percent_aliases
+from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
 
 @WIDGETS.register
-class BarWidget(ChartWidget):
+class BarChartWidget(BaseWidget):
     key = "bar"
+    type_key = "bar"
     label = "Gráfico de Barras"
-    options_cls = BarOptions
-    ai_doc = 'comparar categorías ("ventas por región", "top 5 de productos").'
-    ai_examples = (
-        ("Top 5 productos por ventas en 2026", {
-            "widget_type": "bar", "title": "Top 5 productos 2026",
-            "data_spec": {"dimensions": ["producto"], "pivots": [], "columns": [], "having": [], "trend_by": None,
-                          "filters": [{"field": "anio", "op": "eq", "value": 2026}],
-                          "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}],
-                          "sort": {"by": "total_ventas", "dir": "desc"}, "limit": {"n": 5, "others": False}},
-            "view_options": {"stacked": False, "labels": [{"name": "total_ventas", "label": "Ventas"}]},
-        }),
-        ("Barras apiladas de ventas por categoría y por mes", {
-            "widget_type": "bar", "title": "Ventas por categoría y mes",
-            "data_spec": {"dimensions": ["categoria"], "pivots": ["mes"], "columns": [], "filters": [], "having": [],
-                          "sort": None, "limit": None, "trend_by": None,
-                          "metrics": [{"type": "agg", "as": "total_ventas", "agg": "sum", "field": "ventas"}]},
-            "view_options": {"stacked": True, "labels": [{"name": "total_ventas", "label": "Ventas"}]},
-        }),
-    )
+    ai_doc = 'comparar un número entre pocos grupos (ventas por categoría, por mes).'
+    ai_examples = [
+       (   'ventas por categoría',
+            {   'widget_type': 'bar',
+                'title': 'Ventas por categoría',
+                'fields': {   'dimensions': ['categoria'],
+                              'metrics': [   {   'agg': 'sum',
+                                                 'field': 'ventas',
+                                                 'alias': 'total_ventas'}],
+                              'sort_by': '-total_ventas',
+                              'limit': 5},
+                'style': {'stacked': False}}),
+        (   'ventas por mes separadas por categoría',
+            {   'widget_type': 'bar',
+                'title': 'Ventas por categoría y mes',
+                'fields': {   'dimensions': ['categoria'],
+                              'pivots': ['mes'],
+                              'metrics': [   {   'agg': 'sum',
+                                                 'field': 'ventas',
+                                                 'alias': 'total_ventas'}]},
+                'style': {'stacked': True}})
+    ]
 
-    def compile(self, result, options, spec):
-        return {**super().compile(result, options, spec), "stacked": options.reconcile(spec).stacked}
+    capabilities: ClassVar[dict] = {
+        "dimensions": [1, 1],
+        "pivots": [0, 1],
+        "metrics": [1, 5],
+        "sort": True,
+        "limit": True,
+        "filters": True,
+    }
+
+    # Backend-driven style schema (solo ui: text | select | checkbox | number)
+    style_schema: ClassVar[List[Dict[str, Any]]] = [
+        {"key": "title", "label": "Título", "ui": "text", "default": "Gráfico de Barras"},
+        {"key": "horizontal", "label": "Horizontal", "ui": "checkbox", "default": False},
+        {"key": "stacked", "label": "Apilado", "ui": "checkbox", "default": False},
+        {"key": "color_scheme", "label": "Paleta", "ui": "select", "options": [
+            {"value": "default", "label": "Por defecto"},
+            {"value": "ocean", "label": "Océano"},
+            {"value": "forest", "label": "Bosque"},
+            {"value": "sunset", "label": "Atardecer"},
+        ], "default": "default"},
+        {"key": "yAxisWidth", "label": "Ancho del Eje Y (px)", "ui": "number", "min": 100, "step": 10},
+        {"key": "barWidth", "label": "Ancho de barra (%)", "ui": "number", "min": 10, "max": 100, "step": 5, "default": 70},
+        {"key": "dataLabelFormatter", "label": "Formato de etiquetas. Ej. {value} %", "ui": "text"},
+        {"key": "chartWidth", "label": "Forzar ancho de gráfico (px)", "ui": "number", "min": 100, "step": 50},
+        {"key": "showGrid", "label": "Mostrar cuadrícula", "ui": "checkbox", "default": True},
+    ]
+
+    def compile(
+        self,
+        result: WidgetResult,
+        style: WidgetStyle,
+        fields: Optional[WidgetFields] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        style_dict = style.to_dict()
+        categories, pairs = chart_series(result, fields, metadata)
+
+        df = result.rows
+        series = [
+            {"name": name, "data": df[column].fillna(0).tolist()}
+            for name, column in pairs
+        ]
+
+        horizontal = bool(style_dict.get("horizontal"))
+        stacked = bool(style_dict.get("stacked"))
+        reference_lines = style_dict.get("reference_lines") or []
+
+        output = {
+            "categories": categories,
+            "series": series,
+            "stacked": stacked,
+            "percent": percent_aliases(fields),
+        }
+        if horizontal:
+            output["horizontal"] = True
+        if reference_lines:
+            output["referenceLines"] = self._build_annotations(reference_lines, horizontal)
+
+        return output
+
+    def _build_annotations(self, lines, horizontal):
+        annotations = {"xaxis": [], "yaxis": []}
+        key = "x" if horizontal else "y"
+        for line in lines:
+            if line.get("kind") == "value" and line.get("value") is not None:
+                color = line.get("color", "#d97706")
+                annotations["xaxis" if horizontal else "yaxis"].append({
+                    key: line["value"],
+                    "borderColor": color,
+                    "strokeDashArray": 4,
+                    "label": {
+                        "text": line.get("label", f"Meta: {line['value']}"),
+                        "borderColor": color,
+                        "orientation": "horizontal",
+                        "position": "top" if horizontal else "right",
+                        "style": {"color": "#fff", "background": color, "fontSize": "10px"},
+                    },
+                })
+        return annotations

@@ -1,163 +1,47 @@
 """
-Garantías del diseño: agregar piezas es registrar clases (sin tocar otros módulos) y las capas
-no se mezclan.
+Garantías del diseño: agregar un widget es registrar una clase en un solo archivo (sin tocar
+otros módulos) y las capas no se mezclan (dsl, motor, widgets, servicios, vistas).
 """
 import ast
 import sys
 import tempfile
-from unittest import mock
-from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
-import pandas as pd
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from sheets_reports.dsl.metrics import METRICS, Metric
-from sheets_reports.dsl.schema import REF
-from sheets_reports.engine.plans import PLANS, PlanInput, PlanResult, ResultPlan
 from sheets_reports import sdk
 from sheets_reports.models import Dashboard, Widget, widget_type_choices
-from sheets_reports.services import ai_spec
-from sheets_reports.services.ai_spec import build_system_prompt, build_tool_parameters, generate_widget_spec
+from sheets_reports.services.ai_spec import build_system_prompt, build_tool_parameters
 from sheets_reports.services.widget_service import WidgetService
-from sheets_reports.tests.fixtures import errors_for, sales_ctx, sales_df, spec
-from sheets_reports.dsl.parts import SPEC_PARTS, Dimensions, Filters, Metrics
-from sheets_reports.dsl.spec import DataSpec
-from sheets_reports.widgets import WIDGETS, WidgetType, ext
+from sheets_reports.tests.fixtures import errors_for, examples_ctx, sales_ctx, sales_df
+from sheets_reports.views import _widget_manifest
+from sheets_reports.widgets import WIDGETS, ext
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
-
-# --- Piezas de prueba: un tipo de métrica, una forma de datos y un widget nuevos ------------
-
-@dataclass(frozen=True)
-class ConstantMetric(Metric):
-    """Un número fijo (ej. una meta): no depende de las filas."""
-    key: ClassVar[str] = "constant"
-    label: ClassVar[str] = "«constante»"
-
-    alias: str
-    value: float
-
-    @classmethod
-    def schema(cls, ctx, *, for_ai=False, nested=False):
-        return {
-            "type": "object", "additionalProperties": False, "required": ["type", "as", "value"],
-            "properties": {"type": {"enum": [cls.key]}, "as": REF, "value": {"type": "number"}},
-        }
-
-    @classmethod
-    def from_dict(cls, raw):
-        return cls(alias=raw["as"], value=raw["value"])
-
-    def to_dict(self):
-        return {"type": self.key, "as": self.alias, "value": self.value}
-
-    def scalar(self, ev):
-        return self.value
-
-    def flat(self, fc):
-        return pd.Series(self.value, index=fc.keys, dtype="float64"), self.value
-
-
-@dataclass(frozen=True)
-class RawRowsResult(PlanResult):
-    rows: list
-
-
-class RawRowsPlan(ResultPlan[RawRowsResult]):
-    """Filas crudas, sin agrupar: una forma de datos que no existía."""
-    key = "raw_rows"
-    aggregates = False
-
-    def run(self, spec, data: PlanInput) -> RawRowsResult:
-        return RawRowsResult(rows=data.df[spec.dimensions].head(3).to_dict(orient="records"))
-
-
-class ListSpec(DataSpec):
-    parts = (Dimensions(1, 2), Filters(), Metrics(1, 1, types={"agg", "constant"}))
-
-
-class ListWidget(WidgetType[RawRowsResult, "ViewOptions"]):
-    key = "list"
-    label = "Lista"
-    spec_cls = ListSpec
-    plan_key = "raw_rows"
-
-    def compile(self, result, options, spec):
-        return {"items": result.rows}
-
-
-class RegistryExtensionTests(TestCase):
-    """Un widget, una métrica y un plan nuevos funcionan de punta a punta sin editar el
-    validador, el motor, la IA ni las vistas."""
-
-    def setUp(self):
-        METRICS.register(ConstantMetric)
-        PLANS.register(RawRowsPlan)
-        WIDGETS.register(ListWidget)
-
-    def tearDown(self):
-        WIDGETS.unregister("list")
-        PLANS.unregister("raw_rows")
-        METRICS.unregister("constant")
-
-    def list_spec(self, **overrides):
-        return spec(dimensions=["categoria", "mes"], metrics=[{"type": "constant", "as": "meta", "value": 10}],
-                    **overrides)
-
-    def test_validacion_desde_las_capacidades(self):
-        self.assertEqual(errors_for("list", self.list_spec()), [])
-        self.assertIn("no admite pivote", errors_for("list", self.list_spec(pivots=["anio"]))[0])
-        self.assertIn("«Lista» no se ordena", errors_for("list", self.list_spec(
-            sort={"by": "categoria", "dir": "asc"}))[0])
-        # Los demás widgets no admiten la métrica nueva: lo declara cada widget.
-        self.assertIn("«constante» no están disponibles",
-                      errors_for("bar", spec(metrics=[{"type": "constant", "as": "meta", "value": 1}]))[0])
-
-    def test_metrica_nueva_en_un_widget_existente_que_la_admita(self):
-        # El KPI no la declara: se puede habilitar sin tocar dsl/ (solo sus capacidades).
-        self.assertTrue(errors_for("kpi", spec(dimensions=[], metrics=[{"type": "constant", "as": "m", "value": 1}])))
-
-    def test_aparece_en_la_ia_y_en_el_modelo(self):
-        params = build_tool_parameters(sales_ctx(), widget_type=None)
-        self.assertIn("list", params["properties"]["widget_type"]["enum"])
-        types = [b["properties"]["type"]["enum"][0]
-                 for b in params["properties"]["data_spec"]["properties"]["metrics"]["items"]["anyOf"]]
-        self.assertIn("constant", types)
-        self.assertIn(("list", "Lista"), widget_type_choices())
-
-    def test_aparece_en_el_manifiesto_del_editor(self):
-        # El panel de edición arma su builder con esto: no hay flags que repetir en el frontend.
-        user = get_user_model().objects.create(username="u")
-        dashboard = Dashboard.objects.create(nombre="D", owner=user,
-                                             sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
-        manifest = self.client.get(reverse("board_editor", args=[dashboard.id])).context["widget_manifest"]
-        self.assertEqual(manifest["list"]["data"]["dimensions"], [1, 2])
-        self.assertEqual(manifest["list"]["data"]["metric_types"], ["agg", "constant"])
-        self.assertFalse(manifest["list"]["data"]["sort"])
-        self.assertEqual(manifest["list"]["view"], [])
-
-    def test_crear_y_calcular_por_el_servicio(self):
-        user = get_user_model().objects.create(username="u")
-        dashboard = Dashboard.objects.create(nombre="D", owner=user,
-                                             sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
-        service = WidgetService(dashboard, sales_df())
-        widget = service.create("list", self.list_spec())
-        self.assertEqual(Widget.objects.get().type, "list")
-        self.assertEqual(service.render(widget)["data"]["items"][0], {"categoria": "Hogar", "mes": "Ene"})
+CAPABILITY_KEYS = {"dimensions", "pivots", "metrics", "sort", "limit", "filters"}
+STYLE_UI = {"text", "select", "checkbox", "number"}
 
 
 class LayerTests(SimpleTestCase):
-    """dsl/ no conoce widgets ni el motor; el motor no conoce widgets."""
+    """dsl/ no conoce widgets ni el motor; el motor no conoce widgets; nadie importa la IA."""
 
     def imports(self, folder: str) -> list[tuple[Path, str]]:
+        """Imports del paquete en ejecución: se ignoran los que solo existen para el tipado
+        (`if TYPE_CHECKING:`), porque no cambia de qué depende el módulo."""
         found = []
         for path in (PACKAGE / folder).rglob("*.py"):
-            for node in ast.walk(ast.parse(path.read_text())):
+            tree = ast.parse(path.read_text())
+            skip: set[int] = set()
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.If) and isinstance(node.test, ast.Name)
+                        and node.test.id == "TYPE_CHECKING"):
+                    skip |= {id(child) for child in ast.walk(node)}
+            for node in ast.walk(tree):
+                if id(node) in skip:
+                    continue
                 if isinstance(node, ast.ImportFrom) and node.module:
                     found.append((path, node.module))
                 elif isinstance(node, ast.Import):
@@ -169,7 +53,7 @@ class LayerTests(SimpleTestCase):
                if m.startswith(("sheets_reports.widgets", "sheets_reports.engine", "sheets_reports.services"))]
         self.assertEqual(bad, [])
 
-    def test_motor_no_importa_widgets(self):
+    def test_motor_no_importa_widgets_ni_servicios(self):
         bad = [(p.name, m) for p, m in self.imports("engine")
                if m.startswith(("sheets_reports.widgets", "sheets_reports.services"))]
         self.assertEqual(bad, [])
@@ -183,200 +67,230 @@ class LayerTests(SimpleTestCase):
                     found.append((path.name, node.value))
         self.assertEqual(found, [])
 
+    def test_nadie_importa_gemini(self):
+        """La IA vive en un único servicio: nada más depende del SDK de Gemini."""
+        bad = []
+        for path in PACKAGE.rglob("*.py"):
+            if "tests" in path.parts or "migrations" in path.parts:
+                continue
+            if path.name == "ai_spec.py" and path.parent.name == "services":
+                continue
+            for node in ast.walk(ast.parse(path.read_text())):
+                modules = ([node.module or ""] if isinstance(node, ast.ImportFrom)
+                           else [a.name for a in node.names] if isinstance(node, ast.Import) else [])
+                bad += [(path.name, m) for m in modules if m.startswith("google.genai")]
+        self.assertEqual(bad, [])
 
-# --- Widgets de extensión: un único archivo en widgets/ext/ ---------------------------------
+    def test_no_queda_el_dsl_legacy(self):
+        gone = ["metrics.py", "parts.py", "spec.py", "rules.py", "aggregations.py",
+                "calc_ops.py", "groups.py", "views.py.bak"]
+        leftovers = [name for name in gone if (PACKAGE / "dsl" / name).exists()]
+        leftovers += [name for name in ("executor.py", "results.py", "plans") if (PACKAGE / "engine" / name).exists()]
+        leftovers += [name for name in ("chart.py", "view.py") if (PACKAGE / "widgets" / name).exists()]
+        self.assertEqual(leftovers, [])
 
-HISTOGRAM_MODULE = '''
-"""Histograma: cuántas filas caen en cada intervalo de una columna numérica. Trae su propio
-dato en el data_spec (bins), su forma de datos y sus opciones: todo en este archivo."""
-from dataclasses import dataclass
-
-import numpy as np
-
-from sheets_reports.sdk import (
-    SPEC_PARTS, WIDGETS, DataSpec, Filters, PlanResult, ResultPlan, SpecPart, ViewOptions,
-    WidgetType, choices, column_message,
-)
-
-
-@SPEC_PARTS.register
-class Bins(SpecPart):
-    """Pieza nueva del data_spec: {"column": columna numérica, "n": cantidad de intervalos}."""
-    key = "bins"
-
-    # Su control en el panel: un field-group, sin JS propio.
-    ui = "field-group"
-    panel_order = 5
-    label = "Intervalos"
-
-    def panel_fields(self, columns):
-        return {"layout": "columns", "required": "column", "item_fields": [
-            {"key": "column", "ui": "select", "label": "Columna", "options": choices(columns.numeric)},
-            {"key": "n", "ui": "number", "label": "Intervalos", "min": 2, "max": 30},
-        ]}
-
-    def schema(self, ctx, *, for_ai=False):
-        return {"type": "object", "additionalProperties": False, "required": ["column", "n"],
-                "properties": {"column": {"enum": ctx.ordered_numeric_fields},
-                               "n": {"type": "integer", "minimum": 2, "maximum": 30}}}
-
-    def parse(self, raw):
-        return {"column": raw["column"], "n": int(raw["n"])}
-
-    def names(self, value):
-        return [value["column"]] if value else []
-
-    def readable(self, error, path, ctx):
-        return column_message(error, path, ctx) if error.validator == "enum" else None
-
-    def describe(self):
-        return ["bins"]
+    def test_no_quedan_simbolos_del_contrato_viejo(self):
+        """Nada del código (ni nombres ni atributos) apunta al DSL que se eliminó."""
+        banned = {"data_spec", "view_spec", "generate_widget_spec", "widget_type_from_spec",
+                  "SPEC_PARTS", "SpecPart", "ResultPlan", "PlanInput", "PlanResult",
+                  "ViewOptions", "DataSpec", "WidgetType", "METRICS", "PLANS"}
+        found = []
+        for path in PACKAGE.rglob("*.py"):
+            if "tests" in path.parts or "migrations" in path.parts:
+                continue
+            for node in ast.walk(ast.parse(path.read_text())):
+                name = None
+                if isinstance(node, ast.Name):
+                    name = node.id
+                elif isinstance(node, ast.Attribute):
+                    name = node.attr
+                elif isinstance(node, ast.ImportFrom):
+                    name = ",".join(a.name for a in node.names)
+                if name and name in banned:
+                    found.append(f"{path.name}:{getattr(node, 'lineno', '?')}: {name}")
+        self.assertEqual(found, [])
 
 
-class HistogramSpec(DataSpec):
-    parts = (Bins(), Filters())
+class WidgetContractTests(SimpleTestCase):
+    """Todo widget registrado cumple el contrato de las tres capas."""
+
+    def test_claves_de_registro_coherentes(self):
+        for key, widget in WIDGETS.items():
+            with self.subTest(widget=key):
+                self.assertEqual((key, widget.type_key), (widget.key, widget.key))
+                self.assertTrue(widget.label)
+                self.assertLessEqual(len(key), Widget._meta.get_field("type").max_length)
+
+    def test_capacidades_planas_y_validas(self):
+        for key, widget in WIDGETS.items():
+            with self.subTest(widget=key):
+                caps = widget.capabilities
+                self.assertTrue(CAPABILITY_KEYS <= set(caps), set(caps) ^ CAPABILITY_KEYS)
+                for name in ("dimensions", "pivots", "metrics"):
+                    low, high = caps[name]
+                    self.assertLessEqual(0, low)
+                    self.assertLessEqual(low, high, f"{key}.{name} = {caps[name]}")
+                for name in ("sort", "limit", "filters"):
+                    self.assertIsInstance(caps[name], bool)
+
+    def test_style_schema_con_solo_ui_validos(self):
+        for key, widget in WIDGETS.items():
+            for control in widget.style_schema:
+                with self.subTest(widget=key, control=control["key"]):
+                    self.assertIn(control.get("ui"), STYLE_UI)
+                    self.assertTrue(control.get("label"))
+                    if control["ui"] == "select":
+                        options = control.get("options") or []
+                        self.assertTrue(options)
+                        self.assertEqual({o["value"] for o in options}, {o["value"] for o in options})
+                        for option in options:
+                            self.assertTrue({"value", "label"} <= set(option))
+                    if "default" in control:
+                        self._assert_default_matches(control)
+
+    @staticmethod
+    def _assert_default_matches(control):
+        default = control["default"]
+        ui = control["ui"]
+        if ui == "checkbox":
+            assert isinstance(default, bool), control
+        elif ui == "number":
+            assert isinstance(default, (int, float)) and not isinstance(default, bool), control
+        elif ui == "text":
+            assert isinstance(default, str), control
+        else:
+            assert default in [o["value"] for o in control.get("options", [])], control
+
+    def test_style_defaults_cubre_solo_claves_del_schema(self):
+        for key, widget in WIDGETS.items():
+            with self.subTest(widget=key):
+                self.assertEqual(set(widget.style_defaults()),
+                                 {c["key"] for c in widget.style_schema if "default" in c})
+
+    def test_lo_que_pinta_el_editor_es_el_manifiesto(self):
+        manifest = _widget_manifest()
+        self.assertEqual(set(manifest), set(WIDGETS.keys()))
+        for key, widget in WIDGETS.items():
+            with self.subTest(widget=key):
+                entry = manifest[key]
+                self.assertEqual(entry["label"], widget.label)
+                self.assertEqual(entry["style_schema"], widget.style_schema)
+                self.assertEqual(entry["capabilities"], widget.capabilities)
+                self.assertEqual(entry["max_per_dashboard"], widget.max_per_dashboard)
+
+    def test_los_ejemplos_de_la_ia_son_forms_validos(self):
+        for key, widget in WIDGETS.items():
+            if not widget.ai_enabled:
+                continue
+            self.assertTrue(widget.ai_doc, key)
+            for prompt, args in widget.ai_examples:
+                with self.subTest(widget=key, prompt=prompt):
+                    self.assertEqual(errors_for(args["widget_type"], args["fields"],
+                                                args.get("style"), ctx=examples_ctx(),
+                                                title=args.get("title")), [])
 
 
-@dataclass(frozen=True)
-class BinsResult(PlanResult):
-    edges: list
-    counts: list
+# --- Extensión: un widget nuevo es UN archivo en widgets/ext/ --------------------------------
+
+LIST_MODULE = '''
+"""Lista: las filas de la hoja tal cual. Una extensión completa en un solo archivo."""
+from sheets_reports.sdk import BaseWidget, WIDGET_REGISTRY
 
 
-class BinsPlan(ResultPlan[BinsResult]):
-    """Forma de datos propia: no se registra en PLANS, la devuelve el widget."""
-    aggregates = False
+@WIDGET_REGISTRY.register
+class ListWidget(BaseWidget):
+    key = "list"
+    type_key = "list"
+    label = "Lista"
+    ai_doc = "las filas de la hoja tal cual, para revisar los datos crudos."
+    ai_examples = [
+        ("muéstrame las filas de la hoja", {
+            "widget_type": "list", "title": "Filas de la hoja",
+            "fields": {"dimensions": [], "metrics": []}, "style": {},
+        }),
+    ]
+    capabilities = {
+        "dimensions": [0, 0], "pivots": [0, 0], "metrics": [0, 0],
+        "sort": False, "limit": False, "filters": True,
+    }
+    style_schema = [
+        {"key": "title", "label": "Título", "ui": "text", "default": "Lista"},
+        {"key": "maxRows", "label": "Filas a mostrar", "ui": "number", "min": 1, "default": 3},
+    ]
 
-    def run(self, spec, data):
-        counts, edges = np.histogram(data.df[spec.bins["column"]].dropna(), bins=spec.bins["n"])
-        return BinsResult(edges=edges.tolist(), counts=counts.tolist())
-
-
-@dataclass(frozen=True)
-class HistogramOptions(ViewOptions):
-    cumulative: bool = False
-    ai_doc = "- cumulative: true si pide la distribución acumulada."
-
-    @classmethod
-    def ai_properties(cls):
-        return {"cumulative": {"type": "boolean"}}
-
-    @classmethod
-    def _request_fields(cls, data, previous):
-        fallback = previous.cumulative if previous is not None else False
-        return {**super()._request_fields(data, previous), "cumulative": bool(data.get("cumulative", fallback))}
-
-    @classmethod
-    def _view_fields(cls, view):
-        return {**super()._view_fields(view), "cumulative": bool(view.get("cumulative"))}
-
-    def view_fields(self):
-        return {"cumulative": self.cumulative}
-
-
-@WIDGETS.register
-class HistogramWidget(WidgetType[BinsResult, HistogramOptions]):
-    key = "histogram"
-    label = "Histograma"
-    spec_cls = HistogramSpec
-    options_cls = HistogramOptions
-    ai_doc = 'cómo se distribuye una columna numérica ("distribución de las ventas").'
-
-    def plan(self, spec):
-        return BinsPlan()
-
-    def default_title(self, spec, options):
-        return f"Distribución de {spec.bins['column']}"
-
-    def compile(self, result, options, spec):
-        labels = [f"{a:g}-{b:g}" for a, b in zip(result.edges, result.edges[1:])]
-        return {"categories": labels, "series": [{"name": "Filas", "data": result.counts}]}
+    def compile(self, result, style, fields=None, metadata=None):
+        rows = result.rows.head(int(style.to_dict().get("maxRows") or 3))
+        return {"type": "rows", "rows": rows.to_dict(orient="records")}
 '''
 
 
 class ExtensionTests(TestCase):
-    """Un widget nuevo es un único archivo en un paquete de extensiones: se carga solo y
-    funciona de punta a punta (validación, IA, manifiesto, servicio) sin editar el core."""
+    """Un widget nuevo funciona de punta a punta (registro, validación, IA, manifiesto,
+    servicio) sin editar el core."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         package = Path(self.tmp.name) / "tableia_ext_demo"
         package.mkdir()
         (package / "__init__.py").write_text("")
-        (package / "histogram.py").write_text(HISTOGRAM_MODULE)
+        (package / "list.py").write_text(LIST_MODULE)
         sys.path.insert(0, self.tmp.name)
         self.loaded = ext.load("tableia_ext_demo")
 
     def tearDown(self):
-        WIDGETS.unregister("histogram")
-        SPEC_PARTS.unregister("bins")
+        WIDGETS.unregister("list")
         sys.path.remove(self.tmp.name)
         for name in [m for m in sys.modules if m.startswith("tableia_ext_demo")]:
             del sys.modules[name]
         self.tmp.cleanup()
 
-    def histogram_spec(self, **overrides):
-        return {"source": "0", "filters": [], "bins": {"column": "ventas", "n": 4}, **overrides}
-
     def test_se_carga_y_registra_solo(self):
-        self.assertEqual(self.loaded, ["histogram"])
-        self.assertIn(("histogram", "Histograma"), widget_type_choices())
-        self.assertIn("histogram", build_tool_parameters(sales_ctx(), widget_type=None)
+        self.assertEqual(self.loaded, ["list"])
+        self.assertIn(("list", "Lista"), widget_type_choices())
+        self.assertIn("list", build_tool_parameters(sales_ctx(), widget_type=None)
                       ["properties"]["widget_type"]["enum"])
 
-    def test_valida_con_su_pieza_propia(self):
-        self.assertEqual(errors_for("histogram", self.histogram_spec()), [])
-        self.assertEqual(errors_for("histogram", self.histogram_spec(bins={"column": "nada", "n": 4})),
-                         ["bins.column: la columna 'nada' no existe en la hoja."])
-        # Las piezas de los demás widgets no aplican; las del histograma, en los demás tampoco.
-        self.assertIn("dimensions: este tipo de widget no admite dimensión.",
-                      errors_for("histogram", self.histogram_spec(dimensions=["categoria"])))
-        self.assertIn("bins: «Gráfico de Barras» no admite 'bins'.",
-                      errors_for("bar", spec(bins={"column": "ventas", "n": 4})))
-        # Lo que el builder manda vacío de otras piezas se ignora.
-        self.assertEqual(errors_for("histogram", {**spec(dimensions=[], metrics=[]), "bins": {"column": "ventas", "n": 4}}), [])
+    def test_valida_con_sus_propias_capacidades(self):
+        valid = {"dimensions": [], "pivots": [], "metrics": [], "filters": []}
+        self.assertEqual(errors_for("list", valid), [])
+        self.assertIn("dimensiones: exactamente 0",
+                      errors_for("list", {**valid, "dimensions": ["categoria"]})[0])
+        self.assertIn("no admite orden",
+                      errors_for("list", {**valid, "sort_by": "categoria"})[0])
+        # Las capacidades del resto no cambian: cada tipo habla por sí mismo.
+        self.assertIn("métricas",
+                      errors_for("bar", {"dimensions": ["categoria"], "metrics": [], "pivots": []})[0])
 
-    def test_manifiesto_con_sus_opciones(self):
-        manifest = WIDGETS.get("histogram").manifest(sdk.PanelColumns(numeric=("ventas",)))
-        self.assertEqual(manifest["data"]["dimensions"], [0, 0])
-        self.assertEqual(manifest["view"], ["cumulative"])
-        # Su pieza propia aparece en el panel con sus opciones ya resueltas.
-        bins = manifest["parts"][0]
-        self.assertEqual((bins["key"], bins["ui"]), ("bins", "field-group"))
-        self.assertEqual(bins["item_fields"][0]["options"], [{"value": "ventas", "label": "ventas"}])
-        self.assertEqual([p["key"] for p in manifest["parts"]], ["bins", "filters"])
-
-    def test_la_ia_lo_conoce_y_llena_sus_opciones(self):
+    def test_aparece_en_el_prompt_de_la_ia(self):
         prompt = build_system_prompt()
-        self.assertIn('- histogram: cómo se distribuye una columna numérica ("distribución de las ventas"). '
-                      'Admite: bins; sin having, sort, limit.', prompt)
-        self.assertIn("- cumulative: true si pide la distribución acumulada. (solo histogram)", prompt)
-        # Sin tipo fijado, la tool ofrece la clave nueva; la IA solo manda las del histograma.
-        tool = build_tool_parameters(sales_ctx(), widget_type=None)
-        self.assertIn("bins", tool["properties"]["data_spec"]["properties"])
-        args = {"widget_type": "histogram", "title": "Distribución",
-                "data_spec": {"bins": {"column": "ventas", "n": 3}},
-                "view_options": {"labels": [], "cumulative": True}}
-        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)), \
-                mock.patch.object(ai_spec, "_audit"):
-            result = generate_widget_spec("distribución de las ventas", None, sales_ctx())
-        self.assertEqual(result["data_spec"], {"source": "0", "bins": {"column": "ventas", "n": 3}, "filters": []})
-        self.assertTrue(result["view_spec"]["cumulative"])
+        self.assertIn("- list: las filas de la hoja tal cual, para revisar los datos crudos. "
+                      "Admite: sin dimensiones, sin pivotes, sin métricas, sin orden, sin límite, "
+                      "filtros.", prompt)
+        self.assertIn("- style.maxRows: number (Filas a mostrar)", prompt)
 
-    def test_crear_y_calcular_con_su_propio_plan(self):
-        self.assertNotIn("bins", PLANS)
+    def test_aparece_en_el_manifiesto_del_editor(self):
+        user = get_user_model().objects.create(username="u")
+        dashboard = Dashboard.objects.create(nombre="D", owner=user,
+                                             sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        manifest = self.client.get(reverse("board_editor", args=[dashboard.id])).context["widget_manifest"]
+        self.assertEqual(manifest["list"]["capabilities"]["dimensions"], [0, 0])
+        self.assertEqual(manifest["list"]["style_schema"], WIDGETS.get("list").style_schema)
+
+    def test_crear_y_calcular_por_el_servicio(self):
         user = get_user_model().objects.create(username="u")
         dashboard = Dashboard.objects.create(nombre="D", owner=user,
                                              sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
         service = WidgetService(dashboard, sales_df())
-        # El builder manda todas las claves que conoce; las de otras piezas van vacías.
-        payload = {**spec(dimensions=[], metrics=[]), "bins": {"column": "ventas", "n": 4}, "cumulative": True}
-        widget = service.create("histogram", payload)
-        self.assertEqual(widget.data_spec, {"source": "0", "bins": {"column": "ventas", "n": 4}, "filters": []})
-        self.assertEqual(widget.view_spec["title"], "Distribución de ventas")
+        widget = service.create("list", {
+            "title": "Primeras filas",
+            "fields": {"dimensions": [], "pivots": [], "metrics": [], "filters": []},
+            "style": {"maxRows": 2},
+        })
+        self.assertEqual(Widget.objects.get().type, "list")
+        self.assertEqual(widget.style, {"maxRows": 2})
         data = service.render(widget)["data"]
-        self.assertEqual(len(data["categories"]), 4)
-        self.assertEqual(sum(data["series"][0]["data"]), len(sales_df()))
+        self.assertEqual(len(data["rows"]), 2)
+        self.assertEqual(data["rows"][0]["categoria"], "Hogar")
 
 
 class ExtensionImportTests(SimpleTestCase):
@@ -400,6 +314,14 @@ class ExtensionImportTests(SimpleTestCase):
     def test_el_sdk_exporta_lo_que_declara(self):
         missing = [name for name in sdk.__all__ if not hasattr(sdk, name)]
         self.assertEqual(missing, [])
+
+    def test_el_sdk_expone_el_contrato_plano(self):
+        from sheets_reports.widgets.schemas import WidgetFields, WidgetForm, WidgetStyle
+        self.assertIs(sdk.WidgetFields, WidgetFields)
+        self.assertIs(sdk.WidgetStyle, WidgetStyle)
+        self.assertIs(sdk.WidgetForm, WidgetForm)
+        self.assertTrue(issubclass(sdk.BaseWidget, object))
+        self.assertEqual(sdk.WIDGET_REGISTRY, WIDGETS)
 
     def test_el_core_no_importa_extensiones(self):
         bad = []

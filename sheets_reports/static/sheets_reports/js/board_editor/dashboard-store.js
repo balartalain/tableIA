@@ -1,10 +1,7 @@
 const AI_FETCH_TIMEOUT_MS = 120000;
 const RENDER_FETCH_TIMEOUT_MS = 60000;
-// Espera tras el último cambio de orden o alto antes de guardarlo.
 const LAYOUT_SAVE_DELAY_MS = 600;
 
-// Aborta si tarda demasiado y nunca truena por JSON inválido (p. ej. una página HTML de error
-// devuelta por un timeout de gateway/proxy) — deja que quien llama decida el mensaje de error.
 async function fetchJsonSafe(url, options = {}, timeoutMs = AI_FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -17,642 +14,107 @@ async function fetchJsonSafe(url, options = {}, timeoutMs = AI_FETCH_TIMEOUT_MS)
   }
 }
 
-// "Resumir por" (como en las tablas dinámicas de Sheets).
+// `window.apiUrl` lo define base.html con el prefijo de despliegue (SCRIPT_NAME).
+
+const EMPTY_FIELDS = () => ({
+  dimensions: [],
+  pivots: [],
+  metrics: [],
+  filters: [],
+  columns: [],
+  sort_by: null,
+  limit: null,
+});
+
+// Operadores del motor de filtros (dsl/conditions.py) con su etiqueta para el editor.
+const FILTER_OPS = [
+  { value: 'eq', label: 'es igual a', needsValue: true },
+  { value: 'ne', label: 'es distinto de', needsValue: true },
+  { value: 'lt', label: 'es menor que', needsValue: true },
+  { value: 'lte', label: 'es menor o igual que', needsValue: true },
+  { value: 'gt', label: 'es mayor que', needsValue: true },
+  { value: 'gte', label: 'es mayor o igual que', needsValue: true },
+  { value: 'in', label: 'está en', needsValue: true, isList: true },
+  { value: 'not_in', label: 'no está en', needsValue: true, isList: true },
+  { value: 'between', label: 'entre', needsValue: true, isRange: true },
+  { value: 'contains', label: 'contiene', needsValue: true },
+  { value: 'is_empty', label: 'está vacío', needsValue: false },
+  { value: 'not_empty', label: 'no está vacío', needsValue: false },
+];
+
+const RELATIVE_VALUES = [
+  { value: '', label: 'Un valor…' },
+  { value: 'current_year', label: 'Este año' },
+  { value: 'previous_year', label: 'El año anterior' },
+  { value: 'current_month', label: 'Este mes (1-12)' },
+  { value: 'max', label: 'El último valor de la columna' },
+  { value: 'second_max', label: 'El anterior al último' },
+  { value: 'min', label: 'El primer valor de la columna' },
+];
+
 const AGG_OPTIONS = [
   { value: 'sum', label: 'Suma' },
-  { value: 'count', label: 'Conteo' },
-  { value: 'count_distinct', label: 'Contar únicos' },
   { value: 'avg', label: 'Promedio' },
+  { value: 'median', label: 'Mediana' },
   { value: 'min', label: 'Mínimo' },
   { value: 'max', label: 'Máximo' },
-  { value: 'median', label: 'Mediana' },
+  { value: 'std', label: 'Desviación estándar' },
+  { value: 'count', label: 'Conteo de filas' },
+  { value: 'count_distinct', label: 'Valores distintos' },
 ];
 
-// "Mostrar como". Qué opciones tienen sentido depende de si hay dimensión y pivote.
-const SHOW_AS_LABELS = {
-  value: 'Valor',
-  pct_row: '% de la fila',
-  pct_column: '% de la columna',
-  pct_total: '% del total general',
-};
+let CONDITION_SEQ = 0;
 
-// Tipos de métrica (dsl/metrics: METRICS). "Por grupo" es solo del KPI (DataCapabilities.metric_types).
-const METRIC_TYPE_OPTIONS = [
-  { value: 'agg', label: 'Resumir una columna' },
-  { value: 'calc', label: 'Cálculo entre métricas' },
-  { value: 'grouped', label: 'Por grupo (condición / ranking)' },
-];
-
-// Operaciones de una métrica calculada (dsl/calc_ops.py: CALC_OPS).
-const CALC_OP_OPTIONS = [
-  { value: 'sub', label: '− menos', word: 'dif' },
-  { value: 'add', label: '+ más', word: 'suma' },
-  { value: 'mul', label: '× por', word: 'prod' },
-  { value: 'div', label: '÷ entre', word: 'div' },
-  { value: 'ratio_pct', label: 'como % de', word: 'pct' },
-  { value: 'diff_pct', label: 'variación % vs', word: 'var' },
-];
-
-// Resultado de una métrica por grupo (dsl/metrics/grouped.py: GROUP_RESULTS).
-const GROUP_RESULT_OPTIONS = [
-  { value: 'count', label: 'Cuántos grupos cumplen', word: 'grupos' },
-  { value: 'pct_groups', label: '% de grupos que cumplen', word: 'pct_grupos' },
-  { value: 'top', label: 'El grupo con el mayor…', word: 'top' },
-  { value: 'bottom', label: 'El grupo con el menor…', word: 'menor' },
-  { value: 'sum', label: 'Suma de…', word: 'suma' },
-  { value: 'avg', label: 'Promedio de…', word: 'promedio' },
-  { value: 'min', label: 'Mínimo de…', word: 'minimo' },
-  { value: 'max', label: 'Máximo de…', word: 'maximo' },
-];
-const COUNT_RESULTS = ['count', 'pct_groups'];
-const RANKING_RESULTS = ['top', 'bottom'];
-
-// Operadores de las condiciones (dsl/conditions.py: FILTER_OPS). `numeric`: solo columnas numéricas.
-const FILTER_OP_OPTIONS = [
-  { value: 'eq', label: 'es igual a', short: '=' },
-  { value: 'ne', label: 'es distinto de', short: '≠' },
-  { value: 'gt', label: 'mayor que', short: '>', numeric: true },
-  { value: 'gte', label: 'mayor o igual que', short: '≥', numeric: true },
-  { value: 'lt', label: 'menor que', short: '<', numeric: true },
-  { value: 'lte', label: 'menor o igual que', short: '≤', numeric: true },
-  { value: 'between', label: 'está entre', short: 'entre', numeric: true },
-  { value: 'in', label: 'es uno de', short: 'es uno de' },
-  { value: 'not_in', label: 'no es ninguno de', short: 'no es ninguno de' },
-  { value: 'contains', label: 'contiene', short: 'contiene' },
-  { value: 'is_empty', label: 'está vacío', short: 'está vacío' },
-  { value: 'not_empty', label: 'no está vacío', short: 'no está vacío' },
-];
-const LIST_OPS = ['in', 'not_in'];
-const EMPTY_OPS = ['is_empty', 'not_empty'];
-// Operadores que aceptan un valor relativo (dsl/conditions.py: eq, ne y comparaciones).
-const RELATIVE_OPS = ['eq', 'ne', 'gt', 'gte', 'lt', 'lte'];
-
-// De dónde sale el valor de una condición: fijo, o relativo (dsl/conditions.py: RELATIVE_VALUES).
-const VALUE_MODE_OPTIONS = [
-  { value: 'value', label: 'Valor fijo…' },
-  { value: 'current_year', label: 'Año actual' },
-  { value: 'previous_year', label: 'Año anterior' },
-  { value: 'current_month', label: 'Mes actual (1-12)' },
-  { value: 'max', label: 'Último valor de la columna' },
-  { value: 'second_max', label: 'Penúltimo valor' },
-  { value: 'min', label: 'Primer valor' },
-];
-
-// Comparaciones de las condiciones sobre grupos (having).
-const COMPARE_OP_OPTIONS = FILTER_OP_OPTIONS.filter(o => RELATIVE_OPS.includes(o.value));
-
-const OP_SHORT = Object.fromEntries(FILTER_OP_OPTIONS.map(o => [o.value, o.short]));
-
-// Totales por nivel de cada lista de agrupación (opción de vista de la tabla dinámica).
-const LIST_TOTALS = { dimensions: 'rowTotals', pivots: 'columnTotals' };
-
-// Totales por nivel de filas/columnas (rowTotals/columnTotals) ajustados a `n` niveles;
-// los que faltan quedan visibles.
-function totalsLevels(list, n) {
-  return Array.from({ length: n }, (_, i) => (list || [])[i] !== false);
-}
-
-// Filas y columnas elegidas en el builder, sin vacíos ni repetidos (una columna usada como
-// fila no puede ser además columna de pivote).
-function chosen(list) {
-  return [...new Set((list || []).filter(Boolean))];
-}
-
-// Clase del widget que edita el builder (sus capacidades: dimensión, pivote, métricas...).
-function builderClass(b) {
-  return b && b.widget && WidgetRegistry.has(b.widget) ? WidgetRegistry.get(b.widget) : BaseWidget;
-}
-
-// Filas, columnas de pivote y columnas sueltas elegidas (panel.js: builderList).
-function builderDims(b) {
-  return builderList(b, 'dimensions');
-}
-
-function builderPivots(b) {
-  return builderList(b, 'pivots');
-}
-
-function builderColumns(b) {
-  return builderList(b, 'columns');
-}
-
-// count cuenta filas y no usa campo.
-function isCountAgg(agg) {
-  return agg === 'count';
-}
-
-// Identificador local y estable de cada métrica del builder: los cálculos, las condiciones
-// sobre grupos, el orden y los roles del KPI se refieren a métricas por este id (su alias
-// "as" cambia al cambiar la métrica); builderToPayload lo traduce al alias.
-let _metricSeq = 0;
-function newId() {
-  _metricSeq += 1;
-  return `m${_metricSeq}`;
-}
-
-function slug(text) {
-  return String(text)
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-}
-
-function asAlias(text) {
-  const s = slug(text);
-  return (/^[a-z]/.test(s) ? s : `m_${s}`).slice(0, 63);
-}
-
-// Nombre de columna resultante ("as") para una métrica agg: snake_case ASCII, como exige el
-// schema (^[a-z][a-z0-9_]{0,62}$). count no depende del campo: siempre "cantidad". Las
-// condiciones propias de la métrica se agregan al final (ej. total_ventas_2026).
-function metricAlias(agg, field, showAs, suffix = '') {
-  const pct = showAs && showAs !== 'value' ? 'pct_' : '';
-  const prefix = {
-    avg: 'promedio', min: 'minimo', max: 'maximo', median: 'mediana', count_distinct: 'unicos',
-  }[agg] || 'total';
-  const base = agg === 'count' ? `${pct}cantidad` : `${pct}${prefix}_${field}`;
-  return asAlias(suffix ? `${base}_${suffix}` : base);
-}
-
-// Cabecera por defecto de una columna: el mismo humanize() del backend (widgets/presentation.py), para
-// que el placeholder del campo "Nombre a mostrar" sea el título que se ve si no se personaliza.
-function defaultColumnName(name) {
+// Nombre visible sin «Nombre a mostrar»: el mismo texto que arma el backend (`humanize`).
+function humanizeName(name) {
   const text = String(name || '').replace(/_/g, ' ').trim();
-  return text ? text[0].toUpperCase() + text.slice(1) : '';
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
 }
 
-// --- Condiciones -----------------------------------------------------------------------
-
-// `_k`: clave estable para los x-for del panel (no se envía).
-function newCondition(field = '') {
-  return { _k: newId(), field, op: 'eq', mode: 'value', value: '', value2: '' };
+function opMeta(value) {
+  return FILTER_OPS.find(o => o.value === value) || FILTER_OPS[0];
 }
 
-function conditionFromSpec(f) {
-  const c = newCondition(f.field);
-  c.op = f.op;
-  if (f.relative) c.mode = f.relative;
-  if (f.op === 'between' && Array.isArray(f.value)) {
-    [c.value, c.value2] = f.value.map(String);
-  } else if (Array.isArray(f.value)) {
-    c.value = f.value.join(', ');
-  } else if (f.value !== undefined && f.value !== null) {
-    c.value = String(f.value);
-  }
-  return c;
-}
-
-// Valor tipado según la columna: en una numérica, "2026" se envía como 2026.
-function typedValue(text, numeric) {
-  const v = String(text ?? '').trim();
-  if (numeric && v !== '' && !Number.isNaN(Number(v))) return Number(v);
-  return v;
-}
-
-// Condición del builder -> condición del spec; null si está incompleta (no se envía).
-function conditionToSpec(c, numericFields) {
-  if (!c.field || !c.op) return null;
-  const numeric = numericFields.has(c.field);
-  if (EMPTY_OPS.includes(c.op)) return { field: c.field, op: c.op };
-  if (RELATIVE_OPS.includes(c.op) && c.mode && c.mode !== 'value') {
-    return { field: c.field, op: c.op, relative: c.mode };
-  }
-  if (LIST_OPS.includes(c.op)) {
-    const values = String(c.value || '').split(',').map(v => typedValue(v, numeric)).filter(v => v !== '');
-    return values.length ? { field: c.field, op: c.op, value: values } : null;
-  }
-  if (c.op === 'between') {
-    const range = [c.value, c.value2].map(v => (String(v ?? '').trim() === '' ? NaN : Number(v)));
-    return range.some(Number.isNaN) ? null : { field: c.field, op: c.op, value: range };
-  }
-  const value = typedValue(c.value, numeric);
-  return value === '' ? null : { field: c.field, op: c.op, value };
-}
-
-function conditionsToSpec(list, numericFields) {
-  return (list || []).map(c => conditionToSpec(c, numericFields)).filter(Boolean);
-}
-
-function describeCondition(f) {
-  if (EMPTY_OPS.includes(f.op)) return `${f.field} ${OP_SHORT[f.op]}`;
-  const value = f.relative
-    ? (VALUE_MODE_OPTIONS.find(o => o.value === f.relative) || { label: f.relative }).label.toLowerCase()
-    : Array.isArray(f.value) ? f.value.join(f.op === 'between' ? ' y ' : ', ') : f.value;
-  return `${f.field} ${OP_SHORT[f.op] || f.op} ${value}`;
-}
-
-// --- Condiciones sobre grupos (having) -------------------------------------------------
-
-function newGroupCondition(left = '') {
-  return { _k: newId(), left, op: 'lt', rightKind: 'metric', right: '' };
-}
-
-// `idOf`: alias -> id local de la métrica.
-function groupConditionFromSpec(h, idOf) {
-  const numeric = typeof h.right === 'number';
-  return {
-    _k: newId(),
-    left: idOf[h.left] || '',
-    op: h.op,
-    rightKind: numeric ? 'number' : 'metric',
-    right: numeric ? String(h.right) : (idOf[h.right] || ''),
+// --- condición: lo que se edita ({_k, field, op, mode, value, value2, relative}) →
+// la forma plana que valida el backend ({field, op, value} | {field, op, relative}).
+function conditionToPayload(c, numericFields) {
+  const numeric = numericFields.includes(c.field);
+  const coerce = (raw) => {
+    const text = String(raw ?? '').trim();
+    if (text === '') return '';
+    return numeric && !Number.isNaN(Number(text)) ? Number(text) : text;
   };
-}
 
-// `aliasOf`: id local -> alias; null si está incompleta.
-function groupConditionToSpec(h, aliasOf) {
-  const left = aliasOf[h.left];
-  if (!left) return null;
-  if (h.rightKind === 'number') {
-    const right = Number(h.right);
-    return String(h.right ?? '').trim() === '' || Number.isNaN(right) ? null : { left, op: h.op, right };
+  if (c.mode === 'relative' && c.relative) return { field: c.field, op: c.op, relative: c.relative };
+
+  const meta = opMeta(c.op);
+  if (!meta.needsValue) return { field: c.field, op: c.op };
+
+  if (meta.isRange) {
+    return { field: c.field, op: c.op, value: [coerce(c.value), coerce(c.value2)] };
   }
-  const right = aliasOf[h.right];
-  return right ? { left, op: h.op, right } : null;
-}
-
-// --- Métricas --------------------------------------------------------------------------
-
-// Métrica del builder con los campos de todos los tipos: cambiar de tipo no pierde nada.
-function newMetric(type = 'agg', numericFields = []) {
-  const firstNumeric = numericFields[0] || '';
-  return {
-    _id: newId(), type, label: '', _origAs: '', _origSig: '',
-    // agg
-    agg: firstNumeric ? 'sum' : 'count', field: firstNumeric, show_as: 'value', filters: [], expanded: false,
-    // calc
-    op: 'sub', left: '', rightKind: 'metric', right: '',
-    // grouped
-    group_by: '', inner: [newInnerMetric(numericFields)], innerHaving: [], result: 'count', value: '',
-  };
-}
-
-function newInnerMetric(numericFields = []) {
-  const firstNumeric = numericFields[0] || '';
-  return { _id: newId(), agg: firstNumeric ? 'sum' : 'count', field: firstNumeric };
-}
-
-// Firma del contenido de una métrica: si no cambió, conserva su alias (y con él sus etiquetas).
-const withoutKeys = (list) => JSON.stringify((list || []).map(({ _k, _id, ...rest }) => rest));
-
-function metricSignature(m, b) {
-  const pick = {
-    agg: () => [m.agg, isCountAgg(m.agg) ? '' : m.field, effectiveShowAs(b, m.show_as), withoutKeys(m.filters)],
-    calc: () => [m.op, m.left, m.rightKind, m.right],
-    grouped: () => [m.group_by, JSON.stringify(m.inner), JSON.stringify(m.innerHaving), m.result, m.value, withoutKeys(m.filters)],
-  }[m.type];
-  return JSON.stringify([m.type, ...pick()]);
-}
-
-function metricFromSpec(raw, b, idOf) {
-  const m = newMetric(raw.type);
-  m._origAs = raw.as;
-  if (raw.type === 'agg') {
-    Object.assign(m, { agg: raw.agg, field: raw.field || '', show_as: raw.show_as || 'value' });
-    m.filters = (raw.filters || []).map(conditionFromSpec);
-    m.expanded = m.filters.length > 0;
-  } else if (raw.type === 'calc') {
-    const numeric = typeof raw.right === 'number';
-    Object.assign(m, {
-      op: raw.op, left: idOf[raw.left] || '',
-      rightKind: numeric ? 'number' : 'metric', right: numeric ? String(raw.right) : (idOf[raw.right] || ''),
-    });
-  } else {
-    const innerIds = {};
-    m.inner = (raw.inner || []).map(x => {
-      const inner = { _id: newId(), agg: x.agg, field: x.field || '' };
-      innerIds[x.as] = inner._id;
-      return inner;
-    });
-    Object.assign(m, {
-      group_by: raw.group_by, result: raw.result, value: innerIds[raw.value] || '',
-      innerHaving: (raw.inner_having || []).map(h => groupConditionFromSpec(h, innerIds)),
-    });
-    m.filters = (raw.filters || []).map(conditionFromSpec);
-    m.expanded = m.filters.length > 0;
+  if (meta.isList) {
+    const items = String(c.value ?? '').split(',').map(v => v.trim()).filter(v => v !== '');
+    return { field: c.field, op: c.op, value: items.map(v => (numeric && !Number.isNaN(Number(v)) ? Number(v) : v)) };
   }
-  idOf[raw.as] = m._id;
-  return m;
+  return { field: c.field, op: c.op, value: coerce(c.value) };
 }
 
-// "Mostrar como" disponibles: en un KPI el % es contra los datos sin las condiciones;
-// sin pivote, % de la fila siempre sería 100 y % de la columna = % del total.
-function showAsOptions(b) {
-  const hasDim = builderDims(b).length > 0;
-  const hasPivot = builderPivots(b).length > 0;
-  let values = ['value', 'pct_row', 'pct_column', 'pct_total'];
-  if (!hasDim) values = ['value', 'pct_total'];
-  else if (!hasPivot) values = ['value', 'pct_column'];
-  return values.map(value => ({
-    value,
-    label: !hasDim && value === 'pct_total' ? '% sobre los datos sin las condiciones'
-      : !hasPivot && value === 'pct_column' ? '% del total' : SHOW_AS_LABELS[value],
-  }));
-}
-
-// Lleva `show_as` a una opción válida para la forma actual (ej. se quitó el pivote).
-function effectiveShowAs(b, showAs) {
-  if (!showAs || showAs === 'value' || !builderClass(b).supportsShowAs) return 'value';
-  if (!builderDims(b).length) return 'pct_total';
-  if (!builderPivots(b).length) return 'pct_column';
-  return showAs;
-}
-
-// Métricas que el builder puede enviar: el KPI es el único con métricas por grupo.
-function activeMetrics(b) {
-  return b.metrics.filter(m => m.type !== 'grouped' || b.widget === 'kpi');
-}
-
-function isRankingMetric(m) {
-  return m.type === 'grouped' && RANKING_RESULTS.includes(m.result);
-}
-
-// Alias ("as") final de cada métrica del builder, en el mismo orden, y el mapa id -> alias.
-// Una métrica aún incompleta (sin columna, cálculo sin operandos...) no tiene alias.
-// Separado de builderToPayload para que la UI pueda mostrar el nombre por defecto de una
-// métrica concreta, que depende también del orden (desempate de alias).
-// El alias de un cálculo se arma con los de sus operandos, así que los cálculos se resuelven
-// después de las demás y en orden de dependencias, no de posición: arrastrar un cálculo por
-// encima de las métricas que usa no lo rompe (el backend también evalúa en ese orden).
-function metricAliases(b) {
-  const used = new Set();
-  const aliasOf = {};
-  const unique = (alias) => {
-    let candidate = alias;
-    for (let i = 2; used.has(candidate); i++) candidate = `${alias}_${i}`.slice(0, 63);
-    used.add(candidate);
-    return candidate;
-  };
-  const defaultAlias = (m) => {
-    if (m.type === 'agg') {
-      if (!m.agg || (!isCountAgg(m.agg) && !m.field)) return null;
-      const suffix = (m.filters || []).map(c => (c.mode !== 'value' && RELATIVE_OPS.includes(c.op) ? c.mode : c.value))
-        .filter(Boolean).join('_');
-      return metricAlias(m.agg, m.field, effectiveShowAs(b, m.show_as), suffix);
-    }
-    if (m.type === 'calc') {
-      const left = aliasOf[m.left];
-      const right = m.rightKind === 'number' ? String(m.right ?? '').trim() : aliasOf[m.right];
-      if (!left || !right || (m.rightKind === 'number' && Number.isNaN(Number(right)))) return null;
-      const word = (CALC_OP_OPTIONS.find(o => o.value === m.op) || { word: m.op }).word;
-      return asAlias(`${word}_${left}_${right}`);
-    }
-    if (!m.group_by || !m.inner.some(x => x.agg && (isCountAgg(x.agg) || x.field))) return null;
-    if (!COUNT_RESULTS.includes(m.result) && !m.inner.some(x => x._id === m.value)) return null;
-    const word = (GROUP_RESULT_OPTIONS.find(o => o.value === m.result) || { word: m.result }).word;
-    return asAlias(`${word}_${m.group_by}`);
-  };
-  const list = b.metrics.map(() => null);
-  const resolve = (m, i) => {
-    const alias = defaultAlias(m);
-    if (!alias) return false;
-    const unchanged = m._origAs && m._origSig === metricSignature(m, b);
-    const as = unique(unchanged ? m._origAs : alias);
-    aliasOf[m._id] = as;
-    list[i] = { as, show_as: m.type === 'agg' ? effectiveShowAs(b, m.show_as) : 'value' };
-    return true;
-  };
-  const active = b.metrics.map((m, i) => [m, i]).filter(([m]) => m.type !== 'grouped' || b.widget === 'kpi');
-  active.filter(([m]) => m.type !== 'calc').forEach(([m, i]) => resolve(m, i));
-  // Cálculos: en pasadas, cada uno cuando ya tiene el alias de sus operandos.
-  let pending = active.filter(([m]) => m.type === 'calc');
-  while (pending.length) {
-    const next = pending.filter(([m, i]) => !resolve(m, i));
-    if (next.length === pending.length) break;  // operandos incompletos o un ciclo
-    pending = next;
+function conditionFromPayload(c) {
+  const base = { _k: ++CONDITION_SEQ, field: c.field || '', op: c.op || 'eq', mode: 'value', value: '', value2: '', relative: '' };
+  if (c.relative) {
+    base.mode = 'relative';
+    base.relative = c.relative;
+    return base;
   }
-  return { list, aliasOf };
-}
-
-function metricToSpec(m, alias, aliasOf, numericFields) {
-  if (m.type === 'agg') {
-    const metric = { type: 'agg', as: alias.as, agg: m.agg };
-    if (!isCountAgg(m.agg)) metric.field = m.field;
-    if (alias.show_as !== 'value') metric.show_as = alias.show_as;
-    const filters = conditionsToSpec(m.filters, numericFields);
-    if (filters.length) metric.filters = filters;
-    return metric;
+  const value = c.value;
+  if (Array.isArray(value)) {
+    base.value = String(value[0] ?? '');
+    base.value2 = String(value[1] ?? '');
+  } else if (value != null) {
+    base.value = String(value);
   }
-  if (m.type === 'calc') {
-    return {
-      type: 'calc', as: alias.as, op: m.op, left: aliasOf[m.left],
-      right: m.rightKind === 'number' ? Number(m.right) : aliasOf[m.right],
-    };
-  }
-  // Métricas internas: alias propios, únicos dentro del grupo.
-  const used = new Set();
-  const innerAlias = {};
-  const inner = m.inner.filter(x => x.agg && (isCountAgg(x.agg) || x.field)).map(x => {
-    let as = metricAlias(x.agg, x.field, 'value');
-    for (let i = 2; used.has(as); i++) as = `${metricAlias(x.agg, x.field, 'value')}_${i}`;
-    used.add(as);
-    innerAlias[x._id] = as;
-    const metric = { type: 'agg', as, agg: x.agg };
-    if (!isCountAgg(x.agg)) metric.field = x.field;
-    return metric;
-  });
-  const metric = {
-    type: 'grouped', as: alias.as, group_by: m.group_by, inner,
-    inner_having: m.innerHaving.map(h => groupConditionToSpec(h, innerAlias)).filter(Boolean),
-    result: m.result,
-  };
-  if (!COUNT_RESULTS.includes(m.result)) metric.value = innerAlias[m.value];
-  const filters = conditionsToSpec(m.filters, numericFields);
-  if (filters.length) metric.filters = filters;
-  return metric;
-}
-
-// Roles del KPI (view_spec) <-> controles del builder, con ids locales.
-function kpiFromView(view, idOf) {
-  const target = view ? view.target : null;
-  const status = view && view.status;
-  return {
-    primary: (view && idOf[view.primary]) || '',
-    compare: (view && idOf[view.compare]) || '',
-    compareMode: (view && view.compare_mode) || 'pct',
-    targetKind: typeof target === 'number' ? 'number' : (target ? 'metric' : 'none'),
-    targetMetric: typeof target === 'string' ? (idOf[target] || '') : '',
-    targetValue: typeof target === 'number' ? String(target) : '',
-    higherIsBetter: !view || view.higher_is_better !== false,
-    statusBasis: status ? status.basis : 'none',
-    good: status ? String(status.good) : '100',
-    warn: status ? String(status.warn) : '80',
-  };
-}
-
-function kpiToPayload(k, aliasOf) {
-  const number = (v) => (String(v ?? '').trim() === '' || Number.isNaN(Number(v)) ? null : Number(v));
-  const target = k.targetKind === 'number' ? number(k.targetValue)
-    : k.targetKind === 'metric' ? (aliasOf[k.targetMetric] || null) : null;
-  const status = k.statusBasis !== 'none' && number(k.good) !== null && number(k.warn) !== null
-    ? { basis: k.statusBasis, good: number(k.good), warn: number(k.warn) } : null;
-  return {
-    primary: aliasOf[k.primary] || null,
-    compare: aliasOf[k.compare] || null,
-    compare_mode: k.compareMode,
-    target,
-    higher_is_better: !!k.higherIsBetter,
-    status,
-  };
-}
-
-// Estado del builder a partir de data_spec/view_spec: el MISMO spec que escribe la IA, así el
-// panel siempre muestra lo que tiene el widget (no hay dos estados separados).
-function builderFromSpec(spec, view, widget) {
-  if (!spec) return null;
-  const labels = (view && view.labels) || {};
-  const idOf = {};
-  const b = {
-    widget,
-    // Siempre al menos un select visible por lista ('' = sin elegir).
-    dimensions: (spec.dimensions || []).length ? [...spec.dimensions] : [''],
-    pivots: (spec.pivots || []).length ? [...spec.pivots] : [''],
-    columns: (spec.columns || []).length ? [...spec.columns] : [''],
-    // Tipo de control por columna (caja de filtros): {columna: 'multi_select'}.
-    controls: { ...((view && view.controls) || {}) },
-    filters: (spec.filters || []).map(conditionFromSpec),
-    metrics: [],
-    having: [],
-    // Las cabeceras de las filas/columnas no son del builder: se copian tal cual para no perderlas
-    // (las puso la IA) al aplicar un cambio.
-    labels: { ...labels },
-    stacked: !!(view && view.stacked),
-    // `by`: una columna o `#<_id>` de una métrica (su alias cambia al editarla).
-    sort: { by: '', dir: spec.sort ? spec.sort.dir : 'desc' },
-    kpi: null,
-    // Piezas del data_spec sin control en el panel: se devuelven tal cual al guardar.
-    kept: {},
-  };
-  // Piezas con estado genérico (panel.js): su valor con la forma de su ui.
-  const parts = panelParts(builderClass(b));
-  for (const part of parts) {
-    if (!CUSTOM_STATE_PARTS.has(part.key)) b[part.key] = partStateFromSpec(part, spec[part.key]);
-  }
-  const inPanel = new Set(parts.map(p => p.key));
-  for (const [key, value] of Object.entries(spec)) {
-    if (key !== 'source' && !inPanel.has(key) && !CUSTOM_STATE_PARTS.has(key)) b.kept[key] = value;
-  }
-  b.metrics = (spec.metrics || []).map(raw => {
-    const m = metricFromSpec(raw, b, idOf);
-    m.label = labels[raw.as] || '';
-    return m;
-  });
-  // La firma se calcula con el builder completo (show_as depende de filas y columnas).
-  b.metrics.forEach(m => { m._origSig = metricSignature(m, b); });
-  b.having = (spec.having || []).map(h => groupConditionFromSpec(h, idOf));
-  if (spec.sort) b.sort.by = idOf[spec.sort.by] ? `#${idOf[spec.sort.by]}` : spec.sort.by;
-  b.kpi = kpiFromView(widget === 'kpi' ? view : null, idOf);
-  b.referenceLines = referenceLinesFromView(view, idOf, (spec.pivots || []).length > 0);
-  return b;
-}
-
-// Líneas de referencia del view_spec -> builder. `series`: sin pivote, el _id de la métrica
-// (como los roles del KPI); con pivote, el valor del pivote; '' = todas las series.
-function referenceLinesFromView(view, idOf, withPivot) {
-  return ((view && view.reference_lines) || []).map(l => ({
-    kind: l.kind,
-    value: l.value == null ? '' : String(l.value),
-    series: l.series == null ? '' : (withPivot ? l.series : (idOf[l.series] || '')),
-    label: l.label || '',
-    color: l.color || BaseWidget.REFERENCE_COLOR,
-  }));
-}
-
-function referenceLinesToPayload(lines, aliasOf, withPivot) {
-  const number = (v) => (String(v ?? '').trim() === '' || Number.isNaN(Number(v)) ? null : Number(v));
-  return (lines || []).map((l) => {
-    const isValue = l.kind === 'value';
-    const series = isValue || !l.series ? null : (withPivot ? l.series : (aliasOf[l.series] || null));
-    return {
-      kind: l.kind,
-      value: isValue ? number(l.value) : null,
-      series,
-      label: (l.label || '').trim(),
-      color: l.color || BaseWidget.REFERENCE_COLOR,
-    };
-  }).filter(l => l.kind !== 'value' || l.value !== null);
-}
-
-// Body de POST/PUT del builder: las claves del data_spec más las de presentación (labels,
-// stacked, kpi). `labels` son las cabeceras de columna: viven en view_spec (no en la métrica,
-// que el schema valida con additionalProperties: false).
-function builderToPayload(b, numericFields = new Set()) {
-  const dimensions = builderDims(b);
-  const pivots = builderPivots(b);
-  const columns = builderColumns(b);
-  const { list: aliases, aliasOf } = metricAliases(b);
-  const isKpi = b.widget === 'kpi';
-  const withMetrics = builderClass(b).supportsMetrics;
-  // Cabeceras de las filas/columnas: se conservan las que ya tenía el widget y siguen en uso.
-  const kept = new Set([...dimensions, ...pivots, ...columns]);
-  const labels = {};
-  for (const [name, label] of Object.entries(b.labels || {})) {
-    if (kept.has(name) && (label || '').trim()) labels[name] = label.trim();
-  }
-  const metrics = [];
-  b.metrics.forEach((m, i) => {
-    const alias = aliases[i];
-    if (!alias || !withMetrics) return;
-    metrics.push(metricToSpec(m, alias, aliasOf, numericFields));
-    // "Nombre a mostrar" vacío = la cabecera por defecto (la del alias).
-    const label = (m.label || '').trim();
-    if (label) labels[alias.as] = label;
-  });
-  const sortBy = b.sort.by && b.sort.by.startsWith('#') ? aliasOf[b.sort.by.slice(1)] : b.sort.by;
-  const sortable = new Set([...dimensions, ...columns, ...metrics.map(m => m.as)]);
-  const sort = !isKpi && sortBy && sortable.has(sortBy) ? { by: sortBy, dir: b.sort.dir || 'desc' } : null;
-  const payload = {
-    ...b.kept,
-    dimensions,
-    pivots,
-    columns,
-    filters: conditionsToSpec(b.filters, numericFields),
-    metrics,
-    having: isKpi ? [] : b.having.map(h => groupConditionToSpec(h, aliasOf)).filter(Boolean),
-    sort,
-    labels,
-    stacked: !!(b.stacked && pivots.length),
-  };
-  for (const part of panelParts(builderClass(b))) {
-    if (!CUSTOM_STATE_PARTS.has(part.key)) payload[part.key] = partStateToPayload(part, b[part.key], b);
-  }
-  if (isKpi) payload.kpi = kpiToPayload(b.kpi, aliasOf);
-  if (builderClass(b).supportsReferenceLines) {
-    payload.reference_lines = referenceLinesToPayload(b.referenceLines, aliasOf, pivots.length > 0);
-  }
-  const controlTypes = builderClass(b).columnControls;
-  if (controlTypes) {
-    const fallback = controlTypes.find(o => !o.disabled).value;
-    payload.controls = Object.fromEntries(columns.map(c => [c, (b.controls || {})[c] || fallback]));
-  }
-  return payload;
-}
-
-// Texto de una métrica del builder para los pasos de "Consulta con la IA".
-function describeMetric(m, b) {
-  const aggLabel = (agg) => (AGG_OPTIONS.find(o => o.value === agg) || { label: agg }).label;
-  const nameOf = (id) => {
-    const i = b.metrics.findIndex(x => x._id === id);
-    return i >= 0 ? `métrica ${i + 1}` : '—';
-  };
-  let text;
-  if (m.type === 'agg') {
-    text = isCountAgg(m.agg) ? `${aggLabel(m.agg)} de filas` : `${aggLabel(m.agg)} de ${m.field}`;
-    if (m.show_as && m.show_as !== 'value') text += ` · Mostrar como ${SHOW_AS_LABELS[m.show_as]}`;
-  } else if (m.type === 'calc') {
-    const op = (CALC_OP_OPTIONS.find(o => o.value === m.op) || { label: m.op }).label;
-    text = `Cálculo: ${nameOf(m.left)} ${op} ${m.rightKind === 'number' ? m.right : nameOf(m.right)}`;
-  } else {
-    const result = (GROUP_RESULT_OPTIONS.find(o => o.value === m.result) || { label: m.result }).label;
-    text = `Por grupo de ${m.group_by}: ${result}`;
-  }
-  if (m.label) text += ` · Nombre: «${m.label}»`;
-  return text;
-}
-
-// Incluye `current` aunque no esté en la lista (ej. la IA agrupó por una columna numérica de
-// muchos valores), para que el select no pierda el valor que tiene el widget.
-function withCurrent(options, current) {
-  return current && !options.includes(current) ? [current, ...options] : options;
+  return base;
 }
 
 document.addEventListener('alpine:init', () => {
@@ -661,39 +123,12 @@ document.addEventListener('alpine:init', () => {
     editingId: null,
     editingType: null,
     dashboardId: window.DASHBOARD_ID,
-    drawerDraft: {},
-    // "Consulta con la IA" (solo tablas): configuración sugerida {builder, filters, title}
-    // que el panel muestra como pasos; no se aplica hasta pulsar "Aplicar pasos".
-    // Bloque colapsado por defecto: ocupa mucho alto y empuja el constructor hacia abajo.
-    drawerAskOpen: false,
-    drawerAsking: false,
-    drawerAskError: '',
-    drawerAdvice: null,
-    drawerSaving: false,
-    drawerSaveError: '',
-    // Pestaña activa del panel: 'data' (filas, columnas, métricas) o 'style' (personalizar).
     drawerTab: 'data',
-    // Banner de advertencia del builder: mensaje de rechazo del backend (no se aplica nada).
-    drawerSpecError: '',
-    drawerApplying: false,
-    // Copia de data_spec/view_spec del widget en edición, para el visor JSON.
-    drawerSpecs: { data_spec: null, view_spec: null },
     schema: { all_fields: [], numeric_fields: [], dimension_fields: [], sample_values: {} },
-    aggOptions: AGG_OPTIONS,
-    metricTypeOptions: METRIC_TYPE_OPTIONS,
-    calcOpOptions: CALC_OP_OPTIONS,
-    groupResultOptions: GROUP_RESULT_OPTIONS,
-    compareOpOptions: COMPARE_OP_OPTIONS,
-    isCountAgg,
-    _nextId: -1,
-    // Sortable de la lista de métricas del drawer (se crea al abrirse y se destruye al cerrarse).
-    metricsListEl: null,
-    metricsSortable: null,
-    // Sortables de las listas de columnas arrastrables, por clave de la pieza (mismo ciclo de
-    // vida que el de las métricas).
-    listSortables: {},
-
+    widgetManifest: window.WIDGET_MANIFEST || {},
     schemaError: '',
+    _nextId: -1,
+    listSortables: {},
 
     async loadSchema() {
       try {
@@ -702,7 +137,6 @@ document.addEventListener('alpine:init', () => {
         if (r.ok && data) {
           const { widget_manifest: manifest, ...schema } = data;
           this.schema = schema;
-          // Mismo manifiesto, con las columnas de la hoja en las opciones de los selects.
           if (manifest) {
             window.WIDGET_MANIFEST = manifest;
             this.widgetManifest = manifest;
@@ -722,8 +156,6 @@ document.addEventListener('alpine:init', () => {
       return qs ? `${url}?${qs}` : url;
     },
 
-    // Filtros del tablero que el backend ignoró (ej. una columna que ya no existe): se avisan
-    // una vez cada uno.
     _reportFilterErrors(data) {
       const errors = (data && data.filter_errors) || [];
       this._reportedFilterErrors = this._reportedFilterErrors || new Set();
@@ -733,19 +165,37 @@ document.addEventListener('alpine:init', () => {
       });
     },
 
-    // Carga widgets + datos ya calculados en un solo request. Retorna {id: entry}.
+    normalizeWidget(w) {
+      return {
+        id: w.id,
+        type: w.type,
+        title: w.title || 'Nuevo Widget',
+        position: w.position || { x: 0, y: 0, w: 6, h: 300 },
+        fields: { ...EMPTY_FIELDS(), ...(w.fields || {}) },
+        style: w.style || {},
+        data: w.data || null,
+        error: w.error || null,
+        _dirty: false,
+        _loading: false,
+        el: null,
+        _chart: null,
+      };
+    },
+
     async loadBoard() {
       const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
       this._reportFilterErrors(data);
-      this.widgets = data.widgets.map(w => BaseWidget.fromServer(w));
-      this.widgets.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      // Instancias reales (mount/applyRender/setLoading), no objetos planos.
+      this.widgets = data.widgets
+        .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))
+        .filter(Boolean)
+        .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
       return Object.fromEntries(data.widgets.map(w => [w.id, w]));
     },
 
-    // Recalcula todos los widgets (sin IA): refresco periódico, filtros, reintentos.
     async refreshData() {
-      const saved = this.widgets.filter(w => w.id > 0 && w.hasSpec);
+      const saved = this.widgets.filter(w => w.id > 0 && w.fields);
       saved.forEach(w => w.setLoading(true));
       try {
         const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
@@ -763,38 +213,54 @@ document.addEventListener('alpine:init', () => {
     },
 
     addWidget(type) {
+      const manifest = this.widgetManifest[type] || {};
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
-        order: this.widgets.length,
-        _dirty: true,
+        position: { x: 0, y: this.widgets.length, w: 6, h: 300 },
+        title: manifest.label || 'Nuevo Widget',
+        style: { ...(manifest.style_defaults || {}) },
+        _dirty: false,
       });
       this.widgets.push(widget);
       return widget;
     },
 
-    // Guarda solo la presentación (título, posición, preferencias visuales). Los widgets
-    // nuevos no existen en el backend hasta que se generan con IA.
-    // Retorna true si se guardó; si falla, el widget sigue pendiente (_dirty) y se reintenta
-    // en el próximo guardado. `keepalive`: la petición sobrevive al cierre de la página.
+    // Crea o guarda según el id: un widget con id local todavía no existe en el servidor.
     async _saveWidget(w, { keepalive = false } = {}) {
-      if (w.id < 0) return true;
+      if (!w || !w.fields) return { ok: true, data: null };
+      const isNew = w.id < 0;
+      const url = isNew
+        ? apiUrl(`/api/dashboard/${this.dashboardId}/widgets/`)
+        : apiUrl(`/api/widget/${w.id}/`);
       try {
-        const r = await fetch(apiUrl(`/api/widget/${w.id}/`), {
-          method: 'PUT',
+        const r = await fetch(url, {
+          method: isNew ? 'POST' : 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(w.toPayload()),
+          body: JSON.stringify({
+            type: w.type,
+            title: w.title,
+            position: w.position,
+            fields: w.fields,
+            style: w.style,
+          }),
           keepalive,
         });
-        if (!r.ok) return false;
+        const data = await r.json().catch(() => null);
+        if (!r.ok) {
+          return { ok: false, error: (data && data.error) || `Error ${r.status}` };
+        }
+        if (isNew && data && data.id) {
+          w.id = data.id;
+          w.rebuildElement();
+        }
         w._dirty = false;
-        return true;
+        w.applyRender(data);
+        return { ok: true, data };
       } catch (e) {
-        return false;
+        return { ok: false, error: 'No se pudo conectar con el servidor.' };
       }
     },
 
-    // Diseño (orden y alto de los widgets): se guarda solo, agrupando los cambios seguidos
-    // (ej. varios pasos del redimensionado) en un único guardado.
     _layoutTimer: null,
     _layoutSaving: null,
 
@@ -806,16 +272,13 @@ document.addEventListener('alpine:init', () => {
     async flushLayoutSave({ keepalive = false } = {}) {
       clearTimeout(this._layoutTimer);
       this._layoutTimer = null;
-      // Sin solapar: si hay un guardado en curso, se espera y luego se guarda lo que quede.
-      // Al cerrar la página (keepalive) no se espera: los pendientes se envían ya, incluidos
-      // los que están en curso (siguen _dirty hasta que el servidor responde).
       if (this._layoutSaving && !keepalive) await this._layoutSaving;
       const pending = this.widgets.filter(w => w._dirty && w.id > 0);
       if (!pending.length) return;
       this._layoutSaving = Promise.all(pending.map(w => this._saveWidget(w, { keepalive })));
       const results = await this._layoutSaving;
       this._layoutSaving = null;
-      if (results.includes(false) && typeof window.showToast === 'function') {
+      if (results.some(r => !r.ok) && typeof window.showToast === 'function') {
         window.showToast('No se pudo guardar el diseño. Se reintentará con el próximo cambio.');
       }
     },
@@ -827,7 +290,7 @@ document.addEventListener('alpine:init', () => {
     async removeWidget(id) {
       const removed = this.widgets.find(w => w.id === id);
       if (removed && removed.constructor.placement === 'header' && this.clearBoardFilters) {
-        this.clearBoardFilters((removed.data_spec && removed.data_spec.columns) || []);
+        this.clearBoardFilters((removed.fields && removed.fields.dimensions) || []);
       }
       if (id > 0) {
         try { await fetch(apiUrl(`/api/widget/${id}/`), { method: 'DELETE' }); } catch (e) {}
@@ -842,209 +305,140 @@ document.addEventListener('alpine:init', () => {
       widgetEls.forEach((el, i) => {
         const id = parseInt(el.dataset.widgetId);
         const w = this.widgets.find(w => w.id === id);
-        if (w && w.order !== i) {
-          w.order = i;
+        if (w && w.position?.y !== i) {
+          w.position.y = i;
           w._dirty = true;
         }
       });
-      this.widgets.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      this.widgets.sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
       this.scheduleLayoutSave();
     },
 
-    // Al soltar un widget arrastrado, su "Columna de inicio" vuelve a "Fluido" (valor ''):
-    // la posición la decide el arrastre, y dejar el desplazamiento fijo lo dejaría descolocado.
-    // Un widget nuevo ya nace fluido, así que esto solo afecta a los que lo traían fijo.
     fluidStartColOnDrop(widgetEl) {
       const id = parseInt(widgetEl.dataset.widgetId);
       const w = this.widgets.find(w => w.id === id);
-      if (!w || !w.startCol) return;
-      w.startCol = '';
+      if (!w || !w.position?.x) return;
+      w.position.x = 0;
       w._dirty = true;
-      w.updateChrome();
-      // Si este widget es el del drawer abierto, el borrador guardaría el valor viejo.
-      if (this.editingId === id) {
-        this.drawerDraft.startCol = '';
-      }
+      w.updateChrome?.();
       this.scheduleLayoutSave();
     },
 
+    // ------------------------------------------------------------------ editor
     get editingWidget() {
       return this.widgets.find(w => w.id === this.editingId) || null;
     },
 
-    get drawerFields() {
-      // No debe colapsar a []: eso destruiría/recrearía los <select> del drawer
-      // (y sus <option>) en cada apertura.
-      const WidgetClass = this.editingType ? WidgetRegistry.get(this.editingType) : BaseWidget;
-      const fields = WidgetClass.drawerFields;
-      // La columna de inicio depende del ancho: un widget de 12 columnas solo puede empezar
-      // al inicio. Se reconstruye el array (nunca vacío) para que sus <option> se actualicen.
-      const width = this.drawerDraft && this.drawerDraft.width;
-      if (!width) return fields;
-      return fields.map((field) => (
-        field.key === 'startCol'
-          ? { ...field, options: BaseWidget.startColOptionsForWidth(width) }
-          : field
-      ));
+    get drawerManifest() {
+      return this.widgetManifest[this.editingType] || {};
     },
 
-    // Series sobre las que se calcula una línea de referencia: sin pivote, las métricas; con
-    // pivote, sus valores (los del último resultado dibujado).
-    referenceSeriesOptions(current) {
-      const b = this.builder;
-      if (!b) return [];
-      if (!builderPivots(b).length) return this.metricRefOptions(null, { numericOnly: false });
-      const data = this.editingWidget && this.editingWidget._lastData;
-      const names = ((data && data.series) || []).map(s => s.name);
-      return withCurrent(names, current).map(name => ({ value: name, label: name }));
+    get drawerCapabilities() {
+      return this.drawerManifest.capabilities || {};
     },
 
-    addReferenceLine() {
-      const b = this.builder;
-      if (!b) return;
-      if (!b.referenceLines) b.referenceLines = [];
-      b.referenceLines.push({ kind: 'value', value: '', series: '', label: '', color: BaseWidget.REFERENCE_COLOR });
+    // Controles de estilo del tipo: el título vive en el propio widget, no en «Personalizar»
+    // y los de tipo `hidden` (totales por nivel) se pintan en «Configurar», bajo su fila.
+    get drawerStyleSchema() {
+      return (this.drawerManifest.style_schema || [])
+        .filter(c => c.key !== 'title' && !c.hidden);
     },
 
-    removeReferenceLine(i) {
-      this.builder.referenceLines.splice(i, 1);
+    // Clave de estilo del checkbox «Mostrar totales» de la fila `idx` de dimensiones o de
+    // pivotes (0 = total general, 1 = subtotales del primer nivel, 2 = del segundo).
+    totalsStyleKey(kind, idx) {
+      if (kind === 'column') return idx === 0 ? 'showColumnTotals' : 'columnSubtotal1';
+      return idx === 0 ? 'showTotals' : (idx === 1 ? 'rowSubtotal1' : 'rowSubtotal2');
     },
 
-    get drawerWidgetClass() {
-      return this.editingType ? WidgetRegistry.get(this.editingType) : BaseWidget;
-    },
-
-    // Pasos de la sugerencia de la IA, en el orden del constructor.
-    get drawerSteps() {
-      const a = this.drawerAdvice;
-      if (!a) return [];
-      const b = a.builder;
-      const dims = builderDims(b);
-      const pivots = builderPivots(b);
-      const steps = [
-        { title: 'Filas', detail: dims.length ? `Agrega, en este orden: ${dims.join(' › ')}` : 'Sin filas' },
-        { title: 'Columnas', detail: pivots.length ? `Agrega, en este orden: ${pivots.join(' › ')}` : 'Deja «Sin agrupar»' },
-      ];
-      if (a.filters.length) {
-        steps.push({ title: 'Condiciones', details: a.filters.map(describeCondition) });
+    totalsTitle(kind, idx) {
+      const group = kind === 'column' ? 'pivots' : 'dimensions';
+      const list = (this.drawerDraft.fields && this.drawerDraft.fields[group]) || [];
+      const what = list[idx - 1] || 'grupo';
+      if (idx === 0) {
+        return kind === 'column'
+          ? 'Columna «Total general» a la derecha de la tabla'
+          : 'Fila «Total general» al pie de la tabla';
       }
-      steps.push({ title: 'Valores', details: b.metrics.map(m => describeMetric(m, b)) });
-      if (a.having.length) {
-        steps.push({ title: 'Mostrar solo grupos donde', details: a.having.map(h => `${h.left} ${OP_SHORT[h.op]} ${h.right}`) });
+      return `Subtotal «Total …» de cada ${what}`;
+    },
+
+    // El control solo se pinta si el tipo de widget declaró ese nivel en su style_schema.
+    totalsControl(kind, idx) {
+      const key = this.totalsStyleKey(kind, idx);
+      return (this.drawerManifest.style_schema || [])
+        .find(c => c.key === key && c.ui === 'checkbox') || null;
+    },
+
+    get drawerTitleControl() {
+      return (this.drawerManifest.style_schema || []).find(c => c.key === 'title') || null;
+    },
+
+    // Qué bloques del editor tocan a este tipo (capabilities del backend).
+    get hasColumns() { return (this.drawerCapabilities.columns || [0, 0])[1] > 0; },
+    get maxColumns() { return (this.drawerCapabilities.columns || [0, 0])[1]; },
+    get columnsLabel() { return this.drawerCapabilities.columns_label || 'Columnas a mostrar'; },
+    get hasDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1] > 0; },
+    get hasPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1] > 0; },
+    get hasMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1] > 0; },
+    get hasFilters() { return !!this.drawerCapabilities.filters; },
+    get hasSort() { return !!this.drawerCapabilities.sort; },
+    get hasLimit() { return !!this.drawerCapabilities.limit; },
+    get maxMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1]; },
+    get maxDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1]; },
+    get maxPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1]; },
+
+    openDrawer(id) {
+      const w = this.widgets.find(x => x.id === id);
+      if (!w) return;
+      this.editingId = id;
+      this.editingType = w.type;
+      this.drawerTab = 'data';
+      this.drawerAskError = '';
+      this.drawerAskOpen = false;
+      this.drawerSaveError = '';
+      this.drawerSaving = false;
+      const manifest = this.widgetManifest[w.type] || {};
+      const title = w.title || manifest.label || 'Nuevo Widget';
+      this.drawerDraft = {
+        title,
+        fields: { ...EMPTY_FIELDS(), ...(w.fields || {}) },
+        style: { ...(manifest.style_defaults || {}), ...(w.style || {}), title },
+      };
+      this._normalizeDraft();
+      if (this.hasColumns) {
+        if (!this.drawerDraft.fields.columns.length) this._autoPickColumns();
+      } else if (!this.drawerDraft.fields.dimensions.length) {
+        this._autoPickDimensions();
       }
-      if (b.sort.by) {
-        const target = b.sort.by.startsWith('#') ? `la métrica ${b.metrics.findIndex(m => `#${m._id}` === b.sort.by) + 1}` : b.sort.by;
-        steps.push({ title: 'Orden', detail: `Ordenar por ${target}, ${b.sort.dir === 'asc' ? 'de menor a mayor' : 'de mayor a menor'}` });
-      }
-      if (b.limit && b.limit.n) {
-        steps.push({ title: 'Top', detail: `Mostrar solo los primeros ${b.limit.n}${b.limit.others ? ' y agrupar el resto en «Otros»' : ''}` });
-      }
-      if ((b.referenceLines || []).length) {
-        const kindLabel = (k) => (BaseWidget.REFERENCE_KINDS.find(o => o.value === k) || { label: k }).label;
-        const seriesLabel = (l) => {
-          if (!l.series) return 'todas las series';
-          const i = b.metrics.findIndex(m => m._id === l.series);
-          return i >= 0 ? `la métrica ${i + 1}` : l.series;
-        };
-        steps.push({ title: 'Líneas de referencia', details: b.referenceLines.map(l => {
-          const what = l.kind === 'value' ? `${kindLabel(l.kind)} ${l.value}` : `${kindLabel(l.kind)} de ${seriesLabel(l)}`;
-          return l.label ? `${what} («${l.label}»)` : what;
-        }) });
-      }
-      steps.push({ title: 'Listo', detail: 'Pulsa «Guardar» para ver la tabla.' });
-      return steps;
+      this.initListSortables();
     },
 
-    get builder() {
-      return this.drawerDraft.builder || null;
+    // (Re)atan los arrastres de las listas del panel: se destruyen al cerrar.
+    initListSortables() {
+      ['columns', 'dimensions', 'pivots', 'metrics'].forEach(key => {
+        const el = document.querySelector(`[data-column-list="${key}"]`);
+        if (el) this.initListSortable(el, key);
+      });
     },
 
-    // --- Panel de datos: secciones y piezas de manifest.parts (panel.js) ---
-
-    // Manifiesto reactivo: /schema/ lo reemplaza por el que trae las columnas de la hoja.
-    widgetManifest: window.WIDGET_MANIFEST || {},
-
-    get panelSections() {
-      const manifest = this.widgetManifest[this.editingType];
-      return panelSections((manifest && manifest.parts) || []);
+    closeDrawer() {
+      this.editingId = null;
+      this.editingType = null;
+      this.drawerAskError = '';
+      this.drawerAskOpen = false;
+      this.drawerSaveError = '';
+      this.drawerTab = 'data';
+      this.destroyListSortables();
     },
 
-    // --- column-list ---
-
-    // Columnas para la posición `i` de la lista: sin las ya elegidas en ella ni en las listas
-    // de sus `excludes` (el backend también lo valida).
-    listOptions(part, i) {
-      const b = this.builder;
-      if (!b) return [];
-      const current = b[part.key][i];
-      const used = new Set((part.excludes || []).flatMap(k => b[k] || []));
-      const values = (part.options || []).map(o => o.value);
-      return withCurrent(values, current).filter(v => v === current || !used.has(v));
-    },
-
-    // Se agrega un elemento solo cuando el anterior ya tiene columna elegida.
-    canAddListItem(part) {
-      const list = this.builder && this.builder[part.key];
-      return !!list && list.length < part.max && list.every(Boolean);
-    },
-
-    canRemoveListItem(part) {
-      const list = this.builder && this.builder[part.key];
-      return !!list && (list.length > 1 || part.min === 0);
-    },
-
-    // Los totales de cada nivel (drawerDraft.rowTotals/columnTotals) siguen a su fila o
-    // columna al agregar o quitar niveles, como en Sheets.
-    _listTotals(part) {
-      return this.drawerDraft[LIST_TOTALS[part.key]] || null;
-    },
-
-    addListItem(part) {
-      if (!this.canAddListItem(part)) return;
-      this.builder[part.key].push('');
-      this._listTotals(part)?.push(true);
-    },
-
-    removeListItem(part, i) {
-      const list = this.builder && this.builder[part.key];
-      if (!list) return;
-      const totals = this._listTotals(part);
-      if (list.length > 1) {
-        list.splice(i, 1);
-        totals?.splice(i, 1);
-      } else {
-        list[0] = '';
-        if (totals) totals[0] = true;
-      }
-    },
-
-    // Una columna recién elegida deja de estar en las listas que la excluyen (ej. una fila
-    // nueva sale de las columnas de pivote).
-    onListChange(part) {
-      const b = this.builder;
-      if (!b) return;
-      const picked = new Set(b[part.key].filter(Boolean));
-      for (const other of panelParts(this.drawerWidgetClass)) {
-        if (other.key === part.key || other.ui !== 'column-list' || !(other.excludes || []).includes(part.key)) continue;
-        b[other.key] = b[other.key].map(v => (picked.has(v) ? '' : v));
-      }
-    },
-
-    // Atajo «Usar todas»: todas las columnas que ofrece la lista, en el orden de la hoja.
-    useAllListItems(part) {
-      const b = this.builder;
-      if (!b) return;
-      b[part.key] = (part.options || []).map(o => o.value).slice(0, part.max);
-    },
-
-    // Arrastre de una lista `sortable`. Las filas se identifican por posición (una columna aún
-    // sin elegir no tiene nombre), así que Sortable no se queda con el DOM movido: al soltar se
-    // devuelve el nodo a su lugar y se reordena el array; Alpine redibuja la lista.
-    initListSortable(el, part) {
+    // Reordenar columnas / dimensiones / pivotes / métricas arrastrando por el asa. El `x-for` de
+    // Alpine repinta al cambiar el array: al soltar se devuelve la fila a su sitio y manda
+    // el array (índices originales, como Sortable).
+    initListSortable(el, key) {
       if (!el || typeof Sortable === 'undefined') return;
-      this.listSortables = this.listSortables || {};
-      this.listSortables[part.key]?.destroy();
-      this.listSortables[part.key] = new Sortable(el, {
+      this.listSortables[key]?.destroy();
+      this.listSortables[key] = new Sortable(el, {
         draggable: '[data-column-row]',
         handle: '.column-drag-handle',
         animation: 150,
@@ -1052,10 +446,10 @@ document.addEventListener('alpine:init', () => {
         onEnd: (evt) => {
           const from = evt.oldDraggableIndex;
           const to = evt.newDraggableIndex;
-          if (from === to || from == null || to == null) return;
+          if (from == null || to == null || from === to) return;
           const rows = [...el.querySelectorAll('[data-column-row]')].filter(n => n !== evt.item);
           el.insertBefore(evt.item, rows[from] || null);
-          const list = this.builder && this.builder[part.key];
+          const list = this.drawerDraft && this.drawerDraft.fields && this.drawerDraft.fields[key];
           if (!list) return;
           const [moved] = list.splice(from, 1);
           list.splice(to, 0, moved);
@@ -1068,470 +462,284 @@ document.addEventListener('alpine:init', () => {
       this.listSortables = {};
     },
 
-    // --- column-picker ---
-
-    pickerOptions(part) {
-      const current = this.builder && this.builder[part.key];
-      return withCurrent((part.options || []).map(o => o.value), current);
+    _normalizeDraft() {
+      const f = this.drawerDraft.fields;
+      ['dimensions', 'pivots', 'metrics', 'filters', 'columns'].forEach(k => {
+        if (!Array.isArray(f[k])) f[k] = [];
+      });
+      // `columns`: {"field": ..., "label": ...} sin repetidas y sin vacías.
+      const seen = new Set();
+      const columns = [];
+      f.columns.forEach(c => {
+        const raw = typeof c === 'string' ? { field: c } : (c || {});
+        const field = String(raw.field || '').trim();
+        const label = String(raw.label || '').trim();
+        if (!field || seen.has(field)) return;
+        seen.add(field);
+        columns.push(label ? { field, label } : { field });
+      });
+      f.columns = columns;
+      if (typeof f.sort_by !== 'string') f.sort_by = null;
+      if (f.limit != null && f.limit !== '') f.limit = Number(f.limit);
+      f.filters = f.filters.map(c => (c && typeof c === 'object' && c._k ? c : conditionFromPayload(c || {})));
     },
 
-    // --- field-group ---
-
-    // Opciones de un campo: las que trae resueltas el manifiesto, o las de una fuente que
-    // depende de lo elegido en el panel (PANEL_SOURCES).
-    fieldOptions(part, field) {
-      if (field.options) {
-        const current = this.builder && this.builder[part.key] && this.builder[part.key][field.key];
-        const known = field.options.some(o => o.value === current);
-        return current && !known ? [{ value: current, label: current }, ...field.options] : field.options;
-      }
-      const source = PANEL_SOURCES[field.options_from];
-      return source ? source(this) : [];
+    // Un widget recién arrastrado empieza con las primeras columnas ya elegidas.
+    _autoPickDimensions() {
+      const caps = this.drawerCapabilities;
+      const max = Math.min(caps.dimensions ? caps.dimensions[1] : 0, 1);
+      const source = this.schema.dimension_fields && this.schema.dimension_fields.length
+        ? this.schema.dimension_fields
+        : this.schema.all_fields;
+      this.drawerDraft.fields.dimensions = (source || []).slice(0, max);
+      if ((caps.metrics || [0, 0])[0] > 0) this.addMetric();
     },
 
-    fieldVisible(part, field) {
-      const state = this.builder && this.builder[part.key];
-      return !field.show_if || !!(state && state[field.show_if]);
+    // Una Tabla nueva arranca con las primeras columnas de la hoja.
+    _autoPickColumns() {
+      const max = Math.min(this.maxColumns || 0, 8);
+      this.drawerDraft.fields.columns = (this.schema.all_fields || []).slice(0, max)
+        .map(field => ({ field }));
     },
 
-    fieldEnabled(part, field) {
-      const state = this.builder && this.builder[part.key];
-      return !field.enable_if || !!(state && state[field.enable_if]);
+    // ---- dimensiones / pivotes
+    _dimensionColumns() {
+      return (this.schema.dimension_fields && this.schema.dimension_fields.length)
+        ? this.schema.dimension_fields
+        : (this.schema.all_fields || []);
     },
 
-    partNotes(part) {
-      return (part.notes || []).filter(n => PANEL_CHECKS[n.when] && PANEL_CHECKS[n.when](this));
+    // Columnas elegibles en la fila `idx`: las ya usadas por otra fila no se repiten.
+    dimensionOptions(idx) {
+      const list = this.drawerDraft.fields.dimensions;
+      return this._dimensionColumns().filter(c => list[idx] === c || !list.includes(c));
     },
 
-    // --- Columnas de la caja de filtros (opciones de vista por columna) ---
-
-    // Tipo de control de la columna `i` (caja de filtros); el primero habilitado por defecto.
-    columnControl(i) {
-      const b = this.builder;
-      const types = this.drawerWidgetClass.columnControls;
-      if (!b || !types) return '';
-      return (b.controls || {})[b.columns[i]] || types.find(o => !o.disabled).value;
+    pivotOptions(idx) {
+      const list = this.drawerDraft.fields.pivots;
+      return (this.schema.all_fields || []).filter(c => list[idx] === c || !list.includes(c));
     },
 
-    setColumnControl(i, value) {
-      const b = this.builder;
-      if (!b || !b.columns[i]) return;
-      b.controls = { ...(b.controls || {}), [b.columns[i]]: value };
+    addDimension() {
+      const list = this.drawerDraft.fields.dimensions;
+      if (list.length >= this.maxDimensions) return;
+      list.push(this._dimensionColumns().find(c => !list.includes(c)) || '');
     },
 
-    // Nombre a mostrar de la columna `i` (labels del view_spec); vacío = el de la columna.
-    columnLabel(i) {
-      const b = this.builder;
-      return (b && b.columns[i] && (b.labels || {})[b.columns[i]]) || '';
+    removeDimension(index) {
+      this.drawerDraft.fields.dimensions.splice(index, 1);
     },
 
-    setColumnLabel(i, value) {
-      const b = this.builder;
-      if (!b || !b.columns[i]) return;
-      const labels = { ...(b.labels || {}) };
-      if ((value || '').trim()) labels[b.columns[i]] = value;
-      else delete labels[b.columns[i]];
-      b.labels = labels;
+    addPivot() {
+      const list = this.drawerDraft.fields.pivots;
+      if (list.length >= this.maxPivots) return;
+      list.push((this.schema.all_fields || []).find(c => !list.includes(c)) || '');
     },
 
-    get maxMetrics() {
-      return this.drawerWidgetClass.maxMetrics;
+    removePivot(index) {
+      this.drawerDraft.fields.pivots.splice(index, 1);
     },
 
-    // El campo "Nombre a mostrar" solo donde la métrica se ve con nombre: hoy, la tabla.
-    get drawerSupportsLabels() {
-      return !!this.drawerWidgetClass.supportsLabels;
+    // ---- columnas (tabla: se muestran tal cual, en orden)
+    columnOptions(idx) {
+      const list = this.drawerDraft.fields.columns;
+      const current = (list[idx] || {}).field;
+      return (this.schema.all_fields || []).filter(c => c === current || !list.some(x => x.field === c));
     },
 
-    get drawerIsKpi() {
-      return this.editingType === 'kpi';
+    addColumn() {
+      const list = this.drawerDraft.fields.columns;
+      if (list.length >= this.maxColumns) return;
+      const field = (this.schema.all_fields || []).find(c => !list.some(x => x.field === c));
+      if (field) list.push({ field });
     },
 
-    // Cabecera por defecto de la métrica `i`: lo que se verá si no se escribe un nombre.
-    metricLabelPlaceholder(i) {
-      const b = this.builder;
-      if (!b) return '';
-      const alias = metricAliases(b).list[i];
-      return alias ? defaultColumnName(alias.as) : '';
+    removeColumn(index) {
+      this.drawerDraft.fields.columns.splice(index, 1);
     },
 
-    get _numericSet() {
-      return new Set(this.schema.numeric_fields || []);
+    // Al cambiar la columna elegida, el «Nombre a mostrar» de esa fila deja de servir.
+    onColumnFieldChange(index, field) {
+      const column = this.drawerDraft.fields.columns[index];
+      if (!column) return;
+      if (field != null && column.field !== field) column.field = field;
+      column.label = '';
     },
 
-    _payload(b) {
-      return builderToPayload(b, this._numericSet);
+    // Nombre que se muestra en la tabla: el «Nombre a mostrar» o la columna tal cual.
+    columnLabel(column) {
+      return (column && column.label) || humanizeName((column && column.field) || '');
     },
 
-    // Tipos de métrica que admite el widget (DataCapabilities.metric_types del backend).
-    get metricTypes() {
-      const allowed = this.drawerWidgetClass.metricTypes;
-      return METRIC_TYPE_OPTIONS.filter(o => allowed.includes(o.value));
+    // ---- métricas
+    addMetric() {
+      const metrics = this.drawerDraft.fields.metrics;
+      if (metrics.length >= (this.drawerCapabilities.metrics || [0, 99])[1]) return;
+      const field = (this.schema.numeric_fields || []).find(f => !metrics.some(m => m.field === f))
+        || (this.schema.all_fields || [])[0] || '';
+      metrics.push({ field, agg: 'sum', alias: this._autoAlias('sum', field, metrics) });
     },
 
-    // Nombre corto de la métrica `id` en los selects (su nombre a mostrar o el de por defecto).
-    metricName(id) {
-      const b = this.builder;
-      if (!b) return '';
-      const i = b.metrics.findIndex(m => m._id === id);
-      if (i < 0) return '';
-      return (b.metrics[i].label || '').trim() || this.metricLabelPlaceholder(i) || `Métrica ${i + 1} (incompleta)`;
+    removeMetric(index) {
+      this.drawerDraft.fields.metrics.splice(index, 1);
     },
 
-    // Métricas a las que puede referirse la métrica `i` en un cálculo: las anteriores que dan
-    // un número. Sin `i`, todas (condiciones sobre grupos y roles del KPI).
-    metricRefOptions(i = null, { numericOnly = true } = {}) {
-      const b = this.builder;
-      if (!b) return [];
-      const list = i === null ? activeMetrics(b) : activeMetrics(b).filter(m => b.metrics.indexOf(m) < i);
-      return list
-        .filter(m => !numericOnly || !isRankingMetric(m))
-        .map(m => ({ value: m._id, label: this.metricName(m._id) }));
+    onMetricFieldChange(metric) {
+      const taken = this.drawerDraft.fields.metrics.filter(m => m !== metric).map(m => m.alias);
+      metric.alias = this._autoAlias(metric.agg, metric.field, taken);
     },
 
-    // Métricas internas de una métrica por grupo, para su condición y su resultado.
-    innerRefOptions(m) {
-      const aggLabel = (agg) => (AGG_OPTIONS.find(o => o.value === agg) || { label: agg }).label;
-      return m.inner
-        .filter(x => x.agg && (isCountAgg(x.agg) || x.field))
-        .map(x => ({ value: x._id, label: isCountAgg(x.agg) ? 'Conteo de filas' : `${aggLabel(x.agg)} de ${x.field}` }));
+    // Nombre visible de la métrica: «Nombre a mostrar» o, si está vacío, el agg en español
+    // con el campo («Promedio Ventas»), igual que en las cabeceras del backend.
+    metricName(metric) {
+      const agg = (this.aggOptions.find(o => o.value === (metric.agg || '')) || {}).label
+        || (metric.agg || '');
+      return `${agg} ${humanizeName(metric.field)}`.trim();
     },
 
-    groupResultNeedsValue(m) {
-      return !COUNT_RESULTS.includes(m.result);
+    _autoAlias(agg, field, taken) {
+      const base = (agg && field) ? `${agg}_${field}` : (field || 'metrica');
+      const slug = base.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'metrica';
+      let alias = /^[a-z]/.test(slug) ? slug : `m_${slug}`;
+      let n = 2;
+      const used = new Set(taken || []);
+      while (used.has(alias)) alias = `${slug.slice(0, 30)}_${n++}`;
+      return alias;
     },
 
-    addInnerMetric(m) {
-      if (m.inner.length >= 3) return;
-      m.inner.push(newInnerMetric(this.schema.numeric_fields || []));
+    get aggOptions() { return AGG_OPTIONS; },
+
+    // ---- filtros
+    addFilter() {
+      const filters = this.drawerDraft.fields.filters;
+      if (filters.length >= 20) return;
+      filters.push(conditionFromPayload({ field: (this.schema.all_fields || [])[0] || '', op: 'eq' }));
     },
 
-    removeInnerMetric(m, i) {
-      if (m.inner.length <= 1) return;
-      const [removed] = m.inner.splice(i, 1);
-      if (m.value === removed._id) m.value = '';
+    removeFilter(index) {
+      this.drawerDraft.fields.filters.splice(index, 1);
     },
 
-    // --- Condiciones ---
-    addCondition(list) {
-      list.push(newCondition((this.schema.all_fields || [])[0] || ''));
+    get filterOpOptions() { return FILTER_OPS; },
+    get relativeOptions() { return RELATIVE_VALUES; },
+
+    filterNeedsValue(c) { return opMeta(c.op).needsValue; },
+    filterIsRange(c) { return opMeta(c.op).isRange; },
+    filterIsList(c) { return opMeta(c.op).isList; },
+
+    onFilterFieldChange(c) {
+      const numeric = (this.schema.numeric_fields || []).includes(c.field);
+      const meta = opMeta(c.op);
+      if (numeric && ['contains', 'in', 'not_in'].includes(c.op)) c.op = 'eq';
+      if (!numeric && ['lt', 'lte', 'gt', 'gte', 'between'].includes(c.op)) c.op = 'eq';
+      c.value = '';
+      c.value2 = '';
+      if (!meta.needsValue) return;
     },
 
-    removeCondition(list, i) {
-      list.splice(i, 1);
+    onFilterOpChange(c) {
+      c.value = '';
+      c.value2 = '';
+      if (c.mode === 'relative') c.mode = 'value';
     },
 
-    // Operadores según la columna: las comparaciones de orden solo en columnas numéricas.
-    opOptionsFor(field) {
-      const numeric = this._numericSet.has(field);
-      return FILTER_OP_OPTIONS.filter(o => numeric || !o.numeric);
-    },
-
-    onConditionFieldChange(c) {
-      if (!this.opOptionsFor(c.field).some(o => o.value === c.op)) c.op = 'eq';
-    },
-
-    conditionUsesMode(c) {
-      return RELATIVE_OPS.includes(c.op);
-    },
-
-    conditionNeedsValue(c) {
-      return !EMPTY_OPS.includes(c.op) && !(this.conditionUsesMode(c) && c.mode !== 'value');
-    },
-
-    conditionIsList(c) {
-      return LIST_OPS.includes(c.op);
-    },
-
-    valueModeOptions: VALUE_MODE_OPTIONS,
-
-    // id del <datalist> con los valores de ejemplo de la columna (autocompletar).
     sampleListId(field) {
-      const fields = Object.keys(this.schema.sample_values || {});
-      const i = fields.indexOf(field);
-      return i >= 0 ? `samples-${i}` : null;
+      return `samples-${String(field).replace(/[^a-z0-9_-]/gi, '_')}`;
     },
 
     get sampleLists() {
-      return Object.values(this.schema.sample_values || {}).map((values, i) => ({ id: `samples-${i}`, values }));
+      const samples = this.schema.sample_values || {};
+      return Object.entries(samples).map(([field, values]) => ({ id: this.sampleListId(field), values }));
     },
 
-    addGroupCondition(list, options) {
-      list.push(newGroupCondition(options[0] ? options[0].value : ''));
-    },
-
-    // --- Top N ---
-    get limitNeedsMetricSort() {
-      const b = this.builder;
-      return !!(b && b.limit) && parseInt(b.limit.n, 10) > 0 && !(b.sort.by || '').startsWith('#');
-    },
-
-    get showStacked() {
-      return this.drawerWidgetClass.supportsStacked && !!(this.builder && builderPivots(this.builder).length);
-    },
-
-    // Campos según la función: contar únicos acepta cualquier columna; el resto de las
-    // funciones que resumen una columna, solo numéricas (count no usa campo).
-    fieldOptionsFor(agg, current) {
-      const fields = agg === 'count_distinct' ? this.schema.all_fields : this.schema.numeric_fields;
-      return withCurrent(fields || [], current);
-    },
-
-    get showAsOptions() {
-      return this.builder ? showAsOptions(this.builder) : [];
-    },
-
-    showAsValue(m) {
-      return this.builder ? effectiveShowAs(this.builder, m.show_as) : 'value';
-    },
-
+    // ---- orden y límite
     get sortOptions() {
-      const b = this.builder;
-      if (!b) return [];
-      const opts = [...builderDims(b), ...builderColumns(b)].map(d => ({ value: d, label: d }));
-      const { list } = metricAliases(b);
-      b.metrics.forEach((m, i) => {
-        if (list[i]) opts.push({ value: `#${m._id}`, label: this.metricName(m._id) });
-      });
-      return opts;
+      const f = this.drawerDraft.fields;
+      const metricAliases = (f.metrics || []).map(m => m.alias).filter(Boolean);
+      // Tablas: el orden va sobre sus columnas; el resto, sobre dimensiones y alias.
+      const options = [
+        ...(f.columns || []).filter(c => c && c.field)
+          .map(c => ({ value: c.field, label: c.label || humanizeName(c.field) })),
+        ...(f.dimensions || []).map(c => ({ value: c, label: c })),
+        ...metricAliases.map(c => ({ value: c, label: c })),
+      ];
+      return options.filter((o, i, arr) => o.value && arr.findIndex(x => x.value === o.value) === i);
     },
 
-    // Al cambiar el ancho, la columna de inicio elegida puede quedarse fuera del grid
-    // (p. ej. estaba en la 10 y el widget pasa a 12 columnas). Se recorta al último inicio
-    // válido para que el <select> siempre tenga una opción que coincida con su valor.
-    fitStartCol() {
-      const d = this.drawerDraft;
-      if (!d || !d.width) return;
-      const fitted = BaseWidget.fitStartCol(d.startCol, d.width);
-      if (fitted !== d.startCol) d.startCol = fitted;
+    get sortValue() {
+      const raw = this.drawerDraft.fields.sort_by;
+      return raw ? String(raw).replace(/^-/, '') : '';
     },
 
-    openDrawer(id) {
-      const w = this.widgets.find(w => w.id === id);
+    get sortDirection() {
+      const raw = this.drawerDraft.fields.sort_by;
+      return raw && String(raw).startsWith('-') ? 'desc' : 'asc';
+    },
+
+    setSortValue(value) {
+      this.drawerDraft.fields.sort_by = value
+        ? (this.sortDirection === 'desc' ? `-${value}` : value)
+        : null;
+    },
+
+    setSortDirection(direction) {
+      const value = this.sortValue;
+      this.drawerDraft.fields.sort_by = value ? (direction === 'desc' ? `-${value}` : value) : null;
+    },
+
+    // ---- guardado
+    async saveDrawer() {
+      const w = this.editingWidget;
       if (!w) return;
-      this.editingId = id;
-      this.editingType = w.chart_type;
-      // Un widget nuevo empieza por sus datos.
-      if (w.id < 0) this.drawerTab = 'data';
-      const draft = {};
-      for (const field of this.drawerFields) {
-        if (field.key === 'builder' || field.key === 'prompt') continue;
-        draft[field.key] = w[field.key];
-      }
-      draft.prompt = '';
-      draft.builder = this._builderDraft(w) || this._defaultBuilder();
-      // Un tablero guardado puede tener un inicio que hoy no cabe con su ancho (o que quedó
-      // de una versión anterior): se normaliza al abrir para que el desplegable no quede sin
-      // opción coincidente.
-      draft.startCol = BaseWidget.fitStartCol(draft.startCol, draft.width);
-      // Totales por nivel: van junto a cada fila/columna del builder, pero son presentación
-      // (se guardan con "Guardar" y no vuelven a pedir los datos).
-      if (this.drawerWidgetClass.supportsTotals) {
-        draft.rowTotals = totalsLevels(w.rowTotals, draft.builder.dimensions.length);
-        draft.columnTotals = totalsLevels(w.columnTotals, draft.builder.pivots.length);
-        // "Repetir etiquetas de fila" va, como en Sheets, bajo la primera fila.
-        draft.repeatRowLabels = !!w.repeatRowLabels;
-      }
-      this.drawerDraft = draft;
-      // Widget nuevo abierto antes de que llegaran las columnas: completar los valores por
-      // defecto cuando lleguen.
-      if (w.id < 0 && !(this.schema.all_fields || []).length) {
-        this.loadSchema().then(() => {
-          if (this.editingId === id) this.drawerDraft.builder = this._defaultBuilder();
-        });
-      }
-      this.drawerAskError = '';
-      this.drawerAdvice = null;
-      this.drawerAskOpen = false;
+      this.drawerSaving = true;
       this.drawerSaveError = '';
-      this.drawerSpecError = '';
-      this._syncDrawerSpecs(w);
-    },
-
-    _builderDraft(w) {
-      return builderFromSpec(w.data_spec, w.view_spec, w.chart_type);
-    },
-
-    // Punto de partida del builder para un widget nuevo: primera columna agrupable y una
-    // métrica (suma de la primera columna numérica, o conteo si la hoja no tiene números).
-    // Los widgets con columnas sueltas arrancan con las primeras columnas de la hoja.
-    _defaultBuilder() {
-      const WidgetClass = this.drawerWidgetClass;
-      const dims = this.schema.dimension_fields || [];
-      const b = builderFromSpec({ dimensions: [], pivots: [], metrics: [] }, null, this.editingType);
-      b.dimensions = [WidgetClass.supportsDimension ? (dims[0] || '') : ''];
-      if (WidgetClass.usesColumns) {
-        const source = this.schema[WidgetClass.defaultColumnsFrom] || this.schema.all_fields || [];
-        const first = source.slice(0, Math.min(WidgetClass.defaultColumns, WidgetClass.maxColumns));
-        b.columns = first.length ? first : [''];
-      }
-      b.metrics = WidgetClass.supportsMetrics ? [newMetric('agg', this.schema.numeric_fields || [])] : [];
-      return b;
-    },
-
-    _syncDrawerSpecs(w) {
-      this.drawerSpecs = {
-        data_spec: w && w.data_spec ? JSON.parse(JSON.stringify(w.data_spec)) : null,
-        view_spec: w && w.view_spec ? JSON.parse(JSON.stringify(w.view_spec)) : null,
-      };
-    },
-
-    closeDrawer() {
-      this.editingId = null;
-      this.editingType = null;
-      this.drawerDraft = {};
-      this.destroyMetricsList();
-      this.destroyListSortables();
-      this.drawerAskError = '';
-      this.drawerAdvice = null;
-      this.drawerAskOpen = false;
-      this.drawerSaveError = '';
-      this.drawerSpecError = '';
-      this.drawerTab = 'data';
-    },
-
-    addBuilderMetric() {
-      const b = this.builder;
-      if (!b || b.metrics.length >= this.maxMetrics) return;
-      b.metrics.push(newMetric('agg', this.schema.numeric_fields || []));
-    },
-
-    removeBuilderMetric(index) {
-      const b = this.builder;
-      if (!b || b.metrics.length <= 1) return;
-      b.metrics.splice(index, 1);
-    },
-
-    // Arrastre de métricas: Sortable mueve los nodos y al soltar el orden del DOM se copia
-    // al builder. El alias de cada métrica se recalcula después (metricAliases), así que los
-    // cálculos entre métricas y los roles del KPI la siguen aunque cambie de posición.
-    initMetricsList(el) {
-      if (!el || typeof Sortable === 'undefined') return;
-      // El bloque del builder se crea y se destruye al cambiar de pestaña o de widget.
-      this.destroyMetricsList();
-      this.metricsListEl = el;
-      this.metricsSortable = new Sortable(el, {
-        draggable: '[data-metric-id]',
-        handle: '.metric-drag-handle',
-        animation: 150,
-        ghostClass: 'metric-ghost-preview',
-        onEnd: () => this.reorderMetrics(),
-      });
-    },
-
-    destroyMetricsList() {
-      if (this.metricsSortable) {
-        this.metricsSortable.destroy();
-        this.metricsSortable = null;
-      }
-      this.metricsListEl = null;
-    },
-
-    reorderMetrics() {
-      const b = this.builder;
-      const el = this.metricsListEl;
-      if (!b || !el) return;
-      const byId = new Map(b.metrics.map(m => [m._id, m]));
-      const ordered = Array.from(el.querySelectorAll('[data-metric-id]'))
-        .map(node => byId.get(node.dataset.metricId))
-        .filter(Boolean);
-      if (ordered.length !== b.metrics.length) return;
-      b.metrics.splice(0, b.metrics.length, ...ordered);
-    },
-
-    // Etiqueta completa de un tipo de métrica (el selector es angosto y la recorta).
-    metricTypeLabel(type) {
-      const found = METRIC_TYPE_OPTIONS.find(o => o.value === type);
-      return found ? found.label : '';
-    },
-
-    // Al pasar una métrica a "por grupo", arranca agrupando por la primera columna agrupable.
-    onMetricTypeChange(m) {
-      if (m.type === 'grouped' && !m.group_by) m.group_by = (this.schema.dimension_fields || [])[0] || '';
-    },
-
-    // Escritura del data_spec vía update_widget_spec, desde "Guardar". NUNCA llama a la IA. Si
-    // el backend rechaza la combinación, muestra su mensaje en el banner y no toca el widget.
-    // Retorna true si se aplicó.
-    async applyBuilder() {
-      const w = this.editingWidget;
-      const b = this.builder;
-      if (!w || !b) return false;
-      const payload = this._payload(b);
-      const WidgetClass = this.drawerWidgetClass;
-      if (WidgetClass.supportsMetrics && !payload.metrics.length) {
-        this.drawerSpecError = 'Agrega al menos una métrica con su columna.';
-        return false;
-      }
-      if (WidgetClass.usesColumns && !payload.columns.length) {
-        this.drawerSpecError = 'Elige al menos una columna para mostrar.';
-        return false;
-      }
-      this.drawerApplying = true;
-      this.drawerSpecError = '';
       try {
-        const isNew = w.id < 0;
-        // Widget nuevo: se crea desde el builder. Existente: se edita su spec. Ninguno usa IA.
-        const { r, data } = await fetchJsonSafe(
-          isNew
-            ? apiUrl(`/api/dashboard/${this.dashboardId}/widgets/`)
-            : apiUrl(`/api/widget/${w.id}/spec/`),
-          {
-            method: isNew ? 'POST' : 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...payload,
-              title: this.drawerDraft.title,
-              ...(isNew ? { type: this.editingType, position: w.getPosition(), display: w.getProperties() } : {}),
-            }),
-          },
-          RENDER_FETCH_TIMEOUT_MS,
-        );
-        if (!r.ok || !data) {
-          this.drawerSpecError = (data && data.error) || 'No se pudo aplicar el cambio.';
-          return false;
+        const draft = this.drawerDraft;
+        const fields = JSON.parse(JSON.stringify(draft.fields));
+        // Una fila a medio elegir («— elegir —») no se envía al servidor.
+        ['dimensions', 'pivots'].forEach(k => {
+          fields[k] = (fields[k] || []).filter(v => v !== '' && v != null);
+        });
+        // Columnas: solo `field`, y `label` solo si escribió uno.
+        fields.columns = (fields.columns || [])
+          .map(c => (typeof c === 'string' ? { field: c } : (c || {})))
+          .filter(c => String(c.field || '').trim() !== '')
+          .map(c => {
+            const field = String(c.field).trim();
+            const label = String(c.label || '').trim();
+            return label ? { field, label } : { field };
+          });
+        fields.filters = fields.filters.map(c => conditionToPayload(c, this.schema.numeric_fields || []));
+        if (!fields.filters.length) fields.filters = [];
+        if (!fields.sort_by) fields.sort_by = null;
+        if (fields.limit === '' || fields.limit == null || Number.isNaN(Number(fields.limit))) fields.limit = null;
+        else fields.limit = Number(fields.limit);
+
+        const style = JSON.parse(JSON.stringify(draft.style || {}));
+        const title = String(draft.title || '').trim() || w.title;
+        style.title = title;
+
+        w.title = title;
+        w.fields = fields;
+        w.style = style;
+        w._dirty = true;
+        w.updateChrome?.();
+
+        const result = await this._saveWidget(w);
+        if (!result.ok) {
+          this.drawerSaveError = result.error || 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
+          return;
         }
-        if (isNew) this._swapWidgetId(w, data.id);
-        // Filtros quitados de la caja: su selección deja de aplicarse.
-        if (WidgetClass.placement === 'header' && this.clearBoardFilters) {
-          const kept = new Set((data.data_spec && data.data_spec.columns) || []);
-          this.clearBoardFilters(((w.data_spec && w.data_spec.columns) || []).filter(c => !kept.has(c)));
-        }
-        w.applyServerState(data);
-        w.updateChrome();
-        w.applyRender(data);
-        this.drawerDraft.builder = this._builderDraft(w);
-        this._syncDrawerSpecs(w);
-        return true;
+        // El panel se queda abierto: «Guardar» no cierra (lo hace «Cancelar» o la ✕).
+        if (typeof window.showToast === 'function') window.showToast('Cambios guardados.');
       } catch (e) {
-        this.drawerSpecError = 'No se pudo conectar con el servidor.';
-        return false;
+        this.drawerSaveError = e.message;
       } finally {
-        this.drawerApplying = false;
+        this.drawerSaving = false;
       }
     },
 
-    get builderDirty() {
-      const w = this.editingWidget;
-      if (!w || !this.builder) return false;
-      if (w.id < 0) return true;
-      return JSON.stringify(this._payload(this.builder))
-        !== JSON.stringify(this._payload(this._builderDraft(w)));
-    },
-
-    _swapWidgetId(w, newId) {
-      const oldId = w.id;
-      w.id = newId;
-      if (w.el) {
-        w.el.dataset.widgetId = newId;
-        const chartContainer = w.el.querySelector(`#chart-${oldId}`);
-        if (chartContainer) chartContainer.id = `chart-${newId}`;
-      }
-      if (this.editingId === oldId) this.editingId = newId;
-    },
-
-    // "Consulta con la IA": pide la configuración sugerida para el pedido del usuario. No
-    // modifica el widget; el panel la muestra como pasos.
+    // ---- asistente con IA
     async askAssistant() {
       const prompt = (this.drawerDraft.prompt || '').trim();
       if (!prompt) return;
@@ -1542,17 +750,11 @@ document.addEventListener('alpine:init', () => {
         const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.dashboardId}/table-assistant/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ prompt, widget_type: this.editingType }),
         });
-        if (!r.ok || !data) {
-          throw new Error((data && data.error) || 'El servidor no respondió correctamente (puede que la IA haya tardado demasiado). Intenta de nuevo.');
-        }
-        this.drawerAdvice = {
-          builder: builderFromSpec(data.data_spec, data.view_spec, 'dynamic_table'),
-          filters: data.data_spec.filters || [],
-          having: data.data_spec.having || [],
-          title: (data.view_spec && data.view_spec.title) || '',
-        };
+        if (!r.ok || !data) throw new Error((data && data.error) || 'El servidor no respondió correctamente.');
+        this.drawerAdvice = data;
+        this.applyAdvice();
       } catch (e) {
         this.drawerAskError = e.name === 'AbortError'
           ? 'La IA tardó demasiado en responder. Intenta de nuevo.'
@@ -1562,50 +764,27 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Rellena el constructor con la sugerencia. No guarda: el usuario revisa y pulsa "Guardar".
     applyAdvice() {
       const a = this.drawerAdvice;
       if (!a) return;
-      const builder = JSON.parse(JSON.stringify(a.builder));
-      builder.widget = this.editingType;
-      this.drawerDraft.builder = builder;
-      if (a.title) this.drawerDraft.title = a.title;
-      if (this.drawerDraft.rowTotals) {
-        this.drawerDraft.rowTotals = totalsLevels(this.drawerDraft.rowTotals, builder.dimensions.length);
-        this.drawerDraft.columnTotals = totalsLevels(this.drawerDraft.columnTotals, builder.pivots.length);
+      const draft = this.drawerDraft;
+      draft.fields = { ...EMPTY_FIELDS(), ...(a.fields || {}) };
+      draft.style = { ...(this.drawerManifest.style_defaults || {}), ...(a.style || {}) };
+      if (a.title) draft.title = a.title;
+      this._normalizeDraft();
+      this.drawerAdvice = null;
+      this.drawerAskOpen = false;
+      if (typeof window.showToast === 'function') {
+        window.showToast('Configuración propuesta por la IA. Revisa y guarda.');
       }
     },
 
-    // Guardar es el único punto de confirmación del panel: aplica el spec de datos (si
-    // cambió) y persiste la presentación. Siempre guarda, aunque no haya cambios, y NO cierra
-    // el panel: se sigue editando sobre el mismo widget.
-    async saveDrawer() {
-      const w = this.editingWidget;
-      if (!w) return;
-      this.drawerSaving = true;
-      this.drawerSaveError = '';
-      try {
-        const { prompt, builder, ...presentation } = this.drawerDraft;
-        // Cambios del builder sin aplicar: se aplican con el mismo camino que antes el botón.
-        if (builder && this.builderDirty && !(await this.applyBuilder())) return;
-
-        // Última barrera antes de guardar: si el ancho y la columna de inicio no caben en las
-        // 12 columnas del grid, se ajusta el inicio en vez de persistir un diseño inválido.
-        presentation.startCol = BaseWidget.fitStartCol(presentation.startCol, presentation.width);
-        Object.assign(w, presentation);
-        if (!await this._saveWidget(w)) {
-          this.drawerSaveError = 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
-          return;
-        }
-        w.updateChrome();
-        // Opciones de presentación que cambian el contenido (ej. totales de la tabla): se
-        // redibuja con los datos ya calculados, sin volver a pedirlos.
-        if (w._lastEntry) w.applyRender(w._lastEntry);
-      } catch (e) {
-        this.drawerSaveError = e.message;
-      } finally {
-        this.drawerSaving = false;
-      }
-    },
+    drawerDraft: { title: '', fields: { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null }, style: {}, prompt: '' },
+    drawerAdvice: null,
+    drawerAskOpen: false,
+    drawerAsking: false,
+    drawerAskError: '',
+    drawerSaving: false,
+    drawerSaveError: '',
   });
 });

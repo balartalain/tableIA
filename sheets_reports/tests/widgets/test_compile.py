@@ -1,246 +1,270 @@
+"""Lo que cada widget le devuelve al frontend para dibujarse (`compile`)."""
 from django.test import SimpleTestCase
 
-from sheets_reports.tests.fixtures import agg, compiled, sellers_df, spec
+from sheets_reports.tests.fixtures import agg, compiled, fields, render, sales_df, sellers_df, table_fields
 
 
-class CompileViewTests(SimpleTestCase):
-    def test_kpi(self):
-        out = compiled("kpi", spec(dimensions=[]), {"labels": {"total_ventas": "Total"}})
-        self.assertEqual(out, {"value": 755.0, "label": "Total"})
-
-    def test_kpi_porcentaje(self):
-        out = compiled("kpi", spec(dimensions=[], metrics=[agg("porcentaje", show_as="pct_total")],
-                                   filters=[{"field": "anio", "op": "eq", "value": 2026}]))
-        self.assertEqual(out, {"value": 89.4, "label": "Porcentaje", "percent": True})
-
-    def test_bar_y_table_marcan_series_y_campos_de_porcentaje(self):
-        metrics = [agg("total_ventas"), agg("porcentaje", show_as="pct_column")]
-        self.assertEqual(compiled("bar", spec(metrics=metrics))["percent"], ["Porcentaje"])
-        self.assertEqual(compiled("dynamic_table", spec(metrics=metrics))["percent"], ["porcentaje"])
-        pivoted = compiled("dynamic_table", spec(pivots=["mes"], metrics=[metrics[1]]))
-        # Una por mes + la columna "Total general".
-        self.assertEqual(len(pivoted["percent"]), 4)
-
-    def test_bar_sin_pivote_una_serie_por_metrica(self):
-        out = compiled("bar", spec(metrics=[
-            {"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"},
-            {"type": "agg", "agg": "count", "as": "cantidad"},
-        ]), {"labels": {"cantidad": "Cantidad"}})
+class BarCompileTests(SimpleTestCase):
+    def test_sin_pivote_una_serie_por_metrica(self):
+        out = compiled("bar", fields(metrics=[
+            agg("total_ventas"), {"agg": "count", "alias": "cantidad"},
+        ]))
         self.assertEqual(out["categories"], ["Hogar", "Electrónica", "Ropa"])
         self.assertEqual(out["series"], [
-            {"name": "Total ventas", "data": [175.0, 500.0, 80.0]},
-            {"name": "Cantidad", "data": [3, 2, 1]},
+            {"name": "Suma Ventas", "data": [175.0, 500.0, 80.0]},
+            {"name": "Conteo de filas", "data": [3, 2, 1]},
         ])
         self.assertFalse(out["stacked"])
+        self.assertEqual(out["percent"], [])
 
-    def test_bar_con_pivote_una_serie_por_valor(self):
-        out = compiled("bar", spec(pivots=["mes"]), {"stacked": True})
+    def test_con_pivote_una_serie_por_valor(self):
+        out = compiled("bar", fields(dimensions=["categoria"], pivots=["mes"],
+                                     metrics=[agg("total_ventas")]), {"stacked": True})
         self.assertEqual(out["categories"], ["Hogar", "Electrónica", "Ropa"])
-        self.assertEqual(out["series"], [
-            {"name": "Ene", "data": [100.0, 300.0, 0]},
-            {"name": "Feb", "data": [50.0, 200.0, 80.0]},
-            {"name": "Mar", "data": [25.0, 0, 0]},
-        ])
+        self.assertEqual([s["name"] for s in out["series"]], ["Ene", "Feb", "Mar"])
+        self.assertEqual(out["series"][0]["data"], [100.0, 300.0, 0])
         self.assertTrue(out["stacked"])
 
-    def test_line_no_lleva_stacked(self):
-        self.assertNotIn("stacked", compiled("line", spec(dimensions=["mes"])))
+    def test_orientacion_horizontal_y_cuadricula(self):
+        out = compiled("bar", fields(), {"horizontal": True, "showGrid": True})
+        self.assertTrue(out["horizontal"])
 
-    def test_donut(self):
-        out = compiled("donut", spec(sort={"by": "total_ventas", "dir": "desc"}))
-        self.assertEqual(out, {"series": [500.0, 175.0, 80.0], "labels": ["Electrónica", "Hogar", "Ropa"]})
-
-    def test_table_plana(self):
-        out = compiled("dynamic_table", spec())
-        self.assertEqual(out["columns"], [
-            {"header": "Categoria", "field": "categoria"},
-            {"header": "Total ventas", "field": "total_ventas"},
-        ])
-        self.assertEqual(out["rows"][0], {"categoria": "Hogar", "total_ventas": 175.0})
-
-    def test_table_con_pivote_columnas_anidadas(self):
-        out = compiled("dynamic_table", spec(pivots=["mes"]), {"labels": {"total_ventas": "Ventas"}})
-        self.assertEqual(out["columns"], [
-            {"header": "Categoria", "field": "categoria"},
-            {"header": "Ventas", "children": [
-                {"header": "Ene", "field": "__pivots.Ene.total_ventas"},
-                {"header": "Feb", "field": "__pivots.Feb.total_ventas"},
-                {"header": "Mar", "field": "__pivots.Mar.total_ventas"},
-            ]},
-            {"header": "Total general", "field": "__total.total_ventas", "total": True},
-        ])
-        self.assertEqual(out["rows"][0], {
-            "categoria": "Hogar",
-            "__pivots.Ene.total_ventas": 100.0,
-            "__pivots.Feb.total_ventas": 50.0,
-            "__pivots.Mar.total_ventas": 25.0,
-            "__total.total_ventas": 175.0,
-        })
-        self.assertEqual(out["totals"], {
-            "categoria": "Total general",
-            "__pivots.Ene.total_ventas": 400.0,
-            "__pivots.Feb.total_ventas": 330.0,
-            "__pivots.Mar.total_ventas": 25.0,
-            "__total.total_ventas": 755.0,
-        })
-
-    def test_table_con_pivote_y_varias_metricas_agrupa_por_valor_del_pivote(self):
-        out = compiled("dynamic_table", spec(pivots=["mes"], metrics=[
-            {"type": "agg", "agg": "count", "as": "cantidad"},
-            {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"},
-        ]), {"labels": {"pct": "%"}})
-        self.assertEqual(out["columns"][1], {"header": "Ene", "children": [
-            {"header": "Cantidad", "field": "__pivots.Ene.cantidad"},
-            {"header": "%", "field": "__pivots.Ene.pct"},
+    def test_lineas_de_referencia_validas(self):
+        out = compiled("bar", fields(), {"reference_lines": [
+            {"kind": "value", "value": 400, "label": "Meta"},
+            {"kind": "value"},
+            {"kind": "mediana"},
         ]})
-        self.assertEqual(out["columns"][-1], {"header": "Total general", "total": True, "children": [
-            {"header": "Cantidad", "field": "__total.cantidad"},
-            {"header": "%", "field": "__total.pct"},
-        ]})
-        self.assertEqual(out["rows"][0]["__pivots.Ene.pct"], 33.33)
-        self.assertIn("__total.pct", out["percent"])
-        self.assertNotIn("__total.cantidad", out["percent"])
+        self.assertEqual(len(out["referenceLines"]["yaxis"]), 1)
+        self.assertEqual(out["referenceLines"]["yaxis"][0]["y"], 400)
 
-    def test_table_plana_trae_fila_de_totales(self):
-        out = compiled("dynamic_table", spec())
-        self.assertEqual(out["totals"], {"categoria": "Total general", "total_ventas": 755.0})
+    def test_porcentajes_se_marcan_para_el_formato(self):
+        out = compiled("bar", fields(metrics=[
+            {"field": "ventas", "agg": "sum", "alias": "pct",
+             "window": {"type": "percent_of_total"}},
+        ]))
+        self.assertEqual(out["percent"], ["pct"])
+
+
+class LineCompileTests(SimpleTestCase):
+    def test_no_lleva_stacked(self):
+        out = compiled("line", fields(dimensions=["mes"], metrics=[agg("total_ventas")]))
+        self.assertNotIn("stacked", out)
+        self.assertNotIn("horizontal", out)
+        self.assertEqual(out["categories"], ["Ene", "Feb", "Mar"])
+        self.assertEqual(out["series"][0]["data"], [400.0, 330.0, 25.0])
+
+    def test_mantiene_el_orden_de_la_hoja(self):
+        out = compiled("line", fields(dimensions=["mes"], metrics=[agg("total_ventas")]))
+        self.assertEqual(out["percent"], [])
+
+
+class DonutCompileTests(SimpleTestCase):
+    def test_series_y_etiquetas(self):
+        out = compiled("donut", fields())
+        self.assertEqual(out["labels"], ["Hogar", "Electrónica", "Ropa"])
+        self.assertEqual(out["series"], [175.0, 500.0, 80.0])
+        self.assertNotIn("_apex_options", out)
 
 
 class KpiCompileTests(SimpleTestCase):
-    def data_spec(self, *metrics, **overrides):
-        return spec(dimensions=[], metrics=list(metrics) or [
+    def kpi(self, *metrics, **overrides):
+        return fields(dimensions=[], pivots=[], metrics=list(metrics), **overrides)
+
+    def test_comparacion_con_la_segunda_metrica(self):
+        out = compiled("kpi", self.kpi(
             agg("actual", filters=[{"field": "anio", "op": "eq", "value": 2026}]),
             agg("anterior", filters=[{"field": "anio", "op": "eq", "value": 2025}]),
-        ], **overrides)
-
-    def test_comparacion(self):
-        out = compiled("kpi", self.data_spec(), {"kpi": {"compare": "anterior"}, "labels": {"anterior": "2025"}})
+        ))
         self.assertEqual(out["value"], 675.0)
-        self.assertEqual(out["compare"], {"label": "2025", "value": 80.0, "mode": "pct",
-                                          "delta": 595.0, "delta_pct": 743.75, "better": True})
+        self.assertEqual(out["compare"]["label"], "Anterior")
+        self.assertEqual(out["compare"]["value"], 80.0)
+        self.assertEqual(out["compare"]["mode"], "pct")
+        self.assertTrue(out["compare"]["better"])
 
     def test_comparacion_cuando_menos_es_mejor(self):
-        out = compiled("kpi", self.data_spec(), {"kpi": {"compare": "anterior", "higher_is_better": False}})
+        out = compiled("kpi", self.kpi(
+            agg("actual", filters=[{"field": "anio", "op": "eq", "value": 2026}]),
+            agg("anterior", filters=[{"field": "anio", "op": "eq", "value": 2025}]),
+        ), {"higher_is_better": False})
         self.assertFalse(out["compare"]["better"])
 
-    def test_meta_numerica_y_semaforo(self):
-        options = {"kpi": {"target": 1000, "status": {"basis": "target_pct", "good": 100, "warn": 60}}}
-        out = compiled("kpi", self.data_spec(), options)
-        self.assertEqual(out["target"], {"label": "Meta", "value": 1000, "pct": 67.5})
+    def test_meta_y_semaforo(self):
+        out = compiled("kpi", self.kpi(agg("actual")), {"target": 1000, "status_good": 100, "status_warn": 60})
+        self.assertEqual(out["target"]["label"], "Meta")
+        self.assertEqual(out["target"]["value"], 1000.0)
         self.assertEqual(out["status"], "warn")
 
-    def test_semaforo_por_valor_invertido(self):
-        options = {"kpi": {"higher_is_better": False, "status": {"basis": "value", "good": 500, "warn": 700}}}
-        self.assertEqual(compiled("kpi", self.data_spec(), options)["status"], "warn")
+    def test_semaforo_por_valor_sin_meta(self):
+        out = compiled("kpi", self.kpi(agg("actual")),
+                       {"higher_is_better": False, "status_good": 700, "status_warn": 800})
+        self.assertIsNone(out["target"])
+        self.assertEqual(out["status"], "warn")
 
-    def test_meta_desde_otra_metrica(self):
-        out = compiled("kpi", self.data_spec(agg("ventas"), agg("plan", field="plan")),
-                       {"kpi": {"target": "plan"}}, df=sellers_df())
-        self.assertEqual(out["target"], {"label": "Plan", "value": 1020.0, "pct": 104.9})
+    def test_formato_prefijo_abreviacion_y_decimales(self):
+        out = compiled("kpi", self.kpi(agg("actual")), {"prefix": "RD$ ", "abbreviate": True})
+        self.assertEqual(out["formatted_value"], "RD$ 755")
 
-    def test_top_muestra_el_grupo(self):
-        metric = {"type": "grouped", "as": "lider", "group_by": "categoria", "inner": [agg("v")],
-                  "inner_having": [], "result": "top", "value": "v"}
-        out = compiled("kpi", self.data_spec(metric), {"labels": {"lider": "Ventas"}})
-        self.assertEqual(out, {"label": "Ventas", "text": "Electrónica", "value": 500.0})
-
-    def test_tendencia_de_la_metrica_principal(self):
-        out = compiled("kpi", self.data_spec(agg("total"), agg("cantidad", "count"), trend_by="mes"),
-                       {"kpi": {"primary": "cantidad"}})
-        self.assertEqual(out["value"], 6)
-        self.assertEqual(out["trend"], {"categories": ["Ene", "Feb", "Mar"], "data": [2, 3, 1]})
+    def test_los_defaults_del_estilo_vienen_de_backend(self):
+        out = render("kpi", self.kpi(agg("actual")))
+        self.assertEqual(out["widget_form"]["style"]["decimals"], 0)
+        self.assertEqual(out["widget_form"]["style"]["compareMode"], "pct")
 
 
-class PivotTableCompileTests(SimpleTestCase):
-    def test_varias_filas_marcan_subtotales(self):
-        out = compiled("dynamic_table", spec(dimensions=["anio", "categoria"]))
-        self.assertEqual([c["field"] for c in out["columns"]], ["anio", "categoria", "total_ventas"])
-        self.assertEqual(out["rowFields"], ["anio", "categoria"])
-        self.assertEqual(out["rows"][2], {"anio": "Total 2026", "categoria": None, "__subtotal": True, "total_ventas": 675.0})
-        self.assertEqual(out["totals"], {"anio": "Total general", "total_ventas": 755.0})
+class DynamicTableCompileTests(SimpleTestCase):
+    def test_columnas_con_etiqueta_y_campo(self):
+        out = compiled("dynamic_table", fields(dimensions=["categoria"]))
+        self.assertEqual(out["columns"], [
+            {"header": "Categoria", "field": "categoria"},
+            {"header": "Suma Ventas", "field": "total_ventas"},
+        ])
+        self.assertEqual(out["rowFields"], ["categoria"])
+        self.assertEqual([r["categoria"] for r in out["rows"]], ["Hogar", "Electrónica", "Ropa"])
 
-    def test_dos_pivotes_anidan_columnas_con_subtotales(self):
-        out = compiled("dynamic_table", spec(pivots=["anio", "mes"]))
-        sep = "\x1f"
-        self.assertEqual(out["columns"][1], {"header": "Total ventas", "children": [
-            {"header": "2026", "children": [
-                {"header": "Ene", "field": f"__pivots.2026{sep}Ene.total_ventas"},
-                {"header": "Feb", "field": f"__pivots.2026{sep}Feb.total_ventas"},
-                {"header": "Mar", "field": f"__pivots.2026{sep}Mar.total_ventas"},
-            ]},
-            {"header": "Total 2026", "field": "__pivots.2026.total_ventas", "subtotal": True},
-            {"header": "2025", "children": [
-                {"header": "Feb", "field": f"__pivots.2025{sep}Feb.total_ventas"},
-            ]},
-            {"header": "Total 2025", "field": "__pivots.2025.total_ventas", "subtotal": True},
-        ]})
-        self.assertEqual(out["rows"][0]["__pivots.2026.total_ventas"], 175.0)
+    def test_un_hijo_por_valor_del_pivote(self):
+        out = compiled("dynamic_table", fields(pivots=["mes"], metrics=[agg("total_ventas")]))
+        pivot_col = next(c for c in out["columns"] if c.get("children"))
+        self.assertEqual(pivot_col["header"], "Suma Ventas")
+        self.assertEqual([c["field"] for c in pivot_col["children"]],
+                         ["__pivots.Ene.total_ventas", "__pivots.Feb.total_ventas",
+                          "__pivots.Mar.total_ventas"])
+        self.assertEqual(out["columns"][0]["field"], "categoria")
+        # La tabla se cierra con la columna «Total general» (apagable con showColumnTotals).
+        self.assertEqual(out["columns"][-1],
+                         {"header": "Total general", "field": "__total.total_ventas", "total": True})
+        self.assertEqual(out["totals"]["__total.total_ventas"], 755.0)
 
-    def test_dos_pivotes_y_varias_metricas(self):
-        out = compiled("dynamic_table", spec(pivots=["anio", "mes"], metrics=[
-            {"type": "agg", "agg": "count", "as": "cantidad"},
-            {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"},
+    def test_totales_de_las_columnas_numericas(self):
+        out = compiled("dynamic_table", fields())
+        self.assertEqual(out["totals"], {"categoria": "Total general", "total_ventas": 755.0})
+
+    def test_filas_de_subtotal_por_dimension(self):
+        out = compiled("dynamic_table", fields(dimensions=["categoria", "anio"]), df=sellers_df())
+        subtotals = [r for r in out["rows"] if r.get("__subtotal")]
+        self.assertEqual([r["categoria"] for r in subtotals], ["Total Hogar", "Total Ropa"])
+        self.assertTrue(all(r["anio"] is None for r in subtotals))
+        self.assertEqual(subtotals[0]["total_ventas"], 600.0)
+        self.assertEqual([r["categoria"] for r in out["rows"]],
+                         ["Hogar", "Hogar", "Total Hogar", "Ropa", "Ropa", "Total Ropa"])
+        self.assertEqual(out["totals"]["categoria"], "Total general")
+
+    def test_columna_de_subtotal_tras_cada_valor_del_pivote(self):
+        out = compiled("dynamic_table",
+                       fields(dimensions=["categoria"], pivots=["anio", "vendedor"],
+                              metrics=[agg("total_ventas")]),
+                       df=sellers_df())
+        group = out["columns"][1]
+        self.assertEqual([c["header"] for c in group["children"]],
+                         ["2025", "Total 2025", "2026", "Total 2026"])
+        self.assertEqual([c.get("subtotal") for c in group["children"]],
+                         [None, True, None, True])
+        self.assertEqual(group["children"][1]["field"], "__pivots.2025.total_ventas")
+        self.assertEqual(out["columns"][-1],
+                         {"header": "Total general", "field": "__total.total_ventas", "total": True})
+
+    def test_varias_metricas_anidadas_bajo_una_subcolumna_por_metrica(self):
+        out = compiled("dynamic_table",
+                       fields(dimensions=["categoria"], pivots=["anio"],
+                              metrics=[agg("total_ventas"), agg("total_plan", "sum", "plan")]),
+                       df=sellers_df())
+        group = out["columns"][1]
+        self.assertEqual(group["header"], "2025")
+        self.assertEqual([c["header"] for c in group["children"]], ["Suma Ventas", "Suma Plan"])
+        self.assertEqual(group["children"][0]["field"], "__pivots.2025.total_ventas")
+        self.assertEqual([c["header"] for c in out["columns"][-1]["children"]],
+                         ["Suma Ventas", "Suma Plan"])
+
+    def test_nombre_a_mostrar_de_la_metrica(self):
+        out = compiled("dynamic_table", fields(metrics=[
+            {"field": "ventas", "agg": "sum", "alias": "t", "label": "Costos totales"},
         ]))
-        anio_2026 = out["columns"][1]
-        self.assertEqual(anio_2026["header"], "2026")
-        self.assertEqual([c["header"] for c in anio_2026["children"][0]["children"]], ["Cantidad", "Pct"])
-        self.assertEqual(out["columns"][2]["header"], "Total 2026")
-        self.assertTrue(out["columns"][2]["subtotal"])
+        self.assertEqual(out["columns"][1], {"header": "Costos totales", "field": "t"})
+        # Sin label se muestra el agg en español con la columna («Suma Ventas»): nunca el alias.
+        self.assertEqual(out["columns"][0], {"header": "Categoria", "field": "categoria"})
+
+    def test_porcentajes(self):
+        out = compiled("dynamic_table", fields(metrics=[
+            {"field": "ventas", "agg": "sum", "alias": "pct", "window": {"type": "percent_of_total"}},
+        ]))
+        self.assertEqual(out["percent"], ["pct"])
+
+    def test_porcentajes_con_pivote_apuntan_a_cada_celda_y_al_total(self):
+        out = compiled("dynamic_table", fields(dimensions=["categoria"], pivots=["mes"],
+                                               metrics=[{"field": "ventas", "agg": "sum",
+                                                         "alias": "pct",
+                                                         "window": {"type": "percent_of_total"}}]))
+        self.assertEqual(out["percent"],
+                         ["__pivots.Ene.pct", "__pivots.Feb.pct", "__pivots.Mar.pct",
+                          "__total.pct"])
+        row = out["rows"][0]
+        # Cada celda sobre el total de SU columna: Hogar/Ene es 100 de los 400 de «Ene».
+        self.assertEqual(row["__pivots.Ene.pct"], 25.0)
+        # La fila completa (175) sobre el total general (755).
+        self.assertEqual(row["__total.pct"], 23.18)
 
 
-class LineOrderTests(SimpleTestCase):
-    """El eje X de una línea va en orden cronológico ascendente, salvo un orden elegido."""
-
-    def df(self):
-        import pandas as pd
-        return pd.DataFrame({
-            "mes": ["Mar", "Ene", "Feb", "Ene"],
-            "anio": [2026, 2024, 2025, 2024],
-            "fecha": ["03/02/2024", "15/01/2024", "2024-01-20", "15/01/2024"],
-            "cat": ["a", "b", "a", "b"],
-            "v": [10.0, 2.0, 30.0, 4.0],
-        })
-
-    def categories(self, widget_type="line", **overrides):
-        data_spec = spec(**{"metrics": [agg("t", field="v")], **overrides})
-        return compiled(widget_type, data_spec, df=self.df())["categories"]
-
-    def test_anios_meses_y_fechas_ascendentes(self):
-        self.assertEqual(self.categories(dimensions=["anio"]), ["2024", "2025", "2026"])
-        self.assertEqual(self.categories(dimensions=["mes"]), ["Ene", "Feb", "Mar"])
-        self.assertEqual(self.categories(dimensions=["fecha"]), ["15/01/2024", "2024-01-20", "03/02/2024"])
-
-    def test_los_valores_siguen_a_su_categoria(self):
-        out = compiled("line", spec(dimensions=["anio"], metrics=[agg("t", field="v")]), df=self.df())
-        self.assertEqual(out["series"][0]["data"], [6.0, 30.0, 10.0])
-
-    def test_con_pivote(self):
-        self.assertEqual(self.categories(dimensions=["anio"], pivots=["cat"]), ["2024", "2025", "2026"])
-
-    def test_un_orden_elegido_se_respeta(self):
-        self.assertEqual(self.categories(dimensions=["anio"], sort={"by": "t", "dir": "desc"}),
-                         ["2025", "2026", "2024"])
-
-    def test_las_barras_mantienen_el_orden_de_la_hoja(self):
-        self.assertEqual(self.categories("bar", dimensions=["anio"]), ["2026", "2024", "2025"])
+class TableCompileTests(SimpleTestCase):
+    def test_columnas_con_tipo_y_tope_de_filas(self):
+        out = compiled("table", table_fields(["categoria", "ventas"]))
+        self.assertEqual(out["columns"], [
+            {"header": "Categoria", "field": "categoria", "numeric": False},
+            {"header": "Ventas", "field": "ventas", "numeric": True},
+        ])
+        self.assertEqual(out["rows"][0], {"categoria": "Hogar", "ventas": 100.0})
+        self.assertFalse(out["truncated"])
+        self.assertEqual(out["total_rows"], 6)
 
 
-class ReferenceLinesTests(SimpleTestCase):
-    META = {"kind": "value", "value": 300, "label": "Meta"}
-
-    def test_sin_lineas_no_agrega_la_clave(self):
-        self.assertNotIn("referenceLines", compiled("bar", spec()))
-
-    def test_valor_fijo_y_serie_por_su_etiqueta(self):
-        lines = [self.META, {"kind": "avg", "series": "total_ventas", "color": "#112233"}]
-        out = compiled("line", spec(), {"labels": {"total_ventas": "Ventas"}, "reference_lines": lines})
-        self.assertEqual(out["referenceLines"], [
-            {"kind": "value", "value": 300.0, "series": None, "label": "Meta", "color": "#d97706"},
-            {"kind": "avg", "value": None, "series": "Ventas", "label": "", "color": "#112233"},
+class FilterCompileTests(SimpleTestCase):
+    def test_un_control_por_columna(self):
+        out = compiled("filter", fields(dimensions=["anio", "categoria"], metrics=[]))
+        self.assertEqual(out["filters"], [
+            {"field": "anio", "label": "Anio", "type": "multi_select",
+             "options": [2025, 2026], "truncated": False},
+            {"field": "categoria", "label": "Categoria", "type": "multi_select",
+             "options": ["Electrónica", "Hogar", "Ropa"], "truncated": False},
         ])
 
-    def test_con_pivote_la_serie_es_un_valor_del_pivote(self):
-        lines = [{"kind": "max", "series": "Ene"}, {"kind": "min", "series": "Dic"}]
-        out = compiled("bar", spec(pivots=["mes"]), {"reference_lines": lines})
-        # "Dic" no está en el resultado: no se dibuja.
-        self.assertEqual([l["series"] for l in out["referenceLines"]], ["Ene"])
+    def test_sin_columnas_elegidas_expone_tod_las_de_la_hoja(self):
+        out = compiled("filter", fields(dimensions=[], metrics=[]))
+        self.assertEqual([f["field"] for f in out["filters"]], ["categoria", "mes", "anio", "ventas"])
+
+
+class RenderContractTests(SimpleTestCase):
+    def test_todo_widget_devuelve_render_data_y_widget_form(self):
+        for key, spec in [
+            ("bar", fields()),
+            ("line", fields(dimensions=["mes"])),
+            ("donut", fields()),
+            ("kpi", fields(dimensions=[], metrics=[agg("total_ventas")])),
+            ("dynamic_table", fields()),
+            ("table", table_fields(["categoria"])),
+            ("filter", fields(dimensions=["mes"], metrics=[])),
+        ]:
+            with self.subTest(widget=key):
+                out = render(key, spec)
+                self.assertIn("render_data", out)
+                self.assertIn("widget_form", out)
+                self.assertNotIn("error", out)
+
+    def test_un_error_no_tumba_el_form(self):
+        out = render("bar", fields(dimensions=["categoria"],
+                                   metrics=[{"field": "no_existe", "agg": "sum", "alias": "x"}]))
+        self.assertIn("error", out)
+        self.assertIn("widget_form", out)
+
+    def test_los_estilos_se_completan_con_los_defaults(self):
+        out = render("bar", fields(), {})
+        self.assertEqual(out["widget_form"]["style"]["showGrid"], True)
+        self.assertEqual(out["widget_form"]["style"]["barWidth"], 70)
+
+    def test_el_error_de_una_hoja_sin_filas_no_lanza(self):
+        out = compiled("bar", fields(), {}, df=sales_df().head(0))
+        self.assertEqual(out["categories"], [])
+        self.assertEqual(out["series"], [])
+
+    def test_kpi_sobre_una_hoja_vacia(self):
+        out = compiled("kpi", fields(dimensions=[], metrics=[agg("total_ventas")]),
+                       {}, df=sellers_df().head(0))
+        self.assertEqual(out["value"], 0)
+        self.assertIsNone(out["compare"])

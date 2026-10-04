@@ -1,31 +1,69 @@
-from sheets_reports.dsl.parts import Metrics
-from sheets_reports.dsl.spec import DataSpec, GroupedSpec, with_parts
-from sheets_reports.engine.plans import FlatResult
-from sheets_reports.widgets.base import WIDGETS, ViewOptions, WidgetType
-from sheets_reports.widgets.presentation import column_values
+"""
+Gráfico de Dona: consulta con `WidgetFields`, apariencia con `WidgetStyle`.
+"""
+from typing import Any, ClassVar, Dict, List, Optional
 
-
-class DonutSpec(GroupedSpec):
-    """Reparte UNA métrica entre las categorías: sin pivote y sin «mostrar como» (el
-    porcentaje de cada porción lo calcula ApexCharts)."""
-    parts = with_parts(GroupedSpec, Metrics(1, 1, show_as=False), without=("pivots",))
+from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
+from sheets_reports.widgets.presentation import chart_series, percent_aliases
+from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
 
 @WIDGETS.register
-class DonutWidget(WidgetType[FlatResult, ViewOptions]):
-    """Reparte UNA métrica entre las categorías de la dimensión: sin pivote."""
+class DonutWidget(BaseWidget):
     key = "donut"
+    type_key = "donut"
     label = "Gráfico de Dona"
-    spec_cls = DonutSpec
-    plan_key = "flat"
-    ai_doc = "cómo se reparte un total entre pocas categorías."
+    ai_doc = 'la composición de un total en pocas partes (qué % de ventas viene de cada categoría).'
+    ai_examples = [
+       (   'qué parte de las ventas viene de cada categoría',
+            {   'widget_type': 'donut',
+                'title': 'Participación por categoría',
+                'fields': {   'dimensions': ['categoria'],
+                              'metrics': [   {   'agg': 'sum',
+                                                 'field': 'ventas',
+                                                 'alias': 'total_ventas'}],
+                              'sort_by': '-total_ventas'},
+                'style': {'labelMode': 'percent'}})
+    ]
 
-    def data_view(self, spec: DataSpec) -> dict:
-        return {"x": spec.dimensions[0] if spec.dimensions else None, "metrics": spec.aliases}
+    capabilities: ClassVar[dict] = {
+        "dimensions": [1, 1],
+        "pivots": [0, 0],
+        "metrics": [1, 1],
+        "sort": True,
+        "limit": True,
+        "filters": True,
+    }
 
-    def compile(self, result: FlatResult, options, spec):
-        """{"series": [valores], "labels": [categorías]} (formato nativo de ApexCharts)."""
-        return {
-            "series": column_values(result.rows, spec.aliases[0]),
-            "labels": [str(v) for v in column_values(result.rows, result.dimension)],
-        }
+    style_schema: ClassVar[List[Dict[str, Any]]] = [
+        {"key": "title", "label": "Título", "ui": "text", "default": "Gráfico de Dona"},
+        {"key": "labelMode", "label": "Mostrar en porciones", "ui": "select", "options": [
+            {"value": "percent", "label": "Porcentaje"},
+            {"value": "value", "label": "Valor"},
+        ], "default": "percent"},
+        {"key": "donutSize", "label": "Tamaño del hueco (%)", "ui": "number", "min": 30, "max": 80, "step": 5, "default": 50},
+        {"key": "showLegend", "label": "Mostrar leyenda", "ui": "checkbox", "default": True},
+    ]
+
+    def compile(
+        self,
+        result: WidgetResult,
+        style: WidgetStyle,
+        fields: Optional[WidgetFields] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        categories, pairs = chart_series(result, fields, metadata)
+
+        df = result.rows
+        if pairs:
+            column = pairs[0][1]
+            labels = categories
+            values = df[column].fillna(0).tolist()
+        else:
+            labels = []
+            values = []
+
+        output = {"series": values, "labels": labels,
+                  "percent": percent_aliases(fields)}
+
+        return output

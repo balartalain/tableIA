@@ -43,7 +43,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   store.widgets = data.widgets
     .map(w => BaseWidget.fromServer(w))
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    .filter(Boolean)
+    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
   const headerEl = document.getElementById('dashboard-filters');
   store.widgets.forEach(w => (w.constructor.placement === 'header' ? headerEl : canvasEl).appendChild(w.mountReadOnly()));
   const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));

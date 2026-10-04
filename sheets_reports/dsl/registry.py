@@ -45,6 +45,9 @@ class Registry(Generic[T]):
     def keys(self) -> list[str]:
         return list(self._items)
 
+    def items(self):
+        return self._items.items()
+
     def values(self) -> list[T]:
         return list(self._items.values())
 

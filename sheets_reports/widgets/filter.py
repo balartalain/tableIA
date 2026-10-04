@@ -1,114 +1,97 @@
 """
-Caja de filtros del tablero: una barra fija arriba con un control por columna (ej. un selector
-múltiple). Lo que el usuario elige NO se guarda en el widget: viaja en la URL como filtros del
-tablero (`?filters=[{field, op, value}]`) y define el universo de todos los widgets.
+Widget de filtros del tablero: no consulta, publica las columnas y sus valores posibles.
 """
-import dataclasses
-from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import Any, ClassVar, Dict, List, Optional
 
-from sheets_reports.dsl.registry import Registry
-from sheets_reports.dsl.parts import Columns
-from sheets_reports.dsl.spec import DataSpec, RowsSpec, with_parts
-from sheets_reports.engine.plans.column_values import ColumnValuesResult
-from sheets_reports.widgets.base import WIDGETS, ViewOptions, WidgetType
+import pandas as pd
 
-FILTER_CONTROLS: Registry["FilterControl"] = Registry("Tipo de filtro")
+from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
+from sheets_reports.dsl.conditions import distinct_values
+from sheets_reports.dsl.values import to_python
+from sheets_reports.widgets.presentation import humanize
+from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
-MAX_FILTERS_PER_BOX = 10
-
-
-class FilterControl:
-    """Un tipo de control de la caja de filtros. Dice qué datos necesita para dibujarse; la
-    condición que produce la arma el frontend con los operadores del DSL."""
-    key: ClassVar[str]
-    label: ClassVar[str]
-
-    def payload(self, column: str, result: ColumnValuesResult) -> dict:
-        raise NotImplementedError
-
-
-@FILTER_CONTROLS.register
-class MultiSelectControl(FilterControl):
-    """Selector múltiple: los valores de la columna como opciones; produce `in`."""
-    key = "multi_select"
-    label = "Selector múltiple"
-
-    def payload(self, column, result):
-        out = {"options": result.values.get(column, [])}
-        if column in result.truncated:
-            out["truncated"] = True
-        return out
-
-
-DEFAULT_CONTROL = MultiSelectControl.key
-
-
-@dataclass(frozen=True)
-class FilterOptions(ViewOptions):
-    controls: dict = field(default_factory=dict)  # {columna: tipo de control}
-
-    @classmethod
-    def _request_fields(cls, data, previous):
-        fields = super()._request_fields(data, previous)
-        if isinstance(data.get("controls"), dict):
-            fields["controls"] = dict(data["controls"])
-        else:
-            fields["controls"] = dict(previous.controls) if previous is not None else {}
-        return fields
-
-    @classmethod
-    def _view_fields(cls, view):
-        return {**super()._view_fields(view), "controls": dict(view.get("controls") or {})}
-
-    def reconcile(self, spec: DataSpec):
-        """Un control por columna filtrada; un tipo desconocido pasa al selector múltiple."""
-        controls = {
-            column: self.controls.get(column) if self.controls.get(column) in FILTER_CONTROLS else DEFAULT_CONTROL
-            for column in spec.columns
-        }
-        return dataclasses.replace(super().reconcile(spec), controls=controls)
-
-    def view_fields(self):
-        return {"controls": self.controls}
-
-
-class FilterSpec(RowsSpec):
-    """Un control por columna, en el orden del panel: sin orden de filas."""
-    parts = with_parts(RowsSpec, Columns(1, MAX_FILTERS_PER_BOX, label="Filtros",
-                                         hint="un control por columna; arrastra para cambiar el orden",
-                                         add_label="Agregar filtro", allow_all=False),
-                       without=("sort",))
+MAX_FILTER_VALUES = 100
 
 
 @WIDGETS.register
-class FilterWidget(WidgetType[ColumnValuesResult, FilterOptions]):
+class FilterWidget(BaseWidget):
     key = "filter"
+    type_key = "filter"
     label = "Filtros"
-    spec_cls = FilterSpec
-    options_cls = FilterOptions
-    plan_key = "column_values"
-    # Sus opciones son de toda la hoja: no se recortan con la selección del propio tablero.
+    ai_doc = 'una caja de filtros fija arriba del tablero (elegir categoría, año, vendedor).'
+    ai_examples = [
+       (   'que se pueda filtrar por categoría y año',
+            {   'widget_type': 'filter',
+                'title': 'Filtros',
+                'fields': {'dimensions': ['categoria', 'anio'], 'metrics': []},
+                'style': {'layout': 'horizontal'}})
+    ]
+    # La caja lista los valores de la hoja completa: la selección filtra a los demás widgets,
+    # no a sí misma (así siempre se pueden ampliar y quitar filtros).
     board_filtered = False
     max_per_dashboard = 1
-    ai_enabled = False
-    # Sus filtros de filas no se editan en el panel: la caja ES el filtro del tablero.
-    panel_hidden = ("filters",)
 
-    def default_title(self, spec: DataSpec, options: FilterOptions) -> str:
-        return "Filtros"
+    capabilities: ClassVar[dict] = {
+        # Aquí `dimensions` son las columnas que la caja expone al usuario.
+        "dimensions": [0, 50],
+        "dimensions_label": "Columnas del filtro",
+        "dimensions_hint": "Columnas que se muestran como controles de filtro.",
+        "pivots": [0, 0],
+        "metrics": [0, 0],
+        "sort": False,
+        "limit": False,
+        "filters": False,
+    }
 
-    def compile(self, result: ColumnValuesResult, options: FilterOptions, spec: DataSpec) -> dict:
-        """{"filters": [{"field", "label", "type", "options", "truncated"?}]} en el orden de
-        `columns` (el orden en que el usuario los dejó en el panel)."""
-        options = options.reconcile(spec)
-        filters = []
-        for column in spec.columns:
-            control = FILTER_CONTROLS.get(options.controls[column])
+    style_schema: ClassVar[List[Dict[str, Any]]] = [
+        {"key": "title", "label": "Título", "ui": "text", "default": "Filtros"},
+        {"key": "layout", "label": "Layout", "ui": "select", "options": [
+            {"value": "horizontal", "label": "Horizontal"},
+            {"value": "vertical", "label": "Vertical"},
+        ], "default": "horizontal"},
+    ]
+
+    def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:
+        # Las columnas elegidas en `fields.dimensions` (vacío = todas) definen los controles.
+        chosen = [c for c in (fields.dimensions or []) if c in df.columns]
+        columns = chosen or list(df.columns)
+        return WidgetResult(
+            data={"columns": columns},
+            metadata={"fields": fields, "dimensions": columns},
+            fields=fields,
+            type="columns",
+            frame=df,
+        )
+
+    def compile(
+        self,
+        result: WidgetResult,
+        style: WidgetStyle,
+        fields: Optional[WidgetFields] = None,
+        metadata: Optional[dict] = None,
+    ) -> dict:
+        style_dict = style.to_dict()
+        frame = result.rows
+        columns = metadata.get("dimensions") or list(frame.columns)
+
+        filters: List[Dict[str, Any]] = []
+        for col in columns:
+            if col not in frame.columns:
+                continue
+            values = distinct_values(frame[col])
+            truncated = len(values) > MAX_FILTER_VALUES
             filters.append({
-                "field": column,
-                "label": options.labels.get(column) or str(column),
-                "type": control.key,
-                **control.payload(column, result),
+                "field": col,
+                "label": humanize(col),
+                "type": "multi_select",
+                "options": [to_python(v) for v in values[:MAX_FILTER_VALUES]],
+                "truncated": truncated,
             })
-        return {"filters": filters}
+
+        return {
+            "type": "filter",
+            "columns": columns,
+            "filters": filters,
+            "style": style_dict,
+        }

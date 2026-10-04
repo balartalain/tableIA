@@ -1,22 +1,25 @@
 """
-Casos de uso de los widgets de un tablero: crear, editar el data_spec y calcular. Las vistas
-son adaptadores HTTP sobre este servicio. No hace I/O: recibe la hoja ya cargada.
+Casos de uso de los widgets de un tablero: crear, editar su `WidgetForm` y calcular.
+Las vistas son adaptadores HTTP sobre este servicio. No hace I/O: recibe la hoja ya cargada.
 """
 import json
 import logging
+from typing import Optional
 
 import pandas as pd
 
 from sheets_reports.dsl.conditions import Condition, apply_filters, condition_errors, parse_conditions
 from sheets_reports.dsl.context import SheetContext
 from sheets_reports.dsl.errors import SpecValidationError
-from sheets_reports.dsl.parts import SPEC_PARTS
 from sheets_reports.dsl.schema import MAX_BOARD_IN_VALUES
 from sheets_reports.engine import ResultTooLargeError
 from sheets_reports.models import Widget, default_position
+from sheets_reports.services.ai_spec import form_errors
 from sheets_reports.widgets import WIDGETS
+from sheets_reports.widgets.schemas import WidgetForm
 
 logger = logging.getLogger(__name__)
+
 
 def clean_position(value, fallback=None) -> dict:
     position = dict(fallback or default_position())
@@ -31,53 +34,88 @@ def clean_position(value, fallback=None) -> dict:
 
 
 class WidgetService:
+    """Operaciones sobre los widgets de un tablero, sobre la hoja ya cacheada."""
+
     def __init__(self, dashboard, df: pd.DataFrame):
         self.dashboard = dashboard
         self.df = df
         self.ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid)
 
-    def _raw_data_spec(self, definition, payload: dict) -> dict:
-        """data_spec desde el body del builder: las claves de las piezas conocidas (el resto
-        son opciones de vista), con el valor por defecto de las que el builder no manda."""
-        raw = {"source": self.dashboard.sheet_gid}
-        raw.update({key: payload[key] for key in SPEC_PARTS.keys() if key in payload})
-        return definition.spec_cls.with_defaults(raw)
-
+    # ----------------------------------------------------------------- CRUD
     def create(self, widget_type: str, payload: dict) -> Widget:
-        """Widget desde el builder. NUNCA llama a la IA. Lanza UnknownKeyError o
-        SpecValidationError (mismas validaciones que el camino de IA)."""
+        """Widget desde el builder o desde la IA. Lanza UnknownKeyError o SpecValidationError."""
         definition = WIDGETS.get(widget_type)
-        limit = definition.max_per_dashboard
-        if limit is not None and self.dashboard.widgets.filter(type=widget_type).count() >= limit:
-            raise SpecValidationError([f"Solo se puede agregar un widget «{definition.label}» por tablero."])
-        spec = definition.validate(self._raw_data_spec(definition, payload), self.ctx)
+        self._check_singleton(definition)
+        title = str(payload.get("title") or "").strip() or definition.label
+        form = WidgetForm.from_dict({
+            **payload,
+            "fields": payload.get("fields") or {},
+            "style": self._clean_style(widget_type, payload.get("style") or {}),
+        })
+        self._validate(widget_type, form, title)
         return Widget.objects.create(
             dashboard=self.dashboard,
             type=widget_type,
+            title=title,
             position=clean_position(payload.get("position")),
-            data_spec=spec.to_dict(),
-            view_spec=definition.build_view(spec, definition.options(payload)),
+            fields=form.fields.to_dict(),
+            style=form.style.to_dict(),
+            source_prompt=payload.get("source_prompt"),
         )
 
-    def update_spec(self, widget: Widget, payload: dict) -> Widget:
-        """Edición manual desde el builder: valida, reconstruye view_spec (lo que no viene se
-        conserva del widget) y guarda. NUNCA llama a la IA."""
-        definition = widget.definition
-        spec = definition.validate(self._raw_data_spec(definition, payload), self.ctx)
-        widget.data_spec = spec.to_dict()
-        widget.view_spec = definition.build_view(spec, definition.options(payload, widget.view_spec or {}))
+    def update(self, widget: Widget, payload: dict) -> Widget:
+        """Edición manual: lo que no viene se conserva del widget. NUNCA llama a la IA."""
+        if "type" in payload and payload["type"] != widget.type:
+            self._check_singleton(WIDGETS.get(payload["type"]))
+            widget.type = payload["type"]
+
+        merged = {
+            "fields": {**(widget.fields or {}), **(payload.get("fields") or {})},
+            "style": self._clean_style(widget.type, {**(widget.style or {}), **(payload.get("style") or {})}),
+        }
+        form = WidgetForm.from_dict(merged)
+        self._validate(widget.type, form, payload.get("title", widget.title))
+        widget.fields = form.fields.to_dict()
+        widget.style = form.style.to_dict()
+        if "title" in payload:
+            widget.title = str(payload["title"] or "").strip() or widget.title
+        if "position" in payload:
+            widget.position = clean_position(payload["position"], fallback=widget.position)
         widget.save()
         return widget
 
-    def parse_board_filters(self, raw: str | None) -> tuple[list[Condition], list[str]]:
+    def _clean_style(self, widget_type: str, style: dict) -> dict:
+        """El estilo lo define el `style_schema` del tipo: una clave fuera de él se descarta."""
+        definition = WIDGETS.get(widget_type)
+        known = {c["key"] for c in (definition.style_schema or [])}
+        return {k: v for k, v in (style or {}).items() if k in known}
+
+    def _validate(self, widget_type: str, form: WidgetForm, title) -> None:
+        """Mismas reglas que la IA: un form que no pasa no llega a guardarse."""
+        data = {
+            "widget_type": widget_type,
+            "title": str(title or "").strip(),
+            "fields": form.fields.to_dict(),
+            "style": form.style.to_dict(),
+        }
+        errors = form_errors(data, self.ctx, widget_type)
+        if errors:
+            raise SpecValidationError(errors)
+
+    def _check_singleton(self, definition) -> None:
+        limit = getattr(definition, "max_per_dashboard", None)
+        if limit is None:
+            return
+        if self.dashboard.widgets.filter(type=definition.type_key).count() >= limit:
+            raise SpecValidationError([f"Solo se puede agregar un widget «{definition.label}» por tablero."])
+
+    # ------------------------------------------------------------- filtros
+    def parse_board_filters(self, raw: Optional[str]) -> tuple[list[Condition], list[str]]:
         """
-        Filtros del tablero desde `?filters=[{"field", "op", "value" | "relative"}]` (los que
-        elige el usuario en la caja de filtros). Cada uno se valida con las mismas reglas que
-        las condiciones del data_spec; un `in` admite tantos valores como opciones da un
-        selector. Un filtro inválido (ej. una URL compartida con una columna que ya no está en
-        la hoja) se ignora y se informa, sin tumbar el tablero.
-        Retorna (condiciones válidas, mensajes de los ignorados). Lanza ValueError si el
-        parámetro no es una lista JSON.
+        Filtros del tablero desde `?filters=[{"field", "op", "value" | "relative"}]`. Cada uno
+        se valida con las mismas reglas que los `fields.filters` del widget; uno inválido (ej.
+        una URL compartida con una columna que ya no está en la hoja) se ignora y se informa,
+        sin tumbar el tablero. Lanza ValueError si el parámetro no es una lista JSON.
         """
         if not raw:
             return [], []
@@ -96,20 +134,26 @@ class WidgetService:
                 valid += parse_conditions([item])
         return valid, ignored
 
-    def render(self, widget: Widget, board_filters: list[Condition] | None = None) -> dict:
-        """{"data": ...} listo para dibujar, o {"error": ...}. Un error en un widget no tumba
-        el tablero."""
+    # -------------------------------------------------------------- cálculo
+    def render(self, widget: Widget, board_filters: Optional[list[Condition]] = None) -> dict:
+        """{"data": ...} listo para dibujar, o {"error": ...}. Un error no tumba el tablero."""
+        definition = widget.definition
+        if definition is None:
+            return {"error": f"El tipo de widget «{widget.type}» ya no existe. Edita el widget."}
         try:
             # Los filtros del tablero se aplican antes: definen el universo del widget (el
             # denominador de sus porcentajes), mientras que los del propio widget lo recortan.
-            definition = widget.definition
             df = apply_filters(self.df, board_filters) if board_filters and definition.board_filtered else self.df
-            return {"data": definition.render(widget.data_spec, widget.view_spec, df)}
+            rendered = definition.render(df, {"fields": widget.fields, "style": widget.style})
         except ResultTooLargeError as e:
             return {"error": str(e)}
         except KeyError as e:
-            # La hoja cambió y ya no tiene una columna que el spec usa.
+            # La hoja cambió y ya no tiene una columna que el form usa.
             return {"error": f"La columna {e} ya no existe en la hoja. Edita el widget."}
         except Exception:
             logger.exception("Error renderizando el widget %s", widget.id)
             return {"error": "No se pudo calcular este widget."}
+
+        if rendered.get("error"):
+            return {"error": rendered["error"]}
+        return {"data": rendered.get("render_data"), "form": rendered.get("widget_form")}

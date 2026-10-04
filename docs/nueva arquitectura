@@ -1,0 +1,366 @@
+# PROMPT DE ARQUITECTURA Y REFACTORIZACIÓN: MIGRACIÓN A SISTEMA DE WIDGETS SIMPLIFICADO
+
+## CONTEXTO Y OBJETIVO
+Actualmente, nuestro backend de widgets/analítica utiliza una arquitectura DSL basada en abstracciones complejas (`DataSpec`, `SpecPart`, `ViewOptions`, `ViewSpec`, y subclases como `Metrics`, `Dimensions`, etc.) junto con un sistema de manifiestos dinámicos en tiempo de ejecución.
+
+Esta arquitectura introduce sobreingeniería, indirección y acoplamiento innecesarios. Vamos a migrar hacia un **enfoque simplificado y directo** en 3 capas:
+1. **Modelos de datos planos (Dataclasses en Python):** `WidgetFields` (para datos) y `WidgetStyle` (para apariencia).
+2. **Backend-Driven Style Schema:** Cada clase de widget define una lista declarativa estática (`style_schema`) que indica a la UI qué controles de estilo renderizar.
+3. **Frontend genérico (Alpine.js):** Renderizado directo de `fields` y recorrido dinámico de `style_schema` sin plantillas duplicadas ni condicionales por tipo de gráfico.
+
+---
+
+## REGLAS Y PRINCIPIOS DE LA NUEVA ARQUITECTURA
+
+1. **Eliminación del DSL anterior:**
+   - Eliminar `DataSpec`, `SpecPart`, `ViewOptions`, `ViewSpec`, `GroupedSpec`, `ScalarSpec` y subclases específicas como `Metrics`, `Dimensions`, `Pivots`, `Filters`.
+   - Ninguna regla de UI o de agregación vivirá en subclases de `SpecPart`.
+
+2. **Métricas y Campos como Estructuras Planas:**
+   - Las métricas pasan a ser una lista de diccionarios dentro de `WidgetFields`:
+     `[{"field": "monto", "agg": "sum", "alias": "total_monto"}]`
+   - Las dimensiones y filtros se representan como listas simples de strings o diccionarios dentro de `WidgetFields`.
+
+3. **Separación de Responsabilidades:**
+   - **`WidgetFields`**: Almacena los parámetros de la consulta (`dimensions`, `metrics`, `filters`, `sort_by`, `limit`).
+   - **`WidgetStyle`**: Almacena los valores de configuración visual seleccionados en un diccionario plano `{"title": "...", "stacked": true, ...}`.
+   - **`style_schema`**: Define los controles que la UI debe construir (`ui`: `"text" | "select" | "checkbox" | "number"`).
+
+---
+
+## INSTRUCCIONES PASO A PASO PARA LA IMPLEMENTACIÓN
+
+### PASO 1: Redefinición de Modelos y Schemas (`widgets/schemas.py`)
+Crea o actualiza `widgets/schemas.py` utilizando Dataclasses de Python:
+
+```python
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional
+
+@dataclass
+class WidgetFields:
+    dimensions: List[str] = field(default_factory=list)
+    metrics: List[Dict[str, Any]] = field(default_factory=list) # Ej: [{"field": "monto", "agg": "sum", "alias": "sum_monto"}]
+    filters: List[Dict[str, Any]] = field(default_factory=list)
+    sort_by: Optional[str] = None
+    limit: Optional[int] = None
+
+    @classmethod
+    from_dict(cls, data: dict) -> "WidgetFields":
+        return cls(
+            dimensions=data.get("dimensions", []),
+            metrics=data.get("metrics", []),
+            filters=data.get("filters", []),
+            sort_by=data.get("sort_by"),
+            limit=data.get("limit")
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "dimensions": self.dimensions,
+            "metrics": self.metrics,
+            "filters": self.filters,
+            "sort_by": self.sort_by,
+            "limit": self.limit
+        }
+
+@dataclass
+class WidgetStyle:
+    values: Dict[str, Any] = field(default_factory=dict) # Guarda {"title": "Ventas", "stacked": True, ...}
+
+    @classmethod
+    from_dict(cls, data: dict) -> "WidgetStyle":
+        return cls(values=data if isinstance(data, dict) else {})
+
+    def to_dict(self) -> dict:
+        return self.values
+
+@dataclass
+class WidgetForm:
+    fields: WidgetFields
+    style: WidgetStyle
+
+    @classmethod
+    from_dict(cls, data: dict) -> "WidgetForm":
+        return cls(
+            fields=WidgetFields.from_dict(data.get("fields", {})),
+            style=WidgetStyle.from_dict(data.get("style", {}))
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "fields": self.fields.to_dict(),
+            "style": self.style.to_dict()
+        }
+        
+        
+PASO 2: Refactorización de Handlers de Widgets (widgets/base.py y subclases)
+En la clase base BaseWidget, elimina las dependencias de DataSpec y SpecPart.
+
+Asigna la propiedad declarativa style_schema a cada tipo de widget.
+
+Traslada la ejecución de consultas y agregación de métricas directamente al método process_query().
+
+Ejemplo para BarChartWidget:
+class BaseWidget:
+    type_key: str
+    style_schema: List[Dict[str, Any]] = []
+
+    def process_query(self, df, fields: WidgetFields):
+        raise NotImplementedError
+
+    def render(self, df, form_data: dict) -> dict:
+        form = WidgetForm.from_dict(form_data)
+        data = self.process_query(df, form.fields)
+        return {
+            "render_data": data,
+            "widget_form": form.to_dict()
+        }
+
+class BarChartWidget(BaseWidget):
+    type_key = "bar_chart"
+    
+    # Backend-driven style schema
+    style_schema = [
+        {"key": "title", "label": "Título", "ui": "text", "default": "Gráfico de Barras"},
+        {
+            "key": "color_scheme", 
+            "label": "Paleta de Colores", 
+            "ui": "select", 
+            "options": [
+                {"label": "Por defecto", "value": "default"},
+                {"label": "Océano", "value": "ocean"}
+            ],
+            "default": "default"
+        },
+        {"key": "stacked", "label": "Apilar Barras", "ui": "checkbox", "default": False}
+    ]
+
+    def process_query(self, df, fields: WidgetFields):
+        # Procesamiento directo con Pandas / ORM sin usar la antigua clase Metrics
+        if not fields.metrics:
+            return df
+
+        # Construcción directa de la agregación a partir de la lista de diccionarios de métricas
+        agg_map = {m.get("alias", f"{m['agg']}_{m['field']}"): (m["field"], m["agg"]) for m in fields.metrics}
+        
+        if fields.dimensions:
+            return df.groupby(fields.dimensions).agg(**agg_map).reset_index()
+        return df.agg(**agg_map)
+        
+        
+        PASO 3: Adaptación de la API Backend (views.py)
+Asegúrate de que la API entregue el style_schema junto con la configuración guardada del widget:
+def get_widget_config(request, widget_id):
+    widget_obj = get_object_or_404(Widget, pk=widget_id)
+    handler = WIDGET_REGISTRY.get(widget_obj.type_key)
+    
+    config = widget_obj.config_json or {}
+    
+    return JsonResponse({
+        "fields": config.get("fields", {}),
+        "style": config.get("style", {}),
+        "style_schema": handler.style_schema # Esquema para que el frontend dibuje los controles de estilo
+    })
+    PASO 4: Refactorización del Frontend (Alpine.js / HTML)
+Reemplaza los componentes dinámicos de ViewSpec y part.html por un editor desacoplado que renderiza el style_schema enviado por la API:
+<div x-data="widgetEditor()" x-init="initEditor(widgetId)">
+  <!-- 1. CONFIGURACIÓN DE DATOS (fields) -->
+  <section class="mb-6">
+    <h3 class="font-bold mb-2">Datos</h3>
+    
+    <!-- Selector de Dimensiones -->
+    <label>Dimensiones</label>
+    <select x-model="form.fields.dimensions" multiple class="input">
+      <template x-for="col in availableColumns" :key="col">
+        <option :value="col" x-text="col"></option>
+      </template>
+    </select>
+
+    <!-- Lista de Métricas -->
+    <h4 class="font-semibold mt-4 mb-2">Métricas</h4>
+    <template x-for="(metric, idx) in form.fields.metrics" :key="idx">
+      <div class="flex gap-2 mb-2 items-center">
+        <select x-model="metric.field" class="input">
+          <template x-for="col in availableColumns" :key="col">
+            <option :value="col" x-text="col"></option>
+          </template>
+        </select>
+        
+        <select x-model="metric.agg" class="input">
+          <option value="sum">Suma</option>
+          <option value="avg">Promedio</option>
+          <option value="count">Conteo</option>
+        </select>
+
+        <button type="button" @click="form.fields.metrics.splice(idx, 1)" class="text-red-500">✕</button>
+      </div>
+    </template>
+    <button type="button" @click="addMetric()" class="btn-secondary">+ Agregar Métrica</button>
+  </section>
+
+  <!-- 2. CONFIGURACIÓN DE ESTILOS (style_schema renderizado dinámicamente) -->
+  <section>
+    <h3 class="font-bold mb-2">Apariencia</h3>
+    <template x-for="control in styleSchema" :key="control.key">
+      <div class="mb-3">
+        <label class="block text-sm font-medium" x-text="control.label"></label>
+
+        <!-- Control de Texto -->
+        <template x-if="control.ui === 'text'">
+          <input type="text" x-model="form.style[control.key]" class="input">
+        </template>
+
+        <!-- Control Select -->
+        <template x-if="control.ui === 'select'">
+          <select x-model="form.style[control.key]" class="input">
+            <template x-for="opt in control.options" :key="opt.value">
+              <option :value="opt.value" x-text="opt.label"></option>
+            </template>
+          </select>
+        </template>
+
+        <!-- Control Checkbox -->
+        <template x-if="control.ui === 'checkbox'">
+          <label class="inline-flex items-center mt-1">
+            <input type="checkbox" x-model="form.style[control.key]">
+            <span class="ml-2 text-sm" x-text="control.label"></span>
+          </label>
+        </template>
+      </div>
+    </template>
+  </section>
+</div>
+
+<script>
+function widgetEditor() {
+  return {
+    availableColumns: [],
+    styleSchema: [],
+    form: {
+      fields: { dimensions: [], metrics: [], filters: [] },
+      style: {}
+    },
+    async initEditor(id) {
+      const res = await fetch(`/api/widgets/${id}/config/`);
+      const data = await res.json();
+      
+      this.styleSchema = data.style_schema || [];
+      this.form.fields = data.fields || { dimensions: [], metrics: [], filters: [] };
+      this.form.style = data.style || {};
+    },
+    addMetric() {
+      this.form.fields.metrics.push({ field: '', agg: 'sum', alias: '' });
+    }
+  }
+}
+</script>
+
+impieza de Código:
+
+Eliminar los archivos obsoletos del DSL (data_spec.py, spec_part.py, view_options.py, metrics.py, etc.).
+
+Eliminar los componentes/plantillas del frontend que interpretaban manifiestos dinámicos antiguos.
+
+Puedes limiiar la BD
+
+ENTREGABLES ESPERADOS
+Refactorización de widgets/schemas.py con WidgetFields, WidgetStyle y WidgetForm.
+
+Actualización de BaseWidget y sus clases hijas con style_schema y process_query().
+
+Endpoints de API limpios respondiendo la nueva estructura JSON plano.
+
+Plantilla de Alpine.js renderizando el formulario simplificado y el style_schema.
+
+Código libre de referencias a DataSpec, SpecPart, ViewOptions y la antigua clase Metrics.
+
+
+
+Ahora: El ejecutor pasa a ser un Pipeline de Transformación Secuencial que recibe únicamente la dataclass plana WidgetFields y el DataFrame (o QuerySet).
+
+¿Cómo queda la responsabilidad?
+El Executor deja de validar manifiestos de UI y se enfoca 100% en la ejecución de datos (Data Engine). Los plans/ se convierten en etapas limpias del pipeline:
+
+Widget.process_query(df, fields) 
+   └──> PipelineExecutor.execute(df, fields)
+          ├── 1. FilterStep (dsl/conditions)
+          ├── 2. CalculatedMetricsStep
+          ├── 3. AggregationOrPivotStep
+          └── 4. WindowFunctionsStep
+2. Operaciones Complejas (Pivots, Window Functions, Métricas Calculadas)
+Para soportar operaciones avanzadas sin meter código sucio en el process_query() de cada widget, las operaciones complejas se manejan mediante Estrategias/Pasos de Ejecución Reutilizables:
+
+A. Tabla Pivote (PivotStep)
+Si el widget requiere pivote (ej. pivote por mes y categoría), la dataclass WidgetFields aceptará un campo pivots: List[str]. El ejecutor llamará internamente a un helper o plan de pivote:
+
+Python
+
+
+# engine/steps/pivot.py
+def apply_pivot(df, dimensions: list, pivots: list, metrics: list):
+    """Transforma el DataFrame agrupado en una tabla pivote de Pandas."""
+    values = [m["alias"] for m in metrics]
+    return df.pivot_table(
+        index=dimensions,
+        columns=pivots,
+        values=values,
+        aggfunc="first" # Ya viene agregado del paso anterior
+    ).reset_index()
+B. Funciones de Ventana / Acumulados (WindowStep)
+Las métricas que requieren cálculos sobre ventanas (ej. "Acumulado móvil", "% sobre el total", "Diferencia vs mes anterior") se declaran dentro del diccionario de la métrica en fields.metrics:
+
+JSON
+
+
+{
+  "alias": "pct_total",
+  "field": "monto",
+  "agg": "sum",
+  "window": { "type": "percent_of_total" }
+}
+El motor de ejecución tiene un paso específico apply_window_functions(df, fields.metrics) que aplica estas transformaciones usando la API nativa de Pandas (df.transform('sum'), shift(), cumsum()).
+
+C. Métricas Calculadas / Fórmulas
+Para métricas compuestas (ej. precio * cantidad o ganancia / ventas), la métrica incluye un tipo "formula":
+
+JSON
+
+
+{
+  "alias": "margen",
+  "type": "formula",
+  "expression": "total_ganancia / total_ventas"
+}
+El paso CalculatedMetricsStep evalúa estas expresiones sobre las columnas ya agregadas de forma segura (usando pd.eval() o sintaxis matemática acotada).
+
+3. El Sistema de Condiciones/Filtros (dsl/conditions.py, dsl/rules.py)
+¿Qué pasa con él?
+Se CONSERVA pero se desacopla del DSL de la UI.
+
+El motor de reglas de filtrado (conditions.py) es una de las partes más valiosas del backend porque traduce estructuras JSON de filtros a operaciones eficientes en Pandas u ORM (manejo de AND, OR, IN, BETWEEN, CONTAINS, nulos, etc.).
+
+Se ELIMINA: dsl/rules.py si estaba atado a validar qué UI/input dibuja el filtro en pantalla (SpecPart).
+
+Se CONSERVA: dsl/conditions.py como el Motor de Filtrado Técnico.
+
+¿Cómo interactúa ahora?
+Cuando WidgetFields.filters recibe la lista de condiciones desde el frontend:
+
+Python
+
+
+# dsl/conditions.py
+def build_filter_expression(df, filters_list: list[dict]):
+    """
+    Convierte la lista plana de filtros en máscaras de Pandas / Queries.
+    Ejemplo de filter: {"field": "edad", "op": "gte", "value": 18}
+    """
+    mask = pd.Series(True, index=df.index)
+    for f in filters_list:
+        field, op, val = f["field"], f["op"], f["value"]
+        if op == "eq": mask &= (df[field] == val)
+        elif op == "gte": mask &= (df[field] >= val)
+        elif op == "in": mask &= (df[field].isin(val))
+        elif op == "between": mask &= (df[field].between(val[0], val[1]))
+    return df[mask]

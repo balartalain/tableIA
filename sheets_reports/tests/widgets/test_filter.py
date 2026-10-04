@@ -1,72 +1,84 @@
-"""Caja de filtros (`filter`): opciones por columna; la selección viaja como filtros del tablero."""
 import json
 from unittest import mock
 from urllib.parse import quote
 
-import pandas as pd
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
-from sheets_reports.dsl.conditions import distinct_values
-from sheets_reports.engine.plans import ColumnValuesResult
 from sheets_reports.models import Dashboard, Widget
-from sheets_reports.services.ai_spec import build_tool_parameters
-from sheets_reports.tests.fixtures import agg, compiled, errors_for, execute, sales_ctx, sales_df, spec, view
-
-
-def filter_spec(columns=("categoria", "anio"), **overrides):
-    return spec(**{"dimensions": [], "metrics": [], "columns": list(columns), **overrides})
-
-
-class ValidationTests(SimpleTestCase):
-    def test_spec_valido(self):
-        self.assertEqual(errors_for("filter", filter_spec()), [])
-
-    def test_requiere_al_menos_un_filtro(self):
-        self.assertEqual(errors_for("filter", filter_spec(columns=[])),
-                         ["columns: elige al menos una columna para mostrar."])
-
-    def test_columna_inexistente_o_repetida(self):
-        self.assertIn("'region' no existe", errors_for("filter", filter_spec(columns=["region"]))[0])
-        self.assertIn("no se puede repetir", errors_for("filter", filter_spec(columns=["mes", "mes"]))[0])
-
-    def test_no_lleva_metricas_ni_orden(self):
-        self.assertIn("no lleva métricas", errors_for("filter", filter_spec(metrics=[agg("t")]))[0])
-        self.assertIn("no se ordena", errors_for("filter", filter_spec(sort={"by": "anio", "dir": "asc"}))[0])
-
-
-class DistinctValuesTests(SimpleTestCase):
-    def test_opciones_normalizadas_como_las_compara_el_filtro(self):
-        self.assertEqual(distinct_values(pd.Series([" Hogar", "Hogar ", "Ropa", None, "  ", "Árbol"])),
-                         ["Árbol", "Hogar", "Ropa"])
-        # Una columna entera leída como float (por una celda vacía) da enteros: 2026, no 2026.0.
-        self.assertEqual(distinct_values(pd.Series([2026.0, None, 2025.0])), [2025, 2026])
-
-    def test_plan_column_values(self):
-        result = execute(sales_df(), filter_spec(), plan="column_values")
-        self.assertIsInstance(result, ColumnValuesResult)
-        self.assertEqual(result.values, {"categoria": ["Electrónica", "Hogar", "Ropa"], "anio": [2025, 2026]})
-
-    def test_tope_de_opciones(self):
-        with mock.patch("sheets_reports.engine.plans.column_values.MAX_OPTIONS", 2):
-            out = compiled("filter", filter_spec(columns=["mes"]))
-        self.assertEqual(out["filters"][0]["options"], ["Ene", "Feb"])
-        self.assertTrue(out["filters"][0]["truncated"])
-
+from sheets_reports.tests.fixtures import compiled, fields, render, sales_df
+from sheets_reports.widgets import WIDGETS
 
 class CompileTests(SimpleTestCase):
-    def test_un_control_por_columna_en_su_orden(self):
-        out = compiled("filter", filter_spec(columns=["anio", "categoria"]), {"labels": {"anio": "Año"}})
-        self.assertEqual(out, {"filters": [
-            {"field": "anio", "label": "Año", "type": "multi_select", "options": [2025, 2026]},
-            {"field": "categoria", "label": "categoria", "type": "multi_select",
-             "options": ["Electrónica", "Hogar", "Ropa"]},
-        ]})
+    def test_un_control_por_columna_en_el_orden_elegido(self):
+        out = compiled("filter", fields(dimensions=["anio", "categoria"], metrics=[]))
+        self.assertEqual([f["field"] for f in out["filters"]], ["anio", "categoria"])
+        self.assertEqual(out["filters"][0]["options"], [2025, 2026])
+        self.assertEqual(out["filters"][1]["options"], ["Electrónica", "Hogar", "Ropa"])
 
-    def test_controles_se_reconcilian_con_las_columnas(self):
-        v = view("filter", filter_spec(columns=["mes"]), {"controls": {"mes": "nada", "vieja": "multi_select"}})
-        self.assertEqual(v["controls"], {"mes": "multi_select"})
-        self.assertEqual(v["title"], "Filtros")
+    def test_columna_inexistente_se_salta(self):
+        out = compiled("filter", fields(dimensions=["categoria", "borrada"], metrics=[]))
+        self.assertEqual([f["field"] for f in out["filters"]], ["categoria"])
+
+    def test_tope_de_opciones(self):
+        with mock.patch("sheets_reports.widgets.filter.MAX_FILTER_VALUES", 2):
+            out = compiled("filter", fields(dimensions=["mes"], metrics=[]))
+        self.assertEqual(out["filters"][0]["options"], ["Ene", "Feb", "Mar"][:2])
+        self.assertTrue(out["filters"][0]["truncated"])
+
+    def test_las_opciones_normalizadas_no_se_duplican(self):
+        out = compiled("filter", fields(dimensions=["categoria"], metrics=[]))
+        options = out["filters"][0]["options"]
+        self.assertEqual(options, sorted(set(options), key=str))
+
+    def test_sin_columnas_elegidas_expone_todas(self):
+        out = compiled("filter", fields(dimensions=[], metrics=[]))
+        self.assertEqual([f["field"] for f in out["filters"]], ["categoria", "mes", "anio", "ventas"])
+
+    def test_el_estilo_trae_sus_defaults(self):
+        out = render("filter", fields(dimensions=["mes"], metrics=[]))
+        self.assertEqual(out["widget_form"]["style"]["layout"], "horizontal")
+
+
+class BoardFilterTests(TestCase):
+    """La selección de la caja viaja en `?filters=` y define el universo de todos los widgets."""
+
+    def test_filters_de_tablero_sobre_un_widget_del_tablero(self):
+        from sheets_reports.dsl.conditions import apply_filters, parse_conditions
+        conditions = parse_conditions([{"field": "categoria", "op": "in", "value": ["Hogar", "Ropa"]}])
+        df = apply_filters(sales_df(), conditions)
+        out = WIDGETS.get("bar").render(df, {"fields": fields(), "style": {}})["render_data"]
+        self.assertEqual(out["categories"], ["Hogar", "Ropa"])
+        self.assertEqual(out["series"][0]["data"], [175.0, 80.0])
+
+    def test_parse_de_filtros_ignora_los_invalidos(self):
+        from sheets_reports.models import Dashboard
+        from sheets_reports.services.widget_service import WidgetService
+
+        user = get_user_model().objects.create(username="u")
+        dashboard = Dashboard.objects.create(
+            nombre="D", owner=user,
+            sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        service = WidgetService(dashboard, sales_df())
+        raw = json.dumps([
+            {"field": "categoria", "op": "in", "value": ["Hogar"]},
+            {"field": "pais", "op": "in", "value": ["DO"]},
+        ])
+        conditions, errors = service.parse_board_filters(raw)
+        self.assertEqual(len(conditions), 1)
+        self.assertIn("'pais' no existe", errors[0])
+
+    def test_un_parametro_que_no_es_lista_da_error(self):
+        from sheets_reports.models import Dashboard
+        from sheets_reports.services.widget_service import WidgetService
+
+        user = get_user_model().objects.create(username="u2")
+        dashboard = Dashboard.objects.create(
+            nombre="D", owner=user,
+            sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        service = WidgetService(dashboard, sales_df())
+        with self.assertRaises(ValueError):
+            service.parse_board_filters("nada")
 
 
 @mock.patch("sheets_reports.views.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
@@ -74,37 +86,39 @@ class ApiTests(TestCase):
     def setUp(self):
         user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.client.force_login(user)
-        self.dashboard = Dashboard.objects.create(nombre="D", owner=user,
-                                                  sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        self.dashboard = Dashboard.objects.create(
+            nombre="D", owner=user,
+            sheet_url="https://docs.google.com/spreadsheets/d/abc/edit",
+        )
 
-    def post(self, payload):
-        return self.client.post(f"/api/dashboard/{self.dashboard.id}/widgets/", json.dumps(payload),
-                                content_type="application/json")
+    def post_widget(self, payload):
+        return self.client.post(
+            f"/api/dashboard/{self.dashboard.id}/widgets/",
+            json.dumps(payload),
+            content_type="application/json",
+        )
 
     def test_una_sola_caja_por_tablero(self, _df):
-        self.assertEqual(self.post({"type": "filter", "columns": ["categoria"]}).status_code, 201)
-        r = self.post({"type": "filter", "columns": ["anio"]})
+        self.assertEqual(self.post_widget({"type": "filter", "title": "Filtros",
+                                           "fields": {"dimensions": ["categoria"]}}).status_code, 201)
+        r = self.post_widget({"type": "filter", "title": "Filtros",
+                              "fields": {"dimensions": ["anio"]}})
         self.assertEqual(r.status_code, 422)
-        self.assertEqual(r.json()["error"], "Solo se puede agregar un widget «Filtros» por tablero.")
+        self.assertIn("Filtros", r.json()["error"])
         self.assertEqual(Widget.objects.filter(type="filter").count(), 1)
 
     def test_la_seleccion_filtra_los_widgets_pero_no_la_caja(self, _df):
-        self.post({"type": "filter", "columns": ["categoria"]})
-        self.post({"type": "bar", "dimensions": ["categoria"], "metrics": [agg("total_ventas")]})
+        self.post_widget({"type": "filter", "title": "Filtros", "fields": {"dimensions": ["categoria"]}})
+        self.post_widget({"type": "bar", "title": "Ventas", "fields": fields()})
+
         selection = [{"field": "categoria", "op": "in", "value": ["Hogar", "Ropa"]}]
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filters={quote(json.dumps(selection))}")
+
         widgets = {w["type"]: w["data"] for w in r.json()["widgets"]}
         self.assertEqual(widgets["bar"]["categories"], ["Hogar", "Ropa"])
         self.assertEqual(widgets["filter"]["filters"][0]["options"], ["Electrónica", "Hogar", "Ropa"])
 
     def test_seleccion_con_muchos_valores(self, _df):
-        # Un selector múltiple puede mandar más valores que el tope de un `in` del builder (200).
         selection = [{"field": "categoria", "op": "in", "value": ["Hogar", *[f"x{i}" for i in range(300)]]}]
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filters={quote(json.dumps(selection))}")
         self.assertEqual(r.json()["filter_errors"], [])
-
-
-class AiTests(SimpleTestCase):
-    def test_la_ia_no_propone_cajas_de_filtro(self):
-        params = build_tool_parameters(sales_ctx(), widget_type=None)
-        self.assertNotIn("filter", params["properties"]["widget_type"]["enum"])

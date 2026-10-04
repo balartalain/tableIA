@@ -33,7 +33,7 @@
     );
   }
   .is-snapping { transition: height 0.16s ease-out; }
-  /* Fantasma de la métrica o columna que se está arrastrando dentro del panel de edición. */
+  /* Fila fantasma al arrastrar dimensiones, pivotes o métricas del panel. */
   .metric-ghost-preview {
     background-color: #f1f5f9 !important;
     opacity: 0.6;
@@ -168,7 +168,9 @@
          class="shrink-0 h-full bg-white border-line overflow-hidden transition-[width] duration-300">
   <div class="w-[34rem] h-full flex flex-col">
     <div class="flex justify-between items-center px-5 py-4 border-b border-line">
-      <h3 class="text-sm font-bold text-ink">Editar Propiedades</h3>
+      <div class="min-w-0">
+        <h3 class="text-sm font-bold text-ink truncate">Editar propiedades</h3>
+      </div>
       <button x-on:click="$store.dashboard.closeDrawer()" class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
     </div>
 
@@ -186,164 +188,396 @@
 
     <div class="flex-1 min-h-0 overflow-y-auto p-5">
 
-    <div x-show="$store.dashboard.drawerSpecError" x-cloak role="alert"
-         class="mb-4 flex items-start gap-2 rounded-lg border border-clay-300 bg-clay-50 px-3 py-2 text-xs text-clay-600">
-      <i class="ti ti-alert-triangle text-sm mt-px" aria-hidden="true"></i>
-      <span x-text="$store.dashboard.drawerSpecError"></span>
-    </div>
+      <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
 
-    <div class="grid grid-cols-2 gap-x-3 gap-y-4">
-      <template x-for="field in $store.dashboard.drawerFields" :key="field.key">
-        <template x-if="field.type !== 'builder' || $store.dashboard.drawerDraft.builder">
-          <div x-show="(field.tab || 'style') === $store.dashboard.drawerTab"
-               x-bind:class="(field.key === 'title' || field.type === 'assistant' || field.type === 'builder') ? 'col-span-2' : 'col-span-1'">
-            <template x-if="field.type !== 'assistant' && field.type !== 'builder'">
-              <div class="flex items-center justify-between mb-1">
-                <label class="block text-xs font-semibold text-ink/70" x-text="field.label"></label>
-              </div>
-            </template>
+        <div x-show="$store.dashboard.schemaError" x-cloak role="alert"
+             class="flex items-start gap-2 rounded-lg border border-clay-300 bg-clay-50 px-3 py-2 text-xs text-clay-600">
+          <i class="ti ti-alert-triangle text-sm mt-px" aria-hidden="true"></i>
+          <span x-text="$store.dashboard.schemaError"></span>
+        </div>
 
-            <template x-if="field.type === 'text'">
-              <input type="text" x-model="$store.dashboard.drawerDraft[field.key]"
-                     x-bind:readonly="!!field.readonly"
-                     x-bind:class="field.readonly ? 'bg-paper text-ink/50 cursor-not-allowed' : ''"
-                     class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
-            </template>
+        <!-- Valores de ejemplo de las columnas de texto (autocompletar de los filtros) -->
+        <template x-for="l in $store.dashboard.sampleLists" :key="l.id">
+          <datalist x-bind:id="l.id">
+            <template x-for="v in l.values" :key="v"><option x-bind:value="v"></option></template>
+          </datalist>
+        </template>
 
-            <template x-if="field.type === 'assistant'">
-              <div class="rounded-xl border border-moss-100 bg-moss-tint px-3 py-2">
-                <button type="button" x-on:click="$store.dashboard.drawerAskOpen = !$store.dashboard.drawerAskOpen"
-                        x-bind:aria-expanded="$store.dashboard.drawerAskOpen"
-                        class="w-full flex items-center justify-between text-xs font-semibold text-moss-700 cursor-pointer">
-                  <span class="flex items-center gap-1.5">
-                    <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
-                    <span x-text="field.label"></span>
-                  </span>
-                  <i class="ti text-sm" x-bind:class="$store.dashboard.drawerAskOpen ? 'ti-chevron-up' : 'ti-chevron-down'" aria-hidden="true"></i>
-                </button>
-                <div x-show="$store.dashboard.drawerAskOpen" x-cloak class="mt-2 space-y-2">
-                <p class="text-[11px] text-ink/60">Describe qué quieres ver y la IA te dirá cómo configurarlo en el constructor.</p>
-                <textarea x-model="$store.dashboard.drawerDraft[field.key]" rows="3"
-                          x-on:keydown.ctrl.enter="$store.dashboard.askAssistant()"
-                          placeholder="¿Qué quieres ver? (ej. ventas por categoría y año, separadas por cajero)"
-                          class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500"></textarea>
-                <button type="button" x-on:click="$store.dashboard.askAssistant()"
-                        x-bind:disabled="$store.dashboard.drawerAsking || !($store.dashboard.drawerDraft[field.key] || '').trim()"
-                        class="w-full text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
-                  <i class="ti text-base" x-bind:class="$store.dashboard.drawerAsking ? 'ti-loader-2 animate-spin' : 'ti-message-question'" aria-hidden="true"></i>
-                  <span x-text="$store.dashboard.drawerAsking ? 'Consultando…' : 'Consultar'"></span>
-                </button>
-                <p x-show="$store.dashboard.drawerAskError" x-text="$store.dashboard.drawerAskError"
-                   class="text-xs text-red-600"></p>
+        <!-- Título -->
+        <div>
+          <label class="block text-xs font-semibold text-ink/70 mb-1">Título</label>
+          <input type="text" x-model="$store.dashboard.drawerDraft.title"
+                 class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+        </div>
 
-                <template x-if="$store.dashboard.drawerSteps.length">
-                  <div class="rounded-lg border border-line bg-white p-3 space-y-3">
-                    <p class="text-xs font-semibold text-ink/70">Sigue estos pasos en el constructor:</p>
-                    <ol class="space-y-2">
-                      <template x-for="(step, n) in $store.dashboard.drawerSteps" :key="step.title">
-                        <li class="flex gap-2">
-                          <span class="shrink-0 h-5 w-5 rounded-full bg-moss-500 text-white text-[11px] font-semibold flex items-center justify-center"
-                                x-text="n + 1"></span>
-                          <div class="min-w-0 text-xs">
-                            <p class="font-semibold text-ink" x-text="step.title"></p>
-                            <template x-if="step.detail">
-                              <p class="text-ink/70" x-text="step.detail"></p>
-                            </template>
-                            <template x-if="step.details">
-                              <ul class="list-disc pl-4 text-ink/70">
-                                <template x-for="(line, j) in step.details" :key="j">
-                                  <li x-text="line"></li>
-                                </template>
-                              </ul>
-                            </template>
-                          </div>
-                        </li>
-                      </template>
-                    </ol>
-                    <button type="button" x-on:click="$store.dashboard.applyAdvice()"
-                            class="w-full text-sm font-medium text-moss-700 bg-white border border-moss-500 hover:bg-moss-tint rounded-lg py-1.5 transition cursor-pointer flex items-center justify-center gap-1.5">
-                      <i class="ti ti-wand text-base" aria-hidden="true"></i>
-                      Aplicar pasos
-                    </button>
-                    <p class="text-[11px] text-ink/50">Rellena el constructor con esta configuración; revisa y pulsa «Guardar».</p>
-                  </div>
-                </template>
+        <!-- Asistente con IA -->
+        <div class="rounded-xl border border-moss-100 bg-moss-tint px-3 py-2">
+          <button type="button" x-on:click="$store.dashboard.drawerAskOpen = !$store.dashboard.drawerAskOpen"
+                  x-bind:aria-expanded="$store.dashboard.drawerAskOpen"
+                  class="w-full flex items-center justify-between text-xs font-semibold text-moss-700 cursor-pointer">
+            <span class="flex items-center gap-1.5">
+              <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
+              Consultar a la IA
+            </span>
+            <i class="ti text-sm" x-bind:class="$store.dashboard.drawerAskOpen ? 'ti-chevron-up' : 'ti-chevron-down'" aria-hidden="true"></i>
+          </button>
+          <div x-show="$store.dashboard.drawerAskOpen" x-cloak class="mt-2 space-y-2">
+            <p class="text-[11px] text-ink/60">Describe qué quieres ver y la IA propondrá la configuración de este widget.</p>
+            <textarea x-model="$store.dashboard.drawerDraft.prompt" rows="3"
+                      x-on:keydown.ctrl.enter="$store.dashboard.askAssistant()"
+                      placeholder="¿Qué quieres ver? (ej. ventas por categoría y año)"
+                      class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500"></textarea>
+            <button type="button" x-on:click="$store.dashboard.askAssistant()"
+                    x-bind:disabled="$store.dashboard.drawerAsking || !($store.dashboard.drawerDraft.prompt || '').trim()"
+                    class="w-full text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
+              <i class="ti text-base" x-bind:class="$store.dashboard.drawerAsking ? 'ti-loader-2 animate-spin' : 'ti-message-question'" aria-hidden="true"></i>
+              <span x-text="$store.dashboard.drawerAsking ? 'Consultando…' : 'Consultar'"></span>
+            </button>
+            <p x-show="$store.dashboard.drawerAskError" x-text="$store.dashboard.drawerAskError" class="text-xs text-red-600"></p>
+            <p class="text-[11px] text-ink/50">La propuesta se carga abajo; revisa y pulsa «Guardar».</p>
+          </div>
+        </div>
+
+        <!-- Columnas (tabla simple): las columnas visibles, en el orden en que se muestran -->
+        <div x-show="$store.dashboard.hasColumns" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-ink/70"
+                   x-text="$store.dashboard.columnsLabel"></label>
+            <button type="button" x-on:click="$store.dashboard.addColumn()"
+                    x-bind:disabled="$store.dashboard.drawerDraft.fields.columns.length >= $store.dashboard.maxColumns"
+                    class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+              <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
+            </button>
+          </div>
+          <div class="space-y-1" data-column-list="columns">
+            <template x-for="(col, idx) in $store.dashboard.drawerDraft.fields.columns" :key="'col-' + idx">
+              <div class="space-y-1" data-column-row>
+                <div class="flex gap-1.5 items-center rounded-lg bg-paper/70 border border-line/60 p-1.5">
+                  <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+                     aria-hidden="true" title="Arrastra para reordenar"></i>
+                  <select x-model="$store.dashboard.drawerDraft.fields.columns[idx].field"
+                          x-on:change="$store.dashboard.onColumnFieldChange(idx, $event.target.value)"
+                          aria-label="Columna"
+                          class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                    <option value="" x-show="!col.field" x-text="'— elegir —'"></option>
+                    <template x-for="c in $store.dashboard.columnOptions(idx)" :key="c">
+                      <option x-bind:value="c" x-text="c"></option>
+                    </template>
+                  </select>
+                  <button type="button" x-on:click="$store.dashboard.removeColumn(idx)"
+                          class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                          title="Quitar columna" aria-label="Quitar columna">×</button>
                 </div>
+                <input type="text" x-model="$store.dashboard.drawerDraft.fields.columns[idx].label"
+                       maxlength="80"
+                       x-bind:placeholder="idx === 0 ? 'Nombre a mostrar (opcional)' : $store.dashboard.columnLabel(col)"
+                       x-bind:title="$store.dashboard.columnLabel(col)"
+                       aria-label="Nombre a mostrar"
+                       class="w-full text-xs border border-line/60 rounded-md px-1.5 py-1 bg-paper/60 focus:outline-none focus:border-moss-500">
               </div>
             </template>
+          </div>
+          <p class="text-[11px] text-ink/50"
+             x-text="$store.dashboard.drawerCapabilities.columns_hint || 'Columnas visibles, en este orden. Sin «Nombre a mostrar» se muestra la columna tal cual.'"></p>
+        </div>
 
-            <template x-if="field.type === 'builder'">
-              <div class="space-y-3">
-                <p x-show="$store.dashboard.schemaError" x-text="$store.dashboard.schemaError" class="text-[11px] text-red-600"></p>
-                <p x-show="!$store.dashboard.schemaError && !($store.dashboard.schema.all_fields || []).length" class="text-[11px] text-ink/50">
-                  Cargando columnas de la hoja…
-                </p>
-
-                <!-- Valores de ejemplo de las columnas de texto (autocompletar de los filtros) -->
-                <template x-for="l in $store.dashboard.sampleLists" :key="l.id">
-                  <datalist x-bind:id="l.id">
-                    <template x-for="v in l.values" :key="v"><option x-bind:value="v"></option></template>
-                  </datalist>
-                </template>
-
-                <!-- Piezas del data_spec, en el orden y con los controles del manifiesto. -->
-                <div class="space-y-3">
-                  {% include "partials/panel/panel.html" %}
+        <!-- Dimensiones: agrupación del eje/filas, o las columnas de una tabla simple -->
+        <div x-show="$store.dashboard.hasDimensions" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-ink/70"
+                   x-text="$store.dashboard.drawerCapabilities.dimensions_label || 'Dimensiones'"></label>
+            <button type="button" x-on:click="$store.dashboard.addDimension()"
+                    x-bind:disabled="$store.dashboard.drawerDraft.fields.dimensions.length >= $store.dashboard.maxDimensions"
+                    class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+              <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
+            </button>
+          </div>
+          <div class="space-y-1" data-column-list="dimensions">
+            <template x-for="(col, idx) in $store.dashboard.drawerDraft.fields.dimensions" :key="'dim-' + idx">
+              <div class="space-y-1" data-column-row>
+                <div class="flex gap-1.5 items-center rounded-lg bg-paper/70 border border-line/60 p-1.5">
+                  <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+                     aria-hidden="true" title="Arrastra para reordenar"></i>
+                  <select x-model="$store.dashboard.drawerDraft.fields.dimensions[idx]"
+                          aria-label="Dimensión"
+                          class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                    <option value="" x-show="!col" x-text="'— elegir —'"></option>
+                    <template x-for="c in $store.dashboard.dimensionOptions(idx)" :key="c">
+                      <option x-bind:value="c" x-text="c"></option>
+                    </template>
+                  </select>
+                  <button type="button" x-on:click="$store.dashboard.removeDimension(idx)"
+                          class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                          title="Quitar dimensión" aria-label="Quitar dimensión">×</button>
                 </div>
-
-                <!-- Visor JSON de solo lectura -->
-                <details class="text-[11px]">
-                  <summary class="cursor-pointer text-ink/50 hover:text-ink/70 select-none">Ver JSON del widget</summary>
-                  <div class="mt-2 space-y-2">
-                    <div>
-                      <div class="font-semibold text-ink/60 mb-0.5">data_spec</div>
-                      <pre class="font-mono text-[11px] bg-paper border border-line rounded-lg p-2 max-h-56 overflow-auto whitespace-pre"
-                           x-text="JSON.stringify($store.dashboard.drawerSpecs.data_spec, null, 2)"></pre>
-                    </div>
-                    <div>
-                      <div class="font-semibold text-ink/60 mb-0.5">view_spec</div>
-                      <pre class="font-mono text-[11px] bg-paper border border-line rounded-lg p-2 max-h-56 overflow-auto whitespace-pre"
-                           x-text="JSON.stringify($store.dashboard.drawerSpecs.view_spec, null, 2)"></pre>
-                    </div>
-                  </div>
-                </details>
+                <!-- Totales de ese nivel (solo los tipos que los declaran en su style_schema). -->
+                <template x-if="col && $store.dashboard.totalsControl('row', idx)">
+                  <label class="flex items-center gap-1.5 pl-1.5 text-[11px] text-ink/60 cursor-pointer"
+                         x-bind:title="$store.dashboard.totalsTitle('row', idx)">
+                    <input type="checkbox"
+                           x-model="$store.dashboard.drawerDraft.style[$store.dashboard.totalsStyleKey('row', idx)]"
+                           class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+                    Mostrar totales
+                  </label>
+                </template>
               </div>
             </template>
+          </div>
+          <p class="text-[11px] text-ink/50"
+             x-text="$store.dashboard.drawerCapabilities.dimensions_hint || 'Columnas por las que agrupar (filas de la tabla).'"></p>
+        </div>
 
-            <template x-if="field.type === 'number'">
-              <input type="number" x-model.number="$store.dashboard.drawerDraft[field.key]"
-                     x-bind:min="field.min" x-bind:step="field.step || 1"
-                     class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+        <!-- Pivotes: series / columnas cruzadas -->
+        <div x-show="$store.dashboard.hasPivots" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-ink/70">Pivotes</label>
+            <button type="button" x-on:click="$store.dashboard.addPivot()"
+                    x-bind:disabled="$store.dashboard.drawerDraft.fields.pivots.length >= $store.dashboard.maxPivots"
+                    class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+              <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
+            </button>
+          </div>
+          <div class="space-y-1" data-column-list="pivots">
+            <template x-for="(col, idx) in $store.dashboard.drawerDraft.fields.pivots" :key="'piv-' + idx">
+              <div class="space-y-1" data-column-row>
+                <div class="flex gap-1.5 items-center rounded-lg bg-paper/70 border border-line/60 p-1.5">
+                  <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+                     aria-hidden="true" title="Arrastra para reordenar"></i>
+                  <select x-model="$store.dashboard.drawerDraft.fields.pivots[idx]"
+                          aria-label="Pivote"
+                          class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                    <option value="" x-show="!col" x-text="'— elegir —'"></option>
+                    <template x-for="c in $store.dashboard.pivotOptions(idx)" :key="c">
+                      <option x-bind:value="c" x-text="c"></option>
+                    </template>
+                  </select>
+                  <button type="button" x-on:click="$store.dashboard.removePivot(idx)"
+                          class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                          title="Quitar pivote" aria-label="Quitar pivote">×</button>
+                </div>
+                <!-- Columnas de totales de ese nivel (solo tipos que los declaran). -->
+                <template x-if="col && $store.dashboard.totalsControl('column', idx)">
+                  <label class="flex items-center gap-1.5 pl-1.5 text-[11px] text-ink/60 cursor-pointer"
+                         x-bind:title="$store.dashboard.totalsTitle('column', idx)">
+                    <input type="checkbox"
+                           x-model="$store.dashboard.drawerDraft.style[$store.dashboard.totalsStyleKey('column', idx)]"
+                           class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+                    Mostrar totales
+                  </label>
+                </template>
+              </div>
             </template>
+          </div>
+          <p class="text-[11px] text-ink/50">Desagregación extra: series en el gráfico, columnas en la tabla dinámica.</p>
+        </div>
 
-            <template x-if="field.type === 'select'">
-              <select x-model="$store.dashboard.drawerDraft[field.key]"
-                      x-on:change="field.key === 'width' && $store.dashboard.fitStartCol()"
-                      class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
-                <template x-for="opt in field.options" :key="opt.value">
-                  <option x-bind:value="opt.value" x-text="opt.label"></option>
+        <!-- Métricas -->
+        <div x-show="$store.dashboard.hasMetrics" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-ink/70">Métricas</label>
+            <button type="button" x-on:click="$store.dashboard.addMetric()"
+                    x-bind:disabled="$store.dashboard.drawerDraft.fields.metrics.length >= $store.dashboard.maxMetrics"
+                    class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+              <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
+            </button>
+          </div>
+          <p x-show="!$store.dashboard.drawerDraft.fields.metrics.length" class="text-[11px] text-ink/50">
+            Sin métricas: el widget lista las dimensiones tal cual.
+          </p>
+          <div class="space-y-1.5" data-column-list="metrics">
+            <template x-for="(metric, idx) in $store.dashboard.drawerDraft.fields.metrics" :key="idx">
+              <div class="flex gap-2 items-start rounded-lg bg-paper/70 border border-line/60 p-2" data-column-row>
+                <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none mt-0.5"
+                   aria-hidden="true" title="Arrastra para reordenar"></i>
+                <div class="flex-1 min-w-0 space-y-1.5">
+                <select x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
+                        class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  <option value="" x-show="metric.agg === 'count' || !metric.field" x-text="metric.agg === 'count' ? 'Todas las filas' : '— elegir —'"></option>
+                  <template x-for="col in $store.dashboard.schema.all_fields || []" :key="col">
+                    <option x-bind:value="col" x-text="col"></option>
+                  </template>
+                </select>
+                <div class="flex gap-1.5">
+                  <select x-model="metric.agg" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Agregación"
+                          class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                    <template x-for="o in $store.dashboard.aggOptions" :key="o.value">
+                      <option x-bind:value="o.value" x-text="o.label"></option>
+                    </template>
+                  </select>
+                </div>
+                <input type="text" x-model="metric.label" aria-label="Nombre a mostrar"
+                       x-bind:title="'Se muestra: ' + $store.dashboard.metricName(metric)"
+                       x-bind:placeholder="$store.dashboard.metricName(metric)"
+                       class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+              </div>
+              <button type="button" x-on:click="$store.dashboard.removeMetric(idx)"
+                      class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none" title="Quitar métrica" aria-label="Quitar métrica">×</button>
+            </div>
+          </template>
+          </div>
+        </div>
+
+        <!-- Filtros del widget -->
+        <div x-show="$store.dashboard.hasFilters" class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-ink/70">Filtros</label>
+            <button type="button" x-on:click="$store.dashboard.addFilter()"
+                    x-bind:disabled="$store.dashboard.drawerDraft.fields.filters.length >= 20"
+                    class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+              <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
+            </button>
+          </div>
+          <template x-for="(c, ci) in $store.dashboard.drawerDraft.fields.filters" :key="c._k">
+            <div class="flex flex-wrap items-center gap-1 rounded-lg bg-paper/70 border border-line/60 p-1">
+              <select x-model="c.field" x-on:change="$store.dashboard.onFilterFieldChange(c)" aria-label="Columna"
+                      class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                <template x-for="f in $store.dashboard.schema.all_fields || []" :key="f">
+                  <option x-bind:value="f" x-text="f"></option>
                 </template>
               </select>
+              <select x-model="c.op" x-on:change="$store.dashboard.onFilterOpChange(c)" aria-label="Operador"
+                      class="w-36 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                <template x-for="o in $store.dashboard.filterOpOptions" :key="o.value">
+                  <option x-bind:value="o.value" x-text="o.label"></option>
+                </template>
+              </select>
+
+              <template x-if="$store.dashboard.filterNeedsValue(c)">
+                <select x-model="c.mode" aria-label="Tipo de valor"
+                        class="w-28 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  <option value="value" x-text="$store.dashboard.filterIsList(c) ? 'Lista' : ($store.dashboard.filterIsRange(c) ? 'Rango' : 'Valor')"></option>
+                  <option value="relative" x-text="'Relativo…'"></option>
+                </select>
+              </template>
+
+              <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'value' && !$store.dashboard.filterIsRange(c)">
+                <input type="text" x-model="c.value" x-bind:list="$store.dashboard.sampleListId(c.field)" aria-label="Valor"
+                       x-bind:placeholder="$store.dashboard.filterIsList(c) ? 'Separados por coma' : 'Valor'"
+                       class="flex-1 min-w-[5rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+              </template>
+
+              <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'value' && $store.dashboard.filterIsRange(c)">
+                <span class="flex items-center gap-1">
+                  <input type="text" x-model="c.value" placeholder="Desde" aria-label="Desde"
+                         class="w-20 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  <span class="text-xs text-ink/50">…</span>
+                  <input type="text" x-model="c.value2" placeholder="Hasta" aria-label="Hasta"
+                         class="w-20 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                </span>
+              </template>
+
+              <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'relative'">
+                <select x-model="c.relative" aria-label="Valor relativo"
+                        class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  <template x-for="o in $store.dashboard.relativeOptions" :key="o.value">
+                    <option x-bind:value="o.value" x-text="o.label"></option>
+                  </template>
+                </select>
+              </template>
+
+              <button type="button" x-on:click="$store.dashboard.removeFilter(ci)"
+                      class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                      title="Quitar filtro" aria-label="Quitar filtro">×</button>
+            </div>
+          </template>
+        </div>
+
+        <!-- Orden -->
+        <div x-show="$store.dashboard.hasSort" class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-ink/70 mb-1">Ordenar por</label>
+            <select x-bind:value="$store.dashboard.sortValue"
+                    x-on:change="$store.dashboard.setSortValue($event.target.value)"
+                    class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500">
+              <option value="">Sin orden</option>
+              <template x-for="o in $store.dashboard.sortOptions" :key="o.value">
+                <option x-bind:value="o.value" x-text="o.label"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-ink/70 mb-1">Dirección</label>
+            <select x-bind:value="$store.dashboard.sortDirection"
+                    x-on:change="$store.dashboard.setSortDirection($event.target.value)"
+                    x-bind:disabled="!$store.dashboard.sortValue"
+                    class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+              <option value="asc">Ascendente</option>
+              <option value="desc">Descendente</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Límite -->
+        <div x-show="$store.dashboard.hasLimit">
+          <label class="block text-xs font-semibold text-ink/70 mb-1">Límite de filas</label>
+          <input type="number" min="1" max="500" x-model.number="$store.dashboard.drawerDraft.fields.limit"
+                 placeholder="Sin límite"
+                 class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+        </div>
+
+        <!-- Visor JSON de solo lectura -->
+        <details class="text-[11px]">
+          <summary class="cursor-pointer text-ink/50 hover:text-ink/70 select-none">Ver JSON del widget</summary>
+          <div class="mt-2 space-y-2">
+            <div>
+              <div class="font-semibold text-ink/60 mb-0.5">fields</div>
+              <pre class="font-mono text-[11px] bg-paper border border-line rounded-lg p-2 max-h-56 overflow-auto whitespace-pre"
+                   x-text="JSON.stringify($store.dashboard.drawerDraft.fields, null, 2)"></pre>
+            </div>
+            <div>
+              <div class="font-semibold text-ink/60 mb-0.5">style</div>
+              <pre class="font-mono text-[11px] bg-paper border border-line rounded-lg p-2 max-h-56 overflow-auto whitespace-pre"
+                   x-text="JSON.stringify($store.dashboard.drawerDraft.style, null, 2)"></pre>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- ============ Personalizar: el style_schema que manda el backend ============ -->
+      <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+        <p x-show="!$store.dashboard.drawerStyleSchema.length" class="text-sm text-ink/50">
+          Este widget no tiene opciones de estilo.
+        </p>
+        <template x-for="control in $store.dashboard.drawerStyleSchema" :key="control.key">
+          <div>
+            <template x-if="control.ui === 'checkbox'">
+              <label class="flex items-center gap-2 text-xs font-semibold text-ink/70 cursor-pointer">
+                <input type="checkbox" x-model="$store.dashboard.drawerDraft.style[control.key]"
+                       class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+                <span x-text="control.label || control.key"></span>
+              </label>
             </template>
 
-            <template x-if="field.type === 'range'">
-              <div class="flex items-center gap-3">
-                <input type="range" x-model.number="$store.dashboard.drawerDraft[field.key]"
-                       x-bind:min="field.min" x-bind:max="field.max" x-bind:step="field.step || 1"
-                       class="flex-1 h-2 rounded-lg appearance-none cursor-pointer bg-line accent-moss-500">
-                <span class="text-sm font-semibold text-ink/70 min-w-[2ch] text-center"
-                      x-text="$store.dashboard.drawerDraft[field.key]"></span>
+            <template x-if="control.ui !== 'checkbox'">
+              <div>
+                <label class="block text-xs font-semibold text-ink/70 mb-1" x-text="control.label || control.key"></label>
+
+                <template x-if="control.ui === 'text'">
+                  <input type="text" x-model="$store.dashboard.drawerDraft.style[control.key]"
+                         x-bind:placeholder="control.default != null ? String(control.default) : ''"
+                         class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+                </template>
+
+                <template x-if="control.ui === 'number'">
+                  <input type="number" x-model.number="$store.dashboard.drawerDraft.style[control.key]"
+                         x-bind:min="control.min" x-bind:max="control.max" x-bind:step="control.step || 1"
+                         class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+                </template>
+
+                <template x-if="control.ui === 'select'">
+                  <select x-model="$store.dashboard.drawerDraft.style[control.key]"
+                          class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+                    <template x-for="o in control.options || []" :key="o.value">
+                      <option x-bind:value="o.value" x-text="o.label"></option>
+                    </template>
+                  </select>
+                </template>
               </div>
-            </template>
-
-            <template x-if="field.type === 'checkbox'">
-              <input type="checkbox" x-model="$store.dashboard.drawerDraft[field.key]"
-                     class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
             </template>
           </div>
         </template>
-      </template>
-    </div>
+      </div>
+
     </div>
 
     <div class="px-5 py-4 border-t border-line">
@@ -376,6 +610,7 @@
 <script src="https://cdn.jsdelivr.net/npm/virtual-select-plugin@1.0.39/dist/virtual-select.min.js"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/base-widget.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/utils/formatearEtiquetaApex.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widget-registry.js' %}"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/widgets/bar-widget.js' %}"></script>
@@ -386,7 +621,6 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/table-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/filter-widget.js' %}"></script>
 
-<script src="{% static 'sheets_reports/js/board_editor/panel.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/board-editor-init.js' %}"></script>

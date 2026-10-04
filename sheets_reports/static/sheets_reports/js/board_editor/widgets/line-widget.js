@@ -16,34 +16,58 @@
       };
     }
 
+    constructor(raw) {
+      super(raw);
+    }
+
     buildElement() {
       return this.buildStandardCardElement();
     }
 
-    renderContent(container, data) {
+    getProperties() {
+      return { ...super.getProperties() };
+    }
+
+    draw(data, style, title) {
+      this.style = { ...this.style, ...style };
+      if (title) this.title = title;
+
       const payload = data || this.constructor.mockData();
       this._lastData = payload;
-      const series = payload.series || [{ name: 'Datos', data: [] }];
-      const categories = payload.categories || [];
+
+      let series = [];
+      let categories = [];
+
+      if (payload.columns && payload.rows) {
+        const meta = payload.metadata || {};
+        const dimensionField = meta.dimension || payload.columns[0];
+        const metricFields = meta.metrics || payload.columns.slice(1);
+
+        categories = payload.rows.map(row => row[dimensionField]);
+        series = metricFields.map(field => ({
+          name: field,
+          data: payload.rows.map(row => row[field] ?? 0),
+        }));
+      } else if (payload.series) {
+        series = payload.series || [{ name: 'Datos', data: [] }];
+        categories = payload.categories || [];
+      }
+
       const allPercent = BaseWidget.allSeriesPercent(payload, series);
-      const reference = BaseWidget.referenceAnnotations(payload.referenceLines, series, {
+      const reference = BaseWidget.referenceAnnotations(payload.referenceLines || [], series, {
         format: BaseWidget.referenceFormat(allPercent),
       });
+
       const options = {
         chart: {
           type: 'line', height: '100%', width: '100%', fontFamily: 'inherit',
-          // Solo descargar (igual que barras y dona): el zoom/pan no sirve en un eje de
-          // categorías y sus íconos se dibujaban encima del gráfico.
           toolbar: this.chartExportToolbar(),
         },
         colors: BaseWidget.CHART_COLORS,
-        // monotoneCubic: curva suave que no se pasa de los puntos ('smooth' inventaba picos y
-        // valles entre categorías, incluso por debajo de 0).
         stroke: { curve: 'monotoneCubic', width: 3 },
         markers: { size: 3, hover: { size: 5 } },
         series,
         xaxis: {
-          // Mismo formato que las barras: etiquetas largas en varias líneas, sin inclinar.
           categories: categories.map((cat) => formatearEtiquetaApex(cat, 18)),
           labels: { rotate: 0, hideOverlappingLabels: true, style: { fontSize: '11px' } },
           tooltip: { enabled: false },
@@ -52,16 +76,14 @@
         annotations: reference.annotations,
         yaxis: {
           ...(allPercent && { labels: { formatter: (val) => `${Math.round(val)}%` } }),
-          // Que las líneas de referencia fuera del rango de los datos no queden cortadas.
           ...(reference.max != null && {
             min: (min) => Math.min(min, reference.min),
             max: (max) => Math.max(max, reference.max),
           }),
         },
-        // Margen a los lados para que las etiquetas de los extremos no queden cortadas.
         grid: { padding: { left: 12, right: 18 } },
       };
-      this.renderApexChart(container, options);
+      this.renderApexChart(this.getContentContainer(), options);
     }
   }
 

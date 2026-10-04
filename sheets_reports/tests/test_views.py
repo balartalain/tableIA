@@ -1,3 +1,5 @@
+"""Las vistas son adaptadores HTTP sobre `WidgetService`: render de solo lectura (sin IA),
+alta/edición con la misma validación que la IA, asistente con IA y CRUD de tableros."""
 import json
 from unittest import mock
 from urllib.parse import quote
@@ -7,8 +9,7 @@ from django.test import TestCase
 
 from sheets_reports.models import Dashboard, Widget
 from sheets_reports.services.ai_spec import SpecGenerationError
-from sheets_reports.tests.fixtures import agg, sales_df, spec
-from sheets_reports.tests.fixtures import view as build_view_spec
+from sheets_reports.tests.fixtures import agg, fields, sales_df
 
 
 def board_filters(*conditions) -> str:
@@ -17,6 +18,10 @@ def board_filters(*conditions) -> str:
 
 
 ANIO_2026 = {"field": "anio", "op": "in", "value": [2026]}
+
+
+def payload(widget_type="bar", title="Ventas por categoría", fields_data=None, style=None, **extra):
+    return {"type": widget_type, "title": title, "fields": fields_data or fields(), "style": style or {}, **extra}
 
 
 @mock.patch("sheets_reports.views.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
@@ -28,30 +33,34 @@ class ViewsTests(TestCase):
             nombre="Ventas", owner=self.user,
             sheet_url="https://docs.google.com/spreadsheets/d/abc123/edit#gid=0",
         )
-        data_spec = spec()
         self.widget = Widget.objects.create(
-            dashboard=self.dashboard, type="bar",
-            data_spec=data_spec, view_spec=build_view_spec("bar", data_spec),
+            dashboard=self.dashboard, type="bar", title="Ventas por categoría",
+            fields=fields(), style={},
         )
 
+    # --------------------------------------------------------------- render
     def test_render_no_llama_a_la_ia(self, _df):
-        with mock.patch("sheets_reports.views.generate_widget_spec") as ai:
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_form") as ai:
             r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?{board_filters(ANIO_2026)}")
         ai.assert_not_called()
         self.assertEqual(r.status_code, 200)
         data = r.json()["widgets"][0]["data"]
-        self.assertEqual(data["categories"], ["Hogar", "Electrónica"])
-        self.assertEqual(data["series"][0]["data"], [175.0, 500.0])
+        self.assertEqual(dict(zip(data["categories"], data["series"][0]["data"])),
+                         {"Hogar": 175.0, "Electrónica": 500.0})
 
     def test_kpi_porcentaje_usa_como_universo_los_filtros_del_tablero(self, _df):
-        data_spec = spec(dimensions=[], metrics=[agg("porcentaje", "count", show_as="pct_total")],
-                         filters=[{"field": "categoria", "op": "eq", "value": "Hogar"}])
-        Widget.objects.create(dashboard=self.dashboard, type="kpi",
-                              data_spec=data_spec, view_spec=build_view_spec("kpi", data_spec))
+        Widget.objects.create(
+            dashboard=self.dashboard, type="kpi", title="Participación de Hogar",
+            fields={"dimensions": [], "filters": [],
+                    "metrics": [{**agg("participacion"),
+                                 "filters": [{"field": "categoria", "op": "eq", "value": "Hogar"}],
+                                 "window": {"type": "percent_of_total"}}]},
+            style={},
+        )
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?{board_filters(ANIO_2026)}")
         kpi = next(w for w in r.json()["widgets"] if w["type"] == "kpi")
-        # 3 filas de Hogar entre las 5 de 2026 (no entre las 6 de la hoja).
-        self.assertEqual(kpi["data"]["value"], 60.0)
+        # 175 de Hogar entre las 675 de 2026 (no entre las 755 de la hoja completa).
+        self.assertEqual(round(kpi["data"]["value"], 1), 25.9)
 
     def test_filtro_de_columna_inexistente_se_ignora_sin_tumbar_el_tablero(self, _df):
         # Ej. una URL compartida cuando la columna ya no está en la hoja.
@@ -59,8 +68,10 @@ class ViewsTests(TestCase):
                             + board_filters({"field": "pais", "op": "in", "value": ["DO"]}, ANIO_2026))
         self.assertEqual(r.status_code, 200)
         self.assertIn("'pais' no existe", r.json()["filter_errors"][0])
-        # El filtro válido sí se aplicó.
-        self.assertEqual(r.json()["widgets"][0]["data"]["categories"], ["Hogar", "Electrónica"])
+        self.assertEqual(r.json()["widgets"][0]["error"], None)
+        data = r.json()["widgets"][0]["data"]
+        self.assertEqual(dict(zip(data["categories"], data["series"][0]["data"])),
+                         {"Hogar": 175.0, "Electrónica": 500.0})
 
     def test_render_valida_las_reglas_de_las_condiciones(self, _df):
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?"
@@ -72,98 +83,60 @@ class ViewsTests(TestCase):
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filters=nada")
         self.assertEqual(r.status_code, 400)
 
+    def test_render_widget_con_tipo_que_ya_no_existe(self, _df):
+        Widget.objects.filter(id=self.widget.id).update(type="fantasma")
+        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/")
+        self.assertEqual(r.json()["widgets"][0]["error"], "El tipo de widget «fantasma» ya no existe. Edita el widget.")
+
+    def test_render_de_un_widget_roto_no_tumba_el_tablero(self, _df):
+        Widget.objects.filter(id=self.widget.id).update(fields={"dimensions": ["pais"], "metrics": [agg()]})
+        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("ya no existe en la hoja", r.json()["widgets"][0]["error"])
+
+    # --------------------------------------------------------------- alta
     def test_crear_kpi_con_condiciones_y_roles(self, _df):
         r = self.client.post(
             f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps({
-                "type": "kpi", "dimensions": [], "trend_by": "mes",
-                "filters": [{"field": "categoria", "op": "ne", "value": "Ropa"}],
-                "metrics": [
-                    agg("actual", filters=[{"field": "anio", "op": "eq", "relative": "max"}]),
-                    agg("anterior", filters=[{"field": "anio", "op": "eq", "relative": "second_max"}]),
-                ],
-                "kpi": {"primary": "actual", "compare": "anterior", "target": 1000,
-                        "status": {"basis": "target_pct", "good": 100, "warn": 50}},
-            }),
+            json.dumps(payload(
+                "kpi", "Ventas vs año anterior",
+                fields_data={"dimensions": [], "filters": [],
+                             "metrics": [
+                                 agg("actual", filters=[{"field": "anio", "op": "eq", "relative": "max"}]),
+                                 agg("anterior", filters=[{"field": "anio", "op": "eq", "relative": "second_max"}]),
+                             ]},
+                style={"target": 1000, "targetLabel": "Meta", "status_good": 100, "status_warn": 50},
+            )),
             content_type="application/json",
         )
         self.assertEqual(r.status_code, 201, r.content)
         data = r.json()["data"]
         self.assertEqual(data["value"], 675.0)
-        # Sin Ropa no hay filas de 2025: la suma es 0 y la variación % no existe.
-        self.assertEqual(data["compare"]["value"], 0)
-        self.assertIsNone(data["compare"]["delta_pct"])
+        self.assertEqual(data["compare"]["value"], 80.0)
+        self.assertEqual(data["compare"]["delta"], 595.0)
         self.assertEqual(data["target"]["pct"], 67.5)
         self.assertEqual(data["status"], "warn")
-        self.assertEqual(data["trend"]["data"], [400.0, 250.0, 25.0])
 
-    def test_update_kpi_conserva_roles_si_no_se_envian(self, _df):
-        data_spec = spec(dimensions=[], metrics=[agg("a"), agg("b")])
-        kpi = Widget.objects.create(dashboard=self.dashboard, type="kpi", data_spec=data_spec,
-                                    view_spec=build_view_spec("kpi", data_spec, {"kpi": {"compare": "b"}}))
-        r = self.client.put(f"/api/widget/{kpi.id}/spec/", json.dumps({"metrics": [agg("a"), agg("b", "avg")]}),
-                            content_type="application/json")
-        self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(r.json()["view_spec"]["compare"], "b")
-
-    def test_crear_barras_top_n_con_otros(self, _df):
+    def test_crear_barras_con_orden_y_limite(self, _df):
         r = self.client.post(
             f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps({"type": "bar", "dimensions": ["categoria"], "metrics": [agg("total_ventas")],
-                        "sort": {"by": "total_ventas", "dir": "desc"}, "limit": {"n": 1, "others": True}}),
+            json.dumps(payload(fields_data=fields(sort_by="-total_ventas", limit=1))),
             content_type="application/json",
         )
         self.assertEqual(r.status_code, 201, r.content)
-        self.assertEqual(r.json()["data"]["categories"], ["Electrónica", "Otros"])
-        self.assertEqual(r.json()["data"]["series"][0]["data"], [500.0, 255.0])
-
-    def test_update_spec_desde_builder(self, _df):
-        with mock.patch("sheets_reports.views.generate_widget_spec") as ai:
-            r = self.client.put(
-                f"/api/widget/{self.widget.id}/spec/",
-                json.dumps({
-                    "dimensions": ["categoria"], "pivots": ["mes"], "stacked": True,
-                    "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"}],
-                }),
-                content_type="application/json",
-            )
-        ai.assert_not_called()
-        self.assertEqual(r.status_code, 200, r.content)
-        self.widget.refresh_from_db()
-        self.assertEqual(self.widget.data_spec["pivots"], ["mes"])
-        self.assertEqual(self.widget.view_spec["seriesBy"], "mes")
-        self.assertTrue(self.widget.view_spec["stacked"])
-        self.assertEqual(len(r.json()["data"]["series"]), 3)
-
-    def test_update_spec_count_sin_campo(self, _df):
-        r = self.client.put(
-            f"/api/widget/{self.widget.id}/spec/",
-            json.dumps({"dimensions": ["categoria"], "stacked": True,
-                        "metrics": [{"type": "agg", "agg": "count", "as": "cantidad"}]}),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 200, r.content)
-        self.assertNotIn("field", r.json()["data_spec"]["metrics"][0])
-        self.assertFalse(r.json()["view_spec"]["stacked"])  # sin pivote no se apila
-        self.assertEqual(r.json()["data"]["series"][0]["data"], [3, 2, 1])
-
-    def test_update_spec_rechaza_pivote_igual_a_dimension(self, _df):
-        r = self.client.put(
-            f"/api/widget/{self.widget.id}/spec/",
-            json.dumps({"dimensions": ["categoria"], "pivots": ["categoria"], "stacked": False,
-                        "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"}]}),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 422)
-        self.assertIn("pivot", r.json()["error"])
+        data = r.json()["data"]
+        self.assertEqual(data["categories"], ["Electrónica"])
+        self.assertEqual(data["series"][0]["data"], [500.0])
 
     def test_crear_widget_desde_builder_sin_ia(self, _df):
-        with mock.patch("sheets_reports.views.generate_widget_spec") as ai:
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_form") as ai:
             r = self.client.post(
                 f"/api/dashboard/{self.dashboard.id}/widgets/",
-                json.dumps({"type": "dynamic_table", "dimensions": ["categoria"], "pivots": ["mes"],
-                            "metrics": [{"type": "agg", "agg": "count", "as": "cantidad"}],
-                            "position": {"x": 0, "y": 3, "w": 12, "h": 400}}),
+                json.dumps(payload(
+                    "dynamic_table", "Ventas por categoría y mes",
+                    fields_data=fields(pivots=["mes"], metrics=[agg("cantidad", agg="count")]),
+                    position={"x": 0, "y": 3, "w": 12, "h": 400},
+                )),
                 content_type="application/json",
             )
         ai.assert_not_called()
@@ -171,67 +144,107 @@ class ViewsTests(TestCase):
         widget = Widget.objects.get(id=r.json()["id"])
         self.assertIsNone(widget.source_prompt)
         self.assertEqual(widget.position, {"x": 0, "y": 3, "w": 12, "h": 400})
-        self.assertEqual(r.json()["data"]["columns"][1]["children"][0]["header"], "Ene")
-
-    def test_crear_tabla_dinamica_con_varios_niveles(self, _df):
-        r = self.client.post(
-            f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps({"type": "dynamic_table", "dimensions": ["anio", "categoria"], "pivots": ["mes"],
-                        "metrics": [{"type": "agg", "agg": "count", "as": "cantidad"},
-                                    {"type": "agg", "agg": "count", "as": "pct", "show_as": "pct_row"}]}),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 201, r.content)
-        data = r.json()["data"]
-        self.assertEqual(data["rowFields"], ["anio", "categoria"])
-        subtotal = next(row for row in data["rows"] if row.get("__subtotal"))
-        self.assertEqual(subtotal["anio"], "Total 2026")
-        self.assertEqual(subtotal["__total.cantidad"], 5)
-
-    def test_tabla_demasiado_grande_muestra_mensaje(self, _df):
-        data_spec = spec(pivots=["mes"])
-        Widget.objects.create(dashboard=self.dashboard, type="dynamic_table",
-                              data_spec=data_spec, view_spec=build_view_spec("dynamic_table", data_spec))
-        with mock.patch("sheets_reports.engine.plans.pivot_table.MAX_TABLE_CELLS", 5):
-            r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/")
-        table = next(w for w in r.json()["widgets"] if w["type"] == "dynamic_table")
-        self.assertIn("celdas", table["error"])
-
-    def test_update_spec_conserva_labels_que_no_envia_el_builder(self, _df):
-        self.widget.view_spec = {**self.widget.view_spec, "labels": {"total_ventas": "Ingresos"}}
-        self.widget.save()
-        r = self.client.put(
-            f"/api/widget/{self.widget.id}/spec/",
-            json.dumps({"dimensions": ["categoria"], "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"}]}),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(r.json()["view_spec"]["labels"], {"total_ventas": "Ingresos"})
-
-    def test_crear_tabla_con_nombre_a_mostrar(self, _df):
-        r = self.client.post(
-            f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps({"type": "dynamic_table", "dimensions": ["categoria"],
-                        "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"}],
-                        "labels": {"categoria": "Categoría", "total_ventas": "Ventas"}}),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 201, r.content)
-        columns = r.json()["data"]["columns"]
-        self.assertEqual([c["header"] for c in columns], ["Categoría", "Ventas"])
-        self.assertEqual(Widget.objects.get(id=r.json()["id"]).view_spec["labels"],
-                         {"categoria": "Categoría", "total_ventas": "Ventas"})
+        headers = {ch["header"] for c in r.json()["data"]["columns"] for ch in c.get("children", [])}
+        self.assertEqual(headers, {"Ene", "Feb", "Mar"})
 
     def test_crear_widget_invalido_no_guarda_nada(self, _df):
         r = self.client.post(
             f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps({"type": "bar", "dimensions": ["categoria"], "pivots": ["categoria"],
-                        "metrics": [{"type": "agg", "field": "ventas", "agg": "sum", "as": "total"}]}),
+            json.dumps(payload(fields_data=fields(pivots=["categoria"]))),
             content_type="application/json",
         )
         self.assertEqual(r.status_code, 422)
+        self.assertIn("no puede estar también en las dimensiones", r.json()["error"])
         self.assertEqual(Widget.objects.count(), 1)
 
+    def test_crear_barras_con_pivote_y_varias_metricas_se_rechaza(self, _df):
+        r = self.client.post(
+            f"/api/dashboard/{self.dashboard.id}/widgets/",
+            json.dumps(payload(fields_data=fields(pivots=["mes"], metrics=[agg("total_ventas"),
+                                                                          agg("cantidad", agg="count")]))),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 422)
+        self.assertIn("UNA métrica", r.json()["error"])
+        self.assertEqual(Widget.objects.count(), 1)
+
+    def test_crear_estilo_fuera_del_schema_se_descarta(self, _df):
+        r = self.client.post(
+            f"/api/dashboard/{self.dashboard.id}/widgets/",
+            json.dumps(payload(style={"stacked": True, "no_existe": "x"})),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Widget.objects.get(id=r.json()["id"]).style, {"stacked": True})
+
+    def test_un_solo_widget_de_filtros_por_tablero(self, _df):
+        body = json.dumps(payload("filter", "Filtros", fields_data={"dimensions": ["categoria"], "metrics": []}))
+        first = self.client.post(f"/api/dashboard/{self.dashboard.id}/widgets/", body,
+                                 content_type="application/json")
+        second = self.client.post(f"/api/dashboard/{self.dashboard.id}/widgets/", body,
+                                  content_type="application/json")
+        self.assertEqual(first.status_code, 201, first.content)
+        self.assertEqual(second.status_code, 422)
+        self.assertIn("Solo se puede agregar un widget «Filtros» por tablero.", second.json()["error"])
+
+    # ------------------------------------------------------------- edición
+    def test_update_desde_builder_sin_ia(self, _df):
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_form") as ai:
+            r = self.client.put(
+                f"/api/widget/{self.widget.id}/",
+                json.dumps({"fields": fields(pivots=["mes"], metrics=[agg("total_ventas")]),
+                            "style": {"stacked": True}, "title": "Ventas por categoría y mes"}),
+                content_type="application/json",
+            )
+        ai.assert_not_called()
+        self.assertEqual(r.status_code, 200, r.content)
+        self.widget.refresh_from_db()
+        self.assertEqual(self.widget.fields["pivots"], ["mes"])
+        self.assertEqual(self.widget.title, "Ventas por categoría y mes")
+        self.assertTrue(r.json()["data"]["stacked"])
+        self.assertEqual(len(r.json()["data"]["series"]), 3)
+
+    def test_update_rechaza_pivote_igual_a_dimension(self, _df):
+        r = self.client.put(
+            f"/api/widget/{self.widget.id}/",
+            json.dumps({"fields": fields(pivots=["categoria"])}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 422)
+        self.widget.refresh_from_db()
+        self.assertEqual(self.widget.fields["pivots"], [])
+
+    def test_update_conserva_lo_que_no_se_envia(self, _df):
+        r = self.client.put(f"/api/widget/{self.widget.id}/", json.dumps({"style": {"stacked": True}}),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.widget.refresh_from_db()
+        self.assertEqual(self.widget.fields["dimensions"], ["categoria"])
+        self.assertEqual(self.widget.style, {"stacked": True})
+
+    def test_widget_config_devuelve_el_style_schema(self, _df):
+        r = self.client.get(f"/api/widget/{self.widget.id}/config/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["type"], "bar")
+        self.assertEqual(body["fields"], self.widget.fields)
+        keys = [c["key"] for c in body["style_schema"]]
+        self.assertIn("stacked", keys)
+        self.assertIn("color_scheme", keys)
+
+    def test_eliminar_widget(self, _df):
+        r = self.client.delete(f"/api/widget/{self.widget.id}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(Widget.objects.filter(id=self.widget.id).exists())
+
+    def test_widget_de_otro_usuario_no_se_toca(self, _df):
+        other = get_user_model().objects.create(username="otro")
+        dashboard = Dashboard.objects.create(nombre="Ajeno", owner=other, sheet_url="https://x/es")
+        widget = Widget.objects.create(dashboard=dashboard, type="bar", fields=fields(), style={})
+        self.assertEqual(self.client.get(f"/api/widget/{widget.id}/config/").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/widget/{widget.id}/").status_code, 404)
+
+    # ---------------------------------------------------------------- schema
     def test_schema_incluye_columnas_agrupables(self, _df):
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/schema/")
         # anio es numérica pero con pocos valores enteros: se puede agrupar. ventas no.
@@ -240,49 +253,37 @@ class ViewsTests(TestCase):
 
     def test_schema_trae_el_manifiesto_con_las_columnas_de_la_hoja(self, _df):
         manifest = self.client.get(f"/api/dashboard/{self.dashboard.id}/schema/").json()["widget_manifest"]
-        dims = next(p for p in manifest["bar"]["parts"] if p["key"] == "dimensions")
-        self.assertEqual([o["value"] for o in dims["options"]], ["categoria", "mes", "anio"])
-        # La página del editor lo arma sin leer la hoja.
+        self.assertEqual(manifest["bar"]["capabilities"], {
+            "dimensions": [1, 1], "pivots": [0, 1], "metrics": [1, 5],
+            "sort": True, "limit": True, "filters": True,
+        })
+        self.assertEqual(manifest["bar"]["max_per_dashboard"], None)
+        self.assertEqual(manifest["filter"]["max_per_dashboard"], 1)
+        self.assertEqual(manifest["bar"]["style_defaults"]["stacked"], False)
+        # La página del editor se arma con lo mismo, sin leer la hoja.
         page = self.client.get(f"/tableros/{self.dashboard.id}/edit/").context["widget_manifest"]
-        self.assertEqual(next(p for p in page["bar"]["parts"] if p["key"] == "dimensions")["options"], [])
+        self.assertEqual(page, manifest)
 
-    def test_update_spec_rechaza_pivote_con_varias_metricas(self, _df):
-        r = self.client.put(
-            f"/api/widget/{self.widget.id}/spec/",
-            json.dumps({
-                "dimensions": ["categoria"], "pivots": ["mes"], "stacked": False,
-                "metrics": [
-                    {"type": "agg", "field": "ventas", "agg": "sum", "as": "total_ventas"},
-                    {"type": "agg", "agg": "count", "as": "cantidad"},
-                ],
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 422)
-        self.assertIn("Con pivote solo se permite una métrica", r.json()["error"])
-        self.widget.refresh_from_db()
-        self.assertEqual(self.widget.data_spec["pivots"], [])
-
-    def test_asistente_de_tabla_devuelve_spec_sin_guardar(self, _df):
-        generated = {
-            "widget_type": "dynamic_table",
-            "data_spec": spec(),
-            "view_spec": build_view_spec("dynamic_table", spec()),
-        }
+    # -------------------------------------------------------------- asistente
+    def test_asistente_devuelve_el_form_sin_guardar(self, _df):
+        proposal = {"widget_type": "dynamic_table", "title": "Ventas por categoría",
+                    "fields": fields(pivots=["mes"]), "style": {"showTotals": True}}
         widgets_before = Widget.objects.count()
-        with mock.patch("sheets_reports.views.generate_widget_spec", return_value=generated) as ai:
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_form",
+                        return_value=proposal) as ai:
             r = self.client.post(
                 f"/api/dashboard/{self.dashboard.id}/table-assistant/",
                 json.dumps({"prompt": "ventas por categoría"}),
                 content_type="application/json",
             )
         self.assertEqual(r.status_code, 200, r.content)
-        self.assertEqual(ai.call_args.args[:2], ("ventas por categoría", "dynamic_table"))
-        self.assertEqual(r.json(), {"data_spec": generated["data_spec"], "view_spec": generated["view_spec"]})
+        self.assertEqual(ai.call_args.args[:2], ("ventas por categoría", None))
+        self.assertEqual(r.json(), {"widget_type": "dynamic_table", "title": "Ventas por categoría",
+                                    "fields": fields(pivots=["mes"]), "style": {"showTotals": True}})
         self.assertEqual(Widget.objects.count(), widgets_before)
 
-    def test_asistente_de_tabla_error_legible(self, _df):
-        with mock.patch("sheets_reports.views.generate_widget_spec",
+    def test_asistente_error_legible(self, _df):
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_form",
                         side_effect=SpecGenerationError("La columna Precio no existe.")):
             r = self.client.post(
                 f"/api/dashboard/{self.dashboard.id}/table-assistant/",
@@ -292,6 +293,12 @@ class ViewsTests(TestCase):
         self.assertEqual(r.status_code, 422)
         self.assertEqual(r.json()["error"], "La columna Precio no existe.")
 
+    def test_asistente_sin_prompt(self, _df):
+        r = self.client.post(f"/api/dashboard/{self.dashboard.id}/table-assistant/",
+                             json.dumps({"prompt": " "}), content_type="application/json")
+        self.assertEqual(r.status_code, 400)
+
+    # -------------------------------------------------------------- páginas
     def test_paginas_renderizan(self, _df):
         for url in ("/", f"/tableros/{self.dashboard.id}/edit/", f"/tableros/{self.dashboard.id}/shared/"):
             r = self.client.get(url)
@@ -301,6 +308,69 @@ class ViewsTests(TestCase):
         self.assertContains(r, "donut-widget.js")
         self.assertContains(r, 'id="module-rail"')
         self.assertContains(r, "tableia:rail-collapsed")
+
+
+class DashboardCrudTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create(username="ana")
+        self.client.force_login(self.user)
+        self.url = "https://docs.google.com/spreadsheets/d/abc/edit"
+        self.dashboard = Dashboard.objects.create(nombre="Ventas", owner=self.user, sheet_url=self.url)
+
+    def test_lista_solo_los_propios(self):
+        Dashboard.objects.create(nombre="Ajeno", owner=get_user_model().objects.create(username="pepe"),
+                                 sheet_url=self.url)
+        r = self.client.get("/api/dashboards/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([d["nombre"] for d in r.json()], ["Ventas"])
+        self.assertEqual(r.json()[0]["cardCount"], 0)
+
+    def test_crear_validando_campos(self):
+        r = self.client.post("/api/dashboards/", json.dumps({"nombre": "Nueva", "sheet_url": self.url}),
+                             content_type="application/json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["nombre"], "Nueva")
+        self.assertEqual(self.client.post("/api/dashboards/", json.dumps({"nombre": "", "sheet_url": self.url}),
+                                          content_type="application/json").status_code, 400)
+        self.assertEqual(self.client.post("/api/dashboards/", json.dumps({"nombre": "x", "sheet_url": ""}),
+                                          content_type="application/json").status_code, 400)
+
+    def test_editar_y_borrar(self):
+        r = self.client.put(f"/api/dashboards/{self.dashboard.id}/",
+                            json.dumps({"nombre": "Renombrado"}), content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        self.dashboard.refresh_from_db()
+        self.assertEqual(self.dashboard.nombre, "Renombrado")
+        self.assertEqual(self.client.put(f"/api/dashboards/{self.dashboard.id}/",
+                                         json.dumps({"nombre": "  "}), content_type="application/json").status_code, 400)
+        r = self.client.delete(f"/api/dashboards/{self.dashboard.id}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(Dashboard.objects.filter(id=self.dashboard.id).exists())
+
+    def test_duplica_con_sus_widgets(self):
+        Widget.objects.create(dashboard=self.dashboard, type="bar", title="Ventas",
+                              fields=fields(), style={"stacked": True})
+        r = self.client.post(f"/api/dashboards/{self.dashboard.id}/duplicate/", {},
+                             content_type="application/json")
+        self.assertEqual(r.status_code, 201, r.content)
+        copy = Dashboard.objects.get(id=r.json()["id"])
+        self.assertEqual(copy.nombre, "Ventas (copia)")
+        widget = copy.widgets.get()
+        self.assertEqual((widget.type, widget.title, widget.style), ("bar", "Ventas", {"stacked": True}))
+
+    def test_no_toca_tableros_ajenos(self):
+        other = Dashboard.objects.create(nombre="Ajeno",
+                                         owner=get_user_model().objects.create(username="pepe"),
+                                         sheet_url=self.url)
+        self.assertEqual(self.client.get(f"/api/dashboards/{other.id}/").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/dashboards/{other.id}/").status_code, 404)
+
+    def test_al_cambiar_la_url_de_la_hoja_se_invalida_el_cache(self):
+        with mock.patch("sheets_reports.views.invalidate_sheet_cache") as invalidate:
+            r = self.client.put(f"/api/dashboards/{self.dashboard.id}/",
+                                json.dumps({"sheet_url": "https://otra/x"}), content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        invalidate.assert_called_once_with(self.dashboard.sheet_id, self.dashboard.sheet_gid)
 
 
 class SinUsuarioTests(TestCase):

@@ -1,10 +1,4 @@
 (function () {
-  // Caja de filtros (FilterWidget del backend): una barra fija arriba del tablero, a todo el
-  // ancho, con un control por columna en el orden del panel. Lo que se elige no se guarda en
-  // el widget: va a la selección del tablero (filters.js) y recalcula todos los widgets.
-
-  // Textos de Virtual Select en español.
-  // El placeholder es el nombre de cada filtro (ver _initMultiSelect).
   const MULTI_SELECT_TEXTS = {
     searchPlaceholderText: 'Buscar…',
     noOptionsText: 'Sin opciones',
@@ -26,24 +20,8 @@
     };
     static defaults = { title: 'Filtros', width: 'md:col-span-12', height: 300 };
     static placement = 'header';
-    // Builder: solo la lista de filtros (columna + tipo), reordenable (manifest.parts).
-    static defaultColumns = 1;
-    static defaultColumnsFrom = 'dimension_fields';
-    // Cada filtro lleva su etiqueta (por defecto, el nombre de la columna).
-    static supportsColumnLabels = true;
-    // Tipos de filtro (FILTER_CONTROLS del backend). El rango de fecha aún no está disponible.
-    static columnControls = [
-      { value: 'multi_select', label: 'Selector múltiple' },
-      { value: 'date_range', label: 'Rango de fecha (próximamente)', disabled: true },
-    ];
-
     static getGhostSpan() {
       return 12;
-    }
-
-    // Siempre a todo el ancho y arriba: sin ancho ni columna de inicio.
-    static get drawerFields() {
-      return [this.FIELD_TITLE, this.FIELD_BUILDER];
     }
 
     constructor(raw) {
@@ -57,7 +35,6 @@
       el.className = `relative ${editable ? 'group' : ''} bg-white border border-line rounded-xl shadow-sm px-4 py-3`;
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
-      // El título solo en el editor (identifica la caja); en la vista compartida, solo los filtros.
       el.innerHTML = `
         ${editable ? `<div class="flex items-center gap-1.5 mb-2 select-none">
           <i class="ti ti-filter text-sm text-ink/40" aria-hidden="true"></i>
@@ -77,11 +54,14 @@
       return this._buildBar(false);
     }
 
-    // Solo el título: el ancho y el alto no aplican.
     updateChrome() {
       if (!this.el) return;
       const titleEl = this.el.querySelector('.title-display');
       if (titleEl) titleEl.textContent = this.title;
+    }
+
+    getProperties() {
+      return { ...super.getProperties() };
     }
 
     renderPlaceholder() {
@@ -91,14 +71,17 @@
       container.innerHTML = `<span class="text-xs text-ink/50">Agrega filtros desde el panel de edición.</span>`;
     }
 
-    renderContent(container, data) {
+    draw(data, style, title) {
+      this.style = { ...this.style, ...style };
+      if (title) this.title = title;
+
       const filters = (data && data.filters) || [];
-      // El refresco periódico devuelve las mismas opciones: no se recrean los controles (se
-      // cerraría un desplegable abierto).
       const signature = JSON.stringify(filters);
       if (signature === this._signature && this._selects.length) return;
       this._destroySelects();
       this._signature = signature;
+
+      const container = this.getContentContainer();
       container.innerHTML = '';
       if (!filters.length) {
         this.renderPlaceholder();
@@ -107,8 +90,6 @@
       filters.forEach(filter => {
         const wrap = document.createElement('div');
         wrap.className = 'w-56 max-w-full';
-        // Sin etiqueta encima: el nombre del filtro va dentro del selector (placeholder). El
-        // title lo muestra al pasar el mouse cuando ya hay valores elegidos.
         wrap.title = filter.label;
         wrap.innerHTML = `
           <div class="filter-control"></div>
@@ -121,8 +102,6 @@
 
     _initMultiSelect(ele, filter) {
       const store = Alpine.store('dashboard');
-      // Virtual Select trabaja con textos: se guarda el valor original (ej. 2026 numérico)
-      // para mandarlo tal cual en el filtro.
       const byKey = new Map(filter.options.map(v => [String(v), v]));
       VirtualSelect.init({
         ele,
@@ -132,7 +111,6 @@
         selectedValue: ((store.boardFilters || {})[filter.field] || []).map(String),
         silentInitialValueSet: true,
         maxWidth: '100%',
-        // El desplegable se dibuja en <body>: el lienzo tiene scroll y lo recortaría.
         dropboxWrapper: 'body',
         zIndex: 60,
         ...MULTI_SELECT_TEXTS,

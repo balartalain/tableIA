@@ -1,10 +1,11 @@
+"""Fixtures de la suite: la hoja de ventas de prueba y helpers para armar `WidgetForm`."""
 import pandas as pd
 
 from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.parts import Dimensions, Pivots
-from sheets_reports.dsl.spec import GroupedSpec, RowsSpec, ScalarSpec, with_parts
-from sheets_reports.engine import PLANS, run
+from sheets_reports.engine.pipeline import PipelineExecutor
+from sheets_reports.services.ai_spec import form_errors
 from sheets_reports.widgets import WIDGETS
+from sheets_reports.widgets.schemas import WidgetFields, WidgetForm
 
 
 def sales_df() -> pd.DataFrame:
@@ -31,60 +32,86 @@ def sales_ctx() -> SheetContext:
     return SheetContext.from_dataframe(sales_df(), "0")
 
 
-def agg(name: str, agg: str = "sum", field: str | None = "ventas", **extra) -> dict:
-    """Métrica agg; count no lleva field."""
-    metric = {"type": "agg", "as": name, "agg": agg, **extra}
-    if agg != "count" and field:
-        metric["field"] = field
+def examples_ctx() -> SheetContext:
+    """La hoja con todas las columnas que usan los ejemplos del prompt de la IA."""
+    df = pd.DataFrame({
+        "producto": ["A"], "vendedor": ["Ana"], "categoria": ["Hogar"], "mes": ["Ene"],
+        "respuesta": ["Sí"], "anio": [2026], "ventas": [1.0], "costo": [1.0], "plan": [1.0],
+    })
+    return SheetContext.from_dataframe(df, "0")
+
+
+def agg(alias: str = "total_ventas", agg: str = "sum", field: str | None = "ventas", **extra) -> dict:
+    """Métrica agregada. `count` no lleva campo."""
+    metric = {"field": field, "agg": agg, "alias": alias, **extra}
+    if agg == "count" or field is None:
+        metric.pop("field", None)
     return metric
 
 
-def calc(name: str, op: str, left: str, right) -> dict:
-    return {"type": "calc", "as": name, "op": op, "left": left, "right": right}
+def calc(alias: str, expression: str, field: str = "ventas") -> dict:
+    """Métrica calculada sobre columnas ya agregadas (`type: formula`)."""
+    return {"type": "formula", "alias": alias, "expression": expression, "field": field}
 
 
-def spec(**overrides) -> dict:
+def fields(**overrides) -> dict:
+    """`WidgetFields` plano con los defaults de siempre."""
     base = {
-        "source": "0",
         "dimensions": ["categoria"],
         "pivots": [],
-        "columns": [],
+        "metrics": [agg()],
         "filters": [],
-        "metrics": [agg("total_ventas")],
-        "having": [],
-        "sort": None,
+        "sort_by": None,
         "limit": None,
-        "trend_by": None,
     }
     return {**base, **overrides}
 
 
-def errors_for(widget_type: str, data_spec: dict, ctx: SheetContext | None = None) -> list[str]:
-    return WIDGETS.get(widget_type).errors(data_spec, ctx or sales_ctx())
+def table_fields(columns=("categoria", "ventas"), **overrides) -> dict:
+    """`WidgetFields` de la Tabla: solo columnas a mostrar, en orden (no agrupa ni resume)."""
+    base = {
+        "dimensions": [],
+        "pivots": [],
+        "metrics": [],
+        "filters": [],
+        "columns": [c if isinstance(c, dict) else {"field": c} for c in columns],
+        "sort_by": None,
+        "limit": None,
+    }
+    return {**base, **overrides}
 
 
-def view(widget_type: str, data_spec: dict, options: dict | None = None) -> dict:
-    """view_spec de un widget, como lo construye el builder."""
-    definition = WIDGETS.get(widget_type)
-    spec_cls = definition.spec_cls
-    return definition.build_view(spec_cls.from_dict(spec_cls.normalize(data_spec)), definition.options(options))
+def form(fields_data: dict | None = None, style: dict | None = None) -> WidgetForm:
+    return WidgetForm.from_dict({"fields": fields_data or fields(), "style": style or {}})
 
 
-def compiled(widget_type: str, data_spec: dict, options: dict | None = None, df=None) -> dict:
-    """Lo que recibe el frontend para dibujar el widget."""
-    df = sales_df() if df is None else df
-    return WIDGETS.get(widget_type).render(data_spec, view(widget_type, data_spec, options), df)
+def render(widget_type: str, fields_data: dict | None = None, style: dict | None = None,
+           df: pd.DataFrame | None = None) -> dict:
+    """`BaseWidget.render` completo: `render_data` + `widget_form`, o `error`."""
+    return WIDGETS.get(widget_type).render(
+        sales_df() if df is None else df,
+        {"fields": fields_data or fields(), "style": style or {}},
+    )
 
 
-class PLAN_GROUPED(GroupedSpec):
-    """Los planes que agrupan, con las cotas de la tabla dinámica (la más amplia)."""
-    parts = with_parts(GroupedSpec, Dimensions(1, 3), Pivots(0, 2))
+def compiled(widget_type: str, fields_data: dict | None = None, style: dict | None = None,
+             df: pd.DataFrame | None = None) -> dict:
+    """Solo el JSON que dibuja el frontend; falla si el form produjo error."""
+    out = render(widget_type, fields_data, style, df)
+    assert "error" not in out, out["error"]
+    return out["render_data"]
 
 
-def execute(df: pd.DataFrame, data_spec: dict, plan: str | None = None):
-    """Resultado tipado del plan (por defecto, el que corresponde a la forma del spec)."""
-    if plan is None:
-        plan = ("scalar" if not data_spec["dimensions"]
-                else "pivot_chart" if data_spec["pivots"] else "flat")
-    spec_cls = {"scalar": ScalarSpec, "rows": RowsSpec, "column_values": RowsSpec}.get(plan, PLAN_GROUPED)
-    return run(spec_cls.from_dict(data_spec), df, PLANS.get(plan))
+def execute(df: pd.DataFrame, fields_data: dict):
+    """El pipeline crudo, sin pasar por un widget."""
+    return PipelineExecutor().execute(df, WidgetFields.from_dict(fields_data))
+
+
+def errors_for(widget_type: str, fields_data: dict, style: dict | None = None,
+               ctx: SheetContext | None = None, title: str = "Ventas") -> list[str]:
+    """Validación de un `WidgetForm` contra la hoja y las capacidades del tipo."""
+    return form_errors(
+        {"widget_type": widget_type, "title": title, "fields": fields_data, "style": style or {}},
+        ctx or sales_ctx(),
+        widget_type,
+    )

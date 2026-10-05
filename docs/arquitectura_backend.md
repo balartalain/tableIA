@@ -26,8 +26,10 @@ editor visual), y el backend calcula los números con pandas y devuelve JSON lis
    (`form_errors`); el motor ejecuta todo. La IA nunca calcula ni ve los datos.
 5. **Renderizado defensivo.** Cada widget captura sus excepciones y devuelve `{"error": ...}`;
    un widget roto nunca tumba el tablero.
-6. **UI backend-driven.** El `style_schema` declarativo le dice al frontend qué controles
-   dibujar; el backend valida el estilo contra ese mismo schema.
+6. **Contrato de datos en el backend, panel en un partial.** El `style_schema` declara las
+   claves de `style` (tipo, opciones, default) y el backend valida contra él. Cómo se
+   editan lo decide el partial de Django de cada tipo (`templates/sheets_reports/widgets/
+   config/_<tipo>_config.html`), escrito a mano.
 
 ### 1.2 Dependencias externas
 
@@ -99,8 +101,8 @@ El contrato viejo está **prohibido en código**: `test_architecture.py`
 | `engine/` no importa `widgets/` ni `services/` | `test_motor_no_importa_widgets_ni_servicios` |
 | Nada importa `google.genai` salvo `services/ai_spec.py` | `test_nadie_importa_gemini` |
 | No quedan `dsl/`, `engine/pipeline.py` ni otros módulos legacy | `test_no_queda_codigo_legacy` |
-| Las extensiones (`widgets/ext/`) solo importan `sheets_reports.sdk` | `test_extensiones_solo_importan_el_sdk` |
-| El core no importa extensiones | `test_el_core_no_importa_extensiones` |
+| El `style_schema` solo declara datos (`key`, `label`, `type`, `options`, `options_from`, `default`) | `test_style_schema_solo_declara_datos` |
+| Cada widget registrado tiene su partial y `board_editor.html` lo incluye | `test_cada_widget_tiene_su_partial` |
 
 ---
 
@@ -115,8 +117,7 @@ sheets_reports/
   models.py                 # Dashboard, Widget, default_position, widget_type_choices
   views.py                  # Vistas HTTP (adaptadores sobre services/)
   admin.py                  # Django Admin (Dashboard con inline de widgets)
-  apps.py                   # ready(): carga widgets/ext + valida longitud de claves
-  sdk.py                    # API pública estable para widgets de extensión
+  apps.py                   # ready(): valida la longitud de las claves de widget
 
   widgets/                  # Tipos de widget (registrados en WIDGETS)
     __init__.py             # exporta WIDGETS/BaseWidget + importa los 7 built-in
@@ -130,8 +131,14 @@ sheets_reports/
     table.py                # TableWidget        «Tabla»
     dynamic_table.py        # DynamicTableWidget «Tabla Dinámica»
     filter.py               # FilterWidget       «Filtros» (singleton de tablero)
-    ext/                    # Widgets de extensión (cada módulo = 1 widget)
-      __init__.py           # load(): importa cada submódulo con pkgutil
+
+  templates/
+    board_editor.html       # Editor: lienzo + drawer (pestañas, pie) que incluye el panel del tipo
+    sheets_reports/widgets/config/
+      _<tipo>_config.html   # Panel de cada tipo: pestañas «Configurar» y «Personalizar»
+      blocks/               # Piezas compartidas: _title, _assistant, _columns, _dimensions,
+                            # _pivots, _metrics, _trend, _filters, _sort, _limit, _json,
+                            # _style_checkbox/_text/_number/_palette
 
   engine/
     __init__.py             # reexporta run_steps, AGGREGATIONS, ResultTooLargeError
@@ -349,7 +356,7 @@ class BaseWidget(ABC):
     label: ClassVar[str]            # nombre visible en UI/IA
 
     # --- capa declarativa ---
-    style_schema: ClassVar[List[Dict]] = []   # controles del panel «Personalizar»
+    style_schema: ClassVar[List[Dict]] = []   # contrato de `style` (valida; no dibuja)
 
     # --- reglas planas del tipo ---
     capabilities: ClassVar[dict] = {}
@@ -386,34 +393,23 @@ class BaseWidget(ABC):
 Las 6 claves base (`dimensions`, `pivots`, `metrics`, `sort`, `limit`, `filters`) son
 **obligatorias** y deben ser válidas: `test_capacidades_planas_y_validas`.
 
-#### `style_schema` — estructura de cada control
+#### `style_schema` — contrato de cada clave de `style`
 
 | Clave | Tipo | Descripción |
 |---|---|---|
 | `key` | str | Clave en `style` (única por widget) |
-| `label` | str | Etiqueta visible (obligatoria) |
-| `ui` | str | **Solo** `text`, `select`, `checkbox`, `number` (`STYLE_UI` en tests) |
-| `default` | any | Default; debe coincidir con el `ui` (test `_assert_default_matches`) |
-| `options` | list | Solo en `select`: `[{"value", "label"}, ...]` |
-| `options_from` | `"metrics"` | Select cuyo valor es un **alias de métrica** del propio widget (roles del KPI) |
-| `group` | `"card"` | Agrupa el control en el bloque «Tarjeta KPI» de «Configurar» |
-| `hidden` | bool | El control NO va al panel «Personalizar» (va a «Configurar») |
-| `min`, `max`, `step` | number | Rangos de `number` |
-| `placeholder` | str | Texto de ayuda del input |
-| `enabled_when` | dict | `{clave: valor}`: el control se habilita solo si cada clave del `style` vale eso; `true` = cualquier valor no vacío. Ej.: `{"targetMetric": "fixed"}` |
-| `short_label` | str | Etiqueta corta de un control `inline_with` (su columna es estrecha); `label` queda como tooltip |
-| `inline_with` | str | Clave de otro control: este (`text`/`number`) se dibuja a su derecha y no en su propia fila |
-| `section` | str | Título de una sección plegable (cerrada por defecto) del bloque del editor; sus controles deben ir seguidos en el schema. Ej.: «Meta» en el KPI |
-| `clear_when_disabled` | bool | Con `enabled_when` incumplido el valor no se guarda (`WidgetService._clean_style` y el editor al guardar) |
+| `label` | str | Nombre de la clave para la IA y los mensajes de error (obligatoria) |
+| `type` | str | `string`, `number`, `boolean` o `choice`; `form_errors` valida el valor contra él |
+| `options` | list | Solo en `choice`: `[{"value", "label"}, ...]` |
+| `options_from` | `"metrics"` | `choice` cuyo valor es además un **alias de métrica** del propio widget (roles del KPI) |
+| `default` | any | Default; debe coincidir con el `type`. `style_defaults()` completa el form con ellos |
 
-`control_enabled(control, style)` (`widgets/base.py`) evalúa `enabled_when`; el editor aplica la
-misma regla en `controlDisabled`. Así el editor no nombra claves de ningún widget: el KPI
-declara que su meta (`target`) va junto al selector «Meta», que solo cuenta con «Valor fijo»,
-que nombre, semáforo y umbrales piden una meta elegida, y que todo eso va en la sección
-plegable «Meta».
+Nada más: el schema no dice dónde ni cómo se edita cada clave (`test_style_schema_solo_declara_datos`).
+Rangos, etiquetas cortas, secciones plegables o campos deshabilitados son HTML del partial del
+tipo. Por ejemplo, el partial del KPI vacía `target` cuando la meta deja de ser «Valor fijo».
 
-`test_lo_que_pinta_el_editor_es_el_manifiesto` garantiza que lo que dibuja el editor sale del
-manifiesto (`_widget_manifest`), no de código del frontend.
+`test_el_manifiesto_refleja_cada_tipo` comprueba que el manifiesto del editor
+(`_widget_manifest`: etiqueta, `style_schema`, `style_defaults`, capacidades) sale de la clase.
 
 ### 6.4 Registro de widgets
 
@@ -423,10 +419,12 @@ from sheets_reports.widgets.base import WIDGETS, BaseWidget
 from sheets_reports.widgets import kpi, bar, line, donut, dynamic_table, table, filter
 ```
 
-Importar el paquete registra los 7 built-in. Un widget nuevo = un módulo más con una subclase
-decorada con `@WIDGETS.register`. Las **extensiones** (`widgets/ext/`) se cargan en
-`Apps.ready()` vía `ext.load()` (pkgutil; ignora módulos que empiezan por `_`) e importan
-**solo** `sheets_reports.sdk`.
+Importar el paquete registra los 7 tipos. Un widget nuevo son dos piezas:
+1. un módulo en `widgets/` con su subclase decorada con `@WIDGETS.register`, importado en
+   `widgets/__init__.py`;
+2. su panel `templates/sheets_reports/widgets/config/_<key>_config.html` (las dos pestañas,
+   armadas con los `blocks/` que necesite) y su `<template x-if>` con el `{% include %}` en
+   `board_editor.html`. `test_cada_widget_tiene_su_partial` falla si falta.
 
 `apps.py` valida además que ninguna clave supere `max_length=50` del campo `type`
 (`ImproperlyConfigured` al arrancar).
@@ -468,12 +466,12 @@ Todos los tipos tienen `ai_enabled = True`.
 
 | Tipo | Controles |
 |---|---|
-| `kpi` | `title`, `decimals`, `abbreviate`, `prefix`, `suffix` + grupo **card**: `primary`, `compare`, `compareMode`, `target`, `targetMetric`, `targetLabel`, `statusBasis`, `status_good`, `status_warn`, `higher_is_better` |
+| `kpi` | `title`, `decimals`, `abbreviate`, `prefix`, `suffix`, `primary`, `compare`, `compareMode`, `target`, `targetMetric`, `targetLabel`, `statusBasis`, `status_good`, `status_warn`, `higher_is_better` |
 | `bar` | `title`, `horizontal`, `stacked`, `color_scheme`, `yAxisWidth`, `barWidth`, `dataLabelFormatter`, `chartWidth`, `showGrid` |
 | `line` | `title`, `color_scheme`, `curve`, `showGrid`, `showMarkers` |
 | `donut` | `title`, `labelMode`, `donutSize`, `showLegend` |
 | `table` | `title`, `pageSize`, `showPagination`, `boldLastRow` |
-| `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels`, `boldLastRow` (los de totales llevan `hidden: true` → van a «Configurar») |
+| `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels`, `boldLastRow` |
 | `filter` | `title`, `layout` (`horizontal`/`vertical`) |
 
 ### 7.2 Detalle por widget

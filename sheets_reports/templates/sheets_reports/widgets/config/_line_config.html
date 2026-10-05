@@ -1,0 +1,31 @@
+{# Panel del editor del gráfico de líneas. #}
+{% with B="sheets_reports/widgets/config/blocks/" %}
+<div>
+  <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
+    {% include B|add:"_title.html" %}
+    {% include B|add:"_assistant.html" %}
+    {% include B|add:"_dimensions.html" %}
+    {% include B|add:"_pivots.html" %}
+    {% include B|add:"_metrics.html" %}
+    {% include B|add:"_filters.html" %}
+    {% include B|add:"_sort.html" %}
+    {% include B|add:"_limit.html" %}
+    {% include B|add:"_json.html" %}
+  </div>
+
+  <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+    {% include B|add:"_style_palette.html" %}
+    <div>
+      <label class="block text-xs font-semibold text-ink/70 mb-1">Curva</label>
+      <select x-model="$store.dashboard.drawerDraft.style.curve"
+              class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+        <option value="monotoneCubic">Suave (monotoneCubic)</option>
+        <option value="straight">Recta</option>
+        <option value="smooth">Suave (smooth)</option>
+      </select>
+    </div>
+    {% include B|add:"_style_checkbox.html" with key="showGrid" label="Mostrar cuadrícula" %}
+    {% include B|add:"_style_checkbox.html" with key="showMarkers" label="Mostrar puntos" %}
+  </div>
+</div>
+{% endwith %}

@@ -1,0 +1,46 @@
+<!-- Pivotes: series / columnas cruzadas -->
+<div class="space-y-2">
+  <div class="flex items-center justify-between">
+    <label class="block text-xs font-semibold text-ink/70">Pivotes</label>
+    <button type="button" x-on:click="$store.dashboard.addPivot()"
+            x-bind:disabled="$store.dashboard.drawerDraft.fields.pivots.length >= $store.dashboard.maxPivots"
+            class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+      <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
+    </button>
+  </div>
+  <div class="space-y-1" data-column-list="pivots">
+    <template x-for="(col, idx) in $store.dashboard.drawerDraft.fields.pivots" :key="'piv-' + idx">
+      <div class="space-y-1" data-column-row>
+        <div class="flex gap-1.5 items-center rounded-lg bg-paper/70 border border-line/60 p-1.5">
+          <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+             aria-hidden="true" title="Arrastra para reordenar"></i>
+          <select x-model="$store.dashboard.drawerDraft.fields.pivots[idx]"
+                  aria-label="Pivote"
+                  class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+            <option value="" x-show="!col" x-text="'— elegir —'"></option>
+            <template x-for="c in $store.dashboard.pivotOptions(idx)" :key="c">
+              <option x-bind:value="c" x-text="c"></option>
+            </template>
+          </select>
+          <button type="button" x-on:click="$store.dashboard.removePivot(idx)"
+                  class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                  title="Quitar pivote" aria-label="Quitar pivote">×</button>
+        </div>
+        {% if totals %}
+        <!-- Totales de cada nivel de columnas: 0 = total general, 1 = subtotales. -->
+        <template x-if="col && idx < 2">
+          <label class="flex items-center gap-1.5 pl-1.5 text-[11px] text-ink/60 cursor-pointer"
+                 x-bind:title="idx === 0 ? 'Columna «Total general» a la derecha de la tabla'
+                               : 'Subtotal «Total …» de cada ' + ($store.dashboard.drawerDraft.fields.pivots[idx - 1] || 'grupo')">
+            <input type="checkbox"
+                   x-model="$store.dashboard.drawerDraft.style[['showColumnTotals', 'columnSubtotal1'][idx]]"
+                   class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+            Mostrar totales
+          </label>
+        </template>
+        {% endif %}
+      </div>
+    </template>
+  </div>
+  <p class="text-[11px] text-ink/50">Desagregación extra: series en el gráfico, columnas en la tabla dinámica.</p>
+</div>

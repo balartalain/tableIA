@@ -1,0 +1,12 @@
+<!-- Tendencia: la mini línea bajo el número -->
+<div class="space-y-1">
+  <label class="block text-xs font-semibold text-ink/70">Tendencia por</label>
+  <select x-model="$store.dashboard.drawerDraft.fields.trend_by"
+          class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500">
+    <option value="" x-text="'Sin tendencia'"></option>
+    <template x-for="f in $store.dashboard.trendOptions" :key="f">
+      <option x-bind:value="f" x-text="f"></option>
+    </template>
+  </select>
+  <p class="text-[11px] text-ink/50">Mini línea bajo el número: la evolución del número por esa columna.</p>
+</div>

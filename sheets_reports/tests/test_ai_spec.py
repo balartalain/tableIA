@@ -176,7 +176,7 @@ class PromptTests(SimpleTestCase):
 
     def test_declara_los_controles_de_estilo_de_cada_tipo(self):
         prompt = build_system_prompt()
-        self.assertIn("- style.stacked: checkbox (Apilado)", prompt)
+        self.assertIn("- style.stacked: boolean (Apilado)", prompt)
         self.assertIn("- bar:", prompt)
         self.assertIn("select de \"percent\", \"value\"", prompt)
 

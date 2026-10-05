@@ -3,7 +3,9 @@ Cada tipo de widget declara su `style_schema`, sus capacidades y su lógica de c
 
 Tres capas, sin DSL:
   1. `WidgetFields` / `WidgetStyle` (dataclasses planas) describen la consulta y la apariencia.
-  2. `style_schema` (lista declarativa estática) dice a la UI qué controles dibujar.
+  2. `style_schema` (lista estática) es el contrato de `style`: claves, tipo de dato, opciones
+     y defaults. Valida; no dibuja: el panel de cada tipo es su partial de Django
+     (`templates/sheets_reports/widgets/config/_<key>_config.html`).
   3. `process_query` encadena los pasos del motor (`engine/steps/`: filtro → agregación/pivote
      → fórmulas → ventanas → orden/límite); un widget atípico lo sobrescribe y reusa solo los
      pasos que le sirven.
@@ -74,7 +76,7 @@ class BaseWidget(ABC):
     type_key: ClassVar[str]
     label: ClassVar[str]
 
-    # Schema declarativo para el panel «Personalizar» (backend-driven).
+    # Contrato de `style`: [{key, label, type, options?, options_from?, default?}, ...].
     style_schema: ClassVar[List[Dict[str, Any]]] = []
 
     # Reglas del tipo, planas y declarativas (antes vivían en subclases de SpecPart).
@@ -124,15 +126,6 @@ class BaseWidget(ABC):
 
     # ---------------------------------------------------------------- estilo
     def style_defaults(self) -> dict:
-        """Valores por defecto de los controles del `style_schema`."""
+        """Valores por defecto de las claves del `style_schema`."""
         return {c["key"]: c["default"] for c in self.style_schema if "default" in c}
 
-
-def control_enabled(control: dict, style: dict) -> bool:
-    """¿Está habilitado el control con estos valores de estilo? `enabled_when` pide que cada
-    clave valga lo indicado (`True` = cualquier valor no vacío)."""
-    for key, expected in (control.get("enabled_when") or {}).items():
-        value = (style or {}).get(key)
-        if (not value) if expected is True else value != expected:
-            return False
-    return True

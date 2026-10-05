@@ -355,57 +355,14 @@ document.addEventListener('alpine:init', () => {
       return this.drawerManifest.capabilities || {};
     },
 
-    // Controles de estilo del tipo: el título vive en el propio widget, no en «Personalizar»
-    // y los de tipo `hidden` (totales por nivel) se pintan en «Configurar», bajo su fila.
-    get drawerStyleSchema() {
-      return (this.drawerManifest.style_schema || [])
-        .filter(c => c.key !== 'title' && !c.hidden);
-    },
-
-    // Clave de estilo del checkbox «Mostrar totales» de la fila `idx` de dimensiones o de
-    // pivotes (0 = total general, 1 = subtotales del primer nivel, 2 = del segundo).
-    totalsStyleKey(kind, idx) {
-      if (kind === 'column') return idx === 0 ? 'showColumnTotals' : 'columnSubtotal1';
-      return idx === 0 ? 'showTotals' : (idx === 1 ? 'rowSubtotal1' : 'rowSubtotal2');
-    },
-
-    totalsTitle(kind, idx) {
-      const group = kind === 'column' ? 'pivots' : 'dimensions';
-      const list = (this.drawerDraft.fields && this.drawerDraft.fields[group]) || [];
-      const what = list[idx - 1] || 'grupo';
-      if (idx === 0) {
-        return kind === 'column'
-          ? 'Columna «Total general» a la derecha de la tabla'
-          : 'Fila «Total general» al pie de la tabla';
-      }
-      return `Subtotal «Total …» de cada ${what}`;
-    },
-
-    // El control solo se pinta si el tipo de widget declaró ese nivel en su style_schema.
-    totalsControl(kind, idx) {
-      const key = this.totalsStyleKey(kind, idx);
-      return (this.drawerManifest.style_schema || [])
-        .find(c => c.key === key && c.ui === 'checkbox') || null;
-    },
-
-    get drawerTitleControl() {
-      return (this.drawerManifest.style_schema || []).find(c => c.key === 'title') || null;
-    },
-
-    // Qué bloques del editor tocan a este tipo (capabilities del backend).
+    // Límites de las listas del panel (capabilities del backend).
     get hasColumns() { return (this.drawerCapabilities.columns || [0, 0])[1] > 0; },
     get maxColumns() { return (this.drawerCapabilities.columns || [0, 0])[1]; },
     get columnsLabel() { return this.drawerCapabilities.columns_label || 'Columnas a mostrar'; },
-    get hasDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1] > 0; },
-    get hasPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1] > 0; },
     get hasMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1] > 0; },
-    get hasFilters() { return !!this.drawerCapabilities.filters; },
-    get hasSort() { return !!this.drawerCapabilities.sort; },
-    get hasLimit() { return !!this.drawerCapabilities.limit; },
     get maxMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1]; },
     get maxDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1]; },
     get maxPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1]; },
-    get hasTrend() { return !!this.drawerCapabilities.trend; },
     // Columnas para la mini tendencia: las de dimensión (año, mes, categoría…), como en main.
     get trendOptions() {
       const dims = this.schema.dimension_fields || [];
@@ -417,59 +374,9 @@ document.addEventListener('alpine:init', () => {
     },
     get metricTypeOptions() { return METRIC_TYPE_OPTIONS; },
     get calcOpOptions() { return CALC_OP_OPTIONS; },
-    // Controles del bloque «Tarjeta KPI»: el style_schema con `group: 'card'`. Los que van
-    // junto a otro control (`inline_with`) se pintan dentro de ese, no en su propia fila.
-    get cardControls() {
-      return (this.drawerManifest.style_schema || [])
-        .filter(c => c.group === 'card' && !c.inline_with);
-    },
-    // Los controles de la tarjeta agrupados por `section`: los consecutivos con la misma
-    // sección van juntos en un plegable con ese título; sin sección, `title` es null.
-    get cardSections() {
-      const sections = [];
-      this.cardControls.forEach(control => {
-        const title = control.section || null;
-        const last = sections[sections.length - 1];
-        if (last && last.title === title) last.controls.push(control);
-        else sections.push({ title, controls: [control] });
-      });
-      return sections;
-    },
-    // Resumen de una sección cerrada: lo elegido en su primer control y, si lleva un control
-    // al lado (`inline_with`) con valor, ese valor. Ej.: «Valor fijo · 1000».
-    sectionSummary(section) {
-      const first = section && section.controls[0];
-      if (!first) return '';
-      const style = this.drawerDraft.style || {};
-      const value = style[first.key];
-      let text = value == null ? '' : String(value);
-      if (first.ui === 'select') {
-        const options = first.options_from === 'metrics'
-          ? this.metricRoleOptions(first) : (first.options || []);
-        const option = options.find(o => o.value === (value == null ? '' : value));
-        text = option ? option.label : text;
-      } else if (first.ui === 'checkbox') {
-        text = value ? 'Sí' : 'No';
-      }
-      const extra = this.inlineControls(first)
-        .filter(c => !this.controlDisabled(c))
-        .map(c => style[c.key])
-        .filter(v => v !== '' && v != null);
-      return [text, ...extra].filter(Boolean).join(' · ');
-    },
-    inlineControls(control) {
-      return (this.drawerManifest.style_schema || []).filter(c => c.inline_with === control.key);
-    },
-    // `enabled_when` del style_schema: cada clave debe valer lo pedido (true = no vacía).
-    // Misma regla que `control_enabled` en el backend.
-    controlDisabled(control) {
-      const style = this.drawerDraft.style || {};
-      return Object.entries((control && control.enabled_when) || {})
-        .some(([key, expected]) => (expected === true ? !style[key] : style[key] !== expected));
-    },
-    // Opciones de un control de rol del KPI: su opción vacía + las métricas del borrador.
-    metricRoleOptions(control) {
-      const base = (control && control.options) || [];
+    // Opciones de un select que elige una métrica del widget (roles del KPI): las fijas que
+    // pasa el partial (`base`, ej. «Primera métrica») + las métricas del borrador.
+    metricRoleOptions(base = []) {
       const metrics = (this.drawerDraft.fields.metrics || []).filter(m => m && m.alias);
       return [...base, ...metrics.map(m => ({ value: m.alias, label: this.metricName(m) }))];
     },
@@ -507,7 +414,9 @@ document.addEventListener('alpine:init', () => {
       if ((this.drawerCapabilities.metrics || [0, 0])[0] > 0 && !this.drawerDraft.fields.metrics.length) {
         this.addMetric();
       }
-      this.initListSortables();
+      // El panel del tipo lo crea un `x-if`: sus listas existen en el siguiente tick.
+      this.destroyListSortables();
+      Alpine.nextTick(() => this.initListSortables());
     },
 
     // (Re)atan los arrastres de las listas del panel: se destruyen al cerrar.
@@ -965,10 +874,6 @@ document.addEventListener('alpine:init', () => {
         const style = JSON.parse(JSON.stringify(draft.style || {}));
         const title = String(draft.title || '').trim() || w.title;
         style.title = title;
-        // Un control deshabilitado que lo pide (`clear_when_disabled`) no se guarda.
-        (this.drawerManifest.style_schema || [])
-          .filter(c => c.clear_when_disabled && this.controlDisabled(c))
-          .forEach(c => { delete style[c.key]; });
 
         w.title = title;
         w.fields = fields;

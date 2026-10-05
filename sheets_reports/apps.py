@@ -7,12 +7,9 @@ class SheetsReportsConfig(AppConfig):
     name = 'sheets_reports'
 
     def ready(self):
-        # Los widgets de extensión se cargan aquí y no al importar `widgets`: importan el sdk,
-        # que a su vez importa `widgets`, y así ya está completo cuando llegan.
         from sheets_reports.models import Widget
-        from sheets_reports.widgets import WIDGETS, ext
+        from sheets_reports.widgets import WIDGETS
 
-        ext.load()
         max_length = Widget._meta.get_field("type").max_length
         too_long = [key for key in WIDGETS.keys() if len(key) > max_length]
         if too_long:

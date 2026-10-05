@@ -45,11 +45,11 @@ class FilterWidget(BaseWidget):
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Filtros"},
-        {"key": "layout", "label": "Layout", "ui": "select", "options": [
+        {"key": "title", "label": "Título", "type": "string", "default": "Filtros"},
+        {"key": "layout", "label": "Layout", "type": "choice", "default": "horizontal", "options": [
             {"value": "horizontal", "label": "Horizontal"},
             {"value": "vertical", "label": "Vertical"},
-        ], "default": "horizontal"},
+        ]},
     ]
 
     def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:

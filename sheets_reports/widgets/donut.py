@@ -36,13 +36,13 @@ class DonutWidget(BaseWidget):
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Gráfico de Dona"},
-        {"key": "labelMode", "label": "Mostrar en porciones", "ui": "select", "options": [
+        {"key": "title", "label": "Título", "type": "string", "default": "Gráfico de Dona"},
+        {"key": "labelMode", "label": "Mostrar en porciones", "type": "choice", "default": "percent", "options": [
             {"value": "percent", "label": "Porcentaje"},
             {"value": "value", "label": "Valor"},
-        ], "default": "percent"},
-        {"key": "donutSize", "label": "Tamaño del hueco (%)", "ui": "number", "min": 30, "max": 80, "step": 5, "default": 50},
-        {"key": "showLegend", "label": "Mostrar leyenda", "ui": "checkbox", "default": True},
+        ]},
+        {"key": "donutSize", "label": "Tamaño del hueco (%)", "type": "number", "default": 50},
+        {"key": "showLegend", "label": "Mostrar leyenda", "type": "boolean", "default": True},
     ]
 
     def compile(

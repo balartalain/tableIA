@@ -8,7 +8,7 @@ El frontend es una aplicación **Alpine.js + Django templates** con renderizado 
 
 1. **Store central único.** `$store.dashboard` (Alpine.store) es la única fuente de verdad para el estado del tablero, el drawer de edición, el schema y los filtros.
 2. **Widget registry.** Un `Map` estático conecta los tipos declarados por el backend con las clases que los renderizan.
-3. **UI backend-driven.** El `widget_manifest` (desde Django) define capacidades, `style_schema` y defaults. El drawer y las clases de widget leen estos datos para renderizar condicionalmente.
+3. **Un panel por tipo.** El panel de edición de cada widget es un partial de Django escrito a mano (`templates/sheets_reports/widgets/config/_<tipo>_config.html`) con sus dos pestañas. El `widget_manifest` (desde Django) aporta capacidades (límites), `style_schema` (contrato de datos) y defaults; el store no interpreta layouts.
 4. **Renderizado imperativo.** Los widgets se montan como instancias de clase con `mount()` que devuelve un elemento DOM. Alpine nunca gestiona el contenido interno de los widgets (ApexCharts/Tabulator necesitan contenedores reales).
 5. **Dos vistas, dos stores.** El editor y la vista compartida definen su propio `Alpine.store('dashboard')`. El editor es completo (CRUD, drawer, schema, IA); la vista es mínima (widgets + refresh). `filters.js` extienda ambos.
 
@@ -17,7 +17,10 @@ El frontend es una aplicación **Alpine.js + Django templates** con renderizado 
 ```
 templates/
   base.html                   # Tailwind, design system, apiUrl(), header
-  board_editor.html           # Editor: rail + canvas + drawer (2 tabs)
+  board_editor.html           # Editor: rail + canvas + drawer (pestañas, pie y el panel del tipo)
+  sheets_reports/widgets/config/
+    _<tipo>_config.html       # Panel de cada tipo: «Configurar» + «Personalizar» (7 partials)
+    blocks/                   # Piezas compartidas que incluyen los paneles (ver «Drawer de edición»)
   board_view.html             # Vista compartida (read-only)
   home.html                   # Lista de tableros (Alpine component local)
 
@@ -104,42 +107,48 @@ DOMContentLoaded
 
 ### Drawer de edición
 
+`board_editor.html` dibuja la cabecera, las pestañas («Configurar» = `data`, «Personalizar» =
+`style`), el aviso de error de la hoja, los `datalist` de valores de ejemplo y el pie. El cuerpo
+es el panel del tipo, uno por `<template x-if="$store.dashboard.editingType === '<tipo>'">`
+con su `{% include %}`. Cada partial tiene un único elemento raíz con dos `<div x-show>`
+(uno por pestaña) y se arma con los bloques de `widgets/config/blocks/`:
+
+| Bloque | Qué edita | Parámetros |
+|---|---|---|
+| `_title`, `_assistant`, `_json` | título, asistente de IA, visor JSON | — |
+| `_columns`, `_dimensions`, `_pivots`, `_metrics` | listas de `fields` (arrastrables) | `_dimensions` / `_pivots`: `with totals=True` pinta «Mostrar totales» por nivel (tabla dinámica) |
+| `_trend`, `_filters`, `_sort`, `_limit` | resto de `fields` | — |
+| `_style_checkbox`, `_style_text`, `_style_number`, `_style_palette` | una clave de `style` | `key`, `label` (+ `placeholder` / `min`, `max`, `step`) |
+
+Lo propio de un tipo va escrito en su partial con Alpine. Por ejemplo, el bloque «Tarjeta KPI»
+de `_kpi_config.html`: el plegable «Meta» (cerrado por defecto, con resumen en la cabecera)
+es un `x-data` local con `hasMeta` / `isFixed` / `summary`, deshabilita lo que depende de la
+meta y borra `style.target` cuando la meta deja de ser «Valor fijo».
+
 `openDrawer(id)`:
 1. Construye `drawerDraft` desde el widget + defaults del manifest.
 2. `_normalizeDraft()`: asegura arrays, dedupes columnas, normaliza tipos.
 3. Auto-pick: columnas/dimensiones/métricas iniciales si está vacío.
-4. `initListSortables()`: SortableJS en las listas del drawer.
+4. `initListSortables()` en el siguiente tick (`Alpine.nextTick`): el `x-if` crea el panel
+   del tipo después de cambiar `editingType`.
 
 `saveDrawer()`:
 1. `pruneFormulas()`: descarta fórmulas incompletas.
 2. Limpia campos vacíos (dimensions, pivots, columns).
 3. Mapea filtros a formato backend (`conditionToPayload`).
 4. Normaliza `trend_by`, `sort_by`, `limit`.
-5. No guarda los controles deshabilitados que declaran `clear_when_disabled` (por ejemplo, el
-   valor de la meta del KPI sin «Valor fijo»).
-6. `_saveWidget(w)`.
+5. `_saveWidget(w)`: `style` va tal cual lo dejó el panel.
 
 ### Getters de capacidades
 
-El drawer renderiza condicionalmente según las capacidades del widget:
+Límites y opciones que usan los bloques (qué bloques muestra cada tipo lo decide su partial):
 
 ```javascript
-get hasColumns()      // capabilities.columns[1] > 0
-get hasDimensions()   // capabilities.dimensions[1] > 0
-get hasPivots()       // capabilities.pivots[1] > 0
-get hasMetrics()      // capabilities.metrics[1] > 0
-get hasFilters()      // !!capabilities.filters
-get hasSort()         // !!capabilities.sort
-get hasLimit()        // !!capabilities.limit
-get hasTrend()        // !!capabilities.trend
+get hasColumns()      // capabilities.columns[1] > 0 (auto-pick al abrir)
+get maxColumns() / maxDimensions() / maxPivots() / maxMetrics()   // tope de cada lista
+get hasFormulaMetrics()   // admite métricas de tipo fórmula
 get trendOptions()    // dimension_fields (fallback: all_fields)
-get cardControls()    // style_schema con group: 'card' (sin los que van inline_with otro)
-get cardSections()    // cardControls agrupados por `section` (consecutivos)
-sectionSummary(section)   // cabecera de una sección cerrada: lo elegido en su primer control
-inlineControls(control)   // controles con inline_with === control.key: columnas a su
-                          // derecha en la misma fila, con su short_label encima
-controlDisabled(control)  // enabled_when del style_schema no se cumple (misma regla que
-                          // control_enabled en el backend)
+metricRoleOptions(base)   // opciones fijas del partial + las métricas del borrador (roles del KPI)
 ```
 
 ### Asistente IA

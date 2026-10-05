@@ -1,0 +1,42 @@
+<!-- Columnas (tabla simple): las columnas visibles, en el orden en que se muestran -->
+<div class="space-y-2">
+  <div class="flex items-center justify-between">
+    <label class="block text-xs font-semibold text-ink/70"
+           x-text="$store.dashboard.columnsLabel"></label>
+    <button type="button" x-on:click="$store.dashboard.addColumn()"
+            x-bind:disabled="$store.dashboard.drawerDraft.fields.columns.length >= $store.dashboard.maxColumns"
+            class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+      <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
+    </button>
+  </div>
+  <div class="space-y-1" data-column-list="columns">
+    <template x-for="(col, idx) in $store.dashboard.drawerDraft.fields.columns" :key="'col-' + idx">
+      <div class="space-y-1" data-column-row>
+        <div class="flex gap-1.5 items-center rounded-lg bg-paper/70 border border-line/60 p-1.5">
+          <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+             aria-hidden="true" title="Arrastra para reordenar"></i>
+          <select x-model="$store.dashboard.drawerDraft.fields.columns[idx].field"
+                  x-on:change="$store.dashboard.onColumnFieldChange(idx, $event.target.value)"
+                  aria-label="Columna"
+                  class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+            <option value="" x-show="!col.field" x-text="'— elegir —'"></option>
+            <template x-for="c in $store.dashboard.columnOptions(idx)" :key="c">
+              <option x-bind:value="c" x-text="c"></option>
+            </template>
+          </select>
+          <button type="button" x-on:click="$store.dashboard.removeColumn(idx)"
+                  class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                  title="Quitar columna" aria-label="Quitar columna">×</button>
+        </div>
+        <input type="text" x-model="$store.dashboard.drawerDraft.fields.columns[idx].label"
+               maxlength="80"
+               x-bind:placeholder="idx === 0 ? 'Nombre a mostrar (opcional)' : $store.dashboard.columnLabel(col)"
+               x-bind:title="$store.dashboard.columnLabel(col)"
+               aria-label="Nombre a mostrar"
+               class="w-full text-xs border border-line/60 rounded-md px-1.5 py-1 bg-paper/60 focus:outline-none focus:border-moss-500">
+      </div>
+    </template>
+  </div>
+  <p class="text-[11px] text-ink/50"
+     x-text="$store.dashboard.drawerCapabilities.columns_hint || 'Columnas visibles, en este orden. Sin «Nombre a mostrar» se muestra la columna tal cual.'"></p>
+</div>

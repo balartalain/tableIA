@@ -205,6 +205,52 @@ class ViewsTests(TestCase):
         self.assertTrue(r.json()["data"]["stacked"])
         self.assertEqual(len(r.json()["data"]["series"]), 3)
 
+    def test_update_persiste_el_style_completo_del_panel_del_kpi(self, _df):
+        """Lo que edita el panel del KPI (roles, meta, semáforo, formato) se guarda tal cual."""
+        kpi = Widget.objects.create(
+            dashboard=self.dashboard, type="kpi", title="Ventas",
+            fields={"dimensions": [], "filters": [],
+                    "metrics": [agg("total_ventas"), agg("promedio", "avg")]},
+            style={},
+        )
+        style = {"title": "Ventas", "decimals": 1, "abbreviate": True, "prefix": "RD$",
+                 "suffix": "", "primary": "total_ventas", "compare": "promedio",
+                 "compareMode": "abs", "targetMetric": "fixed", "target": 900,
+                 "targetLabel": "Plan", "statusBasis": "target_pct", "status_good": 95,
+                 "status_warn": 70, "higher_is_better": False}
+        r = self.client.put(f"/api/widget/{kpi.id}/", json.dumps({"style": style}),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content)
+        kpi.refresh_from_db()
+        self.assertEqual(kpi.style, style)
+
+    def test_update_persiste_los_totales_por_nivel_de_la_tabla_dinamica(self, _df):
+        table = Widget.objects.create(
+            dashboard=self.dashboard, type="dynamic_table", title="Ventas",
+            fields=fields(dimensions=["categoria", "mes"], pivots=["anio"]), style={},
+        )
+        style = {"showTotals": False, "rowSubtotal1": True, "rowSubtotal2": False,
+                 "showColumnTotals": True, "columnSubtotal1": False, "repeatRowLabels": True,
+                 "pageSize": 25, "showPagination": False, "boldLastRow": True}
+        r = self.client.put(f"/api/widget/{table.id}/", json.dumps({"style": style}),
+                            content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content)
+        table.refresh_from_db()
+        self.assertEqual(table.style, style)
+
+    def test_el_editor_incluye_el_panel_de_cada_tipo(self, _df):
+        from sheets_reports.widgets import WIDGETS
+        r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode()
+        for key in WIDGETS.keys():
+            with self.subTest(widget=key):
+                self.assertIn(f"editingType === '{key}'", html)
+        # Paneles propios: la meta del KPI y los totales por nivel de la tabla dinámica.
+        self.assertIn("Valor objetivo", html)
+        self.assertIn("['showTotals', 'rowSubtotal1', 'rowSubtotal2'][idx]", html)
+        self.assertIn("drawerDraft.style.stacked", html)
+
     def test_update_rechaza_pivote_igual_a_dimension(self, _df):
         r = self.client.put(
             f"/api/widget/{self.widget.id}/",

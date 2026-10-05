@@ -1,0 +1,31 @@
+{# Panel del editor del gráfico de barras. #}
+{% with B="sheets_reports/widgets/config/blocks/" %}
+<div>
+  <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
+    {% include B|add:"_title.html" %}
+    {% include B|add:"_assistant.html" %}
+    {% include B|add:"_dimensions.html" %}
+    {% include B|add:"_pivots.html" %}
+    {% include B|add:"_metrics.html" %}
+    {% include B|add:"_filters.html" %}
+    {% include B|add:"_sort.html" %}
+    {% include B|add:"_limit.html" %}
+    {% include B|add:"_json.html" %}
+  </div>
+
+  <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+    <div class="grid grid-cols-2 gap-3">
+      {% include B|add:"_style_checkbox.html" with key="horizontal" label="Horizontal" %}
+      {% include B|add:"_style_checkbox.html" with key="stacked" label="Apilado" %}
+    </div>
+    {% include B|add:"_style_palette.html" %}
+    <div class="grid grid-cols-2 gap-3">
+      {% include B|add:"_style_number.html" with key="barWidth" label="Ancho de barra (%)" min=10 max=100 step=5 %}
+      {% include B|add:"_style_number.html" with key="yAxisWidth" label="Ancho del eje Y (px)" min=100 step=10 %}
+    </div>
+    {% include B|add:"_style_text.html" with key="dataLabelFormatter" label="Formato de etiquetas" placeholder="Ej. {value} %" %}
+    {% include B|add:"_style_number.html" with key="chartWidth" label="Forzar ancho de gráfico (px)" min=100 step=50 %}
+    {% include B|add:"_style_checkbox.html" with key="showGrid" label="Mostrar cuadrícula" %}
+  </div>
+</div>
+{% endwith %}

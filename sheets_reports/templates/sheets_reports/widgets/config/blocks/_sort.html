@@ -1,0 +1,24 @@
+<!-- Orden -->
+<div class="grid grid-cols-2 gap-3">
+  <div>
+    <label class="block text-xs font-semibold text-ink/70 mb-1">Ordenar por</label>
+    <select x-bind:value="$store.dashboard.sortValue"
+            x-on:change="$store.dashboard.setSortValue($event.target.value)"
+            class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500">
+      <option value="">Sin orden</option>
+      <template x-for="o in $store.dashboard.sortOptions" :key="o.value">
+        <option x-bind:value="o.value" x-text="o.label"></option>
+      </template>
+    </select>
+  </div>
+  <div>
+    <label class="block text-xs font-semibold text-ink/70 mb-1">Dirección</label>
+    <select x-bind:value="$store.dashboard.sortDirection"
+            x-on:change="$store.dashboard.setSortDirection($event.target.value)"
+            x-bind:disabled="!$store.dashboard.sortValue"
+            class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500 disabled:opacity-50">
+      <option value="asc">Ascendente</option>
+      <option value="desc">Descendente</option>
+    </select>
+  </div>
+</div>

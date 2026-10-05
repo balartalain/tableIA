@@ -1,0 +1,7 @@
+{# Número de `style`. Parámetros: key, label, min, max, step (opcionales). #}
+<div>
+  <label class="block text-xs font-semibold text-ink/70 mb-1">{{ label }}</label>
+  <input type="number" x-model.number="$store.dashboard.drawerDraft.style.{{ key }}"
+         {% if min or min == 0 %}min="{{ min }}"{% endif %} {% if max or max == 0 %}max="{{ max }}"{% endif %} step="{{ step|default:1 }}"
+         class="w-full text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+</div>

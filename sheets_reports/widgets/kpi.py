@@ -83,47 +83,35 @@ class KpiWidget(BaseWidget):
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Tarjeta KPI"},
-        {"key": "decimals", "label": "Decimales", "ui": "number", "min": 0, "step": 1, "default": 0},
-        {"key": "abbreviate", "label": "Abreviar (1.2M)", "ui": "checkbox", "default": False},
-        {"key": "prefix", "label": "Prefijo (ej. RD$)", "ui": "text", "default": ""},
-        {"key": "suffix", "label": "Sufijo (ej. uds.)", "ui": "text", "default": ""},
-        # Bloque «Tarjeta KPI» en «Configurar»: quién es el número, contra qué y su semáforo.
-        {"key": "primary", "label": "Número principal", "ui": "select", "group": "card",
-         "hidden": True, "options_from": "metrics",
-         "options": [{"value": "", "label": "Primera métrica"}], "default": ""},
-        {"key": "compare", "label": "Comparar con", "ui": "select", "group": "card",
-         "hidden": True, "options_from": "metrics",
-         "options": [{"value": "", "label": "Sin comparación"}], "default": ""},
-        {"key": "compareMode", "label": "Modo de comparación", "ui": "select", "group": "card",
-         "hidden": True, "options": [
-             {"value": "pct", "label": "Porcentaje"},
-             {"value": "abs", "label": "Absoluto"},
-         ], "default": "pct"},
-        # Sección plegable «Meta»: el selector, su valor (junto al selector, solo con «Valor
-        # fijo») y lo que depende de ella. El valor de la meta va inline con el selector.
-        {"key": "target", "section": "Meta", "label": "Meta (valor)", "ui": "number", "step": 1,
-         "group": "card", "hidden": True, "placeholder": "Valor", "short_label": "Valor", "inline_with": "targetMetric",
-         "enabled_when": {"targetMetric": "fixed"}, "clear_when_disabled": True},
-        {"key": "targetMetric", "section": "Meta", "label": "Valor objetivo", "ui": "select", "group": "card",
-         "hidden": True, "options_from": "metrics",
-         "options": [{"value": "", "label": "— elegir —"},
-                     {"value": "fixed", "label": "Valor fijo"}], "default": ""},
-        # Sin meta elegida, lo que depende de ella queda deshabilitado en el editor.
-        {"key": "targetLabel", "section": "Meta", "label": "Nombre de la meta", "ui": "text", "group": "card",
-         "hidden": True, "enabled_when": {"targetMetric": True}, "default": "Meta"},
-        {"key": "statusBasis", "section": "Meta", "label": "Semáforo según", "ui": "select", "group": "card",
-         "hidden": True, "enabled_when": {"targetMetric": True}, "options": [
-             {"value": "", "label": "Automático"},
-             {"value": "target_pct", "label": "% de la meta"},
-             {"value": "value", "label": "Valor"},
-         ], "default": ""},
-        {"key": "status_good", "section": "Meta", "label": "Umbral «bien» (%)", "ui": "number", "min": 0, "step": 1,
-         "group": "card", "hidden": True, "short_label": "Bien (%)", "inline_with": "statusBasis", "enabled_when": {"targetMetric": True}},
-        {"key": "status_warn", "section": "Meta", "label": "Umbral «ajuste» (%)", "ui": "number", "min": 0, "step": 1,
-         "group": "card", "hidden": True, "short_label": "Ajuste (%)", "inline_with": "statusBasis", "enabled_when": {"targetMetric": True}},
-        {"key": "higher_is_better", "section": "Meta", "label": "Más alto es mejor", "ui": "checkbox",
-         "group": "card", "hidden": True, "enabled_when": {"targetMetric": True}, "default": True},
+        {"key": "title", "label": "Título", "type": "string", "default": "Tarjeta KPI"},
+        {"key": "decimals", "label": "Decimales", "type": "number", "default": 0},
+        {"key": "abbreviate", "label": "Abreviar (1.2M)", "type": "boolean", "default": False},
+        {"key": "prefix", "label": "Prefijo (ej. RD$)", "type": "string", "default": ""},
+        {"key": "suffix", "label": "Sufijo (ej. uds.)", "type": "string", "default": ""},
+        {"key": "primary", "label": "Número principal", "type": "choice", "options_from": "metrics", "default": "", "options": [
+            {"value": "", "label": "Primera métrica"},
+        ]},
+        {"key": "compare", "label": "Comparar con", "type": "choice", "options_from": "metrics", "default": "", "options": [
+            {"value": "", "label": "Sin comparación"},
+        ]},
+        {"key": "compareMode", "label": "Modo de comparación", "type": "choice", "default": "pct", "options": [
+            {"value": "pct", "label": "Porcentaje"},
+            {"value": "abs", "label": "Absoluto"},
+        ]},
+        {"key": "target", "label": "Meta (valor)", "type": "number"},
+        {"key": "targetMetric", "label": "Valor objetivo", "type": "choice", "options_from": "metrics", "default": "", "options": [
+            {"value": "", "label": "— elegir —"},
+            {"value": "fixed", "label": "Valor fijo"},
+        ]},
+        {"key": "targetLabel", "label": "Nombre de la meta", "type": "string", "default": "Meta"},
+        {"key": "statusBasis", "label": "Semáforo según", "type": "choice", "default": "", "options": [
+            {"value": "", "label": "Automático"},
+            {"value": "target_pct", "label": "% de la meta"},
+            {"value": "value", "label": "Valor"},
+        ]},
+        {"key": "status_good", "label": "Umbral «bien» (%)", "type": "number"},
+        {"key": "status_warn", "label": "Umbral «ajuste» (%)", "type": "number"},
+        {"key": "higher_is_better", "label": "Más alto es mejor", "type": "boolean", "default": True},
     ]
 
     # ------------------------------------------------------------------ datos

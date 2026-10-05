@@ -36,20 +36,20 @@ class LineWidget(BaseWidget):
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Gráfico de Líneas"},
-        {"key": "color_scheme", "label": "Paleta", "ui": "select", "options": [
+        {"key": "title", "label": "Título", "type": "string", "default": "Gráfico de Líneas"},
+        {"key": "color_scheme", "label": "Paleta", "type": "choice", "default": "default", "options": [
             {"value": "default", "label": "Por defecto"},
             {"value": "ocean", "label": "Océano"},
             {"value": "forest", "label": "Bosque"},
             {"value": "sunset", "label": "Atardecer"},
-        ], "default": "default"},
-        {"key": "curve", "label": "Curva", "ui": "select", "options": [
+        ]},
+        {"key": "curve", "label": "Curva", "type": "choice", "default": "monotoneCubic", "options": [
             {"value": "monotoneCubic", "label": "Suave (monotoneCubic)"},
             {"value": "straight", "label": "Recta"},
             {"value": "smooth", "label": "Suave (smooth)"},
-        ], "default": "monotoneCubic"},
-        {"key": "showGrid", "label": "Mostrar cuadrícula", "ui": "checkbox", "default": True},
-        {"key": "showMarkers", "label": "Mostrar puntos", "ui": "checkbox", "default": True},
+        ]},
+        {"key": "showGrid", "label": "Mostrar cuadrícula", "type": "boolean", "default": True},
+        {"key": "showMarkers", "label": "Mostrar puntos", "type": "boolean", "default": True},
     ]
 
     def compile(

@@ -15,7 +15,6 @@ from sheets_reports.engine import ResultTooLargeError
 from sheets_reports.models import Widget, default_position
 from sheets_reports.services.ai_spec import form_errors
 from sheets_reports.widgets import WIDGETS
-from sheets_reports.widgets.base import control_enabled
 from sheets_reports.widgets.schemas import WidgetForm
 
 logger = logging.getLogger(__name__)
@@ -85,15 +84,10 @@ class WidgetService:
         return widget
 
     def _clean_style(self, widget_type: str, style: dict) -> dict:
-        """El estilo lo define el `style_schema` del tipo: una clave fuera de él se descarta, y
-        también la de un control deshabilitado que lo pide (`clear_when_disabled`)."""
-        style = style or {}
-        controls = {c["key"]: c for c in (WIDGETS.get(widget_type).style_schema or [])}
-        return {
-            k: v for k, v in style.items()
-            if k in controls and not (controls[k].get("clear_when_disabled")
-                                      and not control_enabled(controls[k], style))
-        }
+        """El estilo lo define el `style_schema` del tipo: una clave fuera de él se descarta.
+        Los tipos y las opciones los valida `form_errors` (en `_validate`)."""
+        known = {c["key"] for c in (WIDGETS.get(widget_type).style_schema or [])}
+        return {k: v for k, v in (style or {}).items() if k in known}
 
     def _validate(self, widget_type: str, form: WidgetForm, title) -> None:
         """Mismas reglas que la IA: un form que no pasa no llega a guardarse."""

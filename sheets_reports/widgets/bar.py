@@ -47,20 +47,20 @@ class BarChartWidget(BaseWidget):
 
     # Backend-driven style schema (solo ui: text | select | checkbox | number)
     style_schema: ClassVar[List[Dict[str, Any]]] = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Gráfico de Barras"},
-        {"key": "horizontal", "label": "Horizontal", "ui": "checkbox", "default": False},
-        {"key": "stacked", "label": "Apilado", "ui": "checkbox", "default": False},
-        {"key": "color_scheme", "label": "Paleta", "ui": "select", "options": [
+        {"key": "title", "label": "Título", "type": "string", "default": "Gráfico de Barras"},
+        {"key": "horizontal", "label": "Horizontal", "type": "boolean", "default": False},
+        {"key": "stacked", "label": "Apilado", "type": "boolean", "default": False},
+        {"key": "color_scheme", "label": "Paleta", "type": "choice", "default": "default", "options": [
             {"value": "default", "label": "Por defecto"},
             {"value": "ocean", "label": "Océano"},
             {"value": "forest", "label": "Bosque"},
             {"value": "sunset", "label": "Atardecer"},
-        ], "default": "default"},
-        {"key": "yAxisWidth", "label": "Ancho del Eje Y (px)", "ui": "number", "min": 100, "step": 10},
-        {"key": "barWidth", "label": "Ancho de barra (%)", "ui": "number", "min": 10, "max": 100, "step": 5, "default": 70},
-        {"key": "dataLabelFormatter", "label": "Formato de etiquetas. Ej. {value} %", "ui": "text"},
-        {"key": "chartWidth", "label": "Forzar ancho de gráfico (px)", "ui": "number", "min": 100, "step": 50},
-        {"key": "showGrid", "label": "Mostrar cuadrícula", "ui": "checkbox", "default": True},
+        ]},
+        {"key": "yAxisWidth", "label": "Ancho del Eje Y (px)", "type": "number"},
+        {"key": "barWidth", "label": "Ancho de barra (%)", "type": "number", "default": 70},
+        {"key": "dataLabelFormatter", "label": "Formato de etiquetas. Ej. {value} %", "type": "string"},
+        {"key": "chartWidth", "label": "Forzar ancho de gráfico (px)", "type": "number"},
+        {"key": "showGrid", "label": "Mostrar cuadrícula", "type": "boolean", "default": True},
     ]
 
     def compile(

@@ -39,10 +39,10 @@ class TableWidget(BaseWidget):
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Tabla"},
-        {"key": "pageSize", "label": "Filas por página", "ui": "number", "min": 5, "step": 5, "default": 10},
-        {"key": "showPagination", "label": "Mostrar paginación", "ui": "checkbox", "default": True},
-        {"key": "boldLastRow", "label": "Resaltar última fila", "ui": "checkbox", "default": False},
+        {"key": "title", "label": "Título", "type": "string", "default": "Tabla"},
+        {"key": "pageSize", "label": "Filas por página", "type": "number", "default": 10},
+        {"key": "showPagination", "label": "Mostrar paginación", "type": "boolean", "default": True},
+        {"key": "boldLastRow", "label": "Resaltar última fila", "type": "boolean", "default": False},
     ]
 
     def process_query(self, df, fields: WidgetFields) -> WidgetResult:

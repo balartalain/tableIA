@@ -1,28 +1,26 @@
 """
-Garantías del diseño: agregar un widget es registrar una clase en un solo archivo (sin tocar
-otros módulos) y las capas no se mezclan (utils, motor, widgets, servicios, vistas).
+Garantías del diseño: un widget es su clase registrada (datos, contrato de `style`, IA) más
+su partial con el panel del editor, y las capas no se mezclan (utils, motor, widgets,
+servicios, vistas).
 """
 import ast
-import sys
-import tempfile
 from pathlib import Path
 
-from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase
-from django.urls import reverse
+from django.template.loader import get_template
+from django.test import SimpleTestCase
 
-from sheets_reports import sdk
-from sheets_reports.models import Dashboard, Widget, widget_type_choices
-from sheets_reports.services.ai_spec import build_system_prompt, build_tool_parameters
-from sheets_reports.services.widget_service import WidgetService
-from sheets_reports.tests.fixtures import errors_for, examples_ctx, sales_ctx, sales_df
+from sheets_reports.models import Widget
+from sheets_reports.tests.fixtures import errors_for, examples_ctx
 from sheets_reports.views import _widget_manifest
-from sheets_reports.widgets import WIDGETS, ext
+from sheets_reports.widgets import WIDGETS
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
 CAPABILITY_KEYS = {"dimensions", "pivots", "metrics", "sort", "limit", "filters"}
-STYLE_UI = {"text", "select", "checkbox", "number"}
+STYLE_TYPES = {"string", "number", "boolean", "choice"}
+# Lo único que declara un control: datos. El layout del panel vive en el partial del widget.
+STYLE_KEYS = {"key", "label", "type", "options", "options_from", "default"}
+TEMPLATES = PACKAGE / "templates"
 
 
 class LayerTests(SimpleTestCase):
@@ -132,13 +130,14 @@ class WidgetContractTests(SimpleTestCase):
                 for name in ("sort", "limit", "filters"):
                     self.assertIsInstance(caps[name], bool)
 
-    def test_style_schema_con_solo_ui_validos(self):
+    def test_style_schema_solo_declara_datos(self):
         for key, widget in WIDGETS.items():
             for control in widget.style_schema:
                 with self.subTest(widget=key, control=control["key"]):
-                    self.assertIn(control.get("ui"), STYLE_UI)
+                    self.assertLessEqual(set(control), STYLE_KEYS)
+                    self.assertIn(control.get("type"), STYLE_TYPES)
                     self.assertTrue(control.get("label"))
-                    if control["ui"] == "select":
+                    if control["type"] == "choice":
                         options = control.get("options") or []
                         self.assertTrue(options)
                         self.assertEqual({o["value"] for o in options}, {o["value"] for o in options})
@@ -150,12 +149,12 @@ class WidgetContractTests(SimpleTestCase):
     @staticmethod
     def _assert_default_matches(control):
         default = control["default"]
-        ui = control["ui"]
-        if ui == "checkbox":
+        kind = control["type"]
+        if kind == "boolean":
             assert isinstance(default, bool), control
-        elif ui == "number":
+        elif kind == "number":
             assert isinstance(default, (int, float)) and not isinstance(default, bool), control
-        elif ui == "text":
+        elif kind == "string":
             assert isinstance(default, str), control
         else:
             assert default in [o["value"] for o in control.get("options", [])], control
@@ -166,7 +165,7 @@ class WidgetContractTests(SimpleTestCase):
                 self.assertEqual(set(widget.style_defaults()),
                                  {c["key"] for c in widget.style_schema if "default" in c})
 
-    def test_lo_que_pinta_el_editor_es_el_manifiesto(self):
+    def test_el_manifiesto_refleja_cada_tipo(self):
         manifest = _widget_manifest()
         self.assertEqual(set(manifest), set(WIDGETS.keys()))
         for key, widget in WIDGETS.items():
@@ -189,145 +188,14 @@ class WidgetContractTests(SimpleTestCase):
                                                 title=args.get("title")), [])
 
 
-# --- Extensión: un widget nuevo es UN archivo en widgets/ext/ --------------------------------
+class PanelPartialTests(SimpleTestCase):
+    """El panel del editor de cada tipo es su partial: existe y `board_editor.html` lo incluye."""
 
-LIST_MODULE = '''
-"""Lista: las filas de la hoja tal cual. Una extensión completa en un solo archivo."""
-from sheets_reports.sdk import BaseWidget, WIDGET_REGISTRY
-
-
-@WIDGET_REGISTRY.register
-class ListWidget(BaseWidget):
-    key = "list"
-    type_key = "list"
-    label = "Lista"
-    ai_doc = "las filas de la hoja tal cual, para revisar los datos crudos."
-    ai_examples = [
-        ("muéstrame las filas de la hoja", {
-            "widget_type": "list", "title": "Filas de la hoja",
-            "fields": {"dimensions": [], "metrics": []}, "style": {},
-        }),
-    ]
-    capabilities = {
-        "dimensions": [0, 0], "pivots": [0, 0], "metrics": [0, 0],
-        "sort": False, "limit": False, "filters": True,
-    }
-    style_schema = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Lista"},
-        {"key": "maxRows", "label": "Filas a mostrar", "ui": "number", "min": 1, "default": 3},
-    ]
-
-    def compile(self, result, style, fields=None, metadata=None):
-        rows = result.rows.head(int(style.to_dict().get("maxRows") or 3))
-        return {"type": "rows", "rows": rows.to_dict(orient="records")}
-'''
-
-
-class ExtensionTests(TestCase):
-    """Un widget nuevo funciona de punta a punta (registro, validación, IA, manifiesto,
-    servicio) sin editar el core."""
-
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        package = Path(self.tmp.name) / "tableia_ext_demo"
-        package.mkdir()
-        (package / "__init__.py").write_text("")
-        (package / "list.py").write_text(LIST_MODULE)
-        sys.path.insert(0, self.tmp.name)
-        self.loaded = ext.load("tableia_ext_demo")
-
-    def tearDown(self):
-        WIDGETS.unregister("list")
-        sys.path.remove(self.tmp.name)
-        for name in [m for m in sys.modules if m.startswith("tableia_ext_demo")]:
-            del sys.modules[name]
-        self.tmp.cleanup()
-
-    def test_se_carga_y_registra_solo(self):
-        self.assertEqual(self.loaded, ["list"])
-        self.assertIn(("list", "Lista"), widget_type_choices())
-        self.assertIn("list", build_tool_parameters(sales_ctx(), widget_type=None)
-                      ["properties"]["widget_type"]["enum"])
-
-    def test_valida_con_sus_propias_capacidades(self):
-        valid = {"dimensions": [], "pivots": [], "metrics": [], "filters": []}
-        self.assertEqual(errors_for("list", valid), [])
-        self.assertIn("dimensiones: exactamente 0",
-                      errors_for("list", {**valid, "dimensions": ["categoria"]})[0])
-        self.assertIn("no admite orden",
-                      errors_for("list", {**valid, "sort_by": "categoria"})[0])
-        # Las capacidades del resto no cambian: cada tipo habla por sí mismo.
-        self.assertIn("métricas",
-                      errors_for("bar", {"dimensions": ["categoria"], "metrics": [], "pivots": []})[0])
-
-    def test_aparece_en_el_prompt_de_la_ia(self):
-        prompt = build_system_prompt()
-        self.assertIn("- list: las filas de la hoja tal cual, para revisar los datos crudos. "
-                      "Admite: sin dimensiones, sin pivotes, sin métricas, sin orden, sin límite, "
-                      "filtros.", prompt)
-        self.assertIn("- style.maxRows: number (Filas a mostrar)", prompt)
-
-    def test_aparece_en_el_manifiesto_del_editor(self):
-        user = get_user_model().objects.create(username="u")
-        dashboard = Dashboard.objects.create(nombre="D", owner=user,
-                                             sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
-        manifest = self.client.get(reverse("board_editor", args=[dashboard.id])).context["widget_manifest"]
-        self.assertEqual(manifest["list"]["capabilities"]["dimensions"], [0, 0])
-        self.assertEqual(manifest["list"]["style_schema"], WIDGETS.get("list").style_schema)
-
-    def test_crear_y_calcular_por_el_servicio(self):
-        user = get_user_model().objects.create(username="u")
-        dashboard = Dashboard.objects.create(nombre="D", owner=user,
-                                             sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
-        service = WidgetService(dashboard, sales_df())
-        widget = service.create("list", {
-            "title": "Primeras filas",
-            "fields": {"dimensions": [], "pivots": [], "metrics": [], "filters": []},
-            "style": {"maxRows": 2},
-        })
-        self.assertEqual(Widget.objects.get().type, "list")
-        self.assertEqual(widget.style, {"maxRows": 2})
-        data = service.render(widget)["data"]
-        self.assertEqual(len(data["rows"]), 2)
-        self.assertEqual(data["rows"][0]["categoria"], "Hogar")
-
-
-class ExtensionImportTests(SimpleTestCase):
-    """Las extensiones solo importan el sdk (la API estable del core) y nunca a otra
-    extensión: lo que repitan queda a la vista para subirlo al core."""
-
-    def test_extensiones_solo_importan_el_sdk(self):
-        bad = []
-        for path in (PACKAGE / "widgets" / "ext").glob("*.py"):
-            if path.name == "__init__.py":
-                continue
-            for node in ast.walk(ast.parse(path.read_text())):
-                modules = ([node.module or ""] if isinstance(node, ast.ImportFrom)
-                           else [a.name for a in node.names] if isinstance(node, ast.Import) else [])
-                if isinstance(node, ast.ImportFrom) and node.level:
-                    bad.append((path.name, "." * node.level + (node.module or "")))
-                bad += [(path.name, m) for m in modules
-                        if m.startswith("sheets_reports") and m != "sheets_reports.sdk"]
-        self.assertEqual(bad, [])
-
-    def test_el_sdk_exporta_lo_que_declara(self):
-        missing = [name for name in sdk.__all__ if not hasattr(sdk, name)]
-        self.assertEqual(missing, [])
-
-    def test_el_sdk_expone_el_contrato_plano(self):
-        from sheets_reports.widgets.schemas import WidgetFields, WidgetForm, WidgetStyle
-        self.assertIs(sdk.WidgetFields, WidgetFields)
-        self.assertIs(sdk.WidgetStyle, WidgetStyle)
-        self.assertIs(sdk.WidgetForm, WidgetForm)
-        self.assertTrue(issubclass(sdk.BaseWidget, object))
-        self.assertEqual(sdk.WIDGET_REGISTRY, WIDGETS)
-
-    def test_el_core_no_importa_extensiones(self):
-        bad = []
-        for path in PACKAGE.rglob("*.py"):
-            if "ext" in path.relative_to(PACKAGE).parts or "tests" in path.parts:
-                continue
-            for node in ast.walk(ast.parse(path.read_text())):
-                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("sheets_reports.widgets.ext."):
-                    bad.append((path.name, node.module))
-        self.assertEqual(bad, [])
+    def test_cada_widget_tiene_su_partial(self):
+        editor = (TEMPLATES / "board_editor.html").read_text()
+        for key in WIDGETS.keys():
+            name = f"sheets_reports/widgets/config/_{key}_config.html"
+            with self.subTest(widget=key):
+                get_template(name)
+                self.assertIn(f"$store.dashboard.editingType === '{key}'", editor)
+                self.assertIn(f'{{% include "{name}" %}}', editor)

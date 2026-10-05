@@ -1,0 +1,134 @@
+{# Panel del editor del KPI: «Configurar» (datos y roles del número) y «Personalizar». #}
+{% with B="sheets_reports/widgets/config/blocks/" %}
+<div>
+  <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
+    {% include B|add:"_title.html" %}
+    {% include B|add:"_assistant.html" %}
+    {% include B|add:"_metrics.html" %}
+
+    <!-- Tarjeta KPI: quién es el número, contra qué se compara y su meta. -->
+    <div class="space-y-3 rounded-xl border border-line/60 bg-paper/60 p-3">
+      <label class="block text-xs font-semibold text-ink/70">Tarjeta KPI</label>
+      <div>
+        <label class="block text-[11px] font-semibold text-ink/60 mb-1">Número principal</label>
+        <select x-model="$store.dashboard.drawerDraft.style.primary"
+                class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+          <template x-for="o in $store.dashboard.metricRoleOptions([{ value: '', label: 'Primera métrica' }])" :key="o.value">
+            <option x-bind:value="o.value" x-text="o.label"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-semibold text-ink/60 mb-1">Comparar con</label>
+        <select x-model="$store.dashboard.drawerDraft.style.compare"
+                class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+          <template x-for="o in $store.dashboard.metricRoleOptions([{ value: '', label: 'Sin comparación' }])" :key="o.value">
+            <option x-bind:value="o.value" x-text="o.label"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-semibold text-ink/60 mb-1">Modo de comparación</label>
+        <select x-model="$store.dashboard.drawerDraft.style.compareMode"
+                class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+          <option value="pct">Porcentaje</option>
+          <option value="abs">Absoluto</option>
+        </select>
+      </div>
+
+      <!-- Meta: plegable, cerrado por defecto; la cabecera resume la meta elegida. -->
+      <div x-data="{
+             open: false,
+             get style() { return this.$store.dashboard.drawerDraft.style; },
+             get metaOptions() {
+               return this.$store.dashboard.metricRoleOptions(
+                 [{ value: '', label: '— elegir —' }, { value: 'fixed', label: 'Valor fijo' }]);
+             },
+             get hasMeta() { return !!this.style.targetMetric; },
+             get isFixed() { return this.style.targetMetric === 'fixed'; },
+             get summary() {
+               const option = this.metaOptions.find(o => o.value === (this.style.targetMetric || ''));
+               const label = option ? option.label : '';
+               const value = this.style.target;
+               return this.isFixed && value !== '' && value != null ? label + ' · ' + value : label;
+             },
+             // Sin «Valor fijo» no hay valor de meta que guardar.
+             onMetaChange() { if (!this.isFixed) delete this.style.target; },
+           }"
+           x-init="$watch('$store.dashboard.editingId', () => { open = false })"
+           class="rounded-lg border border-line/60 bg-white/70">
+        <button type="button" x-on:click="open = !open" x-bind:aria-expanded="open ? 'true' : 'false'"
+                class="w-full flex items-center gap-2 px-2.5 py-2 text-left cursor-pointer select-none">
+          <i class="ti ti-chevron-right text-xs text-ink/50 transition-transform" x-bind:class="open ? 'rotate-90' : ''" aria-hidden="true"></i>
+          <span class="text-[11px] font-semibold text-ink/70">Meta</span>
+          <span class="ml-auto min-w-0 truncate text-[11px] text-ink/45" x-text="summary"></span>
+        </button>
+        <div x-show="open" class="space-y-3 border-t border-line/60 px-2.5 pt-2 pb-2.5">
+          <div class="flex items-end gap-1.5">
+            <div class="flex-1 min-w-0">
+              <label class="block text-[11px] font-semibold text-ink/60 mb-1">Valor objetivo</label>
+              <select x-model="style.targetMetric" x-on:change="onMetaChange()"
+                      class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+                <template x-for="o in metaOptions" :key="o.value">
+                  <option x-bind:value="o.value" x-text="o.label"></option>
+                </template>
+              </select>
+            </div>
+            <div class="w-20 shrink-0">
+              <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-bind:class="isFixed ? '' : 'opacity-40'">Valor</label>
+              <input type="number" step="1" placeholder="Valor" x-model.number="style.target" x-bind:disabled="!isFixed"
+                     class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+            </div>
+          </div>
+          <!-- Sin meta elegida, lo que depende de ella queda deshabilitado. -->
+          <div>
+            <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-bind:class="hasMeta ? '' : 'opacity-40'">Nombre de la meta</label>
+            <input type="text" placeholder="Meta" x-model="style.targetLabel" x-bind:disabled="!hasMeta"
+                   class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+          </div>
+          <div class="flex items-end gap-1.5">
+            <div class="flex-1 min-w-0">
+              <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-bind:class="hasMeta ? '' : 'opacity-40'">Semáforo según</label>
+              <select x-model="style.statusBasis" x-bind:disabled="!hasMeta"
+                      class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                <option value="">Automático</option>
+                <option value="target_pct">% de la meta</option>
+                <option value="value">Valor</option>
+              </select>
+            </div>
+            <div class="w-20 shrink-0">
+              <label class="block truncate text-[11px] font-semibold text-ink/60 mb-1" title="Umbral «bien» (%)"
+                     x-bind:class="hasMeta ? '' : 'opacity-40'">Bien (%)</label>
+              <input type="number" min="0" step="1" x-model.number="style.status_good" x-bind:disabled="!hasMeta"
+                     class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+            </div>
+            <div class="w-20 shrink-0">
+              <label class="block truncate text-[11px] font-semibold text-ink/60 mb-1" title="Umbral «ajuste» (%)"
+                     x-bind:class="hasMeta ? '' : 'opacity-40'">Ajuste (%)</label>
+              <input type="number" min="0" step="1" x-model.number="style.status_warn" x-bind:disabled="!hasMeta"
+                     class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+            </div>
+          </div>
+          <label class="flex items-center gap-2 text-xs font-semibold text-ink/70 cursor-pointer"
+                 x-bind:class="hasMeta ? '' : 'opacity-40 cursor-not-allowed'">
+            <input type="checkbox" x-model="style.higher_is_better" x-bind:disabled="!hasMeta"
+                   class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+            <span>Más alto es mejor</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    {% include B|add:"_trend.html" %}
+    {% include B|add:"_filters.html" %}
+    {% include B|add:"_json.html" %}
+  </div>
+
+  <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+    {% include B|add:"_style_number.html" with key="decimals" label="Decimales" min=0 %}
+    {% include B|add:"_style_checkbox.html" with key="abbreviate" label="Abreviar (1.2M)" %}
+    {% include B|add:"_style_text.html" with key="prefix" label="Prefijo (ej. RD$)" %}
+    {% include B|add:"_style_text.html" with key="suffix" label="Sufijo (ej. uds.)" %}
+  </div>
+</div>
+{% endwith %}

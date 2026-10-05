@@ -1,0 +1,27 @@
+<!-- Asistente con IA -->
+<div class="rounded-xl border border-moss-100 bg-moss-tint px-3 py-2">
+  <button type="button" x-on:click="$store.dashboard.drawerAskOpen = !$store.dashboard.drawerAskOpen"
+          x-bind:aria-expanded="$store.dashboard.drawerAskOpen"
+          class="w-full flex items-center justify-between text-xs font-semibold text-moss-700 cursor-pointer">
+    <span class="flex items-center gap-1.5">
+      <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
+      Consultar a la IA
+    </span>
+    <i class="ti text-sm" x-bind:class="$store.dashboard.drawerAskOpen ? 'ti-chevron-up' : 'ti-chevron-down'" aria-hidden="true"></i>
+  </button>
+  <div x-show="$store.dashboard.drawerAskOpen" x-cloak class="mt-2 space-y-2">
+    <p class="text-[11px] text-ink/60">Describe qué quieres ver y la IA propondrá la configuración de este widget.</p>
+    <textarea x-model="$store.dashboard.drawerDraft.prompt" rows="3"
+              x-on:keydown.ctrl.enter="$store.dashboard.askAssistant()"
+              placeholder="¿Qué quieres ver? (ej. ventas por categoría y año)"
+              class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500"></textarea>
+    <button type="button" x-on:click="$store.dashboard.askAssistant()"
+            x-bind:disabled="$store.dashboard.drawerAsking || !($store.dashboard.drawerDraft.prompt || '').trim()"
+            class="w-full text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg py-2 transition cursor-pointer flex items-center justify-center gap-1.5">
+      <i class="ti text-base" x-bind:class="$store.dashboard.drawerAsking ? 'ti-loader-2 animate-spin' : 'ti-message-question'" aria-hidden="true"></i>
+      <span x-text="$store.dashboard.drawerAsking ? 'Consultando…' : 'Consultar'"></span>
+    </button>
+    <p x-show="$store.dashboard.drawerAskError" x-text="$store.dashboard.drawerAskError" class="text-xs text-red-600"></p>
+    <p class="text-[11px] text-ink/50">La propuesta se carga abajo; revisa y pulsa «Guardar».</p>
+  </div>
+</div>

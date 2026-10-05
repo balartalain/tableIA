@@ -1,0 +1,6 @@
+{# Casilla de un valor booleano de `style`. Parámetros: key, label. #}
+<label class="flex items-center gap-2 text-xs font-semibold text-ink/70 cursor-pointer">
+  <input type="checkbox" x-model="$store.dashboard.drawerDraft.style.{{ key }}"
+         class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+  <span>{{ label }}</span>
+</label>

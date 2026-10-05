@@ -158,15 +158,15 @@ def _style_schema_docs(widget) -> list[str]:
     """Una línea por control de estilo: clave, tipo y opciones."""
     lines = []
     for control in widget.style_schema or []:
-        ui = control.get("ui")
+        kind = control.get("type")
         if control.get("options_from") == "metrics":
             detail = (f"select con el alias de una de las métricas del widget "
                       f"(o vacío: {control.get('label', control['key'])})")
-        elif ui == "select":
+        elif kind == "choice":
             options = ", ".join(f'"{o["value"]}"' for o in control.get("options", []))
             detail = f"select de {options}"
         else:
-            detail = f"{ui} ({control.get('label', control['key'])})"
+            detail = f"{kind} ({control.get('label', control['key'])})"
         lines.append(f"- style.{control['key']}: {detail}")
     return lines
 
@@ -250,7 +250,7 @@ def _style_schema(style_schema: list[dict]) -> tuple[dict, list[str]]:
     """Schema de `style` desde los controles declarados, más sus claves obligatorias."""
     properties: dict = {}
     for control in style_schema or []:
-        ui = control.get("ui")
+        kind = control.get("type")
         if control.get("options_from") == "metrics":
             # El valor es un alias que la propia propuesta define: no puede vivir en un enum.
             properties[control["key"]] = {
@@ -258,14 +258,14 @@ def _style_schema(style_schema: list[dict]) -> tuple[dict, list[str]]:
                 "description": (f"{control.get('label', control['key'])}: alias de una de las "
                                 f"métricas del widget (vacío = la opción por defecto)."),
             }
-        elif ui == "select":
+        elif kind == "choice":
             properties[control["key"]] = {
                 "enum": [o["value"] for o in control.get("options", [])],
                 "description": control.get("label", control["key"]),
             }
-        elif ui == "number":
+        elif kind == "number":
             properties[control["key"]] = {"type": "number", "description": control.get("label", control["key"])}
-        elif ui == "checkbox":
+        elif kind == "boolean":
             properties[control["key"]] = {"type": "boolean", "description": control.get("label", control["key"])}
         else:
             properties[control["key"]] = {"type": "string", "description": control.get("label", control["key"])}
@@ -636,7 +636,7 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[
             errors.append(f"style: '{key}' no es un control de este widget.")
             continue
         control = known[key]
-        if control.get("ui") == "select":
+        if control.get("type") == "choice":
             if control.get("options_from") == "metrics":
                 # Roles del KPI: el valor es un alias de las métricas propuestas, una
                 # opción estática del schema (ej. «Valor fijo») o vacío.
@@ -649,11 +649,11 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[
                 if value not in allowed:
                     errors.append(f"style.{key}: '{value}' no es válido; usa uno de "
                                   f"{', '.join(str(v) for v in allowed)}.")
-        elif control.get("ui") == "number" and not isinstance(value, (int, float)):
+        elif control.get("type") == "number" and not isinstance(value, (int, float)):
             errors.append(f"style.{key}: debe ser un número.")
-        elif control.get("ui") == "checkbox" and not isinstance(value, bool):
+        elif control.get("type") == "boolean" and not isinstance(value, bool):
             errors.append(f"style.{key}: debe ser true o false.")
-        elif control.get("ui") == "text" and not isinstance(value, str):
+        elif control.get("type") == "string" and not isinstance(value, str):
             errors.append(f"style.{key}: debe ser un texto.")
 
     if style.get("statusBasis") == "target_pct" and not _has_target(style, aliases):

@@ -1,0 +1,20 @@
+{# Panel del editor de la tabla simple (columnas de la hoja, sin agrupar). #}
+{% with B="sheets_reports/widgets/config/blocks/" %}
+<div>
+  <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
+    {% include B|add:"_title.html" %}
+    {% include B|add:"_assistant.html" %}
+    {% include B|add:"_columns.html" %}
+    {% include B|add:"_filters.html" %}
+    {% include B|add:"_sort.html" %}
+    {% include B|add:"_limit.html" %}
+    {% include B|add:"_json.html" %}
+  </div>
+
+  <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+    {% include B|add:"_style_number.html" with key="pageSize" label="Filas por página" min=5 step=5 %}
+    {% include B|add:"_style_checkbox.html" with key="showPagination" label="Mostrar paginación" %}
+    {% include B|add:"_style_checkbox.html" with key="boldLastRow" label="Resaltar última fila" %}
+  </div>
+</div>
+{% endwith %}

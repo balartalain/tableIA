@@ -101,24 +101,16 @@ class DynamicTableWidget(BaseWidget):
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [
-        {"key": "title", "label": "Título", "ui": "text", "default": "Tabla Dinámica"},
-        {"key": "pageSize", "label": "Filas por página", "ui": "number", "min": 5, "step": 5, "default": 10},
-        {"key": "showPagination", "label": "Mostrar paginación", "ui": "checkbox", "default": True},
-        # «Mostrar totales» por nivel, como en una tabla dinámica de hoja de cálculo: cada
-        # uno se dibuja bajo su fila de dimensiones/pivotes en la pestaña «Configurar»
-        # (`hidden` lo saca de «Personalizar»).
-        {"key": "showTotals", "label": "Fila «Total general» al pie", "ui": "checkbox",
-         "default": True, "hidden": True},
-        {"key": "rowSubtotal1", "label": "Subtotales «Total …» de cada dimensión 1",
-         "ui": "checkbox", "default": False, "hidden": True},
-        {"key": "rowSubtotal2", "label": "Subtotales «Total …» de cada dimensión 2",
-         "ui": "checkbox", "default": False, "hidden": True},
-        {"key": "showColumnTotals", "label": "Columna «Total general» a la derecha",
-         "ui": "checkbox", "default": False, "hidden": True},
-        {"key": "columnSubtotal1", "label": "Subtotales «Total …» de cada pivote",
-         "ui": "checkbox", "default": False, "hidden": True},
-        {"key": "repeatRowLabels", "label": "Repetir etiquetas de fila", "ui": "checkbox", "default": False},
-        {"key": "boldLastRow", "label": "Resaltar última fila", "ui": "checkbox", "default": False},
+        {"key": "title", "label": "Título", "type": "string", "default": "Tabla Dinámica"},
+        {"key": "pageSize", "label": "Filas por página", "type": "number", "default": 10},
+        {"key": "showPagination", "label": "Mostrar paginación", "type": "boolean", "default": True},
+        {"key": "showTotals", "label": "Fila «Total general» al pie", "type": "boolean", "default": True},
+        {"key": "rowSubtotal1", "label": "Subtotales «Total …» de cada dimensión 1", "type": "boolean", "default": False},
+        {"key": "rowSubtotal2", "label": "Subtotales «Total …» de cada dimensión 2", "type": "boolean", "default": False},
+        {"key": "showColumnTotals", "label": "Columna «Total general» a la derecha", "type": "boolean", "default": False},
+        {"key": "columnSubtotal1", "label": "Subtotales «Total …» de cada pivote", "type": "boolean", "default": False},
+        {"key": "repeatRowLabels", "label": "Repetir etiquetas de fila", "type": "boolean", "default": False},
+        {"key": "boldLastRow", "label": "Resaltar última fila", "type": "boolean", "default": False},
     ]
 
     def compile(

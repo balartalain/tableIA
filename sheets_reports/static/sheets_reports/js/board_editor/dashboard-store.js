@@ -423,6 +423,40 @@ document.addEventListener('alpine:init', () => {
       return (this.drawerManifest.style_schema || [])
         .filter(c => c.group === 'card' && !c.inline_with);
     },
+    // Los controles de la tarjeta agrupados por `section`: los consecutivos con la misma
+    // sección van juntos en un plegable con ese título; sin sección, `title` es null.
+    get cardSections() {
+      const sections = [];
+      this.cardControls.forEach(control => {
+        const title = control.section || null;
+        const last = sections[sections.length - 1];
+        if (last && last.title === title) last.controls.push(control);
+        else sections.push({ title, controls: [control] });
+      });
+      return sections;
+    },
+    // Resumen de una sección cerrada: lo elegido en su primer control y, si lleva un control
+    // al lado (`inline_with`) con valor, ese valor. Ej.: «Valor fijo · 1000».
+    sectionSummary(section) {
+      const first = section && section.controls[0];
+      if (!first) return '';
+      const style = this.drawerDraft.style || {};
+      const value = style[first.key];
+      let text = value == null ? '' : String(value);
+      if (first.ui === 'select') {
+        const options = first.options_from === 'metrics'
+          ? this.metricRoleOptions(first) : (first.options || []);
+        const option = options.find(o => o.value === (value == null ? '' : value));
+        text = option ? option.label : text;
+      } else if (first.ui === 'checkbox') {
+        text = value ? 'Sí' : 'No';
+      }
+      const extra = this.inlineControls(first)
+        .filter(c => !this.controlDisabled(c))
+        .map(c => style[c.key])
+        .filter(v => v !== '' && v != null);
+      return [text, ...extra].filter(Boolean).join(' · ');
+    },
     inlineControls(control) {
       return (this.drawerManifest.style_schema || []).filter(c => c.inline_with === control.key);
     },

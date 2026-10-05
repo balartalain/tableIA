@@ -80,6 +80,21 @@ class StyleSchemaTests(SimpleTestCase):
                     if control.get("clear_when_disabled"):
                         self.assertTrue(control.get("enabled_when"))
 
+    def test_cada_seccion_es_un_tramo_seguido_del_schema(self):
+        """Los controles de una `section` van juntos: si no, su plegable se partiría en dos."""
+        for key, widget in WIDGETS.items():
+            seen, previous = set(), None
+            for control in widget.style_schema:
+                section = control.get("section")
+                with self.subTest(widget=key, control=control["key"]):
+                    if section is not None:
+                        self.assertIsInstance(section, str)
+                        self.assertTrue(section.strip())
+                        if section != previous:
+                            self.assertNotIn(section, seen, f"la sección «{section}» está partida")
+                            seen.add(section)
+                previous = section
+
     def test_estilos_fuera_del_schema_no_llegan_al_form(self):
         from sheets_reports.services.widget_service import WidgetService
         service = WidgetService.__new__(WidgetService)
@@ -162,6 +177,16 @@ class KpiCardBlockTests(SimpleTestCase):
                                    "targetMetric": "fixed", "statusBasis": "target_pct",
                                    "target": 100})
 
+
+    def test_la_meta_y_lo_que_depende_de_ella_van_en_la_seccion_meta(self):
+        sections = {c["key"]: c.get("section") for c in WIDGETS.get("kpi").style_schema}
+        for key in ("target", "targetMetric", "targetLabel", "statusBasis",
+                    "status_good", "status_warn", "higher_is_better"):
+            with self.subTest(key=key):
+                self.assertEqual(sections[key], "Meta")
+        for key in ("primary", "compare", "compareMode"):
+            with self.subTest(key=key):
+                self.assertIsNone(sections[key])
 
     def test_el_valor_de_la_meta_solo_se_guarda_con_valor_fijo(self):
         from sheets_reports.services.widget_service import WidgetService

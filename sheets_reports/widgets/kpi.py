@@ -100,28 +100,29 @@ class KpiWidget(BaseWidget):
              {"value": "pct", "label": "Porcentaje"},
              {"value": "abs", "label": "Absoluto"},
          ], "default": "pct"},
-        # El valor de la meta va junto al selector «Meta» y solo cuenta con «Valor fijo».
-        {"key": "target", "label": "Meta (valor)", "ui": "number", "step": 1,
-         "group": "card", "hidden": True, "placeholder": "Valor", "inline_with": "targetMetric",
+        # Sección plegable «Meta»: el selector, su valor (junto al selector, solo con «Valor
+        # fijo») y lo que depende de ella. El valor de la meta va inline con el selector.
+        {"key": "target", "section": "Meta", "label": "Meta (valor)", "ui": "number", "step": 1,
+         "group": "card", "hidden": True, "placeholder": "Valor", "short_label": "Valor", "inline_with": "targetMetric",
          "enabled_when": {"targetMetric": "fixed"}, "clear_when_disabled": True},
-        {"key": "targetMetric", "label": "Meta", "ui": "select", "group": "card",
+        {"key": "targetMetric", "section": "Meta", "label": "Valor objetivo", "ui": "select", "group": "card",
          "hidden": True, "options_from": "metrics",
          "options": [{"value": "", "label": "— elegir —"},
                      {"value": "fixed", "label": "Valor fijo"}], "default": ""},
         # Sin meta elegida, lo que depende de ella queda deshabilitado en el editor.
-        {"key": "targetLabel", "label": "Nombre", "ui": "text", "group": "card",
+        {"key": "targetLabel", "section": "Meta", "label": "Nombre de la meta", "ui": "text", "group": "card",
          "hidden": True, "enabled_when": {"targetMetric": True}, "default": "Meta"},
-        {"key": "statusBasis", "label": "Semáforo según", "ui": "select", "group": "card",
+        {"key": "statusBasis", "section": "Meta", "label": "Semáforo según", "ui": "select", "group": "card",
          "hidden": True, "enabled_when": {"targetMetric": True}, "options": [
              {"value": "", "label": "Automático"},
              {"value": "target_pct", "label": "% de la meta"},
              {"value": "value", "label": "Valor"},
          ], "default": ""},
-        {"key": "status_good", "label": "Umbral «bien» (%)", "ui": "number", "min": 0, "step": 1,
-         "group": "card", "hidden": True, "enabled_when": {"targetMetric": True}},
-        {"key": "status_warn", "label": "Umbral «ajuste» (%)", "ui": "number", "min": 0, "step": 1,
-         "group": "card", "hidden": True, "enabled_when": {"targetMetric": True}},
-        {"key": "higher_is_better", "label": "Más alto es mejor", "ui": "checkbox",
+        {"key": "status_good", "section": "Meta", "label": "Umbral «bien» (%)", "ui": "number", "min": 0, "step": 1,
+         "group": "card", "hidden": True, "short_label": "Bien (%)", "inline_with": "statusBasis", "enabled_when": {"targetMetric": True}},
+        {"key": "status_warn", "section": "Meta", "label": "Umbral «ajuste» (%)", "ui": "number", "min": 0, "step": 1,
+         "group": "card", "hidden": True, "short_label": "Ajuste (%)", "inline_with": "statusBasis", "enabled_when": {"targetMetric": True}},
+        {"key": "higher_is_better", "section": "Meta", "label": "Más alto es mejor", "ui": "checkbox",
          "group": "card", "hidden": True, "enabled_when": {"targetMetric": True}, "default": True},
     ]
 

@@ -401,13 +401,16 @@ Las 6 claves base (`dimensions`, `pivots`, `metrics`, `sort`, `limit`, `filters`
 | `min`, `max`, `step` | number | Rangos de `number` |
 | `placeholder` | str | Texto de ayuda del input |
 | `enabled_when` | dict | `{clave: valor}`: el control se habilita solo si cada clave del `style` vale eso; `true` = cualquier valor no vacío. Ej.: `{"targetMetric": "fixed"}` |
+| `short_label` | str | Etiqueta corta de un control `inline_with` (su columna es estrecha); `label` queda como tooltip |
 | `inline_with` | str | Clave de otro control: este (`text`/`number`) se dibuja a su derecha y no en su propia fila |
+| `section` | str | Título de una sección plegable (cerrada por defecto) del bloque del editor; sus controles deben ir seguidos en el schema. Ej.: «Meta» en el KPI |
 | `clear_when_disabled` | bool | Con `enabled_when` incumplido el valor no se guarda (`WidgetService._clean_style` y el editor al guardar) |
 
 `control_enabled(control, style)` (`widgets/base.py`) evalúa `enabled_when`; el editor aplica la
 misma regla en `controlDisabled`. Así el editor no nombra claves de ningún widget: el KPI
 declara que su meta (`target`) va junto al selector «Meta», que solo cuenta con «Valor fijo»,
-y que nombre, semáforo y umbrales piden una meta elegida.
+que nombre, semáforo y umbrales piden una meta elegida, y que todo eso va en la sección
+plegable «Meta».
 
 `test_lo_que_pinta_el_editor_es_el_manifiesto` garantiza que lo que dibuja el editor sale del
 manifiesto (`_widget_manifest`), no de código del frontend.

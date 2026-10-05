@@ -134,7 +134,10 @@ get hasLimit()        // !!capabilities.limit
 get hasTrend()        // !!capabilities.trend
 get trendOptions()    // dimension_fields (fallback: all_fields)
 get cardControls()    // style_schema con group: 'card' (sin los que van inline_with otro)
-inlineControls(control)   // controles con inline_with === control.key, a su derecha
+get cardSections()    // cardControls agrupados por `section` (consecutivos)
+sectionSummary(section)   // cabecera de una sección cerrada: lo elegido en su primer control
+inlineControls(control)   // controles con inline_with === control.key: columnas a su
+                          // derecha en la misma fila, con su short_label encima
 controlDisabled(control)  // enabled_when del style_schema no se cumple (misma regla que
                           // control_enabled en el backend)
 ```

@@ -488,63 +488,62 @@
         <div x-show="$store.dashboard.cardControls.length" class="space-y-3 rounded-xl border border-line/60 bg-paper/60 p-3">
           <label class="block text-xs font-semibold text-ink/70">Tarjeta KPI</label>
           <template x-for="control in $store.dashboard.cardControls" :key="control.key">
-            <div x-show="control.key !== 'target'">
+            <div>
               <label class="block text-[11px] font-semibold text-ink/60 mb-1"
                      x-show="control.ui !== 'checkbox'" x-text="control.label || control.key"
-                     x-bind:class="$store.dashboard.cardControlDisabled(control) ? 'opacity-40' : ''"></label>
-              <template x-if="control.ui === 'text'">
-                <input type="text" x-model="$store.dashboard.drawerDraft.style[control.key]"
-                       x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
-                       x-bind:placeholder="control.default != null ? String(control.default) : ''"
-                       class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
-              </template>
-              <template x-if="control.ui === 'number'">
-                <input type="number" x-model.number="$store.dashboard.drawerDraft.style[control.key]"
-                       x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
-                       x-bind:min="control.min" x-bind:max="control.max" x-bind:step="control.step || 1"
-                       class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
-              </template>
+                     x-bind:class="$store.dashboard.controlDisabled(control) ? 'opacity-40' : ''"></label>
               <template x-if="control.ui === 'checkbox'">
                 <label class="flex items-center gap-2 text-xs font-semibold text-ink/70 cursor-pointer"
-                       x-bind:class="$store.dashboard.cardControlDisabled(control) ? 'opacity-40 cursor-not-allowed' : ''">
+                       x-bind:class="$store.dashboard.controlDisabled(control) ? 'opacity-40 cursor-not-allowed' : ''">
                   <input type="checkbox" x-model="$store.dashboard.drawerDraft.style[control.key]"
-                         x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
+                         x-bind:disabled="$store.dashboard.controlDisabled(control)"
                          class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
                   <span x-text="control.label || control.key"></span>
                 </label>
               </template>
-              <template x-if="control.ui === 'select' && control.options_from === 'metrics' && control.key === 'targetMetric'">
-                <div class="flex gap-1.5">
+              <div x-show="control.ui !== 'checkbox'" class="flex gap-1.5">
+                <template x-if="control.ui === 'text'">
+                  <input type="text" x-model="$store.dashboard.drawerDraft.style[control.key]"
+                         x-bind:disabled="$store.dashboard.controlDisabled(control)"
+                         x-bind:placeholder="control.placeholder || (control.default != null ? String(control.default) : '')"
+                         class="flex-1 min-w-0 text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                </template>
+                <template x-if="control.ui === 'number'">
+                  <input type="number" x-model.number="$store.dashboard.drawerDraft.style[control.key]"
+                         x-bind:disabled="$store.dashboard.controlDisabled(control)"
+                         x-bind:placeholder="control.placeholder || ''"
+                         x-bind:min="control.min" x-bind:max="control.max" x-bind:step="control.step || 1"
+                         class="flex-1 min-w-0 text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                </template>
+                <!-- Un select con `options_from: 'metrics'` suma las métricas del borrador a sus opciones. -->
+                <template x-if="control.ui === 'select'">
                   <select x-model="$store.dashboard.drawerDraft.style[control.key]"
-                          x-on:change="$store.dashboard.onTargetMetricChange()"
-                          class="flex-1 text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
-                    <template x-for="o in $store.dashboard.metricRoleOptions(control)" :key="o.value">
+                          x-bind:disabled="$store.dashboard.controlDisabled(control)"
+                          class="flex-1 min-w-0 text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <template x-for="o in (control.options_from === 'metrics' ? $store.dashboard.metricRoleOptions(control) : (control.options || []))" :key="o.value">
                       <option x-bind:value="o.value" x-text="o.label"></option>
                     </template>
                   </select>
-                  <input type="number" x-model.number="$store.dashboard.drawerDraft.style.target"
-                         placeholder="Valor" step="1"
-                         x-bind:disabled="$store.dashboard.drawerDraft.style.targetMetric !== 'fixed'"
-                         class="w-24 text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
-                </div>
-              </template>
-              <template x-if="control.ui === 'select' && control.options_from === 'metrics' && control.key !== 'targetMetric'">
-                <select x-model="$store.dashboard.drawerDraft.style[control.key]"
-                        class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
-                  <template x-for="o in $store.dashboard.metricRoleOptions(control)" :key="o.value">
-                    <option x-bind:value="o.value" x-text="o.label"></option>
-                  </template>
-                </select>
-              </template>
-              <template x-if="control.ui === 'select' && !control.options_from">
-                <select x-model="$store.dashboard.drawerDraft.style[control.key]"
-                        x-bind:disabled="$store.dashboard.cardControlDisabled(control)"
-                        class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
-                  <template x-for="o in control.options || []" :key="o.value">
-                    <option x-bind:value="o.value" x-text="o.label"></option>
-                  </template>
-                </select>
-              </template>
+                </template>
+                <!-- Controles declarados con `inline_with`: van a la derecha de este. -->
+                <template x-for="inline in $store.dashboard.inlineControls(control)" :key="inline.key">
+                  <div class="w-24 shrink-0">
+                    <template x-if="inline.ui === 'number'">
+                      <input type="number" x-model.number="$store.dashboard.drawerDraft.style[inline.key]"
+                             x-bind:disabled="$store.dashboard.controlDisabled(inline)"
+                             x-bind:placeholder="inline.placeholder || inline.label || ''"
+                             x-bind:min="inline.min" x-bind:max="inline.max" x-bind:step="inline.step || 1"
+                             class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                    </template>
+                    <template x-if="inline.ui === 'text'">
+                      <input type="text" x-model="$store.dashboard.drawerDraft.style[inline.key]"
+                             x-bind:disabled="$store.dashboard.controlDisabled(inline)"
+                             x-bind:placeholder="inline.placeholder || inline.label || ''"
+                             class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
+                    </template>
+                  </div>
+                </template>
+              </div>
             </div>
           </template>
         </div>

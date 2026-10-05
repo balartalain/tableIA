@@ -223,16 +223,6 @@ class ViewsTests(TestCase):
         self.assertEqual(self.widget.fields["dimensions"], ["categoria"])
         self.assertEqual(self.widget.style, {"stacked": True})
 
-    def test_widget_config_devuelve_el_style_schema(self, _df):
-        r = self.client.get(f"/api/widget/{self.widget.id}/config/")
-        self.assertEqual(r.status_code, 200)
-        body = r.json()
-        self.assertEqual(body["type"], "bar")
-        self.assertEqual(body["fields"], self.widget.fields)
-        keys = [c["key"] for c in body["style_schema"]]
-        self.assertIn("stacked", keys)
-        self.assertIn("color_scheme", keys)
-
     def test_eliminar_widget(self, _df):
         r = self.client.delete(f"/api/widget/{self.widget.id}/")
         self.assertEqual(r.status_code, 200)
@@ -242,7 +232,6 @@ class ViewsTests(TestCase):
         other = get_user_model().objects.create(username="otro")
         dashboard = Dashboard.objects.create(nombre="Ajeno", owner=other, sheet_url="https://x/es")
         widget = Widget.objects.create(dashboard=dashboard, type="bar", fields=fields(), style={})
-        self.assertEqual(self.client.get(f"/api/widget/{widget.id}/config/").status_code, 404)
         self.assertEqual(self.client.delete(f"/api/widget/{widget.id}/").status_code, 404)
 
     # ---------------------------------------------------------------- schema

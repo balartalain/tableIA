@@ -1,6 +1,6 @@
 """
 Garantías del diseño: agregar un widget es registrar una clase en un solo archivo (sin tocar
-otros módulos) y las capas no se mezclan (dsl, motor, widgets, servicios, vistas).
+otros módulos) y las capas no se mezclan (utils, motor, widgets, servicios, vistas).
 """
 import ast
 import sys
@@ -26,7 +26,7 @@ STYLE_UI = {"text", "select", "checkbox", "number"}
 
 
 class LayerTests(SimpleTestCase):
-    """dsl/ no conoce widgets ni el motor; el motor no conoce widgets; nadie importa la IA."""
+    """utils/ y el motor no conocen widgets ni servicios; nadie importa la IA."""
 
     def imports(self, folder: str) -> list[tuple[Path, str]]:
         """Imports del paquete en ejecución: se ignoran los que solo existen para el tipado
@@ -48,9 +48,9 @@ class LayerTests(SimpleTestCase):
                     found += [(path, alias.name) for alias in node.names]
         return found
 
-    def test_dsl_no_importa_widgets_ni_motor(self):
-        bad = [(p.name, m) for p, m in self.imports("dsl")
-               if m.startswith(("sheets_reports.widgets", "sheets_reports.engine", "sheets_reports.services"))]
+    def test_utils_no_importa_widgets_ni_servicios(self):
+        bad = [(p.name, m) for p, m in self.imports("utils")
+               if m.startswith(("sheets_reports.widgets", "sheets_reports.services"))]
         self.assertEqual(bad, [])
 
     def test_motor_no_importa_widgets_ni_servicios(self):
@@ -58,10 +58,10 @@ class LayerTests(SimpleTestCase):
                if m.startswith(("sheets_reports.widgets", "sheets_reports.services"))]
         self.assertEqual(bad, [])
 
-    def test_dsl_no_nombra_widgets_concretos(self):
+    def test_utils_no_nombra_widgets_concretos(self):
         keys = set(WIDGETS.keys())
         found = []
-        for path in (PACKAGE / "dsl").rglob("*.py"):
+        for path in (PACKAGE / "utils").rglob("*.py"):
             for node in ast.walk(ast.parse(path.read_text())):
                 if isinstance(node, ast.Constant) and node.value in keys:
                     found.append((path.name, node.value))
@@ -81,11 +81,10 @@ class LayerTests(SimpleTestCase):
                 bad += [(path.name, m) for m in modules if m.startswith("google.genai")]
         self.assertEqual(bad, [])
 
-    def test_no_queda_el_dsl_legacy(self):
-        gone = ["metrics.py", "parts.py", "spec.py", "rules.py", "aggregations.py",
-                "calc_ops.py", "groups.py", "views.py.bak"]
-        leftovers = [name for name in gone if (PACKAGE / "dsl" / name).exists()]
-        leftovers += [name for name in ("executor.py", "results.py", "plans") if (PACKAGE / "engine" / name).exists()]
+    def test_no_queda_codigo_legacy(self):
+        leftovers = ["dsl"] if (PACKAGE / "dsl").exists() else []
+        leftovers += [name for name in ("executor.py", "results.py", "plans", "pipeline.py")
+                      if (PACKAGE / "engine" / name).exists()]
         leftovers += [name for name in ("chart.py", "view.py") if (PACKAGE / "widgets" / name).exists()]
         self.assertEqual(leftovers, [])
 

@@ -4,8 +4,9 @@ Cada tipo de widget declara su `style_schema`, sus capacidades y su lógica de c
 Tres capas, sin DSL:
   1. `WidgetFields` / `WidgetStyle` (dataclasses planas) describen la consulta y la apariencia.
   2. `style_schema` (lista declarativa estática) dice a la UI qué controles dibujar.
-  3. `process_query` delega la ejecución al `PipelineExecutor` (Filter → Aggregation/Pivot →
-     Calculated → Window → Sort/Limit).
+  3. `process_query` encadena los pasos del motor (`engine/steps/`: filtro → agregación/pivote
+     → fórmulas → ventanas → orden/límite); un widget atípico lo sobrescribe y reusa solo los
+     pasos que le sirven.
 """
 from __future__ import annotations
 
@@ -15,8 +16,8 @@ from typing import Any, ClassVar, Dict, List, Optional
 
 import pandas as pd
 
-from sheets_reports.dsl.registry import Registry
-from sheets_reports.engine.pipeline import PipelineExecutor
+from sheets_reports.engine.steps import run_steps
+from sheets_reports.utils.registry import Registry
 from sheets_reports.widgets.schemas import WidgetFields, WidgetForm, WidgetStyle
 
 # Registry global de widgets
@@ -76,9 +77,6 @@ class BaseWidget(ABC):
     # Schema declarativo para el panel «Personalizar» (backend-driven).
     style_schema: ClassVar[List[Dict[str, Any]]] = []
 
-    # Configuración por defecto del estilo.
-    defaults: ClassVar[dict] = {}
-
     # Reglas del tipo, planas y declarativas (antes vivían en subclases de SpecPart).
     capabilities: ClassVar[dict] = {}
     max_per_dashboard: ClassVar[Optional[int]] = None
@@ -89,9 +87,8 @@ class BaseWidget(ABC):
 
     # ------------------------------------------------------------------ datos
     def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:
-        """Pipeline secuencial de transformación sobre el DataFrame (o QuerySet)."""
-        raw = PipelineExecutor().execute(df, fields, widget_type=self.type_key)
-        return WidgetResult.from_pipeline(raw)
+        """La secuencia por defecto de los pasos del motor sobre el DataFrame."""
+        return WidgetResult.from_pipeline(run_steps(df, fields, widget_type=self.type_key))
 
     def compile(
         self,
@@ -126,10 +123,16 @@ class BaseWidget(ABC):
         return {"render_data": render_data, "widget_form": form.to_dict()}
 
     # ---------------------------------------------------------------- estilo
-    def get_style_schema(self) -> List[Dict[str, Any]]:
-        """El schema declarativo para el panel «Personalizar»."""
-        return self.style_schema
-
     def style_defaults(self) -> dict:
         """Valores por defecto de los controles del `style_schema`."""
         return {c["key"]: c["default"] for c in self.style_schema if "default" in c}
+
+
+def control_enabled(control: dict, style: dict) -> bool:
+    """¿Está habilitado el control con estos valores de estilo? `enabled_when` pide que cada
+    clave valga lo indicado (`True` = cualquier valor no vacío)."""
+    for key, expected in (control.get("enabled_when") or {}).items():
+        value = (style or {}).get(key)
+        if (not value) if expected is True else value != expected:
+            return False
+    return True

@@ -64,6 +64,22 @@ class StyleSchemaTests(SimpleTestCase):
             with_control_default = [c["key"] for c in widget.style_schema if "default" in c]
             self.assertEqual(sorted(defaults), sorted(with_control_default), key)
 
+    def test_las_dependencias_entre_controles_apuntan_a_controles_del_mismo_widget(self):
+        """`enabled_when` e `inline_with` nombran claves del propio schema, y
+        `clear_when_disabled` solo tiene sentido con `enabled_when`."""
+        for key, widget in WIDGETS.items():
+            keys = {c["key"] for c in widget.style_schema}
+            for control in widget.style_schema:
+                with self.subTest(widget=key, control=control["key"]):
+                    for other in control.get("enabled_when") or {}:
+                        self.assertIn(other, keys)
+                        self.assertNotEqual(other, control["key"])
+                    if "inline_with" in control:
+                        self.assertIn(control["inline_with"], keys)
+                        self.assertIn(control["ui"], {"text", "number"})
+                    if control.get("clear_when_disabled"):
+                        self.assertTrue(control.get("enabled_when"))
+
     def test_estilos_fuera_del_schema_no_llegan_al_form(self):
         from sheets_reports.services.widget_service import WidgetService
         service = WidgetService.__new__(WidgetService)
@@ -145,6 +161,27 @@ class KpiCardBlockTests(SimpleTestCase):
         self.assertEqual(cleaned, {"primary": "plan", "compare": "actual",
                                    "targetMetric": "fixed", "statusBasis": "target_pct",
                                    "target": 100})
+
+
+    def test_el_valor_de_la_meta_solo_se_guarda_con_valor_fijo(self):
+        from sheets_reports.services.widget_service import WidgetService
+        service = WidgetService.__new__(WidgetService)
+        self.assertEqual(service._clean_style("kpi", {"targetMetric": "plan", "target": 100}),
+                         {"targetMetric": "plan"})
+        self.assertEqual(service._clean_style("kpi", {"target": 100}), {})
+        self.assertEqual(service._clean_style("kpi", {"targetMetric": "fixed", "target": 100}),
+                         {"targetMetric": "fixed", "target": 100})
+
+    def test_sin_meta_los_controles_que_dependen_de_ella_se_deshabilitan(self):
+        from sheets_reports.widgets.base import control_enabled
+        schema = {c["key"]: c for c in WIDGETS.get("kpi").style_schema}
+        for key in ("targetLabel", "statusBasis", "status_good", "status_warn", "higher_is_better"):
+            with self.subTest(key=key):
+                self.assertFalse(control_enabled(schema[key], {"targetMetric": ""}))
+                self.assertTrue(control_enabled(schema[key], {"targetMetric": "plan"}))
+        self.assertFalse(control_enabled(schema["target"], {"targetMetric": "plan"}))
+        self.assertTrue(control_enabled(schema["target"], {"targetMetric": "fixed"}))
+        self.assertTrue(control_enabled(schema["primary"], {}))
 
 
 class TotalsByLevelTests(SimpleTestCase):

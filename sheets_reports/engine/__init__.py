@@ -1,30 +1,5 @@
-"""
-Motor de ejecución simplificado: PipelineExecutor + steps.
+"""El motor de consultas: pasos atómicos en `engine/steps/` y el contexto de la hoja."""
+from sheets_reports.engine.steps import build_query_result, run_steps
+from sheets_reports.engine.steps.aggregation import AGGREGATIONS, ResultTooLargeError, agg_name
 
-    FilterStep → AggregationOrPivotStep → CalculatedMetricsStep → WindowFunctionsStep
-    → SortLimitStep
-"""
-from sheets_reports.engine.pipeline import (
-    AggregationOrPivotStep,
-    CalculatedMetricsStep,
-    FilterStep,
-    PipelineContext,
-    PipelineExecutor,
-    PipelineStep,
-    ResultTooLargeError,
-    SortLimitStep,
-    WindowFunctionsStep,
-)
-
-
-__all__ = [
-    "PipelineExecutor",
-    "PipelineContext",
-    "PipelineStep",
-    "FilterStep",
-    "AggregationOrPivotStep",
-    "CalculatedMetricsStep",
-    "WindowFunctionsStep",
-    "SortLimitStep",
-    "ResultTooLargeError",
-]
+__all__ = ["run_steps", "build_query_result", "AGGREGATIONS", "agg_name", "ResultTooLargeError"]

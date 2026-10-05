@@ -1,8 +1,8 @@
 """Fixtures de la suite: la hoja de ventas de prueba y helpers para armar `WidgetForm`."""
 import pandas as pd
 
-from sheets_reports.dsl.context import SheetContext
-from sheets_reports.engine.pipeline import PipelineExecutor
+from sheets_reports.engine import run_steps
+from sheets_reports.engine.context import SheetContext
 from sheets_reports.services.ai_spec import form_errors
 from sheets_reports.widgets import WIDGETS
 from sheets_reports.widgets.schemas import WidgetFields, WidgetForm
@@ -103,8 +103,8 @@ def compiled(widget_type: str, fields_data: dict | None = None, style: dict | No
 
 
 def execute(df: pd.DataFrame, fields_data: dict):
-    """El pipeline crudo, sin pasar por un widget."""
-    return PipelineExecutor().execute(df, WidgetFields.from_dict(fields_data))
+    """Los pasos del motor, sin pasar por un widget."""
+    return run_steps(df, WidgetFields.from_dict(fields_data))
 
 
 def errors_for(widget_type: str, fields_data: dict, style: dict | None = None,

@@ -1,11 +1,13 @@
-"""El pipeline secuencial: filtros → agregación/pivote → fórmulas → ventanas → orden/límite."""
+"""Los pasos del motor: → agregación/pivote → fórmulas → ventanas → orden/límite."""
 from unittest import mock
 
 import pandas as pd
 from django.test import SimpleTestCase
 
 from sheets_reports.engine import ResultTooLargeError
-from sheets_reports.engine.pipeline import AGGREGATIONS, PipelineExecutor, agg_name
+from sheets_reports.engine import AGGREGATIONS, agg_name, build_query_result, run_steps
+from sheets_reports.engine.steps.aggregation import apply_aggregation
+from sheets_reports.engine.steps.filter import filter_rows
 from sheets_reports.tests.fixtures import agg, calc, execute, fields, sales_df, sellers_df
 from sheets_reports.widgets.schemas import WidgetFields
 
@@ -88,7 +90,7 @@ class PivotTests(SimpleTestCase):
             "b": list("uvwxyz"),
             "c": range(6),
         })
-        with mock.patch("sheets_reports.engine.pipeline.MAX_PIVOT_CELLS", 4):
+        with mock.patch("sheets_reports.engine.steps.aggregation.MAX_PIVOT_CELLS", 4):
             with self.assertRaises(ResultTooLargeError) as ctx:
                 execute(df, fields(dimensions=["a"], pivots=["b"], metrics=[agg("total", field="c")]))
         self.assertIn("celdas", str(ctx.exception))
@@ -150,7 +152,7 @@ class SortLimitTests(SimpleTestCase):
 
 
 class MetadataTests(SimpleTestCase):
-    def test_el_pipeline_deja_la_metadata_que_usan_los_widgets(self):
+    def test_los_pasos_dejan_la_metadata_que_usan_los_widgets(self):
         out = execute(sales_df(), fields(pivots=["mes"], metrics=[agg("total")]))
         meta = out["metadata"]
         self.assertEqual(meta["dimensions"], ["categoria"])
@@ -158,9 +160,12 @@ class MetadataTests(SimpleTestCase):
         self.assertEqual(meta["pivot_column"], "mes")
         self.assertEqual(meta["metrics"], [agg("total")])
 
-    def test_pipeline_con_pasos_elegidos(self):
-        out = PipelineExecutor(steps=["filter", "aggregation"]).execute(
-            sellers_df(), WidgetFields.from_dict(fields(dimensions=[], metrics=[agg("total", field="plan")])))
+    def test_un_widget_puede_encadenar_solo_algunos_pasos(self):
+        form_fields = WidgetFields.from_dict(fields(dimensions=[], metrics=[agg("total", field="plan")]))
+        metadata = {}
+        df = filter_rows(sellers_df(), form_fields.filters, metadata)
+        df = apply_aggregation(df, form_fields, metadata)
+        out = build_query_result(df, form_fields, metadata)
         self.assertEqual(out["data"]["values"]["total"], 1020.0)
 
 
@@ -171,8 +176,7 @@ class NestedPivotTests(SimpleTestCase):
 
     @staticmethod
     def nested(df, **overrides):
-        out = PipelineExecutor().execute(df, WidgetFields.from_dict(fields(**overrides)),
-                                          widget_type="dynamic_table")
+        out = run_steps(df, WidgetFields.from_dict(fields(**overrides)), widget_type="dynamic_table")
         return out["metadata"]["nested"]
 
     def test_anida_filas_columnas_y_celdas(self):
@@ -212,9 +216,9 @@ class NestedPivotTests(SimpleTestCase):
 
     def test_un_cruce_demasiado_grande_se_corta(self):
         df = pd.DataFrame({"a": list("abcdef"), "b": list("uvwxyz"), "c": range(6)})
-        with mock.patch("sheets_reports.engine.pipeline.MAX_PIVOT_CELLS", 4):
+        with mock.patch("sheets_reports.engine.steps.aggregation.MAX_PIVOT_CELLS", 4):
             with self.assertRaises(ResultTooLargeError) as ctx:
-                PipelineExecutor().execute(df, WidgetFields.from_dict(
+                run_steps(df, WidgetFields.from_dict(
                     fields(dimensions=["a"], pivots=["b"], metrics=[agg("total", field="c")])),
                     widget_type="dynamic_table")
         self.assertIn("celdas", str(ctx.exception))

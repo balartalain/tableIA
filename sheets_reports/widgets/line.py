@@ -71,7 +71,7 @@ class LineWidget(BaseWidget):
         sort_by = fields.sort_by if fields else None
         if not sort_by and categories:
             try:
-                from sheets_reports.dsl.ordering import chronological
+                from sheets_reports.utils.data import chronological
 
                 ordered = chronological(categories)
                 if ordered != categories:

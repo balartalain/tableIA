@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from sheets_reports.dsl.values import is_number, to_python
+from sheets_reports.utils.data import is_number, to_python
 
 TOTAL_LABEL = "Total general"
 
@@ -40,7 +40,7 @@ def column_values(df: pd.DataFrame, column: str) -> list:
 
 
 def metric_alias(metric: dict) -> str:
-    return metric.get("alias") or metric.get("as") or metric.get("field", "")
+    return metric.get("alias") or metric.get("field", "")
 
 
 def metric_label(metric: dict) -> str:

@@ -7,8 +7,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 
 import pandas as pd
 
-from sheets_reports.dsl.ordering import chronological
-from sheets_reports.dsl.values import to_key
+from sheets_reports.utils.data import chronological, to_key
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
 from sheets_reports.widgets.presentation import metric_alias, metric_label
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
@@ -21,7 +20,7 @@ MAX_TREND_POINTS = 60
 
 def _chronological_keys(series: pd.Series) -> list:
     """Valores distintos de la columna de la tendencia, de lo más antiguo a lo más reciente
-    (ver dsl/ordering.chronological). Nunca en el orden de la hoja."""
+    (ver utils/data.chronological). Nunca en el orden de la hoja."""
     keys = list(pd.unique(series.dropna()))
     if pd.api.types.is_numeric_dtype(series):
         by_key = {to_key(k): k for k in keys}
@@ -101,26 +100,29 @@ class KpiWidget(BaseWidget):
              {"value": "pct", "label": "Porcentaje"},
              {"value": "abs", "label": "Absoluto"},
          ], "default": "pct"},
+        # El valor de la meta va junto al selector «Meta» y solo cuenta con «Valor fijo».
         {"key": "target", "label": "Meta (valor)", "ui": "number", "step": 1,
-         "group": "card", "hidden": True},
+         "group": "card", "hidden": True, "placeholder": "Valor", "inline_with": "targetMetric",
+         "enabled_when": {"targetMetric": "fixed"}, "clear_when_disabled": True},
         {"key": "targetMetric", "label": "Meta", "ui": "select", "group": "card",
          "hidden": True, "options_from": "metrics",
          "options": [{"value": "", "label": "— elegir —"},
                      {"value": "fixed", "label": "Valor fijo"}], "default": ""},
+        # Sin meta elegida, lo que depende de ella queda deshabilitado en el editor.
         {"key": "targetLabel", "label": "Nombre", "ui": "text", "group": "card",
-         "hidden": True, "default": "Meta"},
+         "hidden": True, "enabled_when": {"targetMetric": True}, "default": "Meta"},
         {"key": "statusBasis", "label": "Semáforo según", "ui": "select", "group": "card",
-         "hidden": True, "options": [
+         "hidden": True, "enabled_when": {"targetMetric": True}, "options": [
              {"value": "", "label": "Automático"},
              {"value": "target_pct", "label": "% de la meta"},
              {"value": "value", "label": "Valor"},
          ], "default": ""},
         {"key": "status_good", "label": "Umbral «bien» (%)", "ui": "number", "min": 0, "step": 1,
-         "group": "card", "hidden": True},
+         "group": "card", "hidden": True, "enabled_when": {"targetMetric": True}},
         {"key": "status_warn", "label": "Umbral «ajuste» (%)", "ui": "number", "min": 0, "step": 1,
-         "group": "card", "hidden": True},
+         "group": "card", "hidden": True, "enabled_when": {"targetMetric": True}},
         {"key": "higher_is_better", "label": "Más alto es mejor", "ui": "checkbox",
-         "group": "card", "hidden": True, "default": True},
+         "group": "card", "hidden": True, "enabled_when": {"targetMetric": True}, "default": True},
     ]
 
     # ------------------------------------------------------------------ datos

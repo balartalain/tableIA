@@ -7,7 +7,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 
 import pandas as pd
 
-from sheets_reports.engine.pipeline import cell_field, total_field
+from sheets_reports.engine.steps.aggregation import cell_field, total_field
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
 from sheets_reports.widgets.presentation import (
     TOTAL_LABEL,

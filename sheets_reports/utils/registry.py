@@ -1,5 +1,5 @@
 """
-Registro genérico de piezas del DSL (operadores, agregaciones, métricas, planes, widgets).
+Registro genérico de piezas por clave (operadores de filtro, valores relativos, widgets).
 
 Cada pieza es una clase con un `key` que se registra con `@REGISTRO.register`. El resto del
 sistema recorre el registro (enums del JSON Schema, choices del modelo, tool de la IA) en vez

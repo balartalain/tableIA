@@ -8,14 +8,14 @@ from typing import Optional
 
 import pandas as pd
 
-from sheets_reports.dsl.conditions import Condition, apply_filters, condition_errors, parse_conditions
-from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.errors import SpecValidationError
-from sheets_reports.dsl.schema import MAX_BOARD_IN_VALUES
+from sheets_reports.engine.steps.filter import Condition, apply_filters, condition_errors, parse_conditions
+from sheets_reports.engine.context import SheetContext
+from sheets_reports.utils.validation import MAX_BOARD_IN_VALUES, SpecValidationError
 from sheets_reports.engine import ResultTooLargeError
 from sheets_reports.models import Widget, default_position
 from sheets_reports.services.ai_spec import form_errors
 from sheets_reports.widgets import WIDGETS
+from sheets_reports.widgets.base import control_enabled
 from sheets_reports.widgets.schemas import WidgetForm
 
 logger = logging.getLogger(__name__)
@@ -85,10 +85,15 @@ class WidgetService:
         return widget
 
     def _clean_style(self, widget_type: str, style: dict) -> dict:
-        """El estilo lo define el `style_schema` del tipo: una clave fuera de él se descarta."""
-        definition = WIDGETS.get(widget_type)
-        known = {c["key"] for c in (definition.style_schema or [])}
-        return {k: v for k, v in (style or {}).items() if k in known}
+        """El estilo lo define el `style_schema` del tipo: una clave fuera de él se descarta, y
+        también la de un control deshabilitado que lo pide (`clear_when_disabled`)."""
+        style = style or {}
+        controls = {c["key"]: c for c in (WIDGETS.get(widget_type).style_schema or [])}
+        return {
+            k: v for k, v in style.items()
+            if k in controls and not (controls[k].get("clear_when_disabled")
+                                      and not control_enabled(controls[k], style))
+        }
 
     def _validate(self, widget_type: str, form: WidgetForm, title) -> None:
         """Mismas reglas que la IA: un form que no pasa no llega a guardarse."""

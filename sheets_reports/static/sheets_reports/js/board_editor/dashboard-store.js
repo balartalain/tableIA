@@ -27,7 +27,7 @@ const EMPTY_FIELDS = () => ({
   limit: null,
 });
 
-// Operadores del motor de filtros (dsl/conditions.py) con su etiqueta para el editor.
+// Operadores del motor de filtros (engine/steps/filter.py) con su etiqueta para el editor.
 const FILTER_OPS = [
   { value: 'eq', label: 'es igual a', needsValue: true },
   { value: 'ne', label: 'es distinto de', needsValue: true },
@@ -417,17 +417,21 @@ document.addEventListener('alpine:init', () => {
     },
     get metricTypeOptions() { return METRIC_TYPE_OPTIONS; },
     get calcOpOptions() { return CALC_OP_OPTIONS; },
-    // Controles del bloque «Tarjeta KPI»: el style_schema con `group: 'card'`.
+    // Controles del bloque «Tarjeta KPI»: el style_schema con `group: 'card'`. Los que van
+    // junto a otro control (`inline_with`) se pintan dentro de ese, no en su propia fila.
     get cardControls() {
-      return (this.drawerManifest.style_schema || []).filter(c => c.group === 'card');
+      return (this.drawerManifest.style_schema || [])
+        .filter(c => c.group === 'card' && !c.inline_with);
     },
-    // Sin meta elegida («— elegir —»), los controles que dependen de la meta quedan deshabilitados.
-    get noMeta() {
-      return !this.drawerDraft.style.targetMetric;
+    inlineControls(control) {
+      return (this.drawerManifest.style_schema || []).filter(c => c.inline_with === control.key);
     },
-    cardControlDisabled(control) {
-      if (!this.noMeta) return false;
-      return ['targetLabel', 'statusBasis', 'status_good', 'status_warn', 'higher_is_better'].includes(control.key);
+    // `enabled_when` del style_schema: cada clave debe valer lo pedido (true = no vacía).
+    // Misma regla que `control_enabled` en el backend.
+    controlDisabled(control) {
+      const style = this.drawerDraft.style || {};
+      return Object.entries((control && control.enabled_when) || {})
+        .some(([key, expected]) => (expected === true ? !style[key] : style[key] !== expected));
     },
     // Opciones de un control de rol del KPI: su opción vacía + las métricas del borrador.
     metricRoleOptions(control) {
@@ -692,13 +696,6 @@ document.addEventListener('alpine:init', () => {
       this.reconcileFormulas();
     },
 
-    // El selector de Meta decide si hay barra: solo «Valor fijo» habilita el input numérico.
-    onTargetMetricChange() {
-      if (this.drawerDraft.style.targetMetric !== 'fixed') {
-        this.drawerDraft.style.target = '';
-      }
-    },
-
     // La expression del cálculo: solo con los operandos completos y evaluables.
     formulaExpression(metric, index) {
       const list = this.drawerDraft.fields.metrics || [];
@@ -776,13 +773,14 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Los roles del KPI (y los operandos de un cálculo) apuntan al alias: si cambia, siguen.
+    // Los controles que eligen una métrica (`options_from: 'metrics'`) y los operandos de un
+    // cálculo apuntan al alias: si cambia, siguen.
     _rebindAlias(oldAlias, newAlias) {
       if (!oldAlias) return;
       const style = this.drawerDraft.style || {};
-      ['primary', 'compare', 'targetMetric'].forEach(key => {
-        if (style[key] === oldAlias) style[key] = newAlias || '';
-      });
+      (this.drawerManifest.style_schema || [])
+        .filter(c => c.options_from === 'metrics')
+        .forEach(c => { if (style[c.key] === oldAlias) style[c.key] = newAlias || ''; });
       (this.drawerDraft.fields.metrics || []).forEach(m => {
         if (!m || m.type !== 'formula') return;
         if (m.left === oldAlias) m.left = newAlias || '';
@@ -933,8 +931,10 @@ document.addEventListener('alpine:init', () => {
         const style = JSON.parse(JSON.stringify(draft.style || {}));
         const title = String(draft.title || '').trim() || w.title;
         style.title = title;
-        // Meta: sin «Valor fijo» elegido, el valor numérico no se guarda (no hay barra).
-        if (style.targetMetric !== 'fixed') delete style.target;
+        // Un control deshabilitado que lo pide (`clear_when_disabled`) no se guarda.
+        (this.drawerManifest.style_schema || [])
+          .filter(c => c.clear_when_disabled && this.controlDisabled(c))
+          .forEach(c => { delete style[c.key]; });
 
         w.title = title;
         w.fields = fields;

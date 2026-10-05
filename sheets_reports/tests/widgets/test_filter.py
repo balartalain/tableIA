@@ -44,7 +44,7 @@ class BoardFilterTests(TestCase):
     """La selección de la caja viaja en `?filters=` y define el universo de todos los widgets."""
 
     def test_filters_de_tablero_sobre_un_widget_del_tablero(self):
-        from sheets_reports.dsl.conditions import apply_filters, parse_conditions
+        from sheets_reports.engine.steps.filter import apply_filters, parse_conditions
         conditions = parse_conditions([{"field": "categoria", "op": "in", "value": ["Hogar", "Ropa"]}])
         df = apply_filters(sales_df(), conditions)
         out = WIDGETS.get("bar").render(df, {"fields": fields(), "style": {}})["render_data"]

@@ -6,7 +6,7 @@ import pandas as pd
 @dataclass(frozen=True)
 class SheetContext:
     """
-    Lo que el DSL necesita saber de la hoja: sus columnas reales (de ahí salen los `enum` del
+    Lo que el motor y la validación necesitan saber de la hoja: sus columnas reales (de ahí salen los `enum` del
     JSON Schema), cuáles son numéricas y el gid de la pestaña que se está leyendo.
     `samples` son valores de ejemplo por columna, solo para el contexto de la IA.
     """

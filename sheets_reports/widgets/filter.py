@@ -6,8 +6,8 @@ from typing import Any, ClassVar, Dict, List, Optional
 import pandas as pd
 
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
-from sheets_reports.dsl.conditions import distinct_values
-from sheets_reports.dsl.values import to_python
+from sheets_reports.engine.steps.filter import distinct_values
+from sheets_reports.utils.data import to_python
 from sheets_reports.widgets.presentation import humanize
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 

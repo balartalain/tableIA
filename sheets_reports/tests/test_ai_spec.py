@@ -6,7 +6,7 @@ from unittest import mock
 import pandas as pd
 from django.test import SimpleTestCase
 
-from sheets_reports.dsl.context import SheetContext
+from sheets_reports.engine.context import SheetContext
 from sheets_reports.services import ai_spec
 from sheets_reports.services.ai_spec import (
     SpecGenerationError,

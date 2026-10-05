@@ -1,14 +1,14 @@
-"""Errores de validación y su traducción a mensajes legibles (para el usuario y para la IA)."""
-import re
+"""Errores de validación legibles (para el usuario y para la IA) y límites del lenguaje de consulta."""
+from __future__ import annotations
 
+import re
 from jsonschema import Draft202012Validator
 
-from sheets_reports.dsl.context import SheetContext
+from sheets_reports.engine.context import SheetContext
 
 
 class SpecValidationError(Exception):
     """La configuración del widget no es válida; `errors` son mensajes legibles."""
-
     def __init__(self, errors: list[str]):
         self.errors = errors
         super().__init__("; ".join(errors))
@@ -55,3 +55,26 @@ def schema_errors(schema: dict, instance, ctx: SheetContext) -> list[str]:
     """Errores de `instance` contra `schema`, como mensajes legibles y sin repetir."""
     errors = sorted(Draft202012Validator(schema).iter_errors(instance), key=lambda e: list(e.absolute_path))
     return unique(_readable(e, ctx) for e in _leaf_errors(errors))
+
+
+# --- Límites y piezas comunes de los JSON Schema ---
+SCALAR = {"type": ["string", "number", "boolean"]}
+
+MAX_METRICS = 5
+MAX_FILTERS = 20
+MAX_IN_VALUES = 200
+MAX_BOARD_IN_VALUES = 5000
+MAX_LIMIT = 100
+MAX_DIMENSIONS = 3
+MAX_PIVOTS = 2
+MAX_COLUMNS = 50
+
+AS_PATTERN = r"^[a-z][a-z0-9_]{0,62}$"
+
+
+def field_enum(fields) -> dict:
+    return {"enum": list(fields)}
+
+
+def enum_of(registry) -> dict:
+    return {"enum": registry.keys()}

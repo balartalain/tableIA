@@ -2,8 +2,8 @@
 y de las condiciones de filtro (`condition_errors`)."""
 from django.test import SimpleTestCase
 
-from sheets_reports.dsl.conditions import condition_errors, distinct_values
-from sheets_reports.dsl.context import SheetContext
+from sheets_reports.engine.context import SheetContext
+from sheets_reports.engine.steps.filter import condition_errors, distinct_values
 from sheets_reports.tests.fixtures import agg, errors_for, fields, sales_ctx, sales_df, table_fields
 
 

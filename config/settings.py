@@ -148,6 +148,12 @@ STATIC_URL = f'{REPORT_PATH}/static/'
 # Carpeta donde `collectstatic` reúne todos los estáticos para producción.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# `{% static %}` añade la versión del archivo (?v=<mtime>): un JS cambiado nunca sale de caché.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "sheets_reports.storage.VersionedStaticFilesStorage"},
+}
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 

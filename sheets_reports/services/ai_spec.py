@@ -14,10 +14,10 @@ from django.conf import settings
 from google import genai
 from google.genai import types
 
-from sheets_reports.dsl.conditions import condition_errors
-from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.schema import MAX_IN_VALUES
-from sheets_reports.engine.pipeline import AGGREGATIONS
+from sheets_reports.engine.steps.filter import condition_errors
+from sheets_reports.engine.context import SheetContext
+from sheets_reports.utils.validation import MAX_IN_VALUES
+from sheets_reports.engine import AGGREGATIONS
 from sheets_reports.widgets import WIDGETS
 from sheets_reports.widgets.presentation import AGG_LABELS
 from sheets_reports.widgets.schemas import WidgetForm
@@ -356,7 +356,7 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
 
 
 def condition_schema_for(ctx: SheetContext) -> dict:
-    from sheets_reports.dsl.conditions import conditions_schema
+    from sheets_reports.engine.steps.filter import conditions_schema
     return conditions_schema(ctx, MAX_IN_VALUES)
 
 

@@ -1,6 +1,6 @@
 """
-Condiciones sobre filas ({field, op, value | relative}): los filtros del widget, de una
-métrica y del tablero.
+Paso 1 del motor (`filter_rows`) y las condiciones sobre filas ({field, op, value | relative})
+que lo componen: los filtros del widget, de una métrica y del tablero.
 
 Cada operador es una estrategia registrada en FILTER_OPS que reúne su regla (qué valor lleva,
 si exige columna numérica) y su implementación (la máscara de pandas). Cada valor relativo
@@ -15,11 +15,12 @@ from typing import Any, ClassVar
 
 import pandas as pd
 
-from sheets_reports.dsl.context import SheetContext
-from sheets_reports.dsl.errors import schema_errors, unique
-from sheets_reports.dsl.registry import Registry
-from sheets_reports.dsl.schema import MAX_FILTERS, MAX_IN_VALUES, SCALAR, enum_of, field_enum
-from sheets_reports.dsl.values import is_number, sort_key, to_key
+from sheets_reports.engine.context import SheetContext
+from sheets_reports.utils.data import is_number, sort_key, to_key
+from sheets_reports.utils.registry import Registry
+from sheets_reports.utils.validation import (
+    MAX_FILTERS, MAX_IN_VALUES, SCALAR, enum_of, field_enum, schema_errors, unique,
+)
 
 FILTER_OPS: Registry["FilterOperator"] = Registry("Operador de filtro")
 RELATIVE_VALUES: Registry["RelativeValue"] = Registry("Valor relativo")
@@ -416,3 +417,15 @@ def apply_filters(df: pd.DataFrame, conditions: list[Condition] | None) -> pd.Da
     for cond in conditions or []:
         mask &= cond.mask(df).fillna(False).astype(bool)
     return df[mask]
+
+
+def filter_rows(df: pd.DataFrame, filters: list[dict] | None, metadata: dict) -> pd.DataFrame:
+    """Paso 1: las condiciones del widget recortan las FILAS que entran. Deja en
+    `metadata["universe"]` esas filas (el denominador de sus porcentajes), sin el recorte de
+    los filtros propios de cada métrica."""
+    if filters:
+        conditions = parse_conditions(filters)
+        df = apply_filters(df, conditions)
+        metadata["filters_applied"] = len(conditions)
+    metadata["universe"] = df
+    return df

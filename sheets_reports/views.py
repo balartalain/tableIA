@@ -21,7 +21,7 @@ from sheets_reports.services.sheets import (
     invalidate_sheet_cache,
 )
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
-from sheets_reports.dsl.errors import SpecValidationError
+from sheets_reports.utils.validation import SpecValidationError
 from sheets_reports.services.widget_service import WidgetService
 
 logger = logging.getLogger(__name__)
@@ -303,7 +303,7 @@ def table_assistant(request, dashboard_id):
         return _error(str(e), status=502)
 
     try:
-        from sheets_reports.dsl.context import SheetContext
+        from sheets_reports.engine.context import SheetContext
         from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_form
         ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid, samples=get_field_samples(df))
         proposal = generate_widget_form(prompt, data.get("widget_type"), ctx)
@@ -354,29 +354,6 @@ def create_widget(request, dashboard_id):
     rendered = service.render(widget)
     return JsonResponse({**_serialize_widget(widget), "data": rendered.get("data"),
                          "error": rendered.get("error")}, status=201)
-
-
-@require_http_methods(["GET"])
-def widget_config(request, widget_id):
-    """
-    GET → {id, type, title, position, fields, style, style_schema}
-
-    La configuración guardada del widget junto con el esquema de estilos que la UI debe
-    construir para él (PASO 3 de la arquitectura).
-    """
-    widget = _owned_widget(request, widget_id)
-    if not widget:
-        return _error("Widget no encontrado", status=404)
-    handler = WIDGET_REGISTRY.get(widget.type) if widget.type in WIDGET_REGISTRY else None
-    return JsonResponse({
-        "id": widget.id,
-        "type": widget.type,
-        "title": widget.title,
-        "position": widget.position,
-        "fields": widget.fields or {},
-        "style": widget.style or {},
-        "style_schema": handler.style_schema if handler else [],
-    })
 
 
 @csrf_exempt

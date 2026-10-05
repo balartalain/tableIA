@@ -155,7 +155,7 @@ sheets_reports/
     __init__.py
     sheets.py               # Lectura de la hoja (gviz/tq) + caché + schema
     widget_service.py       # WidgetService: CRUD, validación, render
-    ai_spec.py              # Generación de WidgetForm vía Gemini
+    ai_spec.py              # WidgetForm vía Gemini: crea, o ajusta el borrador actual (current) con el historial del chat
 
   utils/                    # Helpers sin conocer widgets
     registry.py             # Registry genérico + UnknownKeyError

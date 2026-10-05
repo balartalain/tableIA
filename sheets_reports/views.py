@@ -276,13 +276,44 @@ def dashboard_render(request, dashboard_id):
     })
 
 
+MAX_ASSISTANT_HISTORY = 20
+
+
+def _assistant_current(raw) -> dict | None:
+    """El borrador del panel (`{title, fields, style}`) que la IA debe ajustar, o None."""
+    if not isinstance(raw, dict):
+        return None
+    current = {
+        "title": str(raw.get("title") or "").strip(),
+        "fields": raw.get("fields") if isinstance(raw.get("fields"), dict) else {},
+        "style": raw.get("style") if isinstance(raw.get("style"), dict) else {},
+    }
+    return current if current["title"] or current["fields"] or current["style"] else None
+
+
+def _assistant_history(raw) -> list[dict]:
+    """Los mensajes previos del hilo: solo los que tienen la forma esperada, los más recientes."""
+    if not isinstance(raw, list):
+        return []
+    messages = []
+    for item in raw[-MAX_ASSISTANT_HISTORY:]:
+        if not isinstance(item, dict):
+            continue
+        if item.get("role") == "user" and isinstance(item.get("text"), str):
+            messages.append({"role": "user", "text": item["text"][:2000]})
+        elif item.get("role") == "assistant" and isinstance(item.get("proposal"), dict):
+            messages.append({"role": "assistant", "proposal": item["proposal"]})
+    return messages
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def table_assistant(request, dashboard_id):
     """
-    POST {prompt}
-    "Consulta con la IA" de las tablas: la IA propone el `WidgetForm` (fields + style) validado
-    contra la hoja, y el panel lo muestra como pasos a seguir en el constructor.
+    POST {prompt, widget_type?, current?, history?}
+    Chat con la IA del panel de un widget: la IA propone el `WidgetForm` (fields + style)
+    validado contra la hoja, ajustando el borrador actual (`current`: `{title, fields, style}`)
+    con el contexto de los mensajes previos (`history`). El panel lo muestra como pasos.
     NO crea ni modifica widgets.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
@@ -306,7 +337,9 @@ def table_assistant(request, dashboard_id):
         from sheets_reports.engine.context import SheetContext
         from sheets_reports.services.ai_spec import SpecGenerationError, generate_widget_form
         ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid, samples=get_field_samples(df))
-        proposal = generate_widget_form(prompt, data.get("widget_type"), ctx)
+        proposal = generate_widget_form(prompt, data.get("widget_type"), ctx,
+                                        current=_assistant_current(data.get("current")),
+                                        history=_assistant_history(data.get("history")))
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     except Exception:

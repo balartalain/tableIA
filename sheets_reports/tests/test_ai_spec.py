@@ -45,8 +45,52 @@ class GenerateWidgetFormTests(SimpleTestCase):
 
         call.assert_called_once()
         self.assertEqual(result["widget_type"], "bar")
-        self.assertEqual(result["title"], "Ventas por categoría")
+        self.assertEqual(result["title"], "")   # el título lo pone el usuario
         self.assertEqual(result["fields"]["metrics"][0]["field"], "ventas")
+
+    def test_con_el_widget_actual_la_ia_lo_ajusta_en_vez_de_crear(self, _audit):
+        current = {"title": "Ventas", "fields": {"dimensions": ["categoria"], "metrics": [agg()]},
+                   "style": {"stacked": True}}
+        history = [{"role": "user", "text": "ventas por categoría"},
+                   {"role": "assistant", "proposal": {"title": "Ventas", "fields": {"dimensions": ["categoria"]}}},
+                   {"role": "user", "text": ""},  # vacío: no aporta contexto
+                   "basura"]
+        responses = [("create_widget", INVALID_ARGS), ("create_widget", VALID_ARGS)]
+        with mock.patch.object(ai_spec, "_call_model", side_effect=responses) as call:
+            generate_widget_form("ahora por mes", "bar", sales_ctx(), current=current, history=history)
+
+        for attempt in call.call_args_list:  # también en el reintento con los errores
+            contents = attempt.args[0]
+            self.assertIn(ai_spec.MODIFY_PROMPT, contents)
+            self.assertIn('current_widget:\n{"fields": {"dimensions": ["categoria"]', contents)
+            self.assertIn("- Usuario: ventas por categoría", contents)
+            self.assertIn('- Tú propusiste: {"fields": {"dimensions": ["categoria"]}}', contents)
+            self.assertNotIn("basura", contents)
+            self.assertIn("Pedido del usuario:\nahora por mes", contents)
+
+    def test_sin_widget_actual_ni_historial_el_mensaje_no_cambia(self, _audit):
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", VALID_ARGS)) as call:
+            generate_widget_form("ventas por categoría", None, sales_ctx())
+        contents = call.call_args.args[0]
+        self.assertNotIn("current_widget", contents)
+        self.assertNotIn("Conversación previa", contents)
+
+    def test_el_historial_se_recorta_a_los_ultimos_mensajes(self, _audit):
+        history = [{"role": "user", "text": f"pedido {i}"} for i in range(ai_spec.MAX_HISTORY_MESSAGES + 5)]
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", VALID_ARGS)) as call:
+            generate_widget_form("otro", None, sales_ctx(), history=history)
+        contents = call.call_args.args[0]
+        self.assertNotIn("- Usuario: pedido 0\n", contents)
+        self.assertIn(f"- Usuario: pedido {ai_spec.MAX_HISTORY_MESSAGES + 4}", contents)
+
+    def test_un_titulo_devuelto_igual_se_descarta(self, _audit):
+        args = {**VALID_ARGS, "title": "Inventado", "style": {"stacked": True, "title": "Otro"}}
+        current = {"title": "Mi título", "fields": {"dimensions": ["categoria"]}, "style": {"title": "Mi título"}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
+            result = generate_widget_form("apílalo", "bar", sales_ctx(), current=current)
+        self.assertEqual(result["title"], "")
+        self.assertEqual(result["style"], {"stacked": True})
+        self.assertNotIn("Mi título", call.call_args.args[0])   # tampoco lo ve en current_widget
 
     def test_reintenta_una_vez_pasandole_el_error(self, _audit):
         responses = [("create_widget", INVALID_ARGS), ("create_widget", VALID_ARGS)]
@@ -148,6 +192,36 @@ class ToolSchemaTests(SimpleTestCase):
         self.assertEqual(bar["properties"]["widget_type"]["enum"], ["bar"])
         self.assertIn("stacked", bar["properties"]["style"]["properties"])
 
+    def test_tipo_fijado_solo_ofrece_los_campos_que_admite(self):
+        """Un dona no puede recibir una tendencia (solo la admite el KPI) ni pivotes."""
+        def fields_of(widget_type):
+            return set(build_tool_parameters(sales_ctx(), widget_type)
+                       ["properties"]["fields"]["properties"])
+
+        self.assertEqual(fields_of("donut"), {"dimensions", "metrics", "filters", "sort_by", "limit"})
+        self.assertEqual(fields_of("kpi"), {"metrics", "filters", "trend_by"})
+        self.assertEqual(fields_of("table"), {"columns", "filters", "sort_by", "limit"})
+        self.assertIn("trend_by", fields_of(None))   # sin tipo fijado se ofrece todo
+
+    def test_los_ejemplos_de_la_ia_solo_usan_campos_que_su_tipo_ofrece(self):
+        for key, widget in WIDGETS.items():
+            offered = set(build_tool_parameters(examples_ctx(), key)
+                          ["properties"]["fields"]["properties"])
+            for _prompt, args in widget.ai_examples:
+                with self.subTest(widget=key, prompt=_prompt):
+                    used = {k for k, v in args["fields"].items() if v not in (None, [], "")}
+                    self.assertLessEqual(used, offered)
+
+    def test_la_ia_no_genera_el_titulo(self):
+        for widget_type in (None, "bar", "kpi"):
+            with self.subTest(widget_type=widget_type):
+                params = build_tool_parameters(sales_ctx(), widget_type)
+                self.assertNotIn("title", params["properties"])
+                self.assertNotIn("title", params["properties"]["style"].get("properties", {}))
+        prompt = build_system_prompt()
+        self.assertNotIn("- style.title:", prompt)
+        self.assertNotIn('"title":', prompt)   # ni en los ejemplos
+
     def test_sin_tipo_el_estilo_es_objeto_abierto(self):
         params = build_tool_parameters(sales_ctx(), widget_type=None)
         self.assertEqual(params["properties"]["widget_type"]["enum"],
@@ -162,7 +236,7 @@ class ToolSchemaTests(SimpleTestCase):
 
     def test_lo_que_exige_la_tool(self):
         params = build_tool_parameters(sales_ctx(), widget_type=None)
-        self.assertEqual(params["required"], ["widget_type", "title", "fields"])
+        self.assertEqual(params["required"], ["widget_type", "fields"])
         self.assertNotIn("style", params["required"])
 
 

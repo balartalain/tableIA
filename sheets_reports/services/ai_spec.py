@@ -93,8 +93,8 @@ consulta.
 - limit: máximo de filas/grupos a mostrar ("top 5" → 5). Null si no aplica.
 
 ## style (la apariencia)
-Diccionario plano con SOLO las claves del widget. Cada control tiene un tipo fijo:
-`text` (texto), `number` (número), `checkbox` (booleano), `select` (uno de sus `options`).
+Diccionario plano con SOLO las claves del widget. Cada clave tiene un tipo fijo:
+`string` (texto), `number` (número), `boolean` (true/false), `choice` (uno de sus `options`).
 Los select marcados como «alias de una de las métricas» (los roles del KPI: `primary`,
 `compare`, `targetMetric`) llevan el `alias` de una de las métricas del propio widget, o ""
 para la opción por defecto. `targetMetric` además acepta "fixed" para una meta de valor
@@ -117,8 +117,19 @@ PIVOT_PROMPT = """\
 Con pivots, los gráficos permiten UNA métrica; si el usuario pide varias y un cruce en un
 gráfico, incluye todo tal como lo pidió: el sistema te pedirá que corrijas la propuesta."""
 
-TITLE_PROMPT = """\
-- title: título corto y claro para la tarjeta, en español."""
+# El título de la tarjeta lo pone el usuario: la IA no lo genera ni lo ve en `style`.
+NOT_AI_STYLE_KEYS = {"title"}
+
+# Con el estado actual del widget, la IA no crea desde cero: ajusta lo que ya hay.
+MODIFY_PROMPT = """\
+El widget ya existe: su estado actual está en `current_widget`. El usuario pide un cambio
+sobre él. Devuelve con create_widget el formulario COMPLETO ya ajustado: conserva todo lo que
+el usuario no pidió cambiar (dimensiones, métricas con sus alias, filtros, orden, límite y
+style) y quita o reemplaza algo solo si lo pide. Si la conversación previa aclara a
+qué se refiere ("eso", "ahora por mes"), úsala."""
+
+# Mensajes previos del hilo que se le pasan a la IA (los más recientes).
+MAX_HISTORY_MESSAGES = 10
 
 
 def capabilities_text(widget) -> str:
@@ -158,6 +169,8 @@ def _style_schema_docs(widget) -> list[str]:
     """Una línea por control de estilo: clave, tipo y opciones."""
     lines = []
     for control in widget.style_schema or []:
+        if control["key"] in NOT_AI_STYLE_KEYS:
+            continue
         kind = control.get("type")
         if control.get("options_from") == "metrics":
             detail = (f"select con el alias de una de las métricas del widget "
@@ -177,6 +190,14 @@ def _widgets_for(widget_type: str | None) -> list:
     return [w for w in WIDGETS if w.ai_enabled]
 
 
+def _without_title(form: dict) -> dict:
+    """Un WidgetForm sin título ni `style.title`: así lo ve (y lo devuelve) la IA."""
+    form = {k: v for k, v in form.items() if k != "title"}
+    if isinstance(form.get("style"), dict):
+        form["style"] = {k: v for k, v in form["style"].items() if k not in NOT_AI_STYLE_KEYS}
+    return form
+
+
 def build_system_prompt(widgets=None) -> str:
     """El prompt de la IA: lo del core más lo que declara cada widget que la IA puede proponer
     (cuándo usarlo, qué admite, sus controles de estilo y sus ejemplos)."""
@@ -190,7 +211,7 @@ def build_system_prompt(widgets=None) -> str:
             style_docs.append(f"- {widget.key}:")
             style_docs += [f"  {line}" for line in _style_schema_docs(widget)]
     examples = [
-        f'Prompt: "{prompt}"\ncreate_widget({json.dumps(args, ensure_ascii=False)})'
+        f'Prompt: "{prompt}"\ncreate_widget({json.dumps(_without_title(args), ensure_ascii=False)})'
         for w in widgets for prompt, args in w.ai_examples
     ]
     return "\n".join([
@@ -198,7 +219,6 @@ def build_system_prompt(widgets=None) -> str:
         "## Tipos de widget (si no viene fijado)",
         *types_section,
         PIVOT_PROMPT,
-        TITLE_PROMPT,
         "",
         "## style de cada tipo",
         *style_docs,
@@ -250,6 +270,8 @@ def _style_schema(style_schema: list[dict]) -> tuple[dict, list[str]]:
     """Schema de `style` desde los controles declarados, más sus claves obligatorias."""
     properties: dict = {}
     for control in style_schema or []:
+        if control["key"] in NOT_AI_STYLE_KEYS:
+            continue
         kind = control.get("type")
         if control.get("options_from") == "metrics":
             # El valor es un alias que la propia propuesta define: no puede vivir en un enum.
@@ -270,6 +292,20 @@ def _style_schema(style_schema: list[dict]) -> tuple[dict, list[str]]:
         else:
             properties[control["key"]] = {"type": "string", "description": control.get("label", control["key"])}
     return properties, []
+
+
+def _admits_field(widget, key: str) -> bool:
+    """¿El tipo admite la clave `key` de `fields`, según sus capabilities?"""
+    caps = widget.capabilities or {}
+    if key in ("dimensions", "pivots", "metrics", "columns"):
+        return (caps.get(key) or [0, 0])[1] > 0
+    if key == "trend_by":
+        return bool(caps.get("trend"))
+    if key == "sort_by":
+        return bool(caps.get("sort"))
+    if key in ("limit", "filters"):
+        return bool(caps.get(key))
+    return True
 
 
 def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
@@ -331,6 +367,11 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
                     "description": "Columna u alias de orden, con '-' delante para descendente."},
         "limit": {"type": "integer", "description": f"Máximo de filas/grupos (1 a {MAX_LIMIT})."},
     }
+    if widget_type and widgets:
+        # Con el tipo fijado, la IA solo ve los campos que ese tipo admite: no puede proponer,
+        # por ejemplo, una tendencia en un gráfico de dona (form_errors la rechazaría).
+        fields_properties = {key: schema for key, schema in fields_properties.items()
+                             if _admits_field(widgets[0], key)}
 
     # Sin tipo fijado el estilo depende del widget elegido: se acepta como objeto abierto y se
     # valida contra su style_schema después.
@@ -344,10 +385,9 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
     return _to_gemini_schema({
         "type": "object",
         "additionalProperties": False,
-        "required": ["widget_type", "title", "fields"],
+        "required": ["widget_type", "fields"],
         "properties": {
             "widget_type": {"enum": [w.key for w in widgets]},
-            "title": {"type": "string", "description": "Título corto en español."},
             "fields": {"type": "object", "additionalProperties": False,
                        "properties": fields_properties},
             "style": style,
@@ -390,9 +430,32 @@ def _columns_context(ctx: SheetContext) -> str:
     return "Columnas de la hoja:\n" + "\n".join(lines)
 
 
-def _user_message(prompt: str, widget_type: str | None, ctx: SheetContext) -> str:
-    fixed = f"El tipo de widget está fijado en: {widget_type}.\n\n" if widget_type else ""
-    return f"{_columns_context(ctx)}\n\n{fixed}Pedido del usuario:\n{prompt}"
+def _history_text(history: list[dict] | None) -> str:
+    """Los mensajes previos del hilo: pedidos del usuario y formularios que propuso la IA."""
+    lines = []
+    for message in (history or [])[-MAX_HISTORY_MESSAGES:]:
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user" and str(message.get("text") or "").strip():
+            lines.append(f"- Usuario: {str(message['text']).strip()}")
+        elif message.get("role") == "assistant" and isinstance(message.get("proposal"), dict):
+            lines.append(f"- Tú propusiste: {json.dumps(_without_title(message['proposal']), ensure_ascii=False)}")
+    return "Conversación previa:\n" + "\n".join(lines) if lines else ""
+
+
+def _user_message(prompt: str, widget_type: str | None, ctx: SheetContext,
+                  current: dict | None = None, history: list[dict] | None = None) -> str:
+    parts = [_columns_context(ctx)]
+    if widget_type:
+        parts.append(f"El tipo de widget está fijado en: {widget_type}.")
+    if current:
+        parts.append(MODIFY_PROMPT)
+        parts.append("current_widget:\n" + json.dumps(_without_title(current), ensure_ascii=False))
+    previous = _history_text(history)
+    if previous:
+        parts.append(previous)
+    parts.append(f"Pedido del usuario:\n{prompt}")
+    return "\n\n".join(parts)
 
 
 def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tuple[str, dict]:
@@ -524,8 +587,10 @@ def _column_errors(column, index: int, ctx, seen_columns) -> list[str]:
     return errors
 
 
-def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[str]:
-    """Valida un WidgetForm propuesto contra la hoja y las capacidades del widget."""
+def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
+                require_title: bool = True) -> list[str]:
+    """Valida un WidgetForm propuesto contra la hoja y las capacidades del widget. La propuesta
+    de la IA no trae título (`require_title=False`): lo pone el usuario."""
     resolved = data.get("widget_type")
     if not resolved or resolved not in WIDGETS:
         allowed = ", ".join(w.key for w in WIDGETS if w.ai_enabled)
@@ -659,7 +724,7 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None) -> list[
     if style.get("statusBasis") == "target_pct" and not _has_target(style, aliases):
         errors.append("style.statusBasis: «% de la meta» necesita una meta (target o targetMetric).")
 
-    if not str(data.get("title") or "").strip():
+    if require_title and not str(data.get("title") or "").strip():
         errors.append("title: el widget necesita un título.")
 
     return errors
@@ -682,16 +747,22 @@ def _normalize(args: dict) -> dict:
     style = data.get("style") if isinstance(data.get("style"), dict) else {}
     return {
         "widget_type": data.get("widget_type"),
-        "title": str(data.get("title") or "").strip(),
+        "title": "",
         "fields": {k: v for k, v in fields.items() if v is not None},
-        "style": style,
+        "style": {k: v for k, v in style.items() if k not in NOT_AI_STYLE_KEYS},
     }
 
 
-def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext) -> dict:
+def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext,
+                         current: dict | None = None, history: list[dict] | None = None) -> dict:
     """
     Genera `{widget_type, title, fields, style}` para `prompt` sobre la hoja de `ctx` (con
-    `samples` para que la IA escriba los valores exactos).
+    `samples` para que la IA escriba los valores exactos). `title` va siempre vacío: el título
+    de la tarjeta lo pone el usuario, la IA no lo genera.
+
+    Con `current` (`{title, fields, style}` del widget que se edita) la IA ajusta ese estado en
+    vez de crear desde cero; `history` son los mensajes previos del hilo
+    (`{"role": "user", "text"}` / `{"role": "assistant", "proposal"}`).
 
     Si la primera propuesta no pasa la validación, reintenta UNA vez pasándole a la IA los
     errores; si vuelve a fallar, lanza SpecGenerationError con un mensaje legible. Nunca
@@ -702,7 +773,7 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
     if not ctx.fields:
         raise SpecGenerationError("La hoja no tiene columnas.")
 
-    contents = _user_message(prompt, widget_type, ctx)
+    contents = _user_message(prompt, widget_type, ctx, current, history)
     errors: list[str] = []
     for attempt in (1, 2):
         call_name, args = _call_model(contents, ctx, widget_type)
@@ -712,7 +783,7 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
             raise SpecGenerationError(args.get("reason") or "La IA no pudo interpretar el pedido.")
 
         data = _normalize(args)
-        errors = form_errors(data, ctx, widget_type)
+        errors = form_errors(data, ctx, widget_type, require_title=False)
         _audit(prompt, widget_type, attempt, call_name, args, errors)
 
         if not errors:
@@ -721,7 +792,7 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
             return data
 
         contents = (
-            f"{_user_message(prompt, widget_type, ctx)}\n\n"
+            f"{_user_message(prompt, widget_type, ctx, current, history)}\n\n"
             f"Tu respuesta anterior fue:\n{json.dumps(args, ensure_ascii=False)}\n\n"
             f"No es válida por estos errores:\n- " + "\n- ".join(errors) +
             "\n\nCorrígela y vuelve a llamar a create_widget."

@@ -318,6 +318,28 @@ class ViewsTests(TestCase):
                                     "fields": fields(pivots=["mes"]), "style": {"showTotals": True}})
         self.assertEqual(Widget.objects.count(), widgets_before)
 
+    def test_asistente_recibe_el_borrador_y_el_historial(self, _df):
+        proposal = {"widget_type": "bar", "title": "Ventas", "fields": fields(), "style": {}}
+        current = {"title": "Ventas", "fields": fields(), "style": {"stacked": True}, "otra": 1}
+        history = [{"role": "user", "text": "ventas por categoría"},
+                   {"role": "assistant", "proposal": proposal},
+                   {"role": "assistant", "error": "falló"},   # sin propuesta: no se envía
+                   {"role": "sistema", "text": "x"}]
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_form",
+                        return_value=proposal) as ai:
+            r = self.client.post(
+                f"/api/dashboard/{self.dashboard.id}/table-assistant/",
+                json.dumps({"prompt": "ahora apilado", "widget_type": "bar",
+                            "current": current, "history": history}),
+                content_type="application/json",
+            )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(ai.call_args.kwargs["current"],
+                         {"title": "Ventas", "fields": fields(), "style": {"stacked": True}})
+        self.assertEqual(ai.call_args.kwargs["history"],
+                         [{"role": "user", "text": "ventas por categoría"},
+                          {"role": "assistant", "proposal": proposal}])
+
     def test_asistente_error_legible(self, _df):
         with mock.patch("sheets_reports.services.ai_spec.generate_widget_form",
                         side_effect=SpecGenerationError("La columna Precio no existe.")):

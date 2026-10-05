@@ -268,7 +268,13 @@ document.addEventListener('alpine:init', () => {
           return { ok: false, error: (data && data.error) || `Error ${r.status}` };
         }
         if (isNew && data && data.id) {
+          const oldId = w.id;
           w.id = data.id;
+          if (this.assistantThreads[oldId]) {
+            this.assistantThreads[data.id] = this.assistantThreads[oldId];
+            delete this.assistantThreads[oldId];
+          }
+          if (this.editingId === oldId) this.editingId = data.id;
           w.rebuildElement();
         }
         w._dirty = false;
@@ -314,6 +320,7 @@ document.addEventListener('alpine:init', () => {
         try { await fetch(apiUrl(`/api/widget/${id}/`), { method: 'DELETE' }); } catch (e) {}
       }
       this.widgets = this.widgets.filter(w => w.id !== id);
+      delete this.assistantThreads[id];
     },
 
     reorderWidgets() {
@@ -393,7 +400,6 @@ document.addEventListener('alpine:init', () => {
       this.editingId = id;
       this.editingType = w.type;
       this.drawerTab = 'data';
-      this.drawerAskError = '';
       this.drawerAskOpen = false;
       this.drawerSaveError = '';
       this.drawerSaving = false;
@@ -430,7 +436,6 @@ document.addEventListener('alpine:init', () => {
     closeDrawer() {
       this.editingId = null;
       this.editingType = null;
-      this.drawerAskError = '';
       this.drawerAskOpen = false;
       this.drawerSaveError = '';
       this.drawerTab = 'data';
@@ -840,40 +845,48 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ---- guardado
+    // El borrador como lo guarda el backend (`{title, fields, style}`), sin modificarlo: lo
+    // usan «Guardar» y el chat con la IA (el estado actual que la IA debe ajustar).
+    _draftPayload(fallbackTitle = '') {
+      const draft = this.drawerDraft;
+      const fields = JSON.parse(JSON.stringify(draft.fields));
+      // Una fila a medio elegir («— elegir —») no se envía al servidor.
+      ['dimensions', 'pivots'].forEach(k => {
+        fields[k] = (fields[k] || []).filter(v => v !== '' && v != null);
+      });
+      // Un cálculo a medias tampoco (`pruneFormulas` lo quita además del borrador al guardar).
+      fields.metrics = (fields.metrics || []).filter(m => !(m && m.type === 'formula' && !m.expression));
+      // Columnas: solo `field`, y `label` solo si escribió uno.
+      fields.columns = (fields.columns || [])
+        .map(c => (typeof c === 'string' ? { field: c } : (c || {})))
+        .filter(c => String(c.field || '').trim() !== '')
+        .map(c => {
+          const field = String(c.field).trim();
+          const label = String(c.label || '').trim();
+          return label ? { field, label } : { field };
+        });
+      fields.filters = (fields.filters || []).map(c => conditionToPayload(c, this.schema.numeric_fields || []));
+      // Tendencia: sin columna elegida, «sin tendencia» (null, no "").
+      fields.trend_by = String(fields.trend_by || '').trim() || null;
+      if (!fields.sort_by) fields.sort_by = null;
+      if (fields.limit === '' || fields.limit == null || Number.isNaN(Number(fields.limit))) fields.limit = null;
+      else fields.limit = Number(fields.limit);
+
+      const style = JSON.parse(JSON.stringify(draft.style || {}));
+      const title = String(draft.title || '').trim() || fallbackTitle;
+      style.title = title;
+      return { title, fields, style };
+    },
+
     async saveDrawer() {
       const w = this.editingWidget;
       if (!w) return;
       this.drawerSaving = true;
       this.drawerSaveError = '';
       try {
-        const draft = this.drawerDraft;
         // Un cálculo a medias no va al servidor: se descarta del borrador antes de copiarlo.
         this.pruneFormulas();
-        const fields = JSON.parse(JSON.stringify(draft.fields));
-        // Una fila a medio elegir («— elegir —») no se envía al servidor.
-        ['dimensions', 'pivots'].forEach(k => {
-          fields[k] = (fields[k] || []).filter(v => v !== '' && v != null);
-        });
-        // Columnas: solo `field`, y `label` solo si escribió uno.
-        fields.columns = (fields.columns || [])
-          .map(c => (typeof c === 'string' ? { field: c } : (c || {})))
-          .filter(c => String(c.field || '').trim() !== '')
-          .map(c => {
-            const field = String(c.field).trim();
-            const label = String(c.label || '').trim();
-            return label ? { field, label } : { field };
-          });
-        fields.filters = fields.filters.map(c => conditionToPayload(c, this.schema.numeric_fields || []));
-        if (!fields.filters.length) fields.filters = [];
-        // Tendencia: sin columna elegida, «sin tendencia» (null, no "").
-        fields.trend_by = String(fields.trend_by || '').trim() || null;
-        if (!fields.sort_by) fields.sort_by = null;
-        if (fields.limit === '' || fields.limit == null || Number.isNaN(Number(fields.limit))) fields.limit = null;
-        else fields.limit = Number(fields.limit);
-
-        const style = JSON.parse(JSON.stringify(draft.style || {}));
-        const title = String(draft.title || '').trim() || w.title;
-        style.title = title;
+        const { title, fields, style } = this._draftPayload(w.title);
 
         w.title = title;
         w.fields = fields;
@@ -896,50 +909,138 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ---- asistente con IA
+    // Chat con la IA del widget que se edita. Cada pedido viaja con el borrador actual
+    // (`current`) y los mensajes previos del hilo (`history`): la IA ajusta lo que hay en vez
+    // de crear desde cero. La respuesta no toca el borrador: queda en el hilo como pasos, con
+    // su botón «Aplicar».
     async askAssistant() {
       const prompt = (this.drawerDraft.prompt || '').trim();
-      if (!prompt) return;
+      if (!prompt || this.drawerAsking || this.editingId == null) return;
+      if (!this.assistantThreads[this.editingId]) this.assistantThreads[this.editingId] = [];
+      const thread = this.assistantThreads[this.editingId];
+      const history = thread
+        .map(m => (m.role === 'user' ? { role: 'user', text: m.text }
+          : m.proposal ? { role: 'assistant', proposal: m.proposal } : null))
+        .filter(Boolean);
+      const current = this._draftPayload(this.editingWidget ? this.editingWidget.title : '');
+      thread.push({ role: 'user', text: prompt });
+      this.drawerDraft.prompt = '';
       this.drawerAsking = true;
-      this.drawerAskError = '';
-      this.drawerAdvice = null;
       try {
         const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.dashboardId}/table-assistant/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, widget_type: this.editingType }),
+          body: JSON.stringify({ prompt, widget_type: this.editingType, current, history }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || 'El servidor no respondió correctamente.');
-        this.drawerAdvice = data;
-        this.applyAdvice();
+        thread.push({ role: 'assistant', proposal: data, applied: false });
       } catch (e) {
-        this.drawerAskError = e.name === 'AbortError'
-          ? 'La IA tardó demasiado en responder. Intenta de nuevo.'
-          : e.message;
+        thread.push({
+          role: 'assistant',
+          error: e.name === 'AbortError' ? 'La IA tardó demasiado en responder. Intenta de nuevo.' : e.message,
+        });
       } finally {
         this.drawerAsking = false;
       }
     },
 
-    applyAdvice() {
-      const a = this.drawerAdvice;
+    // El hilo del widget que se edita (vive en memoria mientras el tablero está abierto).
+    get drawerThread() {
+      return (this.editingId != null && this.assistantThreads[this.editingId]) || [];
+    },
+
+    clearThread() {
+      if (this.editingId != null) this.assistantThreads[this.editingId] = [];
+    },
+
+    // Pasos de una propuesta de la IA, en el orden del panel: qué cambia si se aplica.
+    adviceSteps(a) {
+      if (!a) return [];
+      const f = a.fields || {};
+      const list = (values) => values.join(' › ');
+      const steps = [];
+      const columns = (f.columns || []).map(c => (typeof c === 'string' ? c : c.label ? `${c.field} («${c.label}»)` : c.field));
+      if (columns.length) steps.push({ title: 'Columnas', detail: `Muestra, en este orden: ${list(columns)}` });
+      if ((f.dimensions || []).length) steps.push({ title: 'Filas', detail: `Agrupa, en este orden: ${list(f.dimensions)}` });
+      if ((f.pivots || []).length) steps.push({ title: 'Columnas cruzadas', detail: `Desagrega por: ${list(f.pivots)}` });
+      if ((f.filters || []).length) {
+        steps.push({ title: 'Condiciones', details: f.filters.map(c => this._describeCondition(c)) });
+      }
+      const metrics = f.metrics || [];
+      if (metrics.length) {
+        steps.push({ title: 'Valores', details: metrics.map(m => {
+          const what = m.type === 'formula' ? `Cálculo: ${m.expression || ''}` : this.metricName(m);
+          const conditions = (m.filters || []).map(c => this._describeCondition(c));
+          return [what, m.label ? `como «${m.label}»` : '', conditions.length ? `solo si ${conditions.join(' y ')}` : '']
+            .filter(Boolean).join(' ');
+        }) });
+      }
+      if (f.trend_by) steps.push({ title: 'Tendencia', detail: `Mini línea por ${f.trend_by}` });
+      if (f.sort_by) {
+        const descending = f.sort_by.startsWith('-');
+        const key = f.sort_by.replace(/^-/, '');
+        const metric = metrics.find(m => m.alias === key);
+        steps.push({ title: 'Orden', detail: `Ordena por ${metric ? (metric.label || this.metricName(metric)) : key}, ${descending ? 'de mayor a menor' : 'de menor a mayor'}` });
+      }
+      if (f.limit) steps.push({ title: 'Límite', detail: `Muestra solo las primeras ${f.limit} filas` });
+      const look = Object.entries(a.style || {})
+        .filter(([key]) => key !== 'title')
+        .map(([key, value]) => this._describeStyle(key, value, metrics))
+        .filter(Boolean);
+      if (look.length) steps.push({ title: 'Apariencia', details: look });
+      return steps;
+    },
+
+    // «ventas es mayor que 100», «anio está en 2025, 2026», «mes es igual a Este mes (1-12)».
+    _describeCondition(c) {
+      const op = opMeta(c.op);
+      if (!op.needsValue) return `${c.field} ${op.label}`;
+      if (c.relative) {
+        const relative = RELATIVE_VALUES.find(o => o.value === c.relative);
+        return `${c.field} ${op.label} ${relative ? relative.label.toLowerCase() : c.relative}`;
+      }
+      const value = Array.isArray(c.value)
+        ? c.value.join(op.isRange ? ' y ' : ', ')
+        : String(c.value ?? '');
+      return `${c.field} ${op.label} ${value}`;
+    },
+
+    // Una clave de `style` con su nombre del style_schema y su valor legible.
+    _describeStyle(key, value, metrics) {
+      const control = (this.drawerManifest.style_schema || []).find(c => c.key === key);
+      if (!control || value === '' || value == null) return '';
+      let shown = value;
+      if (control.type === 'boolean') {
+        shown = value ? 'sí' : 'no';
+      } else if (control.type === 'choice') {
+        const option = (control.options || []).find(o => o.value === value);
+        const metric = control.options_from === 'metrics' ? metrics.find(m => m.alias === value) : null;
+        shown = option ? option.label : metric ? (metric.label || this.metricName(metric)) : value;
+      }
+      return `${control.label}: ${shown}`;
+    },
+
+    // Rellena el panel con la propuesta de un mensaje del hilo. No guarda: el usuario revisa y
+    // pulsa «Guardar». El estilo propuesto se suma al actual (no se pierde la personalización)
+    // y el título no cambia: la IA no lo genera.
+    applyAdvice(message) {
+      const a = message && message.proposal;
       if (!a) return;
       const draft = this.drawerDraft;
-      draft.fields = { ...EMPTY_FIELDS(), ...(a.fields || {}) };
-      draft.style = { ...(this.drawerManifest.style_defaults || {}), ...(a.style || {}) };
-      if (a.title) draft.title = a.title;
+      draft.fields = { ...EMPTY_FIELDS(), ...JSON.parse(JSON.stringify(a.fields || {})) };
+      draft.style = { ...(draft.style || {}), ...JSON.parse(JSON.stringify(a.style || {})) };
       this._normalizeDraft();
-      this.drawerAdvice = null;
-      this.drawerAskOpen = false;
+      message.applied = true;
       if (typeof window.showToast === 'function') {
-        window.showToast('Configuración propuesta por la IA. Revisa y guarda.');
+        window.showToast('Propuesta aplicada al panel. Revisa y pulsa «Guardar».');
       }
     },
 
     drawerDraft: { title: '', fields: { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null }, style: {}, prompt: '' },
-    drawerAdvice: null,
+    // Hilos del chat con la IA por id de widget: { [id]: [{role, text} | {role, proposal, applied} | {role, error}] }.
+    assistantThreads: {},
     drawerAskOpen: false,
     drawerAsking: false,
-    drawerAskError: '',
     drawerSaving: false,
     drawerSaveError: '',
   });

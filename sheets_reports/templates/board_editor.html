@@ -3,14 +3,37 @@
 
 {% block title %}{% if dashboard %}{{ dashboard.nombre }}{% else %}Nuevo tablero{% endif %} — Editor de tablero{% endblock %}
 
-{% block header_actions %}
-<button onclick="window.location.href='{% url 'home' %}'" class="bg-white border border-line hover:bg-paper text-ink/70 py-2 px-4 rounded-xl font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
-  <i class="ti ti-logout" aria-hidden="true"></i>
-  Salir del editor
-</button>
+{% block header_leading %}
+<a href="{% url 'home' %}" aria-label="Salir del editor" title="Salir del editor"
+   class="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-ink/50 hover:text-ink hover:bg-paper transition">
+  <i class="ti ti-arrow-left text-lg" aria-hidden="true"></i>
+</a>
+{% endblock %}
+
+{% block header_title %}
 {% if dashboard %}
-<button id="share-btn" class="bg-white border border-line hover:bg-paper text-ink/70 py-2 px-4 rounded-xl font-medium text-sm transition cursor-pointer">
-  Compartir
+<input id="board-title" type="text" x-data="boardTitle()" x-model="name"
+       x-on:keydown.enter.prevent="$el.blur()" x-on:keydown.escape.prevent="revert(); $el.blur()"
+       x-on:blur="save()" aria-label="Nombre del tablero" maxlength="255"
+       data-name="{{ dashboard.nombre }}" value="{{ dashboard.nombre }}"
+       class="board-title min-w-[8ch] max-w-full truncate bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded-md px-2 py-1 font-sans font-semibold text-sm text-ink transition">
+{% else %}
+<span class="px-2 font-sans font-semibold text-sm text-ink">Nuevo tablero</span>
+{% endif %}
+{% endblock %}
+
+{% block header_actions %}
+{% if dashboard %}
+<!-- Abre la vista real (la que recibe quien tiene el enlace) en otra pestaña. -->
+<button id="preview-btn" type="button" aria-label="Vista previa" title="Vista previa"
+        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-lg font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+  <i class="ti ti-eye text-base" aria-hidden="true"></i>
+  <span class="hidden sm:inline">Vista previa</span>
+</button>
+<button id="share-btn" type="button" aria-label="Compartir" title="Compartir"
+        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-lg font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+  <i class="ti ti-share text-base" aria-hidden="true"></i>
+  <span class="hidden sm:inline">Compartir</span>
 </button>
 {% endif %}
 {% endblock %}
@@ -78,8 +101,8 @@
     text-align: center;
     z-index: 10;
   }
-  /* El header real mide 4rem + el 1px de su border-b, así que en vez de calcularlo
-     con un calc se deja que flexbox mida el header de verdad. */
+  /* En vez de calcular el alto del header (h-14 + el 1px de su border-b) se deja que flexbox
+     lo mida de verdad. */
   html body {
     height: 100dvh;
     min-height: 0;
@@ -110,6 +133,9 @@
   }
   html[data-rail="collapsed"] #module-rail .rail-item:hover .rail-icon { border-color: #cbd5e1; color: #14171f; }
   html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180deg); }
+
+  /* Nombre del tablero en el header: el input mide lo que su texto. */
+  .board-title { field-sizing: content; }
 </style>
 
 <div id="board-body" class="relative flex w-full overflow-hidden">

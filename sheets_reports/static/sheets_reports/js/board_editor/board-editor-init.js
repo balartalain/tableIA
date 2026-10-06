@@ -100,6 +100,45 @@ function initRail(sidebarEl) {
 
 // Global: el store la usa para avisar de un guardado fallido.
 window.showToast = showToast;
+
+// Nombre del tablero en el header, editable en el lugar: Enter guarda, Escape revierte.
+function boardTitle() {
+  return {
+    name: '',
+    saved: '',
+
+    init() {
+      this.name = this.saved = this.$el.dataset.name || '';
+    },
+
+    revert() {
+      this.name = this.saved;
+    },
+
+    async save() {
+      const name = this.name.trim();
+      if (!name || name === this.saved) {
+        this.name = this.saved;
+        return;
+      }
+      try {
+        const r = await fetch(apiUrl(`/api/dashboards/${window.DASHBOARD_ID}/`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: name }),
+        });
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo guardar el nombre');
+        this.name = this.saved = data.nombre;
+        document.title = `${data.nombre} — Editor de tablero`;
+        showToast('Nombre guardado');
+      } catch (e) {
+        this.revert();
+        showToast(e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message);
+      }
+    },
+  };
+}
 function showToast(message) {
   let container = document.getElementById('toast-container');
   if (!container) {
@@ -260,13 +299,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (store.hasPendingLayout) store.flushLayoutSave({ keepalive: true });
   });
 
-  document.getElementById('share-btn').addEventListener('click', async () => {
+  // Enlace de la vista compartida con los filtros elegidos: lo copian «Compartir» y lo abre
+  // «Vista previa».
+  const shareUrl = () => {
     const base = `${window.location.origin}${window.SHARE_PATH}`;
-    const qs = Alpine.store('dashboard').getFilterQueryString
-      ? Alpine.store('dashboard').getFilterQueryString()
-      : '';
-    const url = qs ? base + '?' + qs : base;
-    await copyToClipboard(url);
+    const qs = store.getFilterQueryString ? store.getFilterQueryString() : '';
+    return qs ? `${base}?${qs}` : base;
+  };
+
+  document.getElementById('share-btn').addEventListener('click', async () => {
+    await copyToClipboard(shareUrl());
     showToast('Enlace copiado');
+  });
+
+  document.getElementById('preview-btn').addEventListener('click', async () => {
+    // La pestaña se abre en el mismo clic (si no, el navegador la bloquea como popup); la URL
+    // se pone después de guardar el acomodo pendiente, para que la vista lo muestre.
+    const win = window.open('', '_blank');
+    if (store.hasPendingLayout) await store.flushLayoutSave();
+    if (win) win.location = shareUrl();
+    else window.location.href = shareUrl();
   });
 });

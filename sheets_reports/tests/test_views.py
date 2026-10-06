@@ -398,6 +398,12 @@ class ViewsTests(TestCase):
         self.assertContains(r, "donut-widget.js")
         self.assertContains(r, 'id="module-rail"')
         self.assertContains(r, "tableia:rail-collapsed")
+        # Header del editor: salir, nombre editable, modos y compartir.
+        self.assertContains(r, 'aria-label="Salir del editor"')
+        self.assertContains(r, 'id="board-title"')
+        self.assertContains(r, 'id="preview-btn"')
+        self.assertContains(r, 'id="share-btn"')
+        self.assertContains(self.client.get("/"), "Tableros IA")
 
 
 class DashboardCrudTests(TestCase):

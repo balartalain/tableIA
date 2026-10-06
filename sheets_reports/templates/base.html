@@ -69,21 +69,19 @@
 <body class="bg-paper text-ink antialiased min-h-screen">
 
 {% block header %}
+<!-- Header compartido: cada página llena sus bloques (el editor agrega salir, el nombre del
+     tablero y sus acciones; el home usa los valores por defecto). -->
 <header id="app-header" class="border-b border-line bg-white">
-  <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <span class="w-7 h-7 rounded-md bg-moss-500 flex items-center justify-center text-white text-sm font-sans font-bold">R</span>
-      <span class="font-sans font-semibold text-lg tracking-tight">Report IA</span>
+  <div class="h-14 px-4 flex items-center gap-3">
+    {% block header_leading %}{% endblock %}
+    <span class="shrink-0 w-7 h-7 rounded-md bg-moss-500 flex items-center justify-center text-white text-sm font-sans font-bold" aria-hidden="true">R</span>
+    <div class="min-w-0 flex-1 flex items-center">
+      {% block header_title %}<span class="font-sans font-semibold text-base tracking-tight">Tableros IA</span>{% endblock %}
     </div>
-
-    <div class="flex items-center gap-3">
+    <div class="shrink-0 flex items-center gap-2">
       {% block header_actions %}{% endblock %}
-      <button class="text-ink/40 hover:text-ink transition relative" aria-label="Notificaciones">
-        <i class="ti ti-bell text-lg" aria-hidden="true"></i>
-      </button>
-      <div class="w-8 h-8 rounded-full bg-moss-50 border border-moss-100 flex items-center justify-center text-xs font-medium text-moss-700">
-        RA
-      </div>
+      <div class="w-8 h-8 rounded-full bg-moss-50 border border-moss-100 flex items-center justify-center text-xs font-medium text-moss-700"
+           title="Usuario" aria-label="Usuario">RA</div>
     </div>
   </div>
 </header>

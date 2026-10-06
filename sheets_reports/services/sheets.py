@@ -115,6 +115,16 @@ def invalidate_sheet_cache(sheet_id: str, gid: str) -> None:
     cache.delete(f"sheet_df:{sheet_id}:{gid}")
 
 
+def load_source(source) -> pd.DataFrame:
+    """La hoja de una fuente del tablero, con las columnas y los tipos que se eligieron."""
+    return apply_column_config(get_sheet_dataframe(source.sheet_id, source.gid), source.columns)
+
+
+def source_key(source) -> str:
+    """Identifica la hoja de una fuente (caché de sugerencias, contexto de la IA)."""
+    return f"{source.sheet_id}:{source.gid}"
+
+
 # ---------------------------------------------------------------- tipos de columna
 COLUMN_TYPES = ("text", "number", "date")
 

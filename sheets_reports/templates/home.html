@@ -184,10 +184,11 @@
         return window.URLS.boardEditor.replace('/0/', `/${d.id}/`);
       },
 
+      // La primera fuente del tablero, y cuántas más tiene.
       sourceLabel(d) {
-        if (d.sheet_name) return d.tab_name ? `${d.sheet_name} · ${d.tab_name}` : d.sheet_name;
-        const m = /\/spreadsheets\/d\/([^/]+)/.exec(d.sheet_url || '');
-        return `${(m ? m[1] : d.sheet_url || '').slice(0, 12)}… · gid ${d.sheet_gid}`;
+        const sources = d.sources || [];
+        if (!sources.length) return 'Sin fuente';
+        return sources.length > 1 ? `${sources[0]} +${sources.length - 1}` : sources[0];
       },
 
       // Promesa que se cumple cuando Tabulator terminó de construirse (antes no acepta datos).
@@ -206,7 +207,7 @@
           columns: [
             { title: 'Nombre', field: 'nombre', minWidth: 220, widthGrow: 3,
               formatter: c => `<a href="${esc(this.boardUrl(c.getData()))}" class="font-medium text-ink hover:text-moss-600">${esc(c.getValue())}</a>` },
-            { title: 'Fuente', field: 'sheet_name', minWidth: 200, widthGrow: 2,
+            { title: 'Fuente', field: 'sources', minWidth: 200, widthGrow: 2,
               mutator: (value, data) => this.sourceLabel(data),
               formatter: c => `<span class="inline-flex items-center gap-1.5 text-ink/60"><i class="ti ti-table text-sm" aria-hidden="true"></i>${esc(c.getValue())}</span>` },
             { title: 'Tarjetas', field: 'cardCount', hozAlign: 'right', width: 100 },

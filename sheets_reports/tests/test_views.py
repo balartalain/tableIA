@@ -9,7 +9,7 @@ from django.test import TestCase
 
 from sheets_reports.models import Dashboard, Widget
 from sheets_reports.services.ai_spec import SpecGenerationError
-from sheets_reports.tests.fixtures import agg, fields, sales_df
+from sheets_reports.tests.fixtures import agg, fields, make_board, sales_df
 
 
 def board_filters(*conditions) -> str:
@@ -24,17 +24,14 @@ def payload(widget_type="bar", title="Ventas por categoría", fields_data=None, 
     return {"type": widget_type, "title": title, "fields": fields_data or fields(), "style": style or {}, **extra}
 
 
-@mock.patch("sheets_reports.views.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
+@mock.patch("sheets_reports.services.sheets.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
 class ViewsTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.client.force_login(self.user)
-        self.dashboard = Dashboard.objects.create(
-            nombre="Ventas", owner=self.user,
-            sheet_url="https://docs.google.com/spreadsheets/d/abc123/edit#gid=0",
-        )
+        self.dashboard, self.source = make_board(self.user, sheet_id="abc123")
         self.widget = Widget.objects.create(
-            dashboard=self.dashboard, type="bar", title="Ventas por categoría",
+            dashboard=self.dashboard, source=self.source, type="bar", title="Ventas por categoría",
             fields=fields(), style={},
         )
 
@@ -50,7 +47,7 @@ class ViewsTests(TestCase):
 
     def test_kpi_participacion_respeta_los_filtros_del_tablero(self, _df):
         Widget.objects.create(
-            dashboard=self.dashboard, type="kpi", title="Participación de Hogar",
+            dashboard=self.dashboard, source=self.source, type="kpi", title="Participación de Hogar",
             fields={"dimensions": [], "filters": [],
                     "metrics": [{**agg("hogar"),
                                  "filters": [{"field": "categoria", "op": "eq", "value": "Hogar"}]},
@@ -210,7 +207,7 @@ class ViewsTests(TestCase):
     def test_update_persiste_el_style_completo_del_panel_del_kpi(self, _df):
         """Lo que edita el panel del KPI (roles, meta, semáforo, formato) se guarda tal cual."""
         kpi = Widget.objects.create(
-            dashboard=self.dashboard, type="kpi", title="Ventas",
+            dashboard=self.dashboard, source=self.source, type="kpi", title="Ventas",
             fields={"dimensions": [], "filters": [],
                     "metrics": [agg("total_ventas"), agg("promedio", "avg")]},
             style={},
@@ -228,7 +225,7 @@ class ViewsTests(TestCase):
 
     def test_update_persiste_los_totales_por_nivel_de_la_tabla_dinamica(self, _df):
         table = Widget.objects.create(
-            dashboard=self.dashboard, type="dynamic_table", title="Ventas",
+            dashboard=self.dashboard, source=self.source, type="dynamic_table", title="Ventas",
             fields=fields(dimensions=["categoria", "mes"], pivots=["anio"]), style={},
         )
         style = {"showTotals": False, "rowSubtotal1": True, "rowSubtotal2": False,
@@ -278,13 +275,13 @@ class ViewsTests(TestCase):
 
     def test_widget_de_otro_usuario_no_se_toca(self, _df):
         other = get_user_model().objects.create(username="otro")
-        dashboard = Dashboard.objects.create(nombre="Ajeno", owner=other, sheet_url="https://x/es")
-        widget = Widget.objects.create(dashboard=dashboard, type="bar", fields=fields(), style={})
+        dashboard, source = make_board(other, nombre="Ajeno")
+        widget = Widget.objects.create(dashboard=dashboard, source=source, type="bar", fields=fields(), style={})
         self.assertEqual(self.client.delete(f"/api/widget/{widget.id}/").status_code, 404)
 
     # ---------------------------------------------------------------- schema
     def test_schema_incluye_columnas_agrupables(self, _df):
-        r = self.client.get(f"/api/dashboard/{self.dashboard.id}/schema/")
+        r = self.client.get(f"/api/sources/{self.source.id}/schema/")
         # anio es numérica pero con pocos valores enteros: se puede agrupar. ventas no.
         self.assertEqual(r.json()["dimension_fields"], ["categoria", "mes", "anio"])
         self.assertEqual(r.json()["sample_values"]["mes"], ["Ene", "Feb", "Mar"])
@@ -292,7 +289,7 @@ class ViewsTests(TestCase):
         self.assertEqual(r.json()["time_fields"], ["mes", "anio", "ventas"])
 
     def test_schema_trae_el_manifiesto_con_las_columnas_de_la_hoja(self, _df):
-        manifest = self.client.get(f"/api/dashboard/{self.dashboard.id}/schema/").json()["widget_manifest"]
+        manifest = self.client.get(f"/api/sources/{self.source.id}/schema/").json()["widget_manifest"]
         self.assertEqual(manifest["bar"]["capabilities"], {
             "dimensions": [1, 1], "pivots": [0, 1], "metrics": [1, 5],
             "sort": True, "limit": True, "filters": True,
@@ -410,25 +407,24 @@ class DashboardCrudTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create(username="ana")
         self.client.force_login(self.user)
-        self.url = "https://docs.google.com/spreadsheets/d/abc/edit"
-        self.dashboard = Dashboard.objects.create(nombre="Ventas", owner=self.user, sheet_url=self.url)
+        self.dashboard, self.source = make_board(self.user)
 
     def test_lista_solo_los_propios(self):
-        Dashboard.objects.create(nombre="Ajeno", owner=get_user_model().objects.create(username="pepe"),
-                                 sheet_url=self.url)
+        make_board(get_user_model().objects.create(username="pepe"), nombre="Ajeno")
         r = self.client.get("/api/dashboards/")
         self.assertEqual(r.status_code, 200)
         self.assertEqual([d["nombre"] for d in r.json()], ["Ventas"])
         self.assertEqual(r.json()[0]["cardCount"], 0)
+        self.assertEqual(r.json()[0]["sources"], ["abc… · gid 0"])
 
     def test_crear_validando_campos(self):
-        r = self.client.post("/api/dashboards/", json.dumps({"nombre": "Nueva", "sheet_url": self.url}),
+        r = self.client.post("/api/dashboards/", json.dumps({"nombre": "Nueva", "sheet_id": "abc"}),
                              content_type="application/json")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual(r.json()["nombre"], "Nueva")
-        self.assertEqual(self.client.post("/api/dashboards/", json.dumps({"nombre": "", "sheet_url": self.url}),
+        self.assertEqual(self.client.post("/api/dashboards/", json.dumps({"nombre": "", "sheet_id": "abc"}),
                                           content_type="application/json").status_code, 400)
-        self.assertEqual(self.client.post("/api/dashboards/", json.dumps({"nombre": "x", "sheet_url": ""}),
+        self.assertEqual(self.client.post("/api/dashboards/", json.dumps({"nombre": "x", "sheet_id": ""}),
                                           content_type="application/json").status_code, 400)
 
     def test_editar_y_borrar(self):
@@ -443,8 +439,8 @@ class DashboardCrudTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(Dashboard.objects.filter(id=self.dashboard.id).exists())
 
-    def test_duplica_con_sus_widgets(self):
-        Widget.objects.create(dashboard=self.dashboard, type="bar", title="Ventas",
+    def test_duplica_con_sus_fuentes_y_widgets(self):
+        Widget.objects.create(dashboard=self.dashboard, source=self.source, type="bar", title="Ventas",
                               fields=fields(), style={"stacked": True})
         r = self.client.post(f"/api/dashboards/{self.dashboard.id}/duplicate/", {},
                              content_type="application/json")
@@ -453,21 +449,14 @@ class DashboardCrudTests(TestCase):
         self.assertEqual(copy.nombre, "Ventas (copia)")
         widget = copy.widgets.get()
         self.assertEqual((widget.type, widget.title, widget.style), ("bar", "Ventas", {"stacked": True}))
+        # El widget de la copia usa la copia de la fuente, no la del tablero original.
+        self.assertEqual(widget.source, copy.sources.get())
+        self.assertNotEqual(widget.source_id, self.source.id)
 
     def test_no_toca_tableros_ajenos(self):
-        other = Dashboard.objects.create(nombre="Ajeno",
-                                         owner=get_user_model().objects.create(username="pepe"),
-                                         sheet_url=self.url)
+        other, _ = make_board(get_user_model().objects.create(username="pepe"), nombre="Ajeno")
         self.assertEqual(self.client.get(f"/api/dashboards/{other.id}/").status_code, 404)
         self.assertEqual(self.client.delete(f"/api/dashboards/{other.id}/").status_code, 404)
-
-    def test_al_cambiar_la_url_de_la_hoja_se_invalida_el_cache(self):
-        with mock.patch("sheets_reports.views.invalidate_sheet_cache") as invalidate:
-            r = self.client.put(f"/api/dashboards/{self.dashboard.id}/",
-                                json.dumps({"sheet_url": "https://otra/x"}), content_type="application/json")
-        self.assertEqual(r.status_code, 200)
-        invalidate.assert_called_once_with(self.dashboard.sheet_id, self.dashboard.sheet_gid)
-
 
 class SinUsuarioTests(TestCase):
     def test_lista_explica_como_crear_usuario(self):

@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
 from sheets_reports.models import Dashboard, Widget
-from sheets_reports.tests.fixtures import compiled, fields, render, sales_df
+from sheets_reports.tests.fixtures import compiled, fields, make_board, render, sales_df
 from sheets_reports.widgets import WIDGETS
 
 class CompileTests(SimpleTestCase):
@@ -56,9 +56,7 @@ class BoardFilterTests(TestCase):
         from sheets_reports.services.widget_service import WidgetService
 
         user = get_user_model().objects.create(username="u")
-        dashboard = Dashboard.objects.create(
-            nombre="D", owner=user,
-            sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        dashboard, _ = make_board(user, nombre="D")
         service = WidgetService(dashboard, sales_df())
         raw = json.dumps([
             {"field": "categoria", "op": "in", "value": ["Hogar"]},
@@ -73,23 +71,18 @@ class BoardFilterTests(TestCase):
         from sheets_reports.services.widget_service import WidgetService
 
         user = get_user_model().objects.create(username="u2")
-        dashboard = Dashboard.objects.create(
-            nombre="D", owner=user,
-            sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        dashboard, _ = make_board(user, nombre="D")
         service = WidgetService(dashboard, sales_df())
         with self.assertRaises(ValueError):
             service.parse_board_filters("nada")
 
 
-@mock.patch("sheets_reports.views.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
+@mock.patch("sheets_reports.services.sheets.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
 class ApiTests(TestCase):
     def setUp(self):
         user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.client.force_login(user)
-        self.dashboard = Dashboard.objects.create(
-            nombre="D", owner=user,
-            sheet_url="https://docs.google.com/spreadsheets/d/abc/edit",
-        )
+        self.dashboard, self.source = make_board(user, nombre="D")
 
     def post_widget(self, payload):
         return self.client.post(

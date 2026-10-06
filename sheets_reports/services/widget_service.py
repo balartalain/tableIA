@@ -33,12 +33,14 @@ def clean_position(value, fallback=None) -> dict:
 
 
 class WidgetService:
-    """Operaciones sobre los widgets de un tablero, sobre la hoja ya cacheada."""
+    """Operaciones sobre los widgets de un tablero que usan una fuente (`source`), sobre su
+    hoja ya cargada (`df`). Con varias fuentes, un servicio por fuente."""
 
-    def __init__(self, dashboard, df: pd.DataFrame):
+    def __init__(self, dashboard, df: pd.DataFrame, source=None):
         self.dashboard = dashboard
+        self.source = source
         self.df = df
-        self.ctx = SheetContext.from_dataframe(df, dashboard.sheet_gid)
+        self.ctx = SheetContext.from_dataframe(df, source.gid if source else "")
 
     # ----------------------------------------------------------------- CRUD
     def create(self, widget_type: str, payload: dict) -> Widget:
@@ -54,6 +56,7 @@ class WidgetService:
         self._validate(widget_type, form, title)
         return Widget.objects.create(
             dashboard=self.dashboard,
+            source=self.source,
             type=widget_type,
             title=title,
             position=clean_position(payload.get("position")),
@@ -76,6 +79,8 @@ class WidgetService:
         self._validate(widget.type, form, payload.get("title", widget.title))
         widget.fields = form.fields.to_dict()
         widget.style = form.style.to_dict()
+        if self.source is not None:
+            widget.source = self.source
         if "title" in payload:
             widget.title = str(payload["title"] or "").strip() or widget.title
         if "position" in payload:

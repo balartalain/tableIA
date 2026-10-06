@@ -204,8 +204,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.target === drawerEl && e.propertyName === 'width') window.dispatchEvent(new Event('resize'));
   });
 
-  store.loadSchema();
-
   let entries = {};
   try {
     entries = await store.loadBoard();

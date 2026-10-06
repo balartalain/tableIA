@@ -1,0 +1,67 @@
+{# Fuentes de datos del tablero (cuerpo del bottom sheet): tabla + selector para agregar o editar. #}
+<div x-data="sourceManager()" class="h-full flex flex-col">
+
+  <div x-show="view === 'list'" class="flex-1 min-h-0 flex flex-col gap-4">
+    <div class="flex items-center justify-between gap-3">
+      <p class="text-sm text-ink/60">Cada widget elige una de estas fuentes en su panel.</p>
+      <button type="button" x-on:click="add()"
+              class="shrink-0 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-lg px-4 py-2 transition cursor-pointer inline-flex items-center gap-1.5">
+        <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar fuente
+      </button>
+    </div>
+
+    <p x-show="error" x-text="error" role="alert" class="text-sm text-red-600"></p>
+    <p x-show="loading" class="text-xs text-ink/50">
+      <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando fuentes…
+    </p>
+
+    <div x-show="!loading && !error && !sources.length"
+         class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-xl py-10">
+      <i class="ti ti-database-off text-2xl text-ink/30" aria-hidden="true"></i>
+      <p class="text-sm text-ink/60">Este tablero no tiene fuentes de datos.</p>
+    </div>
+
+    <div x-show="sources.length" class="flex-1 min-h-0 overflow-auto border border-line rounded-xl">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
+          <tr>
+            <th class="px-3 py-2 font-semibold">Fuente</th>
+            <th class="px-3 py-2 w-32 font-semibold">Columnas</th>
+            <th class="px-3 py-2 w-24 font-semibold text-right">Widgets</th>
+            <th class="px-3 py-2 w-24"><span class="sr-only">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="s in sources" :key="s.id">
+            <tr class="border-t border-line">
+              <td class="px-3 py-2">
+                <span class="inline-flex items-center gap-2 min-w-0">
+                  <i class="ti ti-brand-google text-base text-ink/40 shrink-0" aria-hidden="true"></i>
+                  <span class="font-medium truncate" x-text="s.label"></span>
+                </span>
+              </td>
+              <td class="px-3 py-2 text-ink/60" x-text="columnsLabel(s)"></td>
+              <td class="px-3 py-2 text-ink/60 text-right" x-text="s.widgets"></td>
+              <td class="px-3 py-1">
+                <div class="flex justify-end gap-0.5">
+                  <button type="button" x-on:click="edit(s)" title="Editar columnas" x-bind:aria-label="`Editar ${s.label}`"
+                          class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper cursor-pointer">
+                    <i class="ti ti-pencil text-base" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" x-on:click="remove(s)" title="Eliminar" x-bind:aria-label="`Eliminar ${s.label}`"
+                          class="p-1.5 rounded-md text-ink/40 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+                    <i class="ti ti-trash text-base" aria-hidden="true"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div x-show="view === 'picker'" x-cloak class="flex-1 min-h-0">
+    {% include "sheets_reports/source_picker.html" with picker_mode="add" %}
+  </div>
+</div>

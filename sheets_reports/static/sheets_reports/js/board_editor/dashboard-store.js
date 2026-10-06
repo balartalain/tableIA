@@ -151,18 +151,36 @@ document.addEventListener('alpine:init', () => {
     editingType: null,
     dashboardId: window.DASHBOARD_ID,
     drawerTab: 'data',
+    // Fuentes de datos del tablero ([{id, label}]) y el schema de cada una, pedido al abrir el
+    // panel de un widget. `schema` es siempre el de la fuente del widget que se edita.
+    sources: [],
+    schemas: {},
     schema: { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], sample_values: {} },
     widgetManifest: window.WIDGET_MANIFEST || {},
     schemaError: '',
     _nextId: -1,
     listSortables: {},
 
-    async loadSchema() {
+    // Schema de una fuente (cacheado por id). Lo deja en `schema` para el panel.
+    async loadSchema(sourceId) {
+      const empty = { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], sample_values: {} };
+      if (!sourceId) {
+        this.schema = empty;
+        this.schemaError = 'Elige la fuente de datos del widget.';
+        return;
+      }
+      if (this.schemas[sourceId]) {
+        this.schema = this.schemas[sourceId];
+        this.schemaError = '';
+        return;
+      }
+      this.schema = empty;
       try {
-        const r = await fetch(apiUrl(`/api/dashboard/${this.dashboardId}/schema/`));
+        const r = await fetch(apiUrl(`/api/sources/${sourceId}/schema/`));
         const data = await r.json().catch(() => null);
         if (r.ok && data) {
           const { widget_manifest: manifest, ...schema } = data;
+          this.schemas[sourceId] = schema;
           this.schema = schema;
           if (manifest) {
             window.WIDGET_MANIFEST = manifest;
@@ -175,6 +193,13 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         this.schemaError = 'No se pudo conectar con el servidor.';
       }
+    },
+
+    // Tras agregar, editar o eliminar fuentes: otras columnas, otros schemas.
+    resetSources(sources) {
+      if (sources) this.sources = sources;
+      this.schemas = {};
+      this.assistantSuggestions = {};
     },
 
     _renderUrl() {
@@ -196,6 +221,7 @@ document.addEventListener('alpine:init', () => {
       return {
         id: w.id,
         type: w.type,
+        source_id: w.source_id ?? null,
         title: w.title || 'Nuevo Widget',
         position: w.position || { x: 0, y: 0, w: 6, h: 300 },
         fields: { ...EMPTY_FIELDS(), ...(w.fields || {}) },
@@ -213,6 +239,7 @@ document.addEventListener('alpine:init', () => {
       const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
       this._reportFilterErrors(data);
+      this.sources = (data.dashboard && data.dashboard.sources) || [];
       // Instancias reales (mount/applyRender/setLoading), no objetos planos.
       this.widgets = data.widgets
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))
@@ -232,6 +259,7 @@ document.addEventListener('alpine:init', () => {
           return;
         }
         this._reportFilterErrors(data);
+        this.sources = (data.dashboard && data.dashboard.sources) || this.sources;
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
         saved.forEach(w => w.applyRender(byId[w.id]));
       } catch (e) {
@@ -243,6 +271,8 @@ document.addEventListener('alpine:init', () => {
       const manifest = this.widgetManifest[type] || {};
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
+        // Un widget nuevo usa la primera fuente del tablero; se cambia en su panel.
+        source_id: this.sources.length ? this.sources[0].id : null,
         position: { x: 0, y: this.widgets.length, w: 6, h: 300 },
         title: manifest.label || 'Nuevo Widget',
         style: { ...(manifest.style_defaults || {}) },
@@ -265,6 +295,7 @@ document.addEventListener('alpine:init', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: w.type,
+            source: w.source_id,
             title: w.title,
             position: w.position,
             fields: w.fields,
@@ -440,10 +471,24 @@ document.addEventListener('alpine:init', () => {
       const title = w.title || manifest.label || 'Nuevo Widget';
       this.drawerDraft = {
         title,
+        source: w.source_id ?? null,
         fields: { ...EMPTY_FIELDS(), ...(w.fields || {}) },
         style: { ...(manifest.style_defaults || {}), ...(w.style || {}), title },
       };
       this._normalizeDraft();
+      // Las columnas por defecto salen del schema de la fuente: se eligen cuando llega.
+      this.loadSchema(this.drawerDraft.source).then(() => {
+        if (this.editingId === id) this._prefillDraft();
+      });
+      // Sin esperar: los tags del chat aparecen cuando llegan.
+      this.loadSuggestions(w.type);
+      // El panel del tipo lo crea un `x-if`: sus listas existen en el siguiente tick.
+      this.destroyListSortables();
+      Alpine.nextTick(() => this.initListSortables());
+    },
+
+    // Un widget recién arrastrado (o con otra fuente) empieza con columnas y una métrica.
+    _prefillDraft() {
       if (this.hasColumns) {
         if (!this.drawerDraft.fields.columns.length) this._autoPickColumns();
       } else if (!this.drawerDraft.fields.dimensions.length) {
@@ -453,11 +498,16 @@ document.addEventListener('alpine:init', () => {
       if ((this.drawerCapabilities.metrics || [0, 0])[0] > 0 && !this.drawerDraft.fields.metrics.length) {
         this.addMetric();
       }
-      // Sin esperar: los tags del chat aparecen cuando llegan.
-      this.loadSuggestions(w.type);
-      // El panel del tipo lo crea un `x-if`: sus listas existen en el siguiente tick.
-      this.destroyListSortables();
-      Alpine.nextTick(() => this.initListSortables());
+    },
+
+    // Cambiar la fuente del widget en el panel: otro schema y otras sugerencias. Lo elegido
+    // se conserva (si no existe en la nueva hoja, Guardar lo dirá).
+    async changeDrawerSource(sourceId) {
+      const id = sourceId ? Number(sourceId) : null;
+      this.drawerDraft.source = id;
+      await this.loadSchema(id);
+      if (this.drawerDraft.source === id) this._prefillDraft();
+      this.loadSuggestions(this.editingType);
     },
 
     // (Re)atan los arrastres de las listas del panel: se destruyen al cerrar.
@@ -1012,6 +1062,10 @@ document.addEventListener('alpine:init', () => {
     async saveDrawer({ toast = 'Cambios guardados.', fromAssistant = false } = {}) {
       const w = this.editingWidget;
       if (!w) return false;
+      if (!this.drawerDraft.source) {
+        this.drawerSaveError = 'Elige la fuente de datos del widget.';
+        return false;
+      }
       this.drawerSaving = true;
       this.drawerSaveError = '';
       try {
@@ -1020,6 +1074,7 @@ document.addEventListener('alpine:init', () => {
         const { title, fields, style } = this._draftPayload(w.title);
 
         w.title = title;
+        w.source_id = this.drawerDraft.source;
         w.fields = fields;
         w.style = style;
         w._dirty = true;
@@ -1064,7 +1119,7 @@ document.addEventListener('alpine:init', () => {
         const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.dashboardId}/table-assistant/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, widget_type: this.editingType, current, history }),
+          body: JSON.stringify({ prompt, source: this.drawerDraft.source, widget_type: this.editingType, current, history }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || 'El servidor no respondió correctamente.');
         // `baseStyle`: el estilo del panel al pedir, para mostrar solo lo que la propuesta cambia.
@@ -1088,34 +1143,40 @@ document.addEventListener('alpine:init', () => {
       if (this.editingId != null) this.assistantThreads[this.editingId] = [];
     },
 
-    // Pedidos sugeridos por la IA para un tipo de widget (dependen de la hoja y del tipo, no
-    // del widget). Se piden una vez por tipo y sesión; si fallan, el chat queda sin tags.
-    // Con `refresh` («otras ideas») el servidor salta su caché y evita las que ya se ven; si no
-    // llegan nuevas, se quedan las actuales.
+    // Pedidos sugeridos por la IA para un tipo de widget sobre una fuente (dependen de la hoja
+    // y del tipo, no del widget). Se piden una vez por tipo, fuente y sesión; si fallan, el
+    // chat queda sin tags. Con `refresh` («otras ideas») el servidor salta su caché y evita las
+    // que ya se ven; si no llegan nuevas, se quedan las actuales.
+    _suggestionKey(type, source = this.drawerDraft && this.drawerDraft.source) {
+      return `${type}:${source || ''}`;
+    },
+
     async loadSuggestions(type, { refresh = false } = {}) {
-      if (!type || this._suggestionsLoading[type]) return;
-      if (!refresh && type in this.assistantSuggestions) return;
-      const current = this.assistantSuggestions[type] || [];
-      const params = new URLSearchParams({ widget_type: type });
+      const source = this.drawerDraft && this.drawerDraft.source;
+      const key = this._suggestionKey(type, source);
+      if (!type || !source || this._suggestionsLoading[key]) return;
+      if (!refresh && key in this.assistantSuggestions) return;
+      const current = this.assistantSuggestions[key] || [];
+      const params = new URLSearchParams({ widget_type: type, source });
       if (refresh) {
         params.set('refresh', '1');
         current.forEach(s => params.append('avoid', s));
       }
-      this._suggestionsLoading[type] = true;
+      this._suggestionsLoading[key] = true;
       try {
         const { r, data } = await fetchJsonSafe(
           apiUrl(`/api/dashboard/${this.dashboardId}/widget-suggestions/?${params}`));
         const list = (r.ok && data && Array.isArray(data.suggestions)) ? data.suggestions : [];
-        this.assistantSuggestions[type] = list.length || !refresh ? list : current;
+        this.assistantSuggestions[key] = list.length || !refresh ? list : current;
       } catch (e) {
-        this.assistantSuggestions[type] = current;
+        this.assistantSuggestions[key] = current;
       } finally {
-        delete this._suggestionsLoading[type];
+        delete this._suggestionsLoading[key];
       }
     },
 
     get drawerSuggestionsLoading() {
-      return !!(this.editingType && this._suggestionsLoading[this.editingType]);
+      return !!(this.editingType && this._suggestionsLoading[this._suggestionKey(this.editingType)]);
     },
 
     refreshSuggestions() {
@@ -1123,7 +1184,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     get drawerSuggestions() {
-      return (this.editingType && this.assistantSuggestions[this.editingType]) || [];
+      return (this.editingType && this.assistantSuggestions[this._suggestionKey(this.editingType)]) || [];
     },
 
     registerStyleGroup(group, keys) {
@@ -1256,7 +1317,7 @@ document.addEventListener('alpine:init', () => {
       this.drawerThread.forEach(m => { if (m.undo) m.undo = null; });
     },
 
-    drawerDraft: { title: '', fields: { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null }, style: {}, prompt: '' },
+    drawerDraft: { title: '', source: null, fields: { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null }, style: {}, prompt: '' },
     // Hilos del chat con la IA por id de widget: { [id]: [{role, text} | {role, proposal, applied, undo} | {role, error}] }.
     assistantThreads: {},
     // Bloque de «Configurar» de cada clave de style, por tipo: { [type]: { [key]: grupo } }.

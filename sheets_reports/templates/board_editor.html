@@ -17,6 +17,12 @@
        x-on:blur="save()" aria-label="Nombre del tablero" maxlength="255"
        data-name="{{ dashboard.nombre }}" value="{{ dashboard.nombre }}"
        class="board-title min-w-[8ch] max-w-full truncate bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded-md px-2 py-1 font-sans font-semibold text-sm text-ink transition">
+<button id="sources-btn" type="button" aria-label="Gestionar fuente de datos" title="Gestionar fuente de datos"
+        x-data x-on:click="$store.bottomSheet.open({ title: 'Gestionar fuente de datos' }); window.dispatchEvent(new CustomEvent('sources:open'))"
+        class="shrink-0 ml-1 bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-lg font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+  <i class="ti ti-database text-base" aria-hidden="true"></i>
+  <span class="hidden sm:inline">Gestionar fuente de datos</span>
+</button>
 {% else %}
 <span class="px-2 font-sans font-semibold text-sm text-ink">Nuevo tablero</span>
 {% endif %}
@@ -291,7 +297,7 @@
               class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
     </div>
     <div class="flex-1 min-h-0 overflow-auto p-5">
-      {% if not dashboard %}{% include "sheets_reports/source_picker.html" %}{% endif %}
+      {% if dashboard %}{% include "sheets_reports/source_manager.html" %}{% else %}{% include "sheets_reports/source_picker.html" with picker_mode="create" %}{% endif %}
     </div>
   </section>
 
@@ -334,7 +340,8 @@
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/bottom-sheet.js' %}"></script>
-{% if not dashboard %}<script src="{% static 'sheets_reports/js/board_editor/source-picker.js' %}"></script>{% endif %}
+<script src="{% static 'sheets_reports/js/board_editor/source-picker.js' %}"></script>
+{% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/source-manager.js' %}"></script>{% endif %}
 <script src="{% static 'sheets_reports/js/board_editor/board-editor-init.js' %}"></script>
 
 {% endblock %}

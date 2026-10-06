@@ -123,3 +123,12 @@ def errors_for(widget_type: str, fields_data: dict, style: dict | None = None,
         ctx or sales_ctx(),
         widget_type,
     )
+
+
+def make_board(owner, nombre="Ventas", sheet_id="abc", gid="0", **source_fields):
+    """Un tablero con una fuente de datos (la hoja `sheet_id`/`gid`): (dashboard, source)."""
+    from sheets_reports.models import Dashboard, DataSource
+
+    dashboard = Dashboard.objects.create(nombre=nombre, owner=owner)
+    source = DataSource.objects.create(dashboard=dashboard, sheet_id=sheet_id, gid=gid, **source_fields)
+    return dashboard, source

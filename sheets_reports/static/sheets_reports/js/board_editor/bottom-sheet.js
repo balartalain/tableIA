@@ -1,6 +1,6 @@
 // Panel inferior (bottom sheet) del editor: contenedor genérico que abre, cierra y se
 // redimensiona. En un tablero nuevo aloja el selector de la fuente de datos.
-const BOTTOM_SHEET_DEFAULT_PCT = 80;
+const BOTTOM_SHEET_DEFAULT_PCT = 95;
 // Por debajo de esta altura (% del área disponible) soltar el asa cierra el panel.
 const BOTTOM_SHEET_MIN_PCT = 15;
 

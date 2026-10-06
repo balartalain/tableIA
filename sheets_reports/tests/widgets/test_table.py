@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
 from sheets_reports.models import Dashboard, Widget
-from sheets_reports.tests.fixtures import compiled, render, sales_df, table_fields
+from sheets_reports.tests.fixtures import compiled, make_board, render, sales_df, table_fields
 
 
 class RowsExecutionTests(SimpleTestCase):
@@ -61,15 +61,12 @@ class RenderContractTests(SimpleTestCase):
         self.assertTrue(out["widget_form"]["style"]["showPagination"])
 
 
-@mock.patch("sheets_reports.views.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
+@mock.patch("sheets_reports.services.sheets.get_sheet_dataframe", side_effect=lambda *a, **k: sales_df())
 class ApiTests(TestCase):
     def setUp(self):
         user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.client.force_login(user)
-        self.dashboard = Dashboard.objects.create(
-            nombre="D", owner=user,
-            sheet_url="https://docs.google.com/spreadsheets/d/abc/edit",
-        )
+        self.dashboard, self.source = make_board(user, nombre="D")
 
     def post_widget(self, payload):
         return self.client.post(

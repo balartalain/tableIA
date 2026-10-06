@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, TestCase
 
 from sheets_reports.models import Dashboard
 from sheets_reports.services.sheets import SheetError, apply_column_config, infer_column_types
-from sheets_reports.tests.fixtures import sales_df
+from sheets_reports.tests.fixtures import make_board, sales_df
 
 
 def raw_df() -> pd.DataFrame:
@@ -92,7 +92,7 @@ class SourceEndpointsTests(TestCase):
         self.assertEqual(r.json(), tabs)
 
     def test_columnas_con_tipo_inferido_y_ejemplos(self):
-        with mock.patch("sheets_reports.views.get_sheet_dataframe", return_value=sales_df()) as get:
+        with mock.patch("sheets_reports.services.sheets.get_sheet_dataframe", return_value=sales_df()) as get:
             r = self.client.get("/api/sources/google/spreadsheets/abc/tabs/123/columns/")
         get.assert_called_once_with("abc", "123")
         data = r.json()
@@ -106,7 +106,7 @@ class SourceEndpointsTests(TestCase):
         r = self.client.get("/tableros/nuevo/")
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "window.DASHBOARD_ID = null")
-        self.assertContains(r, "sourcePicker()")
+        self.assertContains(r, "sourcePicker({ mode: 'create' })")
         self.assertNotContains(r, 'id="share-btn"')
 
 
@@ -125,12 +125,11 @@ class CreateFromSourceTests(TestCase):
                    {"name": "categoria", "type": "text", "include": False}]
         r = self.post(columns=columns)
         self.assertEqual(r.status_code, 201, r.content)
-        d = Dashboard.objects.get(id=r.json()["id"])
-        self.assertEqual(d.sheet_id, "abc_1-2")
-        self.assertEqual(d.sheet_gid, "77")
-        self.assertEqual((d.sheet_name, d.tab_name), ("Ventas 2026", "Detalle"))
-        self.assertEqual(d.columns, columns)
-        self.assertEqual(r.json()["sheet_name"], "Ventas 2026")
+        source = Dashboard.objects.get(id=r.json()["id"]).sources.get()
+        self.assertEqual((source.sheet_id, source.gid), ("abc_1-2", "77"))
+        self.assertEqual((source.sheet_name, source.tab_name), ("Ventas 2026", "Detalle"))
+        self.assertEqual(source.columns, columns)
+        self.assertEqual(r.json()["sources"], ["Ventas 2026 · Detalle"])
 
     def test_valida_las_columnas(self):
         for columns in ([{"name": "ventas", "type": "moneda", "include": True}],
@@ -143,15 +142,15 @@ class CreateFromSourceTests(TestCase):
     def test_el_tablero_usa_las_columnas_elegidas(self):
         r = self.post(columns=[{"name": "categoria", "type": "text", "include": False},
                                {"name": "anio", "type": "text", "include": True}])
-        with mock.patch("sheets_reports.views.get_sheet_dataframe", return_value=sales_df()):
-            schema = self.client.get(f"/api/dashboard/{r.json()['id']}/schema/").json()
+        with mock.patch("sheets_reports.services.sheets.get_sheet_dataframe", return_value=sales_df()):
+            source = Dashboard.objects.get(id=r.json()["id"]).sources.get()
+            schema = self.client.get(f"/api/sources/{source.id}/schema/").json()
         self.assertNotIn("categoria", schema["all_fields"])
         self.assertNotIn("anio", schema["numeric_fields"])
         self.assertIn("ventas", schema["numeric_fields"])
 
     def test_abrir_el_editor_marca_la_ultima_apertura(self):
-        d = Dashboard.objects.create(nombre="x", owner=self.user,
-                                     sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        d, _ = make_board(self.user, nombre="x")
         self.assertIsNone(self.client.get("/api/dashboards/").json()[0]["last_opened_at"])
         self.client.get(f"/tableros/{d.id}/edit/")
         d.refresh_from_db()

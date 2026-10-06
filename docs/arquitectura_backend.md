@@ -382,7 +382,7 @@ class BaseWidget(ABC):
 |---|---|---|
 | `dimensions` | `[min, max]` | Rango de dimensiones. `[0,0]` = no admite |
 | `pivots` | `[min, max]` | Rango de pivotes |
-| `metrics` | `[min, max]` | Rango de métricas |
+| `metrics` | `[min, max]` | Rango de métricas. Con `max > 1` cada métrica admite además sus propias condiciones (`metric.filters`); con una sola métrica equivaldrían a `filters` y se rechazan |
 | `columns` | `[min, max]` | Rango de columnas (solo «Tabla»); ausente = no admite |
 | `sort` | bool | Admite `sort_by` |
 | `limit` | bool | Admite `limit` |

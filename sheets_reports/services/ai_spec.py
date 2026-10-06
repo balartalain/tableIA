@@ -81,7 +81,9 @@ consulta.
     - agg "count_distinct": "cuántos distintos" de una columna (cualquier tipo).
     - agg "sum"/"avg"/"median"/"min"/"max"/"std": SOLO sobre columnas numéricas.
     - filters (opcional): condiciones SOLO para esa métrica. Sirven para poner en el mismo
-      widget "ventas 2026" y "ventas 2025", o "ventas de Hogar" junto al total.
+      widget "ventas 2026" y "ventas 2025", o "ventas de Hogar" junto al total. Solo en
+      widgets con "condiciones por métrica" (los que admiten más de una métrica); con una
+      sola métrica, usa fields.filters.
     - window (opcional): {"type": "percent_of_total" | "percent_of_row" | "running_total" |
       "pct_change"} sobre esa métrica ya agregada. "participación", "qué % representa cada...",
       "acumulado", "variación respecto al anterior".
@@ -162,7 +164,15 @@ def capabilities_text(widget) -> str:
             parts.append(f"sin {label}")
     if caps.get("trend"):
         parts.append("tendencia")
+    if admits_metric_filters(widget):
+        parts.append("condiciones por métrica")
     return ", ".join(parts)
+
+
+def admits_metric_filters(widget) -> bool:
+    """Condiciones propias de una métrica: solo junto a otras métricas (Electrónica vs total);
+    con una sola métrica equivalen a los filtros del widget."""
+    return (widget.capabilities or {}).get("metrics", (0, 0))[1] > 1
 
 
 def _style_schema_docs(widget) -> list[str]:
@@ -338,6 +348,9 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
             "description": "Transformación sobre la métrica (porcentaje del total, acumulado...).",
         },
     }
+    if widget_type and widgets and not admits_metric_filters(widgets[0]):
+        # Con una sola métrica sus condiciones serían las del widget: se ofrece fields.filters.
+        del metric_properties["filters"]
     fields_properties = {
         "dimensions": {"type": "array", "items": {"type": "string", "enum": list(ctx.fields)},
                        "description": "Columnas para agrupar / mostrar como filas."},
@@ -667,8 +680,11 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
     if not low <= len(metrics) <= high:
         errors.append(f"fields.metrics: {_range_label('métricas', caps.get('metrics', (0, 0)))}.")
     aliases: list[str] = []
+    metric_filters_ok = admits_metric_filters(definition)
     for i, metric in enumerate(metrics):
         errors += _metric_errors(metric, i, ctx, aliases)
+        if isinstance(metric, dict) and metric.get("filters") and not metric_filters_ok:
+            errors.append(f"metrics[{i}].filters: con una sola métrica usa fields.filters.")
         if isinstance(metric, dict) and metric.get("alias"):
             aliases.append(metric["alias"])
 

@@ -368,6 +368,9 @@ document.addEventListener('alpine:init', () => {
     get columnsLabel() { return this.drawerCapabilities.columns_label || 'Columnas a mostrar'; },
     get hasMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1] > 0; },
     get maxMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1]; },
+    // Condiciones propias de una métrica: solo sirven junto a otras métricas (Electrónica vs
+    // total); con una sola equivalen a los filtros del widget.
+    get hasMetricFilters() { return this.maxMetrics > 1; },
     get maxDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1]; },
     get maxPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1]; },
     // Columnas para la mini tendencia: las de dimensión (año, mes, categoría…), como en main.
@@ -492,7 +495,12 @@ document.addEventListener('alpine:init', () => {
       if (typeof f.trend_by !== 'string') f.trend_by = f.trend_by == null ? '' : String(f.trend_by);
       if (typeof f.sort_by !== 'string') f.sort_by = null;
       if (f.limit != null && f.limit !== '') f.limit = Number(f.limit);
-      f.filters = f.filters.map(c => (c && typeof c === 'object' && c._k ? c : conditionFromPayload(c || {})));
+      const toDraft = c => (c && typeof c === 'object' && c._k ? c : conditionFromPayload(c || {}));
+      f.filters = f.filters.map(toDraft);
+      f.metrics.forEach(m => {
+        if (!m || m.type === 'formula') return;
+        m.filters = (Array.isArray(m.filters) ? m.filters : []).map(toDraft);
+      });
       this.reconcileFormulas();
     },
 
@@ -594,7 +602,7 @@ document.addEventListener('alpine:init', () => {
       const field = numeric.find(f => !dims.includes(f) && !used(f))
         || numeric.find(f => !used(f))
         || (this.schema.all_fields || [])[0] || '';
-      metrics.push({ field, agg: 'sum', alias: this._autoAlias('sum', field, metrics) });
+      metrics.push({ field, agg: 'sum', alias: this._autoAlias('sum', field, metrics), filters: [] });
     },
 
     removeMetric(index) {
@@ -621,6 +629,7 @@ document.addEventListener('alpine:init', () => {
         metric.type = 'formula';
         delete metric.agg;
         delete metric.field;
+        delete metric.filters;
         metric.op = 'div';
         const prev = list.slice(0, index).find(m => m && m.alias);
         metric.left = prev ? prev.alias : '';
@@ -634,6 +643,7 @@ document.addEventListener('alpine:init', () => {
         delete metric.right;
         delete metric.expression;
         metric.agg = metric.agg || 'sum';
+        metric.filters = [];
         metric.field = metric.field || (this.schema.numeric_fields || [])[0]
           || (this.schema.all_fields || [])[0] || '';
       }
@@ -751,7 +761,19 @@ document.addEventListener('alpine:init', () => {
       }
       const agg = (this.aggOptions.find(o => o.value === (metric.agg || '')) || {}).label
         || (metric.agg || '');
-      return `${agg} ${humanizeName(metric.field)}`.trim();
+      const name = `${agg} ${humanizeName(metric.field)}`.trim();
+      const conditions = this.metricConditionsSummary(metric);
+      return conditions ? `${name} · ${conditions}` : name;
+    },
+
+    // «Categoría es igual a Electrónica y Año es igual a 2026»: las condiciones completas de
+    // la métrica (las a medio escribir no se cuentan).
+    metricConditionsSummary(metric) {
+      const numeric = this.schema.numeric_fields || [];
+      return ((metric && metric.filters) || [])
+        .filter(c => c && c.field && (!opMeta(c.op).needsValue || c.relative || String(c.value ?? '').trim() !== ''))
+        .map(c => this._describeCondition(c._k ? conditionToPayload(c, numeric) : c))
+        .join(' y ');
     },
 
     _autoAlias(agg, field, taken) {
@@ -766,15 +788,23 @@ document.addEventListener('alpine:init', () => {
 
     get aggOptions() { return AGG_OPTIONS; },
 
-    // ---- filtros
-    addFilter() {
-      const filters = this.drawerDraft.fields.filters;
-      if (filters.length >= 20) return;
-      filters.push(conditionFromPayload({ field: (this.schema.all_fields || [])[0] || '', op: 'eq' }));
+    // ---- filtros (del widget y propios de cada métrica: la misma fila de condición)
+    _addCondition(list) {
+      if (list.length >= 20) return;
+      list.push(conditionFromPayload({ field: (this.schema.all_fields || [])[0] || '', op: 'eq' }));
     },
 
-    removeFilter(index) {
-      this.drawerDraft.fields.filters.splice(index, 1);
+    addFilter() {
+      this._addCondition(this.drawerDraft.fields.filters);
+    },
+
+    addMetricFilter(metric) {
+      if (!Array.isArray(metric.filters)) metric.filters = [];
+      this._addCondition(metric.filters);
+    },
+
+    removeCondition(list, index) {
+      list.splice(index, 1);
     },
 
     get filterOpOptions() { return FILTER_OPS; },
@@ -856,6 +886,12 @@ document.addEventListener('alpine:init', () => {
       });
       // Un cálculo a medias tampoco (`pruneFormulas` lo quita además del borrador al guardar).
       fields.metrics = (fields.metrics || []).filter(m => !(m && m.type === 'formula' && !m.expression));
+      // Condiciones de la métrica en formato del DSL; sin ninguna, la clave no se envía.
+      fields.metrics.forEach(m => {
+        if (!m || !Array.isArray(m.filters)) return;
+        if (m.filters.length) m.filters = m.filters.map(c => conditionToPayload(c, this.schema.numeric_fields || []));
+        else delete m.filters;
+      });
       // Columnas: solo `field`, y `label` solo si escribió uno.
       fields.columns = (fields.columns || [])
         .map(c => (typeof c === 'string' ? { field: c } : (c || {})))
@@ -969,10 +1005,9 @@ document.addEventListener('alpine:init', () => {
       const metrics = f.metrics || [];
       if (metrics.length) {
         steps.push({ title: 'Valores', details: metrics.map(m => {
+          // `metricName` ya incluye las condiciones propias de la métrica.
           const what = m.type === 'formula' ? `Cálculo: ${m.expression || ''}` : this.metricName(m);
-          const conditions = (m.filters || []).map(c => this._describeCondition(c));
-          return [what, m.label ? `como «${m.label}»` : '', conditions.length ? `solo si ${conditions.join(' y ')}` : '']
-            .filter(Boolean).join(' ');
+          return [what, m.label ? `como «${m.label}»` : ''].filter(Boolean).join(' ');
         }) });
       }
       if (f.trend_by) steps.push({ title: 'Tendencia', detail: `Mini línea por ${f.trend_by}` });

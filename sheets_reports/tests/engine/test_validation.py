@@ -21,6 +21,13 @@ class FormErrorsTests(SimpleTestCase):
             metrics=[agg("total"), {"agg": "count", "alias": "filas"}],
         )), [])
 
+    def test_condiciones_por_metrica_solo_con_varias_metricas(self):
+        electronica = [{"field": "categoria", "op": "eq", "value": "Electrónica"}]
+        self.assertEqual(errors_for("kpi", kpi_fields(
+            agg("total"), agg("electronica", filters=electronica))), [])
+        self.assertIn("metrics[0].filters: con una sola métrica usa fields.filters.",
+                      errors_for("donut", fields(metrics=[agg("total", filters=electronica)])))
+
     def test_clave_de_datos_desconocida(self):
         self.assertIn("fields: 'orden' no es un campo de datos válido.",
                       errors_for("bar", {**fields(), "orden": ["ventas"]}))

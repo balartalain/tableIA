@@ -9,56 +9,6 @@
     </button>
   </div>
   <template x-for="(c, ci) in $store.dashboard.drawerDraft.fields.filters" :key="c._k">
-    <div class="flex flex-wrap items-center gap-1 rounded-lg bg-paper/70 border border-line/60 p-1">
-      <select x-model="c.field" x-on:change="$store.dashboard.onFilterFieldChange(c)" aria-label="Columna"
-              class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-        <template x-for="f in $store.dashboard.schema.all_fields || []" :key="f">
-          <option x-bind:value="f" x-text="f"></option>
-        </template>
-      </select>
-      <select x-model="c.op" x-on:change="$store.dashboard.onFilterOpChange(c)" aria-label="Operador"
-              class="w-36 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-        <template x-for="o in $store.dashboard.filterOpOptions" :key="o.value">
-          <option x-bind:value="o.value" x-text="o.label"></option>
-        </template>
-      </select>
-
-      <template x-if="$store.dashboard.filterNeedsValue(c)">
-        <select x-model="c.mode" aria-label="Tipo de valor"
-                class="w-28 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-          <option value="value" x-text="$store.dashboard.filterIsList(c) ? 'Lista' : ($store.dashboard.filterIsRange(c) ? 'Rango' : 'Valor')"></option>
-          <option value="relative" x-text="'Relativo…'"></option>
-        </select>
-      </template>
-
-      <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'value' && !$store.dashboard.filterIsRange(c)">
-        <input type="text" x-model="c.value" x-bind:list="$store.dashboard.sampleListId(c.field)" aria-label="Valor"
-               x-bind:placeholder="$store.dashboard.filterIsList(c) ? 'Separados por coma' : 'Valor'"
-               class="flex-1 min-w-[5rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-      </template>
-
-      <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'value' && $store.dashboard.filterIsRange(c)">
-        <span class="flex items-center gap-1">
-          <input type="text" x-model="c.value" placeholder="Desde" aria-label="Desde"
-                 class="w-20 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-          <span class="text-xs text-ink/50">…</span>
-          <input type="text" x-model="c.value2" placeholder="Hasta" aria-label="Hasta"
-                 class="w-20 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-        </span>
-      </template>
-
-      <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'relative'">
-        <select x-model="c.relative" aria-label="Valor relativo"
-                class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-          <template x-for="o in $store.dashboard.relativeOptions" :key="o.value">
-            <option x-bind:value="o.value" x-text="o.label"></option>
-          </template>
-        </select>
-      </template>
-
-      <button type="button" x-on:click="$store.dashboard.removeFilter(ci)"
-              class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
-              title="Quitar filtro" aria-label="Quitar filtro">×</button>
-    </div>
+    {% include "sheets_reports/widgets/config/blocks/_condition_row.html" with list="$store.dashboard.drawerDraft.fields.filters" %}
   </template>
 </div>

@@ -118,6 +118,7 @@ con su `{% include %}`. Cada partial tiene un único elemento raíz con dos `<di
 | `_title`, `_assistant`, `_json` | título, asistente de IA, visor JSON | — |
 | `_columns`, `_dimensions`, `_pivots`, `_metrics` | listas de `fields` (arrastrables) | `_dimensions` / `_pivots`: `with totals=True` pinta «Mostrar totales» por nivel (tabla dinámica) |
 | `_trend`, `_filters`, `_sort`, `_limit` | resto de `fields` | — |
+| `_condition_row` | una condición `{field, op, valor}` dentro de un `x-for="(c, ci) in …"` | `with list="…"`: la lista que la contiene. La usan `_filters` (filtros del widget) y `_metrics` (condiciones propias de cada métrica de agregación, plegables en «Solo filas donde…», solo si `hasMetricFilters`: el widget admite más de una métrica) |
 | `_style_checkbox`, `_style_text`, `_style_number`, `_style_palette` | una clave de `style` | `key`, `label` (+ `placeholder` / `min`, `max`, `step`) |
 
 Lo propio de un tipo va escrito en su partial con Alpine. Por ejemplo, el bloque «Tarjeta KPI»
@@ -127,7 +128,8 @@ meta y borra `style.target` cuando la meta deja de ser «Valor fijo».
 
 `openDrawer(id)`:
 1. Construye `drawerDraft` desde el widget + defaults del manifest.
-2. `_normalizeDraft()`: asegura arrays, dedupes columnas, normaliza tipos.
+2. `_normalizeDraft()`: asegura arrays, dedupes columnas, normaliza tipos y pasa a borrador
+   (`conditionFromPayload`) los filtros del widget y los de cada métrica.
 3. Auto-pick: columnas/dimensiones/métricas iniciales si está vacío.
 4. `initListSortables()` en el siguiente tick (`Alpine.nextTick`): el `x-if` crea el panel
    del tipo después de cambiar `editingType`.
@@ -135,7 +137,8 @@ meta y borra `style.target` cuando la meta deja de ser «Valor fijo».
 `saveDrawer()`:
 1. `pruneFormulas()`: descarta fórmulas incompletas.
 2. Limpia campos vacíos (dimensions, pivots, columns).
-3. Mapea filtros a formato backend (`conditionToPayload`).
+3. Mapea filtros a formato backend (`conditionToPayload`), también los de cada métrica; una
+   métrica sin condiciones no lleva la clave `filters`.
 4. Normaliza `trend_by`, `sort_by`, `limit`.
 5. `_saveWidget(w)`: `style` va tal cual lo dejó el panel.
 
@@ -147,6 +150,7 @@ Límites y opciones que usan los bloques (qué bloques muestra cada tipo lo deci
 get hasColumns()      // capabilities.columns[1] > 0 (auto-pick al abrir)
 get maxColumns() / maxDimensions() / maxPivots() / maxMetrics()   // tope de cada lista
 get hasFormulaMetrics()   // admite métricas de tipo fórmula
+get hasMetricFilters()    // maxMetrics > 1: cada métrica admite sus propias condiciones
 get trendOptions()    // dimension_fields (fallback: all_fields)
 metricRoleOptions(base)   // opciones fijas del partial + las métricas del borrador (roles del KPI)
 ```

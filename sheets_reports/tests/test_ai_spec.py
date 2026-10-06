@@ -203,6 +203,16 @@ class ToolSchemaTests(SimpleTestCase):
         self.assertEqual(fields_of("table"), {"columns", "filters", "sort_by", "limit"})
         self.assertIn("trend_by", fields_of(None))   # sin tipo fijado se ofrece todo
 
+    def test_condiciones_por_metrica_solo_si_admite_varias_metricas(self):
+        def metric_properties(widget_type):
+            return set(build_tool_parameters(sales_ctx(), widget_type)["properties"]["fields"]
+                       ["properties"]["metrics"]["items"]["properties"])
+
+        self.assertNotIn("filters", metric_properties("donut"))
+        for widget_type in ("kpi", "bar", "line", "dynamic_table", None):
+            with self.subTest(widget_type=widget_type):
+                self.assertIn("filters", metric_properties(widget_type))
+
     def test_los_ejemplos_de_la_ia_solo_usan_campos_que_su_tipo_ofrece(self):
         for key, widget in WIDGETS.items():
             offered = set(build_tool_parameters(examples_ctx(), key)
@@ -281,6 +291,6 @@ class PromptTests(SimpleTestCase):
     def test_capabilities_text_en_una_linea(self):
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("kpi")),
                          "sin dimensiones, sin pivotes, métricas de 1 a 4, sin orden, sin límite, "
-                         "filtros, tendencia")
+                         "filtros, tendencia, condiciones por métrica")
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("donut")),
                          "dimensiones 1, sin pivotes, métricas 1, orden, límite, filtros")

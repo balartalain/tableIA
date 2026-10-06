@@ -45,6 +45,30 @@
                 </template>
               </select>
             </div>
+
+            <!-- Condiciones propias: la métrica resume solo esas filas (ej. ventas de Electrónica
+                 junto al total). Plegable; abierto si ya trae condiciones. -->
+            <template x-if="$store.dashboard.hasMetricFilters">
+              <div x-data="{ open: (metric.filters || []).length > 0 }" class="rounded-md border border-line/60 bg-white/70">
+                <button type="button" x-on:click="open = !open" x-bind:aria-expanded="open ? 'true' : 'false'"
+                        class="w-full flex items-center gap-1.5 px-2 py-1 text-left cursor-pointer select-none">
+                  <i class="ti ti-chevron-right text-xs text-ink/50 transition-transform" x-bind:class="open ? 'rotate-90' : ''" aria-hidden="true"></i>
+                  <span class="text-[11px] font-semibold text-ink/60">Solo filas donde…</span>
+                  <span class="ml-auto min-w-0 truncate text-[11px] text-ink/45"
+                        x-text="(metric.filters || []).length ? (metric.filters.length === 1 ? '1 condición' : metric.filters.length + ' condiciones') : 'todas las filas'"></span>
+                </button>
+                <div x-show="open" class="space-y-1 border-t border-line/60 p-1.5">
+                  <template x-for="(c, ci) in metric.filters || []" :key="c._k">
+                    {% include "sheets_reports/widgets/config/blocks/_condition_row.html" with list="metric.filters" %}
+                  </template>
+                  <button type="button" x-on:click="$store.dashboard.addMetricFilter(metric)"
+                          x-bind:disabled="(metric.filters || []).length >= 20"
+                          class="text-[11px] font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+                    <i class="ti ti-plus text-sm" aria-hidden="true"></i> Condición
+                  </button>
+                </div>
+              </div>
+            </template>
           </div>
         </template>
 

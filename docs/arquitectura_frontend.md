@@ -161,7 +161,7 @@ El bloque `_assistant.html` es un chat por widget. Cada widget tiene su hilo en
 `assistantThreads[id]` (en memoria: sobrevive a cerrar y reabrir el panel, se pierde al
 recargar; borrar el widget borra su hilo; un widget nuevo lo conserva al recibir su id real).
 `drawerThread` es el hilo del widget que se edita. Mensajes:
-`{role: 'user', text}`, `{role: 'assistant', proposal, applied}` o `{role: 'assistant', error}`.
+`{role: 'user', text}`, `{role: 'assistant', proposal, applied, undo}` o `{role: 'assistant', error}`.
 
 `askAssistant()` (Enter o «Enviar»): POST `/api/dashboard/{id}/table-assistant/` con
 `{prompt, widget_type, current, history}`:
@@ -174,9 +174,13 @@ La respuesta (`{widget_type, fields, style}`; `title` va vacío: el título de l
 pone el usuario, la IA no lo genera) se agrega al hilo y **no** toca el borrador.
 `adviceSteps(proposal)` la convierte en pasos legibles en el orden del panel
 (columnas/filas/columnas cruzadas, condiciones, valores, tendencia, orden, límite y apariencia
-con las etiquetas del `style_schema`). Cada propuesta lleva su botón «Aplicar»:
+con las etiquetas del `style_schema`). Cada propuesta lleva su botón «Aplicar y guardar»:
 `applyAdvice(message)` copia `fields` al borrador, **suma** el `style` propuesto al actual
-(el título no cambia) y marca el mensaje como aplicado. No guarda: el usuario revisa y pulsa «Guardar».
+(el título no cambia) y guarda con `saveDrawer({fromAssistant: true})`, así el widget se
+redibuja al momento. El mensaje guarda en `undo` el `_draftPayload()` previo: «Deshacer»
+(`undoAdvice(message)`) lo restaura en el borrador y lo guarda. Solo la última propuesta
+aplicada tiene `undo`, y un «Guardar» manual lo borra (`_clearAdviceUndo()`). Si el guardado
+falla, el borrador queda con la propuesta y el error en el pie del panel.
 «Nueva conversación» (`clearThread()`) vacía el hilo del widget.
 
 ## Widget registry

@@ -914,9 +914,11 @@ document.addEventListener('alpine:init', () => {
       return { title, fields, style };
     },
 
-    async saveDrawer() {
+    // «Guardar» del panel (y «Aplicar y guardar» / «Deshacer» del chat, con `fromAssistant`).
+    // Devuelve si se guardó. Un guardado manual deja sin «Deshacer» a la propuesta aplicada.
+    async saveDrawer({ toast = 'Cambios guardados.', fromAssistant = false } = {}) {
       const w = this.editingWidget;
-      if (!w) return;
+      if (!w) return false;
       this.drawerSaving = true;
       this.drawerSaveError = '';
       try {
@@ -933,12 +935,15 @@ document.addEventListener('alpine:init', () => {
         const result = await this._saveWidget(w);
         if (!result.ok) {
           this.drawerSaveError = result.error || 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
-          return;
+          return false;
         }
+        if (!fromAssistant) this._clearAdviceUndo();
         // El panel se queda abierto: «Guardar» no cierra (lo hace «Cancelar» o la ✕).
-        if (typeof window.showToast === 'function') window.showToast('Cambios guardados.');
+        if (typeof window.showToast === 'function') window.showToast(toast);
+        return true;
       } catch (e) {
         this.drawerSaveError = e.message;
+        return false;
       } finally {
         this.drawerSaving = false;
       }
@@ -948,7 +953,7 @@ document.addEventListener('alpine:init', () => {
     // Chat con la IA del widget que se edita. Cada pedido viaja con el borrador actual
     // (`current`) y los mensajes previos del hilo (`history`): la IA ajusta lo que hay en vez
     // de crear desde cero. La respuesta no toca el borrador: queda en el hilo como pasos, con
-    // su botón «Aplicar».
+    // su botón «Aplicar y guardar».
     async askAssistant() {
       const prompt = (this.drawerDraft.prompt || '').trim();
       if (!prompt || this.drawerAsking || this.editingId == null) return;
@@ -969,7 +974,7 @@ document.addEventListener('alpine:init', () => {
           body: JSON.stringify({ prompt, widget_type: this.editingType, current, history }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || 'El servidor no respondió correctamente.');
-        thread.push({ role: 'assistant', proposal: data, applied: false });
+        thread.push({ role: 'assistant', proposal: data, applied: false, undo: null });
       } catch (e) {
         thread.push({
           role: 'assistant',
@@ -1055,24 +1060,45 @@ document.addEventListener('alpine:init', () => {
       return `${control.label}: ${shown}`;
     },
 
-    // Rellena el panel con la propuesta de un mensaje del hilo. No guarda: el usuario revisa y
-    // pulsa «Guardar». El estilo propuesto se suma al actual (no se pierde la personalización)
-    // y el título no cambia: la IA no lo genera.
-    applyAdvice(message) {
+    // Aplica la propuesta de un mensaje del hilo y guarda: el widget se redibuja al momento.
+    // El estilo propuesto se suma al actual (no se pierde la personalización) y el título no
+    // cambia: la IA no lo genera. El mensaje guarda el estado anterior para «Deshacer».
+    async applyAdvice(message) {
       const a = message && message.proposal;
-      if (!a) return;
+      if (!a || this.drawerSaving) return;
+      const before = this._draftPayload(this.editingWidget ? this.editingWidget.title : '');
       const draft = this.drawerDraft;
       draft.fields = { ...EMPTY_FIELDS(), ...JSON.parse(JSON.stringify(a.fields || {})) };
       draft.style = { ...(draft.style || {}), ...JSON.parse(JSON.stringify(a.style || {})) };
       this._normalizeDraft();
+      // Si no se guarda, el panel queda con la propuesta y el error en el pie: «Guardar» reintenta.
+      if (!await this.saveDrawer({ toast: 'Propuesta aplicada y guardada.', fromAssistant: true })) return;
+      this._clearAdviceUndo();
       message.applied = true;
-      if (typeof window.showToast === 'function') {
-        window.showToast('Propuesta aplicada al panel. Revisa y pulsa «Guardar».');
-      }
+      message.undo = before;
+    },
+
+    // Vuelve al estado previo a la última propuesta aplicada y lo guarda.
+    async undoAdvice(message) {
+      const before = message && message.undo;
+      if (!before || this.drawerSaving) return;
+      const draft = this.drawerDraft;
+      draft.title = before.title;
+      draft.fields = { ...EMPTY_FIELDS(), ...JSON.parse(JSON.stringify(before.fields || {})) };
+      draft.style = JSON.parse(JSON.stringify(before.style || {}));
+      this._normalizeDraft();
+      if (!await this.saveDrawer({ toast: 'Cambios deshechos.', fromAssistant: true })) return;
+      message.undo = null;
+      message.applied = false;
+    },
+
+    // Solo la última propuesta aplicada se puede deshacer, y hasta el siguiente guardado manual.
+    _clearAdviceUndo() {
+      this.drawerThread.forEach(m => { if (m.undo) m.undo = null; });
     },
 
     drawerDraft: { title: '', fields: { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null }, style: {}, prompt: '' },
-    // Hilos del chat con la IA por id de widget: { [id]: [{role, text} | {role, proposal, applied} | {role, error}] }.
+    // Hilos del chat con la IA por id de widget: { [id]: [{role, text} | {role, proposal, applied, undo} | {role, error}] }.
     assistantThreads: {},
     drawerAskOpen: false,
     drawerAsking: false,

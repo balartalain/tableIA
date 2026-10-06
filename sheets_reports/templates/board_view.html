@@ -17,8 +17,9 @@
 
 <style>#dashboard-filters:empty { display: none; }</style>
 <div class="mx-auto p-6">
-  <!-- Caja de filtros: siempre arriba, fuera del grid. -->
-  <div id="dashboard-filters" class="mb-4"></div>
+  <!-- Caja de filtros: siempre arriba, fuera del grid; tan ancha como sus controles (con
+       muchos, no pasa del ancho de la página y los controles bajan de línea). -->
+  <div id="dashboard-filters" class="mb-4 w-fit max-w-full"></div>
   <div id="dashboard-canvas" class="grid grid-cols-12 gap-4">
   </div>
 </div>

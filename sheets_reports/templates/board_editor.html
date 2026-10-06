@@ -34,6 +34,8 @@
   }
   /* interact.js arranca desde este asa; sin touch-action el navegador roba el gesto táctil. */
   .resize-handle { touch-action: none; user-select: none; }
+  /* Asa del panel inferior: mismo motivo, el gesto táctil vertical es del arrastre. */
+  .bottom-sheet-handle { touch-action: none; user-select: none; }
   /* Fila fantasma al arrastrar dimensiones, pivotes o métricas del panel. */
   .metric-ghost-preview {
     background-color: #f1f5f9 !important;
@@ -108,7 +110,7 @@
   html[data-rail="collapsed"] #module-rail .rail-chevron { transform: rotate(180deg); }
 </style>
 
-<div id="board-body" class="flex w-full overflow-hidden">
+<div id="board-body" class="relative flex w-full overflow-hidden">
 
   <script>
     // Antes de pintar la barra: si quedó contraída, se dibuja contraída desde el primer frame.
@@ -239,6 +241,30 @@
   </div>
   </aside>
 
+  <!-- Panel inferior: vista previa de la hoja (por ahora vacío; se abre con bottomSheet.open()). -->
+  <section id="bottom-sheet" x-data x-cloak
+           x-show="$store.bottomSheet.isOpen"
+           x-transition:enter="transition-transform duration-300 ease-out"
+           x-transition:enter-start="translate-y-full"
+           x-transition:enter-end="translate-y-0"
+           x-transition:leave="transition-transform duration-200 ease-in"
+           x-transition:leave-start="translate-y-0"
+           x-transition:leave-end="translate-y-full"
+           x-bind:style="`height: ${$store.bottomSheet.heightPct}%`"
+           class="absolute inset-x-0 bottom-0 z-30 flex flex-col bg-white border-t border-line rounded-t-2xl shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
+    <div class="bottom-sheet-handle h-5 shrink-0 flex items-center justify-center cursor-ns-resize"
+         role="separator" aria-orientation="horizontal" aria-label="Ajustar altura"
+         x-on:pointerdown.prevent="$store.bottomSheet.startDrag($event)">
+      <span class="w-10 h-1.5 rounded-full bg-line"></span>
+    </div>
+    <div class="flex items-center justify-between px-5 pb-3 border-b border-line">
+      <h3 class="text-sm font-bold text-ink">Vista previa de la hoja</h3>
+      <button x-on:click="$store.bottomSheet.close()" aria-label="Cerrar"
+              class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
+    </div>
+    <div class="flex-1 min-h-0 overflow-auto p-5"></div>
+  </section>
+
 </div>
 
 {{ widget_manifest|json_script:"widget-manifest" }}
@@ -271,6 +297,7 @@
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/bottom-sheet.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/board-editor-init.js' %}"></script>
 
 {% endblock %}

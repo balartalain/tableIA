@@ -1,16 +1,18 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ dashboard.nombre }} — Editor de tablero{% endblock %}
+{% block title %}{% if dashboard %}{{ dashboard.nombre }}{% else %}Nuevo tablero{% endif %} — Editor de tablero{% endblock %}
 
 {% block header_actions %}
 <button onclick="window.location.href='{% url 'home' %}'" class="bg-white border border-line hover:bg-paper text-ink/70 py-2 px-4 rounded-xl font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
   <i class="ti ti-logout" aria-hidden="true"></i>
   Salir del editor
 </button>
+{% if dashboard %}
 <button id="share-btn" class="bg-white border border-line hover:bg-paper text-ink/70 py-2 px-4 rounded-xl font-medium text-sm transition cursor-pointer">
   Compartir
 </button>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -241,7 +243,7 @@
   </div>
   </aside>
 
-  <!-- Panel inferior: vista previa de la hoja (por ahora vacío; se abre con bottomSheet.open()). -->
+  <!-- Panel inferior: en un tablero nuevo, el selector de la fuente de datos. -->
   <section id="bottom-sheet" x-data x-cloak
            x-show="$store.bottomSheet.isOpen"
            x-transition:enter="transition-transform duration-300 ease-out"
@@ -258,11 +260,13 @@
       <span class="w-10 h-1.5 rounded-full bg-line"></span>
     </div>
     <div class="flex items-center justify-between px-5 pb-3 border-b border-line">
-      <h3 class="text-sm font-bold text-ink">Vista previa de la hoja</h3>
+      <h3 class="text-sm font-bold text-ink" x-text="$store.bottomSheet.title"></h3>
       <button x-on:click="$store.bottomSheet.close()" aria-label="Cerrar"
               class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
     </div>
-    <div class="flex-1 min-h-0 overflow-auto p-5"></div>
+    <div class="flex-1 min-h-0 overflow-auto p-5">
+      {% if not dashboard %}{% include "sheets_reports/source_picker.html" %}{% endif %}
+    </div>
   </section>
 
 </div>
@@ -270,8 +274,14 @@
 {{ widget_manifest|json_script:"widget-manifest" }}
 <script>
   window.WIDGET_MANIFEST = JSON.parse(document.getElementById('widget-manifest').textContent);
+  window.HOME_URL = "{% url 'home' %}";
+  window.BOARD_EDITOR_URL = "{% url 'board_editor' dashboard_id=0 %}";
+{% if dashboard %}
   window.DASHBOARD_ID = {{ dashboard.id }};
   window.SHARE_PATH = "{% url 'board_view' dashboard_id=dashboard.id %}";
+{% else %}
+  window.DASHBOARD_ID = null;
+{% endif %}
   window.REFRESH_MINUTES = {{ refresh_minutes|default:0 }};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
@@ -298,6 +308,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/bottom-sheet.js' %}"></script>
+{% if not dashboard %}<script src="{% static 'sheets_reports/js/board_editor/source-picker.js' %}"></script>{% endif %}
 <script src="{% static 'sheets_reports/js/board_editor/board-editor-init.js' %}"></script>
 
 {% endblock %}

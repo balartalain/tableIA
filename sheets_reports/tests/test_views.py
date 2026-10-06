@@ -469,7 +469,8 @@ class SinUsuarioTests(TestCase):
         self.assertEqual(r.status_code, 401)
         self.assertIn("createsuperuser", r.json()["error"])
 
-    def test_home_siempre_muestra_nuevo_tablero(self):
+    def test_home_siempre_muestra_crear_tablero(self):
         r = self.client.get("/")
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "Nuevo tablero")
+        self.assertContains(r, "Crear tablero")
+        self.assertContains(r, "/tableros/nuevo/")

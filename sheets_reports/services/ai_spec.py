@@ -119,6 +119,9 @@ falta cambiar nada (usa los valores por defecto).
   reciente de la columna), "previous" (el anterior a ese) y "earliest" (el más antiguo), solo
   en columnas de tiempo (años, meses, fechas). Úsalo para "este año", "el último mes" en vez
   de fijar un número.
+Para comparar periodos ("variación anual", "frente al año anterior") sin que el usuario diga
+cuáles, usa el año del reloj: una métrica con "current_year" y otra con "previous_year". Pon en
+el `label` de cada una su periodo ("Este año", "Año anterior") para que se lea qué se compara.
 Usa los valores de ejemplo de las columnas para escribir el valor exacto.
 """
 

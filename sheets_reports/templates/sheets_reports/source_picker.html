@@ -1,0 +1,161 @@
+{# Selector de la fuente de datos de un tablero nuevo (cuerpo del bottom sheet). #}
+<div x-data="sourcePicker()" class="h-full flex flex-col">
+
+  <!-- Paso 1: fuente → documento → pestaña -->
+  <div x-show="step === 'source'" class="flex-1 min-h-0 flex flex-col gap-4">
+    <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[14rem_minmax(0,1fr)_16rem] gap-4">
+
+      <!-- Fuentes -->
+      <div class="min-h-0 flex flex-col border border-line rounded-xl overflow-hidden">
+        <p class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink/40 border-b border-line">Fuente</p>
+        <div class="flex-1 overflow-y-auto p-2 space-y-1">
+          <button type="button" x-on:click="selectSource('google')"
+                  x-bind:class="source === 'google' ? 'bg-moss-50 text-moss-700 border-moss-100' : 'border-transparent hover:bg-paper text-ink/80'"
+                  class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-sm text-left transition cursor-pointer">
+            <i class="ti ti-brand-google text-base" aria-hidden="true"></i>
+            <span class="flex-1">Hoja de Google</span>
+            <i class="ti ti-chevron-right text-xs text-ink/30" aria-hidden="true"></i>
+          </button>
+          <button type="button" disabled
+                  class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-transparent text-sm text-left text-ink/40 cursor-not-allowed">
+            <i class="ti ti-file-spreadsheet text-base" aria-hidden="true"></i>
+            <span class="flex-1">Excel</span>
+            <span class="text-[10px] font-medium rounded-full bg-paper border border-line px-1.5 py-0.5">Próximamente</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Documentos -->
+      <div class="min-h-0 flex flex-col border border-line rounded-xl overflow-hidden">
+        <div class="flex items-center gap-2 px-3 py-2 border-b border-line">
+          <p class="text-[10px] font-bold uppercase tracking-wider text-ink/40 shrink-0">Documentos</p>
+          <label x-show="source" class="relative flex-1">
+            <span class="sr-only">Buscar documento</span>
+            <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink/40" aria-hidden="true"></i>
+            <input type="search" x-model="query" x-on:input.debounce.300ms="loadSpreadsheets()"
+                   placeholder="Buscar en Drive…" autocomplete="off"
+                   class="w-full text-sm border border-line rounded-lg pl-8 pr-2 py-1 focus:outline-none focus:border-moss-500">
+          </label>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2">
+          <p x-show="!source" class="px-2 py-6 text-center text-xs text-ink/50">Elige una fuente para ver sus documentos.</p>
+          <p x-show="source && loadingSheets" class="px-2 py-6 text-center text-xs text-ink/50">
+            <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando documentos…
+          </p>
+          <p x-show="sheetsError" x-text="sheetsError" role="alert" class="px-2 py-3 text-xs text-red-600"></p>
+          <p x-show="source && !loadingSheets && !sheetsError && !spreadsheets.length"
+             class="px-2 py-6 text-center text-xs text-ink/50">
+            No hay hojas visibles. Comparte la hoja de cálculo con el email de la cuenta de servicio.
+          </p>
+          <ul x-show="!loadingSheets" class="space-y-0.5">
+            <template x-for="s in spreadsheets" :key="s.id">
+              <li>
+                <button type="button" x-on:click="selectSpreadsheet(s)"
+                        x-bind:class="spreadsheet && spreadsheet.id === s.id ? 'bg-moss-50 text-moss-700' : 'hover:bg-paper text-ink/80'"
+                        class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left transition cursor-pointer">
+                  <i class="ti ti-table text-base text-moss-600" aria-hidden="true"></i>
+                  <span class="flex-1 min-w-0 truncate" x-text="s.name.trim() || 'Sin nombre'"></span>
+                  <span class="shrink-0 text-[11px] text-ink/40" x-text="formatDate(s.modified)"></span>
+                </button>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Pestañas -->
+      <div class="min-h-0 flex flex-col border border-line rounded-xl overflow-hidden">
+        <p class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink/40 border-b border-line">Pestaña</p>
+        <div class="flex-1 overflow-y-auto p-2">
+          <p x-show="!spreadsheet" class="px-2 py-6 text-center text-xs text-ink/50">Elige un documento.</p>
+          <p x-show="spreadsheet && loadingTabs" class="px-2 py-6 text-center text-xs text-ink/50">
+            <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando pestañas…
+          </p>
+          <p x-show="tabsError" x-text="tabsError" role="alert" class="px-2 py-3 text-xs text-red-600"></p>
+          <fieldset x-show="spreadsheet && !loadingTabs" class="space-y-0.5">
+            <legend class="sr-only">Pestaña de la hoja</legend>
+            <template x-for="t in tabs" :key="t.gid">
+              <label x-bind:class="tab && tab.gid === t.gid ? 'bg-moss-50 text-moss-700' : 'hover:bg-paper text-ink/80'"
+                     class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm cursor-pointer transition">
+                <input type="radio" name="source-tab" class="accent-moss-500"
+                       x-bind:value="t.gid" x-bind:checked="tab && tab.gid === t.gid" x-on:change="tab = t">
+                <span class="min-w-0 truncate" x-text="t.title"></span>
+              </label>
+            </template>
+          </fieldset>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+      <p x-show="columnsError" x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
+      <button type="button" x-on:click="loadColumns()" x-bind:disabled="!tab || loadingColumns"
+              class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
+              x-text="loadingColumns ? 'Leyendo la pestaña…' : 'Aceptar'"></button>
+    </div>
+  </div>
+
+  <!-- Paso 2: columnas y tipos -->
+  <div x-show="step === 'columns'" x-cloak class="flex-1 min-h-0 flex flex-col gap-4">
+    <div class="flex flex-wrap items-end gap-4">
+      <label class="block flex-1 min-w-[16rem] text-xs font-semibold text-ink/70">Nombre del tablero
+        <input type="text" x-model="name"
+               class="mt-1 w-full text-sm font-normal text-ink border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+      </label>
+      <p class="text-xs text-ink/50 pb-2">
+        <span x-text="includedCount"></span> de <span x-text="columns.length"></span> columnas ·
+        <span x-text="rows.toLocaleString('es')"></span> filas
+      </p>
+    </div>
+
+    <div class="flex-1 min-h-0 overflow-auto border border-line rounded-xl">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
+          <tr>
+            <th class="px-3 py-2 w-20 font-semibold">
+              <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" class="accent-moss-500" x-bind:checked="includedCount === columns.length"
+                       x-on:change="columns.forEach(c => c.include = $event.target.checked)">
+                Incluir
+              </label>
+            </th>
+            <th class="px-3 py-2 font-semibold">Columna</th>
+            <th class="px-3 py-2 w-40 font-semibold">Tipo</th>
+            <th class="px-3 py-2 font-semibold">Ejemplos</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="c in columns" :key="c.name">
+            <tr class="border-t border-line" x-bind:class="c.include ? '' : 'text-ink/40'">
+              <td class="px-3 py-2">
+                <input type="checkbox" x-model="c.include" class="accent-moss-500"
+                       x-bind:aria-label="`Incluir ${c.name}`">
+              </td>
+              <td class="px-3 py-2 font-medium" x-text="c.name"></td>
+              <td class="px-3 py-2">
+                <select x-model="c.type" x-bind:disabled="!c.include" x-bind:aria-label="`Tipo de ${c.name}`"
+                        class="w-full text-sm border border-line rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                  <template x-for="t in TYPES" :key="t.value">
+                    <option x-bind:value="t.value" x-text="t.label" x-bind:selected="c.type === t.value"></option>
+                  </template>
+                </select>
+              </td>
+              <td class="px-3 py-2 text-xs text-ink/50 truncate max-w-[20rem]" x-text="c.samples.join(' · ')"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex items-center justify-between gap-3">
+      <button type="button" x-on:click="step = 'source'"
+              class="text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-lg px-4 py-2 transition cursor-pointer">Atrás</button>
+      <div class="flex items-center gap-3">
+        <p x-show="createError" x-text="createError" role="alert" class="text-xs text-red-600"></p>
+        <button type="button" x-on:click="create()" x-bind:disabled="!canCreate || creating"
+                class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
+                x-text="creating ? 'Creando…' : 'Crear tablero'"></button>
+      </div>
+    </div>
+  </div>
+</div>

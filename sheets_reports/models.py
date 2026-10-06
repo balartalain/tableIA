@@ -22,6 +22,17 @@ class Dashboard(models.Model):
         default="0",
         help_text="gid de la pestaña a leer (el número después de '#gid=' en la URL).",
     )
+    sheet_name = models.CharField(max_length=255, blank=True, default="",
+                                  help_text="Nombre del documento de Google Sheets.")
+    tab_name = models.CharField(max_length=255, blank=True, default="",
+                                help_text="Nombre de la pestaña.")
+    columns = models.JSONField(
+        default=list, blank=True,
+        help_text='Columnas elegidas al conectar la hoja: [{"name", "type": "text"|"number"|"date", '
+                  '"include"}]. Vacío = todas, con el tipo que trae la hoja.',
+    )
+    last_opened_at = models.DateTimeField(null=True, blank=True,
+                                          help_text="Última vez que se abrió en el editor.")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

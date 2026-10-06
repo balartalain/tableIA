@@ -1,0 +1,158 @@
+"""Conectar la hoja al crear un tablero: listar el Drive de la cuenta de servicio, sus
+pestañas y columnas, y guardar qué columnas se usan y con qué tipo."""
+import json
+from unittest import mock
+
+import pandas as pd
+from django.contrib.auth import get_user_model
+from django.test import SimpleTestCase, TestCase
+
+from sheets_reports.models import Dashboard
+from sheets_reports.services.sheets import SheetError, apply_column_config, infer_column_types
+from sheets_reports.tests.fixtures import sales_df
+
+
+def raw_df() -> pd.DataFrame:
+    """Como llega de gviz: montos con coma de miles como texto y fechas día/mes/año."""
+    return pd.DataFrame({
+        "categoria": ["Hogar", "Ropa", None],
+        "monto": ["1,200", "300", None],
+        "fecha": ["05/01/2026", "20/02/2026", None],
+        "mes": ["Ene", "Feb", "Mar"],
+        "anio": [2026, 2025, 2026],
+    })
+
+
+class ColumnTypesTests(SimpleTestCase):
+    def test_infiere_numero_fecha_y_texto(self):
+        df = raw_df()
+        df["monto"] = pd.to_numeric(df["monto"].str.replace(",", ""))
+        self.assertEqual(infer_column_types(df),
+                         {"categoria": "text", "monto": "number", "fecha": "date",
+                          "mes": "date", "anio": "number"})
+
+    def test_sin_configuracion_devuelve_la_hoja_tal_cual(self):
+        df = raw_df()
+        self.assertIs(apply_column_config(df, []), df)
+
+    def test_excluye_y_convierte(self):
+        df = apply_column_config(raw_df(), [
+            {"name": "categoria", "type": "text", "include": False},
+            {"name": "monto", "type": "number", "include": True},
+            {"name": "fecha", "type": "date", "include": True},
+            {"name": "anio", "type": "text", "include": True},
+            {"name": "ya_no_existe", "type": "number", "include": True},
+        ])
+        self.assertNotIn("categoria", df.columns)
+        self.assertEqual(df["monto"].tolist()[:2], [1200.0, 300.0])
+        self.assertTrue(pd.isna(df["monto"].iloc[2]))
+        self.assertEqual(df["fecha"].tolist(), ["2026-01-05", "2026-02-20", None])
+        self.assertEqual(df["anio"].tolist(), ["2026", "2025", "2026"])
+        self.assertEqual(df["mes"].tolist(), ["Ene", "Feb", "Mar"])  # sin configurar: intacta
+
+    def test_meses_y_anios_como_fecha_quedan_como_periodo(self):
+        df = apply_column_config(raw_df(), [{"name": "mes", "type": "date", "include": True},
+                                            {"name": "anio", "type": "date", "include": True}])
+        self.assertEqual(df["mes"].tolist(), ["Ene", "Feb", "Mar"])
+        self.assertEqual(df["anio"].tolist(), ["2026", "2025", "2026"])
+
+
+class SourceEndpointsTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(self.user)
+
+    def test_lista_hojas_del_drive(self):
+        sheets = [{"id": "abc", "name": "Ventas", "modified": "2026-10-06T00:00:00Z"}]
+        with mock.patch("sheets_reports.services.google_drive.list_spreadsheets", return_value=sheets) as ls:
+            r = self.client.get("/api/sources/google/spreadsheets/?q=ven")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"spreadsheets": sheets})
+        ls.assert_called_once_with("ven")
+
+    def test_error_de_google_es_legible(self):
+        with mock.patch("sheets_reports.services.google_drive.list_spreadsheets",
+                        side_effect=SheetError("Configura GOOGLE_SHEETS_CREDENTIALS_PATH")):
+            r = self.client.get("/api/sources/google/spreadsheets/")
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("GOOGLE_SHEETS_CREDENTIALS_PATH", r.json()["error"])
+
+    def test_sin_credenciales_no_llama_a_google(self):
+        with self.settings(GOOGLE_SHEETS_CREDENTIALS_PATH=""):
+            from sheets_reports.services import google_drive
+            with mock.patch.object(google_drive.cache, "get", return_value=None):
+                r = self.client.get("/api/sources/google/spreadsheets/?q=sin-cache")
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("GOOGLE_SHEETS_CREDENTIALS_PATH", r.json()["error"])
+
+    def test_pestanas(self):
+        tabs = {"name": "Ventas", "tabs": [{"gid": "0", "title": "Hoja 1"}]}
+        with mock.patch("sheets_reports.services.google_drive.list_tabs", return_value=tabs):
+            r = self.client.get("/api/sources/google/spreadsheets/abc/tabs/")
+        self.assertEqual(r.json(), tabs)
+
+    def test_columnas_con_tipo_inferido_y_ejemplos(self):
+        with mock.patch("sheets_reports.views.get_sheet_dataframe", return_value=sales_df()) as get:
+            r = self.client.get("/api/sources/google/spreadsheets/abc/tabs/123/columns/")
+        get.assert_called_once_with("abc", "123")
+        data = r.json()
+        self.assertEqual(data["rows"], 6)
+        by_name = {c["name"]: c for c in data["columns"]}
+        self.assertEqual(by_name["ventas"]["type"], "number")
+        self.assertEqual(by_name["categoria"]["type"], "text")
+        self.assertEqual(by_name["categoria"]["samples"], ["Hogar", "Electrónica", "Ropa"])
+
+    def test_editor_nuevo_abre_el_selector(self):
+        r = self.client.get("/tableros/nuevo/")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "window.DASHBOARD_ID = null")
+        self.assertContains(r, "sourcePicker()")
+        self.assertNotContains(r, 'id="share-btn"')
+
+
+class CreateFromSourceTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(self.user)
+
+    def post(self, **data):
+        body = {"nombre": "Ventas", "sheet_id": "abc_1-2", "sheet_gid": "77",
+                "sheet_name": "Ventas 2026", "tab_name": "Detalle", **data}
+        return self.client.post("/api/dashboards/", json.dumps(body), content_type="application/json")
+
+    def test_crea_con_la_hoja_y_las_columnas(self):
+        columns = [{"name": "ventas", "type": "number", "include": True},
+                   {"name": "categoria", "type": "text", "include": False}]
+        r = self.post(columns=columns)
+        self.assertEqual(r.status_code, 201, r.content)
+        d = Dashboard.objects.get(id=r.json()["id"])
+        self.assertEqual(d.sheet_id, "abc_1-2")
+        self.assertEqual(d.sheet_gid, "77")
+        self.assertEqual((d.sheet_name, d.tab_name), ("Ventas 2026", "Detalle"))
+        self.assertEqual(d.columns, columns)
+        self.assertEqual(r.json()["sheet_name"], "Ventas 2026")
+
+    def test_valida_las_columnas(self):
+        for columns in ([{"name": "ventas", "type": "moneda", "include": True}],
+                        [{"name": "ventas", "type": "number", "include": False}],
+                        [{"type": "number"}],
+                        "ventas"):
+            self.assertEqual(self.post(columns=columns).status_code, 400, columns)
+        self.assertEqual(self.post(sheet_id="../x").status_code, 400)
+
+    def test_el_tablero_usa_las_columnas_elegidas(self):
+        r = self.post(columns=[{"name": "categoria", "type": "text", "include": False},
+                               {"name": "anio", "type": "text", "include": True}])
+        with mock.patch("sheets_reports.views.get_sheet_dataframe", return_value=sales_df()):
+            schema = self.client.get(f"/api/dashboard/{r.json()['id']}/schema/").json()
+        self.assertNotIn("categoria", schema["all_fields"])
+        self.assertNotIn("anio", schema["numeric_fields"])
+        self.assertIn("ventas", schema["numeric_fields"])
+
+    def test_abrir_el_editor_marca_la_ultima_apertura(self):
+        d = Dashboard.objects.create(nombre="x", owner=self.user,
+                                     sheet_url="https://docs.google.com/spreadsheets/d/abc/edit")
+        self.assertIsNone(self.client.get("/api/dashboards/").json()[0]["last_opened_at"])
+        self.client.get(f"/tableros/{d.id}/edit/")
+        d.refresh_from_db()
+        self.assertIsNotNone(d.last_opened_at)

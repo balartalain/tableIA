@@ -1,186 +1,118 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Report IA — Tus tableros{% endblock %}
 
 {% block content %}
 
+<link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
+<link href="{% static 'sheets_reports/css/tabulator.css' %}" rel="stylesheet">
+<script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
+
 <script>
   window.URLS = {
     boardEditor: "{% url 'board_editor' dashboard_id=0 %}",
+    boardNew: "{% url 'board_new' %}",
   };
 </script>
 
-<div x-data="homeApp()" x-init="init()">
+<div x-data="homeApp()" x-init="init()" class="flex min-h-[calc(100vh-4rem)]">
 
-  <main class="max-w-7xl mx-auto px-6 py-10 min-h-[calc(100vh-4rem)] flex flex-col">
+  <!-- Menú lateral -->
+  <aside class="w-60 shrink-0 bg-white border-r border-line px-4 py-6 flex flex-col gap-6">
+    <a :href="URLS.boardNew"
+       class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition">
+      <i class="ti ti-plus text-base" aria-hidden="true"></i>Crear tablero
+    </a>
 
-    <div class="mb-8">
-      <h1 class="font-sans text-2xl font-semibold">Mis tableros</h1>
-      <p class="text-sm text-ink/60 mt-1">Reportes conectados a tus hojas de cálculo de Google Sheets.</p>
-    </div>
-
-    <div>
-
-    <div class="flex items-center justify-between mb-4">
-      <div class="relative">
-        <i class="ti ti-search text-ink/30 absolute left-3 top-1/2 -translate-y-1/2 text-base" aria-hidden="true"></i>
-        <input x-model="search" type="text" placeholder="Buscar tablero..."
-               class="w-56 border border-line rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
-      </div>
-      <button @click="showNewDashboardModal = true"
-              class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2 rounded-lg inline-flex items-center gap-2 transition">
-        <i class="ti ti-plus text-base" aria-hidden="true"></i>Nuevo tablero
-      </button>
-    </div>
-
-    <div x-show="loadError" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3" x-text="loadError"></div>
-
-    <div x-show="filteredDashboards.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-
-      <button @click="showNewDashboardModal = true"
-              class="border border-dashed border-line rounded-xl p-5 flex flex-col items-center justify-center gap-2 text-ink/40 hover:text-moss-600 hover:border-moss-300 transition min-h-[148px]">
-        <i class="ti ti-plus text-2xl" aria-hidden="true"></i>
-        <span class="text-sm font-medium">Nuevo tablero</span>
-      </button>
-
-      <template x-for="d in filteredDashboards" :key="d.id">
-        <div class="bg-white border border-line rounded-xl p-5 hover:border-moss-300 hover:shadow-sm transition group relative">
-          <a :href="boardUrl(d)" class="block">
-            <div class="flex items-start justify-between mb-4">
-              <div class="w-9 h-9 rounded-lg bg-moss-50 flex items-center justify-center">
-                <i class="ti ti-layout-dashboard text-moss-600 text-lg" aria-hidden="true"></i>
-              </div>
-              <button @click.prevent.stop="openMenu(d.id)" class="text-ink/30 hover:text-ink p-1 -mr-1 -mt-1" aria-label="Más opciones">
-                <i class="ti ti-dots text-base" aria-hidden="true"></i>
-              </button>
-            </div>
-    <h3 class="font-sans font-semibold text-base mb-1 group-hover:text-moss-600 truncate" x-text="d.nombre"></h3>
-    <p class="text-xs text-ink/50 mb-3" x-text="d.cardCount + ' tarjetas · editado ' + d.updated"></p>
-    <span class="inline-flex items-center gap-1.5 text-[11px] font-mono text-ink/50 bg-paper px-2 py-1 rounded border border-line">
-      <i class="ti ti-table text-sm" aria-hidden="true"></i><span x-text="sheetLabel(d)"></span>
-    </span>
-          </a>
-
-          <div x-show="openMenuId === d.id" @click.outside="openMenuId = null" x-cloak
-               class="absolute right-4 top-12 w-40 bg-white border border-line rounded-lg shadow-lg py-1 z-10">
-            <button @click="editDashboard(d)" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink/70 hover:bg-paper text-left">
-              <i class="ti ti-pencil text-sm" aria-hidden="true"></i>Editar
-            </button>
-            <button @click="duplicateDashboard(d)" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-ink/70 hover:bg-paper text-left">
-              <i class="ti ti-copy text-sm" aria-hidden="true"></i>Duplicar
-            </button>
-            <button @click="deleteDashboard(d.id)" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 text-left">
-              <i class="ti ti-trash text-sm" aria-hidden="true"></i>Eliminar
-            </button>
-          </div>
-        </div>
+    <nav class="flex flex-col gap-1" aria-label="Secciones">
+      <template x-for="item in menu" :key="item.id">
+        <a :href="'#' + item.id"
+           :aria-current="section === item.id ? 'page' : null"
+           :class="section === item.id ? 'bg-moss-50 text-moss-700 font-semibold' : 'text-ink/70 hover:bg-paper hover:text-ink'"
+           class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition">
+          <i class="ti text-base" :class="item.icon" aria-hidden="true"></i>
+          <span x-text="item.label"></span>
+        </a>
       </template>
+    </nav>
+  </aside>
 
-    </div>
+  <main class="flex-1 min-w-0 px-8 py-8">
 
-    <div x-show="dashboards.length === 0 && !loadError" x-cloak class="text-center py-20">
-      <div class="w-14 h-14 rounded-2xl bg-moss-50 flex items-center justify-center mx-auto mb-4">
-        <i class="ti ti-layout-dashboard text-moss-600 text-2xl" aria-hidden="true"></i>
+    <!-- Recientes -->
+    <section x-show="section === 'recientes'">
+      <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
+        <div>
+          <h1 class="font-sans text-2xl font-semibold">Recientes</h1>
+          <p class="text-sm text-ink/60 mt-1">Tus tableros conectados a hojas de Google Sheets.</p>
+        </div>
+        <label class="relative">
+          <span class="sr-only">Buscar tablero</span>
+          <i class="ti ti-search text-ink/30 absolute left-3 top-1/2 -translate-y-1/2 text-base" aria-hidden="true"></i>
+          <input x-model="search" @input="applySearch()" type="search" placeholder="Buscar tablero…"
+                 class="w-64 border border-line rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
+        </label>
       </div>
-      <h2 class="font-sans text-lg font-semibold mb-1">Crea tu primer tablero</h2>
-      <p class="text-sm text-ink/50 mb-5 max-w-xs mx-auto">Conecta una hoja de Google Sheets y arma tu primer reporte en minutos.</p>
-      <button @click="showNewDashboardModal = true"
-              class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg inline-flex items-center gap-2 transition">
-        <i class="ti ti-plus text-base" aria-hidden="true"></i>Nuevo tablero
-      </button>
-    </div>
 
-    <div x-show="dashboards.length > 0 && filteredDashboards.length === 0" x-cloak class="text-center py-20">
-      <p class="text-sm text-ink/50">No hay tableros que coincidan con <span class="font-medium text-ink" x-text="'\u201c' + search + '\u201d'"></span>.</p>
-    </div>
+      <div x-show="loadError" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3" x-text="loadError"></div>
 
-    </div>
+      <div x-show="loaded && dashboards.length === 0 && !loadError" x-cloak class="text-center py-20 bg-white border border-line rounded-xl">
+        <div class="w-14 h-14 rounded-2xl bg-moss-50 flex items-center justify-center mx-auto mb-4">
+          <i class="ti ti-layout-dashboard text-moss-600 text-2xl" aria-hidden="true"></i>
+        </div>
+        <h2 class="font-sans text-lg font-semibold mb-1">Crea tu primer tablero</h2>
+        <p class="text-sm text-ink/50 mb-5 max-w-xs mx-auto">Conecta una hoja de Google Sheets y arma tu primer reporte en minutos.</p>
+        <a :href="URLS.boardNew"
+           class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg inline-flex items-center gap-2 transition">
+          <i class="ti ti-plus text-base" aria-hidden="true"></i>Crear tablero
+        </a>
+      </div>
+
+      <!-- Visible desde el inicio: Tabulator mide su contenedor al construirse (oculto mediría 0). -->
+      <div x-show="!(loaded && dashboards.length === 0)" class="bg-white border border-line rounded-xl overflow-hidden">
+        <div x-ref="table"></div>
+      </div>
+    </section>
+
+    <!-- Plantillas -->
+    <section x-show="section === 'plantillas'" x-cloak>
+      <h1 class="font-sans text-2xl font-semibold mb-5">Plantillas</h1>
+      <div class="text-center py-20 bg-white border border-line rounded-xl">
+        <div class="w-14 h-14 rounded-2xl bg-moss-50 flex items-center justify-center mx-auto mb-4">
+          <i class="ti ti-template text-moss-600 text-2xl" aria-hidden="true"></i>
+        </div>
+        <h2 class="font-sans text-lg font-semibold mb-1">Próximamente</h2>
+        <p class="text-sm text-ink/50 max-w-xs mx-auto">Tableros listos para empezar a partir de una plantilla.</p>
+      </div>
+    </section>
 
   </main>
 
-  <div x-show="showNewDashboardModal" x-cloak
-       class="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
-       style="display:none;">
-    <div @click.outside="showNewDashboardModal = false"
-         x-show="showNewDashboardModal" x-transition
+  <!-- Renombrar -->
+  <div x-show="editingDashboard" x-cloak
+       class="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40">
+    <div @click.outside="editingDashboard = null" @keydown.escape.window="editingDashboard = null"
          class="bg-white rounded-2xl w-full max-w-md border border-line shadow-xl">
-
       <div class="px-6 pt-6 pb-4 border-b border-line">
-        <h2 class="font-sans text-lg font-semibold">Nuevo tablero</h2>
-        <p class="text-sm text-ink/50 mt-0.5">Conecta una pestaña de una hoja de cálculo para empezar.</p>
+        <h2 class="font-sans text-lg font-semibold">Renombrar tablero</h2>
       </div>
-
-      <div class="px-6 py-5 space-y-5">
-
-        <div>
-          <label class="block text-xs font-medium text-ink/60 mb-1.5">Nombre del tablero</label>
-          <input x-model="newDashboardName" type="text" placeholder="Ej. Ventas región norte"
-                 class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-ink/60 mb-1.5">URL de Google Sheets</label>
-          <input x-model="newDashboardUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."
-                 class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
-          <p class="text-[11px] text-ink/50 mt-1">Abre la pestaña que quieres usar y copia la URL: incluye su <span class="font-mono">#gid=</span>.</p>
-        </div>
-
-        <p x-show="formError" x-text="formError" class="text-xs text-red-600"></p>
-
-      </div>
-
-      <div class="px-6 py-4 border-t border-line flex justify-end gap-2">
-        <button @click="showNewDashboardModal = false; resetNewDashboardForm()"
-                class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-lg transition">Cancelar</button>
-        <button @click="createDashboard()"
-                :disabled="!newDashboardName || !newDashboardUrl"
-                :class="!newDashboardName || !newDashboardUrl ? 'opacity-40 cursor-not-allowed' : 'hover:bg-moss-600'"
-                class="px-4 py-2 text-sm font-medium text-white bg-moss-500 rounded-lg transition">
-          Crear tablero
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <div x-show="showEditModal" x-cloak
-       class="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40"
-       style="display:none;">
-    <div @click.outside="showEditModal = false"
-         x-show="showEditModal" x-transition
-         class="bg-white rounded-2xl w-full max-w-md border border-line shadow-xl">
-
-      <div class="px-6 pt-6 pb-4 border-b border-line">
-        <h2 class="font-sans text-lg font-semibold">Editar tablero</h2>
-        <p class="text-sm text-ink/50 mt-0.5">Actualiza el nombre o la fuente de datos.</p>
-      </div>
-
       <template x-if="editingDashboard">
-      <div class="px-6 py-5 space-y-5">
-
-        <div>
-          <label class="block text-xs font-medium text-ink/60 mb-1.5">Nombre del tablero</label>
-          <input x-model="editingDashboard.nombre" type="text" placeholder="Ej. Ventas región norte"
-                 class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
-        </div>
-
-        <div>
-          <label class="block text-xs font-medium text-ink/60 mb-1.5">URL de Google Sheets</label>
-          <input x-model="editingDashboard.sheet_url" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."
-                 class="w-full border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
-        </div>
-
-        <p x-show="formError" x-text="formError" class="text-xs text-red-600"></p>
-      </div>
+        <form @submit.prevent="saveEdit()" class="px-6 py-5 space-y-3">
+          <label class="block text-xs font-medium text-ink/60">Nombre del tablero
+            <input x-model="editingDashboard.nombre" type="text" x-init="$nextTick(() => $el.select())"
+                   class="mt-1.5 w-full border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
+          </label>
+          <p x-show="formError" x-text="formError" class="text-xs text-red-600"></p>
+        </form>
       </template>
-
       <div class="px-6 py-4 border-t border-line flex justify-end gap-2">
-        <button @click="showEditModal = false; editingDashboard = null"
+        <button @click="editingDashboard = null"
                 class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-lg transition">Cancelar</button>
         <button @click="saveEdit()"
-                :disabled="!editingDashboard || !editingDashboard.nombre"
-                :class="!editingDashboard || !editingDashboard.nombre ? 'opacity-40 cursor-not-allowed' : 'hover:bg-moss-600'"
-                class="px-4 py-2 text-sm font-medium text-white bg-moss-500 rounded-lg transition">
-          Guardar cambios
+                :disabled="!editingDashboard || !editingDashboard.nombre.trim()"
+                class="px-4 py-2 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition">
+          Guardar
         </button>
       </div>
     </div>
@@ -189,27 +121,43 @@
 </div>
 
 <script>
-  function homeApp() {
-    return {
-      search: '',
-      showNewDashboardModal: false,
-      newDashboardName: '',
-      newDashboardUrl: '',
-      formError: '',
-      loadError: '',
-      openMenuId: null,
-      dashboards: [],
+  const relativeTime = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+  const RELATIVE_STEPS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400],
+                          ['hour', 3600], ['minute', 60]];
 
-      showEditModal: false,
+  // «hace 3 horas», «ayer»; un ISO vacío es «Nunca».
+  function timeAgo(iso) {
+    if (!iso) return 'Nunca';
+    const seconds = (new Date(iso) - Date.now()) / 1000;
+    for (const [unit, size] of RELATIVE_STEPS) {
+      if (Math.abs(seconds) >= size) return relativeTime.format(Math.round(seconds / size), unit);
+    }
+    return 'Hace un momento';
+  }
+
+  function homeApp() {
+    // Tabulator vive fuera del estado de Alpine: un proxy reactivo encima de la tabla la rompe.
+    let table = null;
+
+    return {
+      menu: [
+        { id: 'recientes', label: 'Recientes', icon: 'ti-clock' },
+        { id: 'plantillas', label: 'Plantillas', icon: 'ti-template' },
+      ],
+      section: 'recientes',
+      search: '',
+      loaded: false,
+      loadError: '',
+      formError: '',
+      dashboards: [],
       editingDashboard: null,
 
-      get filteredDashboards() {
-        if (!this.search.trim()) return this.dashboards;
-        const q = this.search.toLowerCase();
-        return this.dashboards.filter(d => d.nombre.toLowerCase().includes(q));
-      },
-
       async init() {
+        this.syncSection();
+        window.addEventListener('hashchange', () => this.syncSection());
+        // Los x-ref de los hijos existen recién en el siguiente tick.
+        await this.$nextTick();
+        const built = this.buildTable();
         try {
           const r = await fetch(apiUrl('/api/dashboards/'));
           const data = await r.json().catch(() => null);
@@ -221,67 +169,98 @@
         } catch (e) {
           this.loadError = 'No se pudo conectar con el servidor.';
         }
+        this.loaded = true;
+        // Copias: el mutator de «Fuente» escribe sobre la fila y no debe tocar `dashboards`.
+        await built;
+        table.setData(this.dashboards.map(d => ({ ...d })));
+      },
+
+      syncSection() {
+        const id = location.hash.slice(1);
+        this.section = this.menu.some(m => m.id === id) ? id : 'recientes';
       },
 
       boardUrl(d) {
         return window.URLS.boardEditor.replace('/0/', `/${d.id}/`);
       },
 
-      sheetLabel(d) {
+      sourceLabel(d) {
+        if (d.sheet_name) return d.tab_name ? `${d.sheet_name} · ${d.tab_name}` : d.sheet_name;
         const m = /\/spreadsheets\/d\/([^/]+)/.exec(d.sheet_url || '');
-        const id = m ? m[1] : d.sheet_url;
-        return `${id.slice(0, 12)}… · gid ${d.sheet_gid}`;
+        return `${(m ? m[1] : d.sheet_url || '').slice(0, 12)}… · gid ${d.sheet_gid}`;
       },
 
-      openMenu(id) {
-        this.openMenuId = this.openMenuId === id ? null : id;
-      },
-
-      deleteDashboard(id) {
-        if (!confirm('¿Eliminar este tablero?')) return;
-        fetch(apiUrl(`/api/dashboards/${id}/`), { method: 'DELETE' })
-          .then(() => {
-            this.dashboards = this.dashboards.filter(d => d.id !== id);
-            this.openMenuId = null;
-          })
-          .catch(() => {});
-      },
-
-      duplicateDashboard(d) {
-        this.openMenuId = null;
-        fetch(apiUrl(`/api/dashboards/${d.id}/duplicate/`), { method: 'POST' })
-          .then(r => r.ok ? r.json() : Promise.reject())
-          .then(copy => { this.dashboards.unshift(copy); })
-          .catch(() => alert('No se pudo duplicar el tablero'));
-      },
-
-      resetNewDashboardForm() {
-        this.newDashboardName = '';
-        this.newDashboardUrl = '';
-        this.formError = '';
-      },
-
-      async createDashboard() {
-        if (!this.newDashboardName.trim()) return;
-        this.formError = '';
-        const r = await fetch(apiUrl('/api/dashboards/'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: this.newDashboardName, sheet_url: this.newDashboardUrl }),
+      // Promesa que se cumple cuando Tabulator terminó de construirse (antes no acepta datos).
+      buildTable() {
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const action = (name, icon, label, extra = '') =>
+          `<button type="button" data-action="${name}" title="${label}" aria-label="${label}"
+                   class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper ${extra}">
+             <i class="ti ${icon} text-base" aria-hidden="true"></i></button>`;
+        table = new Tabulator(this.$refs.table, {
+          data: [],
+          index: 'id',
+          layout: 'fitColumns',
+          placeholder: 'No hay tableros que coincidan.',
+          columns: [
+            { title: 'Nombre', field: 'nombre', minWidth: 220, widthGrow: 3,
+              formatter: c => `<a href="${esc(this.boardUrl(c.getData()))}" class="font-medium text-ink hover:text-moss-600">${esc(c.getValue())}</a>` },
+            { title: 'Fuente', field: 'sheet_name', minWidth: 200, widthGrow: 2,
+              mutator: (value, data) => this.sourceLabel(data),
+              formatter: c => `<span class="inline-flex items-center gap-1.5 text-ink/60"><i class="ti ti-table text-sm" aria-hidden="true"></i>${esc(c.getValue())}</span>` },
+            { title: 'Tarjetas', field: 'cardCount', hozAlign: 'right', width: 100 },
+            { title: 'Última apertura', field: 'last_opened_at', width: 160,
+              sorter: (a, b) => (a || '').localeCompare(b || ''),
+              formatter: c => esc(timeAgo(c.getValue())) },
+            { title: 'Creado', field: 'created_at', width: 140,
+              sorter: (a, b) => (a || '').localeCompare(b || ''),
+              formatter: c => esc(new Date(c.getValue()).toLocaleDateString('es')) },
+            { title: '', field: 'id', width: 120, headerSort: false, hozAlign: 'right',
+              formatter: () => `<div class="flex justify-end gap-0.5 -my-1.5">
+                  ${action('rename', 'ti-pencil', 'Renombrar')}
+                  ${action('duplicate', 'ti-copy', 'Duplicar')}
+                  ${action('delete', 'ti-trash', 'Eliminar', 'hover:text-red-600 hover:bg-red-50')}
+                </div>`,
+              cellClick: (e, cell) => {
+                const btn = e.target.closest('[data-action]');
+                if (!btn) return;
+                const d = this.dashboards.find(x => x.id === cell.getRow().getData().id);
+                if (!d) return;
+                if (btn.dataset.action === 'rename') this.editDashboard(d);
+                if (btn.dataset.action === 'duplicate') this.duplicateDashboard(d);
+                if (btn.dataset.action === 'delete') this.deleteDashboard(d.id);
+              } },
+          ],
         });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          this.formError = d.error || 'No se pudo crear el tablero';
-          return;
-        }
-        window.location.href = this.boardUrl(d);
+        return new Promise(resolve => table.on('tableBuilt', resolve));
+      },
+
+      applySearch() {
+        if (!table) return;
+        const q = this.search.trim();
+        if (q) table.setFilter('nombre', 'like', q);
+        else table.clearFilter();
+      },
+
+      async deleteDashboard(id) {
+        if (!confirm('¿Eliminar este tablero?')) return;
+        const r = await fetch(apiUrl(`/api/dashboards/${id}/`), { method: 'DELETE' }).catch(() => null);
+        if (!r || !r.ok) return alert('No se pudo eliminar el tablero');
+        this.dashboards = this.dashboards.filter(d => d.id !== id);
+        table && table.deleteRow(id);
+      },
+
+      async duplicateDashboard(d) {
+        const r = await fetch(apiUrl(`/api/dashboards/${d.id}/duplicate/`), { method: 'POST' }).catch(() => null);
+        const copy = r && r.ok ? await r.json() : null;
+        if (!copy) return alert('No se pudo duplicar el tablero');
+        this.dashboards.unshift(copy);
+        table && table.addRow({ ...copy }, true);
       },
 
       editDashboard(d) {
         this.editingDashboard = { ...d };
         this.formError = '';
-        this.showEditModal = true;
-        this.openMenuId = null;
       },
 
       async saveEdit() {
@@ -291,7 +270,7 @@
         const r = await fetch(apiUrl(`/api/dashboards/${d.id}/`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre: d.nombre, sheet_url: d.sheet_url }),
+          body: JSON.stringify({ nombre: d.nombre }),
         });
         const updated = await r.json().catch(() => ({}));
         if (!r.ok) {
@@ -300,10 +279,10 @@
         }
         const idx = this.dashboards.findIndex(x => x.id === updated.id);
         if (idx !== -1) this.dashboards[idx] = updated;
-        this.showEditModal = false;
+        table && table.updateData([{ ...updated }]);
         this.editingDashboard = null;
       },
-    }
+    };
   }
 </script>
 

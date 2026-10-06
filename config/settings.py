@@ -93,7 +93,7 @@ DATABASES = {
 # Respaldada en la misma base de datos: sin esto, Django usa por defecto
 # LocMemCache (memoria local a cada proceso) y cada worker leería la hoja de
 # Google Sheets por su cuenta (ver sheets_reports/services/sheets.py).
-# Requiere correr `python manage.py createcachetable` una vez por base de datos.
+# La tabla la crea `migrate` (sheets_reports/migrations/0008_create_cache_table.py).
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',

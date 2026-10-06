@@ -34,6 +34,8 @@ Reglas:
   reparto o ranking por una categoría.
 - No sugieras un año, una fecha ni un valor suelto. Un valor concreto, solo si aparece en las
   filas y para compararlo con el total o con otro (ej. «ventas de Hogar frente al total»).
+- Si comparas periodos, di contra cuál (ej. «ventas de este año frente al anterior», «el
+  último mes frente al anterior»); nunca «variación anual» o «evolución» sin referencia.
 - Sin términos técnicos (KPI, widget, métrica, condición, pivote, alias).
 - Que el widget los pueda representar y que sean distintos entre sí (otra columna u otro
   enfoque).
@@ -50,8 +52,9 @@ def _sheet_preview(df: pd.DataFrame) -> str:
 
 
 def _cache_key(source: str, widget_type: str, preview: str) -> str:
-    """Si cambian las columnas, sus tipos o las primeras filas, cambia la clave."""
-    digest = hashlib.sha1(preview.encode("utf-8")).hexdigest()[:16]
+    """Si cambian las columnas, sus tipos o las primeras filas, cambia la clave. Si cambia el
+    prompt, también cambia la clave."""
+    digest = hashlib.sha1((SUGGESTIONS_PROMPT + preview).encode("utf-8")).hexdigest()[:16]
     return f"widget_suggestions:{source}:{widget_type}:{digest}"
 
 

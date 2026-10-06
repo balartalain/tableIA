@@ -151,6 +151,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderPalette(sidebarEl);
   initRail(sidebarEl);
 
+  // Tablero nuevo: todavía no hay hoja. Solo el selector de fuente; al confirmarlo se crea el
+  // tablero y se recarga su editor.
+  if (!window.DASHBOARD_ID) {
+    sidebarEl.classList.add('opacity-50', 'pointer-events-none');
+    Alpine.store('bottomSheet').open({ title: 'Conectar datos', dismissible: false });
+    return;
+  }
+
   // El panel cambia el ancho del lienzo: gráficos y tablas se reajustan al terminar la animación.
   const drawerEl = document.getElementById('edit-drawer');
   drawerEl.addEventListener('transitionend', (e) => {

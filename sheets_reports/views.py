@@ -12,12 +12,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from sheets_reports.models import Dashboard, Widget
+from sheets_reports.services import google_drive
 from sheets_reports.services.sheets import (
+    COLUMN_TYPES,
     SheetError,
+    apply_column_config,
     get_dimension_fields,
     get_field_samples,
     get_sheet_dataframe,
     get_sheet_schema,
+    infer_column_types,
     invalidate_sheet_cache,
 )
 from sheets_reports.utils.data import time_fields
@@ -44,9 +48,18 @@ def _widget_manifest() -> dict:
 
 def board_editor(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
+    Dashboard.objects.filter(id=dashboard.id).update(last_opened_at=now())
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
         "widget_manifest": _widget_manifest(),
+    })
+
+
+def board_new(request):
+    """Editor sin tablero: el bottom sheet abre el selector de fuente y, al confirmar, crea el
+    tablero y redirige a su editor."""
+    return render(request, "board_editor.html", {
+        "dashboard": None, "refresh_minutes": 0, "widget_manifest": _widget_manifest(),
     })
 
 
@@ -73,18 +86,57 @@ def dashboard_list(request):
     except ValueError as e:
         return _error(str(e))
     nombre = str(data.get("nombre") or "").strip()
+    sheet_id = str(data.get("sheet_id") or "").strip()
+    sheet_gid = str(data.get("sheet_gid") or "0")
     sheet_url = str(data.get("sheet_url") or "").strip()
+    if sheet_id:
+        if not re.fullmatch(r"[a-zA-Z0-9_-]+", sheet_id):
+            return _error("El id de la hoja no es válido")
+        sheet_url = SHEET_URL.format(sheet_id=sheet_id, gid=sheet_gid)
     if not nombre:
         return _error("El nombre es obligatorio")
     if not sheet_url:
         return _error("La URL de la hoja es obligatoria")
+    columns = data.get("columns") or []
+    errors = _columns_errors(columns)
+    if errors:
+        return _error(errors[0])
     user = _get_user(request)
     if user is None:
         return _error("No hay usuarios creados. Crea uno con: python manage.py createsuperuser",
                       status=401)
-    dashboard = Dashboard.objects.create(owner=user, nombre=nombre, sheet_url=sheet_url,
-                                         sheet_gid=str(data.get("sheet_gid") or "0"))
+    dashboard = Dashboard.objects.create(
+        owner=user, nombre=nombre, sheet_url=sheet_url, sheet_gid=sheet_gid,
+        sheet_name=str(data.get("sheet_name") or "").strip()[:255],
+        tab_name=str(data.get("tab_name") or "").strip()[:255],
+        columns=[{"name": c["name"], "type": c["type"], "include": bool(c.get("include", True))}
+                 for c in columns],
+    )
     return JsonResponse(_serialize_dashboard(dashboard), status=201)
+
+
+SHEET_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/edit#gid={gid}"
+
+
+def _columns_errors(columns) -> list[str]:
+    """Las columnas elegidas al conectar la hoja: [{name, type, include}], al menos una incluida.
+    Vacío es válido (todas, con el tipo que trae la hoja)."""
+    if not isinstance(columns, list):
+        return ["'columns' debe ser una lista"]
+    if not columns:
+        return []
+    names = set()
+    for c in columns:
+        if not isinstance(c, dict) or not str(c.get("name") or "").strip():
+            return ["Cada columna necesita un 'name'"]
+        if c.get("type") not in COLUMN_TYPES:
+            return [f"Tipo no válido para '{c['name']}': usa {', '.join(COLUMN_TYPES)}"]
+        if c["name"] in names:
+            return [f"Columna repetida: '{c['name']}'"]
+        names.add(c["name"])
+    if not any(c.get("include", True) for c in columns):
+        return ["Incluye al menos una columna"]
+    return []
 
 
 @csrf_exempt
@@ -134,6 +186,9 @@ def dashboard_duplicate(request, dashboard_id):
         nombre=f"{dashboard.nombre} (copia)",
         sheet_url=dashboard.sheet_url,
         sheet_gid=dashboard.sheet_gid,
+        sheet_name=dashboard.sheet_name,
+        tab_name=dashboard.tab_name,
+        columns=dashboard.columns,
     )
     for widget in dashboard.widgets.all():
         Widget.objects.create(
@@ -192,7 +247,9 @@ def _gid_from_url(url: str) -> str | None:
 
 
 def _load_sheet(dashboard):
-    return get_sheet_dataframe(dashboard.sheet_id, dashboard.sheet_gid)
+    """La hoja del tablero con las columnas y los tipos que se eligieron al conectarla."""
+    return apply_column_config(get_sheet_dataframe(dashboard.sheet_id, dashboard.sheet_gid),
+                               dashboard.columns)
 
 
 def _serialize_dashboard(dashboard):
@@ -201,10 +258,49 @@ def _serialize_dashboard(dashboard):
         "nombre": dashboard.nombre,
         "sheet_url": dashboard.sheet_url,
         "sheet_gid": dashboard.sheet_gid,
+        "sheet_name": dashboard.sheet_name,
+        "tab_name": dashboard.tab_name,
         "cardCount": dashboard.widgets.count(),
         "created_at": dashboard.created_at.isoformat(),
         "updated": timesince(dashboard.created_at, now()),
+        "last_opened_at": dashboard.last_opened_at.isoformat() if dashboard.last_opened_at else None,
     }
+
+
+# ------------------------------------------------------------------ fuentes (selector)
+@require_http_methods(["GET"])
+def source_spreadsheets(request):
+    """Hojas de Google Drive compartidas con la cuenta de servicio (`?q=` filtra por nombre)."""
+    try:
+        return JsonResponse({"spreadsheets": google_drive.list_spreadsheets(request.GET.get("q", ""))})
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+
+@require_http_methods(["GET"])
+def source_tabs(request, spreadsheet_id):
+    try:
+        return JsonResponse(google_drive.list_tabs(spreadsheet_id))
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+
+SOURCE_SAMPLES = 3
+
+
+@require_http_methods(["GET"])
+def source_columns(request, spreadsheet_id, gid):
+    """Columnas de la pestaña con el tipo que se infiere y algunos valores de ejemplo."""
+    try:
+        df = get_sheet_dataframe(spreadsheet_id, gid)
+    except SheetError as e:
+        return _error(str(e), status=502)
+    types = infer_column_types(df)
+    columns = []
+    for col in df.columns:
+        values = [v for v in df[col].dropna().astype(str).str.strip().unique() if v]
+        columns.append({"name": col, "type": types[col], "samples": values[:SOURCE_SAMPLES]})
+    return JsonResponse({"columns": columns, "rows": len(df)})
 
 
 def _serialize_widget(widget):

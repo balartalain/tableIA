@@ -10,6 +10,8 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 
+from sheets_reports.utils.data import time_order, to_key
+
 logger = logging.getLogger(__name__)
 
 GVIZ_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq"
@@ -26,16 +28,24 @@ class SheetError(Exception):
     """Error legible para el usuario al leer la hoja."""
 
 
-def _access_token() -> str | None:
-    """Token Bearer de la service account, o None si no hay credenciales configuradas
-    (en ese caso la hoja debe ser pública por enlace)."""
+def service_account_credentials():
+    """Credenciales de la service account, o None si no hay configuradas (en ese caso solo se
+    leen hojas públicas por enlace y no se puede listar el Drive)."""
     path = getattr(settings, "GOOGLE_SHEETS_CREDENTIALS_PATH", "")
     if not path:
         return None
-    from google.auth.transport.requests import Request
     from google.oauth2.service_account import Credentials
 
-    creds = Credentials.from_service_account_file(path, scopes=SCOPES)
+    return Credentials.from_service_account_file(path, scopes=SCOPES)
+
+
+def _access_token() -> str | None:
+    """Token Bearer de la service account, o None si no hay credenciales configuradas."""
+    creds = service_account_credentials()
+    if creds is None:
+        return None
+    from google.auth.transport.requests import Request
+
     creds.refresh(Request())
     return creds.token
 
@@ -103,6 +113,68 @@ def get_sheet_dataframe(sheet_id: str, gid: str, ttl: int | None = None) -> pd.D
 
 def invalidate_sheet_cache(sheet_id: str, gid: str) -> None:
     cache.delete(f"sheet_df:{sheet_id}:{gid}")
+
+
+# ---------------------------------------------------------------- tipos de columna
+COLUMN_TYPES = ("text", "number", "date")
+
+
+def infer_column_type(series: pd.Series) -> str:
+    """Tipo que se propone al conectar la hoja: número si pandas ya la leyó numérica, fecha si
+    sus valores son fechas o meses (ver utils/data.time_order), texto en otro caso."""
+    if pd.api.types.is_numeric_dtype(series):
+        return "number"
+    values = list({to_key(v) for v in series.dropna() if str(v).strip()})
+    if values and time_order(values) is not None:
+        return "date"
+    return "text"
+
+
+def infer_column_types(df: pd.DataFrame) -> dict[str, str]:
+    return {col: infer_column_type(df[col]) for col in df.columns}
+
+
+def _as_number(series: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(series):
+        return series
+    text = series.where(series.isna(), series.astype(str).str.strip().str.replace(",", "", regex=False))
+    return pd.to_numeric(text.replace("", None), errors="coerce")
+
+
+def _as_text(series: pd.Series) -> pd.Series:
+    # 2026.0 → "2026": un año leído como número no debe quedar con decimales al pasarlo a texto.
+    return series.map(lambda v: v if pd.isna(v) else str(to_key(v))).astype(object)
+
+
+def _as_date(series: pd.Series) -> pd.Series:
+    """Fechas en ISO (AAAA-MM-DD): el motor las reconoce como columna de tiempo y las ordena.
+    Años sueltos (2026) y meses por nombre (Ene, Feb...) no son fechas completas: quedan como
+    texto, que el motor igual ordena como periodo."""
+    if pd.api.types.is_numeric_dtype(series):
+        return _as_text(series)
+    dates = pd.to_datetime(series.astype("string"), errors="coerce", dayfirst=True, format="mixed")
+    if dates.notna().sum() == 0:
+        return _as_text(series)
+    return dates.dt.strftime("%Y-%m-%d").where(dates.notna(), None).astype(object)
+
+
+_CASTS = {"number": _as_number, "text": _as_text, "date": _as_date}
+
+
+def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.DataFrame:
+    """La hoja como la configuró el usuario al conectarla: sin las columnas excluidas y con el
+    tipo elegido. Sin configuración (tableros anteriores) devuelve la hoja tal cual. Las
+    columnas que ya no existen en la hoja se ignoran; las nuevas se incluyen tal cual vienen."""
+    if not columns:
+        return df
+    df = df.copy()
+    excluded = [c["name"] for c in columns if not c.get("include", True) and c.get("name") in df.columns]
+    df = df.drop(columns=excluded)
+    for column in columns:
+        name, cast = column.get("name"), _CASTS.get(column.get("type"))
+        if name in df.columns and cast and column.get("include", True):
+            df[name] = cast(df[name])
+    return df
 
 
 def get_sheet_schema(df: pd.DataFrame) -> dict:

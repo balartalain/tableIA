@@ -533,6 +533,14 @@ document.addEventListener('alpine:init', () => {
         if (!m || m.type === 'formula') return;
         m.filters = (Array.isArray(m.filters) ? m.filters : []).map(toDraft);
       });
+      // Las fórmulas que llegan solo con `expression` (las de la IA) se leen a los selects si
+      // encajan en una operación; si no, quedan como fórmula personalizada (solo lectura).
+      f.metrics.forEach((m, index) => {
+        if (!m || m.type !== 'formula' || m.op || !m.expression) return;
+        const before = f.metrics.slice(0, index).map(x => (x || {}).alias).filter(Boolean);
+        const parsed = this._parseFormula(m.expression, before);
+        if (parsed) Object.assign(m, parsed);
+      });
       this.reconcileFormulas();
     },
 
@@ -706,6 +714,47 @@ document.addEventListener('alpine:init', () => {
       return this._formulaFor(op.value, left, right);
     },
 
+    // Inversa de `_formulaFor`: lee una expresión (ej. la que genera la IA, «a - b» o
+    // «a / b * 100») de vuelta a los selects {left, op, rightKind, right}. `aliases` son las
+    // métricas que puede usar (las anteriores). null si no encaja en una operación del panel.
+    _parseFormula(expression, aliases) {
+      const ID = '[A-Za-z_][A-Za-z0-9_]*';
+      const NUM = '-?\\d+(?:\\.\\d+)?';
+      const OPERAND = `(${ID}|${NUM})`;
+      const wrapsAll = (t) => {
+        let depth = 0;
+        for (let i = 0; i < t.length; i++) {
+          if (t[i] === '(') depth++;
+          else if (t[i] === ')' && --depth === 0 && i < t.length - 1) return false;
+        }
+        return depth === 0;
+      };
+      let text = String(expression || '').trim();
+      while (text.startsWith('(') && text.endsWith(')') && wrapsAll(text)) text = text.slice(1, -1).trim();
+      const isAlias = (a) => aliases.includes(a);
+      const rightOf = (r) => (isAlias(r) ? { rightKind: 'metric', right: r }
+        : new RegExp(`^${NUM}$`).test(r) ? { rightKind: 'number', right: r } : null);
+      const match = (pattern) => text.match(new RegExp(`^${pattern}$`));
+      let m = match(`\\(\\s*(${ID})\\s*-\\s*${OPERAND}\\s*\\)\\s*/\\s*${OPERAND}\\s*\\*\\s*100`);
+      if (m && m[2] === m[3] && isAlias(m[1]) && rightOf(m[2])) return { left: m[1], op: 'diff_pct', ...rightOf(m[2]) };
+      m = match(`(${ID})\\s*/\\s*${OPERAND}\\s*\\*\\s*100`);
+      if (m && isAlias(m[1]) && rightOf(m[2])) return { left: m[1], op: 'ratio_pct', ...rightOf(m[2]) };
+      m = match(`(${ID})\\s*([-+*/])\\s*${OPERAND}`);
+      if (m && isAlias(m[1]) && rightOf(m[3])) {
+        const op = { '-': 'sub', '+': 'add', '*': 'mul', '/': 'div' }[m[2]];
+        return { left: m[1], op, ...rightOf(m[3]) };
+      }
+      return null;
+    },
+
+    // Una fórmula personalizada (sin operación del panel) pasa a editarse con los selects.
+    editFormulaWithSelects(index) {
+      const metric = (this.drawerDraft.fields.metrics || [])[index];
+      if (!metric || metric.type !== 'formula') return;
+      Object.assign(metric, { op: 'sub', left: '', rightKind: 'metric', right: '' });
+      this.reconcileFormulas();
+    },
+
     _formulaFor(op, left, right) {
       switch (op) {
         case 'sub': return `(${left} - ${right})`;
@@ -783,6 +832,7 @@ document.addEventListener('alpine:init', () => {
     // con el campo («Promedio Ventas»), igual que en las cabeceras del backend.
     metricName(metric) {
       if (metric && metric.type === 'formula') {
+        if (!metric.op && metric.expression) return `Cálculo: ${metric.expression}`;
         if (!metric.op || !metric.left || String(metric.right ?? '').trim() === '') {
           return 'Cálculo entre métricas';
         }

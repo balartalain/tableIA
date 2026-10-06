@@ -134,7 +134,13 @@ meta y borra `style.target` cuando la meta deja de ser «Valor fijo».
 `openDrawer(id)`:
 1. Construye `drawerDraft` desde el widget + defaults del manifest.
 2. `_normalizeDraft()`: asegura arrays, dedupes columnas, normaliza tipos y pasa a borrador
-   (`conditionFromPayload`) los filtros del widget y los de cada métrica.
+   (`conditionFromPayload`) los filtros del widget y los de cada métrica. Una fórmula que
+   llega solo con `expression` (las de la IA) se lee a los selects del «Cálculo entre
+   métricas» con `_parseFormula` (inversa de `_formulaFor`: `a - b`, `a + b`, `a * b`, `a / b`,
+   `a / b * 100`, `((a - b) / b * 100)`, con `b` métrica anterior o número). Si no encaja
+   (ej. `(a + b) / c`) queda como **fórmula personalizada**: el panel la muestra en solo
+   lectura, se guarda tal cual y «elige una operación» (`editFormulaWithSelects`) la pasa a
+   los selects.
 3. Auto-pick: columnas/dimensiones/métricas iniciales si está vacío.
 4. `initListSortables()` en el siguiente tick (`Alpine.nextTick`): el `x-if` crea el panel
    del tipo después de cambiar `editingType`.

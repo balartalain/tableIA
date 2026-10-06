@@ -69,7 +69,7 @@ Es el archivo más grande (~1000 líneas). Contiene todo el estado y la lógica 
   editingType: null,        // tipo del widget en edición
   dashboardId: window.DASHBOARD_ID,
   drawerTab: 'data',        // 'data' | 'style'
-  schema: { all_fields, numeric_fields, dimension_fields, sample_values },
+  schema: { all_fields, numeric_fields, dimension_fields, time_fields, sample_values },
   widgetManifest: window.WIDGET_MANIFEST,
   drawerDraft: { title, fields, style, prompt },
   // ... estados de UI (loading, errores, etc.)
@@ -80,7 +80,11 @@ Es el archivo más grande (~1000 líneas). Contiene todo el estado y la lógica 
 
 - `EMPTY_FIELDS()`: factory de `{dimensions, pivots, metrics, filters, columns, trend_by, sort_by, limit}`.
 - `FILTER_OPS`: 12 operadores con `{value, label, needsValue, isList?, isRange?}`.
-- `RELATIVE_VALUES`: `current_year`, `previous_year`, `current_month`, `max`, `second_max`, `min`.
+- `RELATIVE_VALUES`: `current_year`, `previous_year`, `current_month` (del reloj) y los
+  periodos de los datos (`data: true`) `latest` «El periodo más reciente», `previous` «El
+  periodo anterior», `earliest` «El periodo más antiguo». `relativeOptionsFor(c)` ofrece los
+  periodos solo si la columna de la condición está en `schema.time_fields`; al cambiar de
+  columna, `onFilterFieldChange` borra un periodo que ya no aplica.
 - `AGG_OPTIONS`: `sum`, `avg`, `median`, `min`, `max`, `std`, `count`, `count_distinct`.
 - `CALC_OP_OPTIONS`: `sub`, `add`, `mul`, `div`, `ratio_pct`, `diff_pct`.
 
@@ -118,6 +122,7 @@ con su `{% include %}`. Cada partial tiene un único elemento raíz con dos `<di
 | `_title`, `_assistant`, `_json` | título, asistente de IA, visor JSON | — |
 | `_columns`, `_dimensions`, `_pivots`, `_metrics` | listas de `fields` (arrastrables) | `_dimensions` / `_pivots`: `with totals=True` pinta «Mostrar totales» por nivel (tabla dinámica) |
 | `_trend`, `_filters`, `_sort`, `_limit` | resto de `fields` | — |
+| `_metrics` · «Mostrar como» | `metric.window` de cada métrica de agregación | select con `metricWindowOptions` (`WINDOW_OPTIONS`: «% del total», «% de la fila», «Acumulado», «Variación vs anterior», más «Valor» = sin ventana), mostradas con el prefijo «Mostrar: …» (ej. «Mostrar: valor») para que se lea junto a la agregación. Solo las de `capabilities.windows`; con pivotes, nada en barras/líneas y «% de la fila» solo con pivotes (mismas reglas que `form_errors`). Si la ventana guardada deja de valer, avisa «se quitará al guardar» |
 | `_condition_row` | una condición `{field, op, valor}` dentro de un `x-for="(c, ci) in …"` | `with list="…"`: la lista que la contiene. La usan `_filters` (filtros del widget) y `_metrics` (condiciones propias de cada métrica de agregación, plegables en «Solo filas donde…», solo si `hasMetricFilters`: el widget admite más de una métrica) |
 | `_style_checkbox`, `_style_text`, `_style_number`, `_style_palette` | una clave de `style` | `key`, `label` (+ `placeholder` / `min`, `max`, `step`) |
 
@@ -138,7 +143,8 @@ meta y borra `style.target` cuando la meta deja de ser «Valor fijo».
 1. `pruneFormulas()`: descarta fórmulas incompletas.
 2. Limpia campos vacíos (dimensions, pivots, columns).
 3. Mapea filtros a formato backend (`conditionToPayload`), también los de cada métrica; una
-   métrica sin condiciones no lleva la clave `filters`.
+   métrica sin condiciones no lleva la clave `filters`. Quita el `window` de las métricas
+   cuya ventana ya no vale (`metricWindowInvalid`), así guardar no choca con `form_errors`.
 4. Normaliza `trend_by`, `sort_by`, `limit`.
 5. `_saveWidget(w)`: `style` va tal cual lo dejó el panel.
 
@@ -151,6 +157,7 @@ get hasColumns()      // capabilities.columns[1] > 0 (auto-pick al abrir)
 get maxColumns() / maxDimensions() / maxPivots() / maxMetrics()   // tope de cada lista
 get hasFormulaMetrics()   // admite métricas de tipo fórmula
 get hasMetricFilters()    // maxMetrics > 1: cada métrica admite sus propias condiciones
+get metricWindowOptions() // «Mostrar como»: capabilities.windows válidas con los pivotes del borrador
 get trendOptions()    // dimension_fields (fallback: all_fields)
 metricRoleOptions(base)   // opciones fijas del partial + las métricas del borrador (roles del KPI)
 ```
@@ -161,7 +168,7 @@ El bloque `_assistant.html` es un chat por widget. Cada widget tiene su hilo en
 `assistantThreads[id]` (en memoria: sobrevive a cerrar y reabrir el panel, se pierde al
 recargar; borrar el widget borra su hilo; un widget nuevo lo conserva al recibir su id real).
 `drawerThread` es el hilo del widget que se edita. Mensajes:
-`{role: 'user', text}`, `{role: 'assistant', proposal, applied, undo}` o `{role: 'assistant', error}`.
+`{role: 'user', text}`, `{role: 'assistant', proposal, baseStyle, applied, undo}` o `{role: 'assistant', error}`.
 
 `askAssistant()` (Enter o «Enviar»): POST `/api/dashboard/{id}/table-assistant/` con
 `{prompt, widget_type, current, history}`:
@@ -172,9 +179,16 @@ recargar; borrar el widget borra su hilo; un widget nuevo lo conserva al recibir
 
 La respuesta (`{widget_type, fields, style}`; `title` va vacío: el título de la tarjeta lo
 pone el usuario, la IA no lo genera) se agrega al hilo y **no** toca el borrador.
-`adviceSteps(proposal)` la convierte en pasos legibles en el orden del panel
-(columnas/filas/columnas cruzadas, condiciones, valores, tendencia, orden, límite y apariencia
-con las etiquetas del `style_schema`). Cada propuesta lleva su botón «Aplicar y guardar»:
+`adviceSteps(proposal, baseStyle)` la convierte en pasos legibles en el orden del panel
+y con el nombre de cada bloque (`columnsLabel`, «Dimensiones» o `dimensions_label`,
+«Pivotes», «Filtros», «Métricas», tendencia, orden y límite). Del
+`style` solo lista lo que **cambia** respecto a `baseStyle` (el estilo del panel al pedir,
+guardado en el mensaje: la IA devuelve el estilo completo), con las etiquetas del
+`style_schema` y agrupado como en el panel: las claves que un partial de «Configurar»
+registró con `registerStyleGroup(grupo, claves)` (ej. `_kpi_config.html` → «Tarjeta KPI»;
+`_dimensions` / `_pivots` con `totals` → «Totales») van bajo ese grupo; el resto, bajo
+«Personalizar». El grupo es maquetación: vive en el partial (`styleGroups[tipo]`), no en el
+`style_schema`, que solo declara datos. Cada propuesta lleva su botón «Aplicar y guardar»:
 `applyAdvice(message)` copia `fields` al borrador, **suma** el `style` propuesto al actual
 (el título no cambia) y guarda con `saveDrawer({fromAssistant: true})`, así el widget se
 redibuja al momento. El mensaje guarda en `undo` el `_draftPayload()` previo: «Deshacer»
@@ -183,7 +197,8 @@ aplicada tiene `undo`, y un «Guardar» manual lo borra (`_clearAdviceUndo()`). 
 falla, el borrador queda con la propuesta y el error en el pie del panel.
 «Nueva conversación» (`clearThread()`) vacía el hilo del widget.
 
-Con el hilo vacío, el chat muestra como tags los **pedidos sugeridos** para el tipo de widget.
+El chat muestra siempre arriba del hilo, como tags, los **pedidos sugeridos** para el tipo de
+widget (siguen visibles después de usar uno).
 `openDrawer()` llama a `loadSuggestions(type)` sin esperar: GET
 `/api/dashboard/{id}/widget-suggestions/?widget_type=…`, una vez por tipo y sesión
 (`assistantSuggestions[type]`; `_suggestionsLoading` evita pedidos repetidos; si falla queda

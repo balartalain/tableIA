@@ -20,6 +20,7 @@ from sheets_reports.services.sheets import (
     get_sheet_schema,
     invalidate_sheet_cache,
 )
+from sheets_reports.utils.data import time_fields
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
 from sheets_reports.utils.validation import SpecValidationError
 from sheets_reports.services.widget_service import WidgetService
@@ -227,7 +228,8 @@ def dashboard_schema(request, dashboard_id):
         df = _load_sheet(dashboard)
     except SheetError as e:
         return _error(str(e), status=502)
-    schema = {**get_sheet_schema(df), "dimension_fields": get_dimension_fields(df)}
+    schema = {**get_sheet_schema(df), "dimension_fields": get_dimension_fields(df),
+              "time_fields": time_fields(df)}
     return JsonResponse({
         **schema, "sample_values": get_field_samples(df),
         "widget_manifest": _widget_manifest(),

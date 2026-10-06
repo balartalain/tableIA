@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Tuple
 import pandas as pd
 
 from sheets_reports.engine.steps.filter import parse_conditions
-from sheets_reports.utils.data import to_python
+from sheets_reports.utils.data import is_number, to_python
 
 MAX_PIVOT_CELLS = 50_000
 
@@ -381,13 +381,15 @@ def _cell_window(frame: pd.DataFrame, metric: dict, keys: list, columns: list) -
     if alias not in columns or w_type not in ("percent_of_total", "percent_of_row"):
         return
     values = {key: frame.at[position, alias] for position, key in enumerate(keys)}
+    # Una suma de enteros deja la columna en int64: el porcentaje (66.23) no cabe en ella.
+    frame[alias] = frame[alias].astype(float)
 
     def _percent(value, total) -> float:
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or value != value:
+        if not is_number(value) or value != value:
             return 0
-        if not isinstance(total, (int, float)) or isinstance(total, bool) or not total:
+        if not is_number(total) or not total:
             return 0
-        return round(value / total * 100, 2)
+        return round(float(value) / float(total) * 100, 2)
 
     # Cada celda sobre el total de su columna, o el de su fila.
     for position, key in enumerate(keys):

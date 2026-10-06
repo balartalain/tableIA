@@ -88,7 +88,20 @@ class DynamicTableWidget(BaseWidget):
                 'fields': {   'dimensions': ['vendedor'],
                               'pivots': ['categoria'],
                               'metrics': [{'agg': 'count', 'alias': 'ordenes'}]},
-                'style': {}})
+                'style': {}}),
+        (   'ventas por categoría y su porcentaje del total',
+            {   'widget_type': 'dynamic_table',
+                'title': 'Ventas por categoría',
+                'fields': {   'dimensions': ['categoria'],
+                              'metrics': [   {   'agg': 'sum',
+                                                 'field': 'ventas',
+                                                 'alias': 'total_ventas'},
+                                             {   'agg': 'sum',
+                                                 'field': 'ventas',
+                                                 'alias': 'pct_ventas',
+                                                 'label': '% del total',
+                                                 'window': {'type': 'percent_of_total'}}]},
+                'style': {'showTotals': True}})
     ]
 
     capabilities: ClassVar[dict] = {
@@ -98,6 +111,7 @@ class DynamicTableWidget(BaseWidget):
         "sort": True,
         "limit": True,
         "filters": True,
+        "windows": ["percent_of_total", "percent_of_row"],
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [

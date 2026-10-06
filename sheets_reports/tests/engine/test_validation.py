@@ -28,6 +28,35 @@ class FormErrorsTests(SimpleTestCase):
         self.assertIn("metrics[0].filters: con una sola métrica usa fields.filters.",
                       errors_for("donut", fields(metrics=[agg("total", filters=electronica)])))
 
+    def test_un_solo_numero_no_admite_ventanas(self):
+        for w_type in ("pct_change", "percent_of_total"):
+            with self.subTest(window=w_type):
+                errors = errors_for("kpi", kpi_fields(agg("total"), agg("v", window={"type": w_type})))
+                self.assertEqual(len(errors), 1)
+                self.assertIn("metrics[1].window: este widget da un solo número", errors[0])
+                self.assertIn("'parte / total * 100'", errors[0])
+                self.assertIn("'latest' y 'previous'", errors[0])
+        variacion = agg("variacion", window={"type": "pct_change"})
+        self.assertEqual(errors_for("line", fields(dimensions=["mes"], metrics=[variacion])), [])
+
+    def test_ventanas_que_admite_cada_widget(self):
+        def with_window(w_type, **extra):
+            return fields(metrics=[agg("v", window={"type": w_type})], **extra)
+
+        self.assertEqual(errors_for("line", with_window("running_total", dimensions=["mes"])), [])
+        self.assertEqual(errors_for("bar", with_window("pct_change", dimensions=["mes"])), [])
+        self.assertIn("metrics[0].window: este widget no admite 'window'; quítalo.",
+                      errors_for("donut", with_window("pct_change")))
+        self.assertIn("con pivotes este widget no aplica 'window'",
+                      errors_for("bar", with_window("percent_of_total", pivots=["mes"]))[0])
+        self.assertIn("'running_total' no está disponible en este widget",
+                      errors_for("dynamic_table", with_window("running_total"))[0])
+
+    def test_porcentaje_de_la_fila_necesita_pivotes(self):
+        row = fields(metrics=[agg("v", window={"type": "percent_of_row"})])
+        self.assertIn("'percent_of_row' reparte cada fila", errors_for("dynamic_table", row)[0])
+        self.assertEqual(errors_for("dynamic_table", {**row, "pivots": ["mes"]}), [])
+
     def test_clave_de_datos_desconocida(self):
         self.assertIn("fields: 'orden' no es un campo de datos válido.",
                       errors_for("bar", {**fields(), "orden": ["ventas"]}))
@@ -190,9 +219,19 @@ class ConditionTests(SimpleTestCase):
     def test_orden_contra_texto(self):
         self.assertIn("no es numérica", self.errors({"field": "categoria", "op": "lt", "value": 5})[0])
 
+    def test_periodos_solo_en_columnas_de_tiempo(self):
+        for relative in ("latest", "previous", "earliest"):
+            with self.subTest(relative=relative):
+                errors = self.errors({"field": "categoria", "op": "eq", "relative": relative})
+                self.assertIn(f"'{relative}' solo aplica a columnas de tiempo", errors[0])
+                self.assertEqual(self.errors({"field": "mes", "op": "eq", "relative": relative}), [])
+                self.assertEqual(self.errors({"field": "anio", "op": "eq", "relative": relative}), [])
+        # Los del reloj no dependen de la columna.
+        self.assertEqual(self.errors({"field": "anio", "op": "eq", "relative": "current_year"}), [])
+
     def test_value_y_relative_son_excluyentes(self):
         self.assertIn("no ambos", self.errors(
-            {"field": "anio", "op": "eq", "value": 2026, "relative": "max"})[0])
+            {"field": "anio", "op": "eq", "value": 2026, "relative": "latest"})[0])
 
     def test_valor_faltante(self):
         self.assertIn("falta 'value'", self.errors({"field": "anio", "op": "eq"})[0])

@@ -8,7 +8,8 @@ from sheets_reports.engine import ResultTooLargeError
 from sheets_reports.engine import AGGREGATIONS, agg_name, build_query_result, run_steps
 from sheets_reports.engine.steps.aggregation import apply_aggregation
 from sheets_reports.engine.steps.filter import filter_rows
-from sheets_reports.tests.fixtures import agg, calc, execute, fields, sales_df, sellers_df
+from sheets_reports.tests.fixtures import (agg, calc, execute, fields, sales_df, sales_int_df,
+                                            sellers_df)
 from sheets_reports.widgets.schemas import WidgetFields
 
 
@@ -69,6 +70,28 @@ class FilterStepTests(SimpleTestCase):
         ]))
         self.assertEqual(out["data"]["values"], {"h2026": 675.0, "h2025": 80.0})
 
+    def test_ultimo_y_anterior_en_orden_cronologico(self):
+        from sheets_reports.engine.steps.filter import resolve_relative
+        meses = pd.Series(["Ene", "Feb", "Mar", "Abr", "Sep", "Oct"])
+        self.assertEqual(resolve_relative(meses, "latest"), "Oct")
+        self.assertEqual(resolve_relative(meses, "previous"), "Sep")
+        self.assertEqual(resolve_relative(meses, "earliest"), "Ene")
+        fechas = pd.Series(["15/01/2026", "02/02/2026", "28/12/2025"])
+        self.assertEqual(resolve_relative(fechas, "latest"), "02/02/2026")
+        self.assertEqual(resolve_relative(pd.Series([2025, 2026, 2024]), "previous"), 2025)
+        # Una columna que no es de tiempo no tiene «periodo más reciente»: ninguna fila.
+        self.assertIsNone(resolve_relative(pd.Series(["Hogar", "Ropa"]), "latest"))
+        out = execute(sales_df(), fields(dimensions=[], metrics=[
+            agg("v", filters=[{"field": "categoria", "op": "eq", "relative": "latest"}])]))
+        self.assertEqual(out["data"]["values"]["v"], 0)
+
+    def test_kpi_mes_actual_frente_al_anterior(self):
+        out = execute(sales_df(), fields(dimensions=[], metrics=[
+            agg("ultimo", filters=[{"field": "mes", "op": "eq", "relative": "latest"}]),
+            agg("anterior", filters=[{"field": "mes", "op": "eq", "relative": "previous"}]),
+        ]))
+        self.assertEqual(out["data"]["values"], {"ultimo": 25.0, "anterior": 330.0})
+
 
 class PivotTests(SimpleTestCase):
     def test_una_columna_por_valor_del_pivote(self):
@@ -128,6 +151,17 @@ class CalculatedAndWindowTests(SimpleTestCase):
                            "window": {"type": "running_total"}},
         ]))
         self.assertEqual([r["acum"] for r in out["data"]], [175.0, 675.0, 755.0])
+
+    def test_acumulado_y_variacion_de_lo_mas_antiguo_a_lo_mas_reciente(self):
+        """La hoja trae los meses desordenados: el acumulado no sigue el orden de la hoja."""
+        df = pd.DataFrame({"mes": ["Mar", "Ene", "Feb", "Ene"], "ventas": [30.0, 10.0, 20.0, 5.0]})
+        out = execute(df, fields(dimensions=["mes"], metrics=[
+            {"field": "ventas", "agg": "sum", "alias": "acum", "window": {"type": "running_total"}},
+            {"field": "ventas", "agg": "sum", "alias": "var", "window": {"type": "pct_change"}},
+        ]))
+        self.assertEqual([r["mes"] for r in out["data"]], ["Ene", "Feb", "Mar"])
+        self.assertEqual([r["acum"] for r in out["data"]], [15.0, 35.0, 65.0])
+        self.assertEqual([r["var"] for r in out["data"]][1:], [33.33, 50.0])
 
 
 class SortLimitTests(SimpleTestCase):
@@ -203,6 +237,21 @@ class NestedPivotTests(SimpleTestCase):
                                   "window": {"type": "percent_of_total"}}])
         self.assertEqual(n["cells"][(("Hogar",), ("Ene",))]["pct"], 25.0)  # 100 de los 400 de Ene
         self.assertEqual(n["grand"]["totals"]["pct"], 100.0)
+
+    def test_porcentajes_con_ventas_enteras(self):
+        """Con una columna de enteros las sumas son np.int64: no deben quedar en 0."""
+        pct = {"field": "ventas", "agg": "sum", "alias": "pct", "window": {"type": "percent_of_total"}}
+        n = self.nested(sales_int_df(), dimensions=["categoria"], metrics=[agg("total"), pct])
+        by_key = {tuple(r["key"]): n["cells"][(tuple(r["key"]), ())]["pct"] for r in n["rows"]}
+        self.assertEqual(by_key, {("Hogar",): 23.18, ("Electrónica",): 66.23, ("Ropa",): 10.6})
+        self.assertEqual(n["grand"]["totals"]["pct"], 100.0)
+        n = self.nested(sales_int_df(), dimensions=["categoria"], pivots=["mes"], metrics=[pct])
+        self.assertEqual(n["cells"][(("Hogar",), ("Ene",))]["pct"], 25.0)
+
+    def test_orden_por_una_metrica_de_enteros_es_numerico(self):
+        n = self.nested(sales_int_df(), dimensions=["categoria"], sort_by="-total",
+                        metrics=[agg("total")])
+        self.assertEqual([r["key"] for r in n["rows"]], [["Electrónica"], ["Hogar"], ["Ropa"]])
 
     def test_las_formulas_se_calculan_tambien_en_los_subtotales(self):
         n = self.nested(sellers_df(), dimensions=["categoria", "anio"],

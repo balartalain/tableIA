@@ -10,13 +10,14 @@ from django.template.loader import get_template
 from django.test import SimpleTestCase
 
 from sheets_reports.models import Widget
+from sheets_reports.services.ai_spec import WINDOW_TYPES
 from sheets_reports.tests.fixtures import errors_for, examples_ctx
 from sheets_reports.views import _widget_manifest
 from sheets_reports.widgets import WIDGETS
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
-CAPABILITY_KEYS = {"dimensions", "pivots", "metrics", "sort", "limit", "filters"}
+CAPABILITY_KEYS = {"dimensions", "pivots", "metrics", "sort", "limit", "filters", "windows"}
 STYLE_TYPES = {"string", "number", "boolean", "choice"}
 # Lo único que declara un control: datos. El layout del panel vive en el partial del widget.
 STYLE_KEYS = {"key", "label", "type", "options", "options_from", "default"}
@@ -129,6 +130,9 @@ class WidgetContractTests(SimpleTestCase):
                     self.assertLessEqual(low, high, f"{key}.{name} = {caps[name]}")
                 for name in ("sort", "limit", "filters"):
                     self.assertIsInstance(caps[name], bool)
+                self.assertLessEqual(set(caps["windows"]), set(WINDOW_TYPES))
+                if caps["metrics"][1] == 0:
+                    self.assertEqual(caps["windows"], [])
 
     def test_style_schema_solo_declara_datos(self):
         for key, widget in WIDGETS.items():

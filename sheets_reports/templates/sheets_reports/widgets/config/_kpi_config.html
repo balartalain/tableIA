@@ -6,8 +6,10 @@
     {% include B|add:"_assistant.html" %}
     {% include B|add:"_metrics.html" %}
 
-    <!-- Tarjeta KPI: quién es el número, contra qué se compara y su meta. -->
-    <div class="space-y-3 rounded-xl border border-line/60 bg-paper/60 p-3">
+    <!-- Tarjeta KPI: quién es el número, contra qué se compara y su meta. Registra sus claves
+         de style para que el chat las muestre bajo «Tarjeta KPI». -->
+    <div class="space-y-3 rounded-xl border border-line/60 bg-paper/60 p-3"
+         x-init="$store.dashboard.registerStyleGroup('Tarjeta KPI', ['primary', 'compare', 'compareMode', 'targetMetric', 'target', 'targetLabel', 'statusBasis', 'status_good', 'status_warn', 'higher_is_better'])">
       <label class="block text-xs font-semibold text-ink/70">Tarjeta KPI</label>
       <div>
         <label class="block text-[11px] font-semibold text-ink/60 mb-1">Número principal</label>

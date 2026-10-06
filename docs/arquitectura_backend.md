@@ -162,7 +162,7 @@ sheets_reports/
   utils/                    # Helpers sin conocer widgets
     registry.py             # Registry genérico + UnknownKeyError
     validation.py           # SpecValidationError, schema_errors, límites y piezas de JSON Schema
-    data.py                 # to_python, to_key, sort_key, percent, is_number, chronological…
+    data.py                 # to_python, to_key, sort_key, percent, is_number (también numpy), time_order, time_fields, chronological…
 
   tests/                    # Ver §15
 ```
@@ -263,7 +263,7 @@ Dos métricas sobre el mismo campo no colisionan: la agregación crea una column
 #### `filters[]` — cada condición es un dict
 
 `{"field", "op", "value"}` o `{"field", "op", "relative"}` (nunca ambos). Operadores y
-valores relativos: ver §9.6.
+valores relativos: ver §8.3.
 
 #### `columns[]` — solo el widget «Tabla»
 
@@ -335,7 +335,7 @@ Salida de `process_query()`: data plana + metadata de la consulta.
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `data` | Any | Data del frontend (dict escalar, lista de records…) |
-| `metadata` | dict | Resultado de los pasos (`universe`, `nested`, `dimensions`, `trend`…) |
+| `metadata` | dict | Resultado de los pasos (`nested`, `dimensions`, `trend`…) |
 | `fields` | `WidgetFields?` | Campos usados |
 | `type` | str | `scalar`, `flat`, `rows`, `columns`, `pivot_chart`… |
 | `frame` | `DataFrame?` | Frame crudo de trabajo (si no, se deriva de `data`) |
@@ -389,11 +389,12 @@ class BaseWidget(ABC):
 | `sort` | bool | Admite `sort_by` |
 | `limit` | bool | Admite `limit` |
 | `filters` | bool | Admite filtros propios |
+| `windows` | list[str] | Ventanas (`metric.window.type`) que el widget dibuja bien; `[]` = ninguna. La IA solo ve y solo puede usar estas |
 | `trend` | bool | Admite `trend_by` (solo KPI) |
 | `dimensions_label`, `dimensions_hint` | str? | Texto alternativo («Filtros» reinterpreta `dimensions` como «Columnas del filtro») |
 
-Las 6 claves base (`dimensions`, `pivots`, `metrics`, `sort`, `limit`, `filters`) son
-**obligatorias** y deben ser válidas: `test_capacidades_planas_y_validas`.
+Las 7 claves base (`dimensions`, `pivots`, `metrics`, `sort`, `limit`, `filters`, `windows`)
+son **obligatorias** y deben ser válidas: `test_capacidades_planas_y_validas`.
 
 #### `style_schema` — contrato de cada clave de `style`
 
@@ -451,17 +452,19 @@ Importar el paquete registra los 7 tipos. Un widget nuevo son dos piezas:
 
 ## 7. Catálogo de tipos de widget
 
-| `key` | Clase | `label` | dimensions | pivots | metrics | columns | sort | limit | filters | trend | `max_per_dashboard` | `board_filtered` |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `kpi` | `KpiWidget` | Tarjeta KPI | [0,0] | [0,0] | [1,4] | — | ✗ | ✗ | ✓ | ✓ | — | ✓ |
-| `bar` | `BarChartWidget` | Gráfico de Barras | [1,1] | [0,1] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | — | ✓ |
-| `line` | `LineWidget` | Gráfico de Líneas | [1,1] | [0,1] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | — | ✓ |
-| `donut` | `DonutWidget` | Gráfico de Dona | [1,1] | [0,0] | [1,1] | — | ✓ | ✓ | ✓ | ✗ | — | ✓ |
-| `table` | `TableWidget` | Tabla | [0,0] | [0,0] | [0,0] | [1,50] | ✓ | ✓ | ✓ | ✗ | — | ✓ |
-| `dynamic_table` | `DynamicTableWidget` | Tabla Dinámica | [0,3] | [0,2] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | — | ✓ |
-| `filter` | `FilterWidget` | Filtros | [0,50]¹ | [0,0] | [0,0] | — | ✗ | ✗ | ✗ | ✗ | **1** | **✗** |
+| `key` | Clase | `label` | dimensions | pivots | metrics | columns | sort | limit | filters | trend | windows² | `max_per_dashboard` | `board_filtered` |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kpi` | `KpiWidget` | Tarjeta KPI | [0,0] | [0,0] | [1,4] | — | ✗ | ✗ | ✓ | ✓ | — | — | ✓ |
+| `bar` | `BarChartWidget` | Gráfico de Barras | [1,1] | [0,1] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | total, acum., var. | — | ✓ |
+| `line` | `LineWidget` | Gráfico de Líneas | [1,1] | [0,1] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | total, acum., var. | — | ✓ |
+| `donut` | `DonutWidget` | Gráfico de Dona | [1,1] | [0,0] | [1,1] | — | ✓ | ✓ | ✓ | ✗ | — | — | ✓ |
+| `table` | `TableWidget` | Tabla | [0,0] | [0,0] | [0,0] | [1,50] | ✓ | ✓ | ✓ | ✗ | — | — | ✓ |
+| `dynamic_table` | `DynamicTableWidget` | Tabla Dinámica | [0,3] | [0,2] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | total, fila | — | ✓ |
+| `filter` | `FilterWidget` | Filtros | [0,50]¹ | [0,0] | [0,0] | — | ✗ | ✗ | ✗ | ✗ | — | **1** | **✗** |
 
 ¹ En «Filtros», `dimensions` son las **columnas expuestas como controles** (vacío = todas).
+² `percent_of_total` (total), `percent_of_row` (fila), `running_total` (acum.), `pct_change`
+(var.). La dona no lleva ventanas: ya muestra el porcentaje de cada parte.
 Todos los tipos tienen `ai_enabled = True`.
 
 ### 7.1 `style_schema` por tipo (claves)
@@ -498,6 +501,13 @@ Todos los tipos tienen `ai_enabled = True`.
   - Formato: `decimals`, `abbreviate` (K/M), `prefix`, `suffix`.
   - Etiquetas: `metric_label()` de la métrica correspondiente.
   - Si `df` está vacío → payload cero sin `compare`/`target`/`status`.
+- **Sin ventanas** (`windows: []`); los dos cálculos «respecto a otro» del KPI se arman con
+  métricas (ambos son `ai_examples`):
+  - **Participación** («qué % de las ventas es de Hogar»): métrica filtrada + métrica total +
+    fórmula `parte / total * 100` como `primary`. La fórmula se evalúa también en cada punto
+    de la tendencia: la sparkline es la participación de cada mes.
+  - **Frente al periodo anterior**: dos métricas filtradas con `relative` `latest` y `previous`
+    sobre la columna de tiempo + `style.compare` con la anterior.
 
 #### `bar` / `line` / `donut` — gráficos
 
@@ -535,7 +545,7 @@ Los tres usan `chart_series()` para `(categories, pairs)` y `percent_aliases()`.
 - **No consulta**: `process_query` devuelve `{"columns": [...]}` con las columnas elegidas en
   `dimensions` (o todas) y conserva el `frame` completo.
 - **`compile`**: por columna, `distinct_values()` (normalización idéntica a la de las
-  condiciones, §9.6) → `multi_select` con hasta `MAX_FILTER_VALUES = 100` opciones y flag
+  condiciones, §8.3) → `multi_select` con hasta `MAX_FILTER_VALUES = 100` opciones y flag
   `truncated`.
 - `board_filtered = False` (sus opciones listan la hoja completa, sin recorte) y
   `max_per_dashboard = 1`.
@@ -559,8 +569,7 @@ def run_steps(df, fields, widget_type=None):
 ```
 
 Cada paso es una función pura sobre el frame; el dict `metadata` compartido lleva lo que un
-paso deja para los siguientes (`universe`, y la forma del resultado que decide la
-agregación). `widget_type="dynamic_table"` pide el resultado jerárquico. Un widget que solo
+paso deja para los siguientes (la forma del resultado que decide la agregación). `widget_type="dynamic_table"` pide el resultado jerárquico. Un widget que solo
 necesita algunos pasos los encadena él mismo y cierra con `build_query_result`.
 
 ### 8.2 Constantes del motor (`engine/steps/aggregation.py`)
@@ -582,8 +591,20 @@ Helpers públicos: `cell_field(col_key, metric)` → `"__pivots.{clave}.{alias}"
   mismo módulo define los operadores (`FILTER_OPS`), los valores relativos
   (`RELATIVE_VALUES`), `Condition` y la validación (`condition_errors`), que también usan las
   métricas y los filtros del tablero.
-- Metadata: `universe` (frame **sin** recortar por filtros de métrica: el denominador de los
-  porcentajes) y `filters_applied`; `universe` también se guarda cuando no hay filtros.
+- Valores relativos: `current_year`, `previous_year` y `current_month` salen del reloj y
+  valen en cualquier columna. `latest` (el periodo más reciente), `previous` (el anterior) y
+  `earliest` (el más antiguo) salen de los valores distintos de la columna en orden de tiempo
+  (`utils/data.time_order`: años y otros números ascendentes, meses Ene→Dic, fechas en texto)
+  y **solo valen en columnas de tiempo**:
+  - `SheetContext.time_fields` (con `utils/data.time_fields(df)`) las identifica; la
+    validación (`_Comparison.check_value`) rechaza un periodo sobre otra columna (ej.
+    Categoría), y `/schema/` las expone como `time_fields` para el panel.
+  - En ejecución, sobre una columna que no es de tiempo el periodo es `None` y la condición no
+    deja filas.
+  - `latest` / `previous` sobre la columna de tiempo es la forma de comparar con el periodo
+    anterior en un KPI.
+- Metadata: `filters_applied`. Los filtros propios de cada métrica no recortan aquí: se
+  aplican al agregar (§8.4).
 
 ### 8.4 Paso 2 — `apply_aggregation` (`aggregation.py`)
 
@@ -638,8 +659,16 @@ Se declara **dentro** de la métrica: `{"alias": "pct", "field": "monto", "agg":
 | `pct_change` | `pct_change() * 100` |
 
 - Trabaja sobre el alias ya agregado (o el campo crudo si el alias no está en el frame).
-- **KPI (`scalar`)**: solo aplica `percent_of_total`, con denominador = `universe` (filas del
-  widget sin recorte de filtros propios de la métrica).
+- `running_total` y `pct_change` dependen del orden: si la primera dimensión es de tiempo
+  (`utils/data.time_order`: números, meses o fechas en texto) se calculan de lo más antiguo a
+  lo más reciente, el mismo orden del eje del gráfico de líneas; el frame queda en ese orden
+  y `sort_by` (paso 5) reordena después. Con otra dimensión (categorías) se respeta su orden.
+- Qué ventana admite cada widget lo declara `capabilities["windows"]` (§7); `form_errors`
+  además rechaza ventanas en barras/líneas con pivote (cada serie es un valor del pivote y la
+  ventana se ignoraría) y `percent_of_row` sin pivotes (daría 100 % en todas las celdas).
+- **KPI (`scalar`)**: no aplica ventanas. Con una sola fila no hay otras filas que mirar (ni
+  total de grupos, ni anterior, ni acumulado); el KPI declara `windows: []` y la IA no puede
+  proponerlas. La participación es una fórmula entre métricas (§7.2 `kpi`).
 - `nested`: ya calculado celda a celda → se omite.
 - Copia el frame antes de escribir (evita escribir sobre una vista de pandas).
 

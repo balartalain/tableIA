@@ -43,7 +43,7 @@ Alpine de la lista que la contiene (filtros del widget o de una métrica).
   <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'relative'">
     <select x-model="c.relative" aria-label="Valor relativo"
             class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-      <template x-for="o in $store.dashboard.relativeOptions" :key="o.value">
+      <template x-for="o in $store.dashboard.relativeOptionsFor(c)" :key="o.value">
         <option x-bind:value="o.value" x-text="o.label"></option>
       </template>
     </select>

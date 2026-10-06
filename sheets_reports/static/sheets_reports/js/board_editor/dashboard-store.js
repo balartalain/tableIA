@@ -48,9 +48,10 @@ const RELATIVE_VALUES = [
   { value: 'current_year', label: 'Este año' },
   { value: 'previous_year', label: 'El año anterior' },
   { value: 'current_month', label: 'Este mes (1-12)' },
-  { value: 'max', label: 'El último valor de la columna' },
-  { value: 'second_max', label: 'El anterior al último' },
-  { value: 'min', label: 'El primer valor de la columna' },
+  // Periodos de los datos (`data`): solo en columnas de tiempo (schema.time_fields).
+  { value: 'latest', label: 'El periodo más reciente', data: true },
+  { value: 'previous', label: 'El periodo anterior', data: true },
+  { value: 'earliest', label: 'El periodo más antiguo', data: true },
 ];
 
 const AGG_OPTIONS = [
@@ -66,6 +67,14 @@ const AGG_OPTIONS = [
 
 // Tipos de fila de métrica: una agregación o un cálculo entre las métricas anteriores
 // (se serializa como {"type": "formula", "expression"}, que el motor ya evalúa).
+// «Mostrar como» de una métrica (`metric.window`): cómo se muestra cada valor respecto a los demás.
+const WINDOW_OPTIONS = [
+  { value: 'percent_of_total', label: '% del total' },
+  { value: 'percent_of_row', label: '% de la fila' },
+  { value: 'running_total', label: 'Acumulado' },
+  { value: 'pct_change', label: 'Variación vs anterior' },
+];
+
 const METRIC_TYPE_OPTIONS = [
   { value: 'agg', label: 'Agregación' },
   { value: 'formula', label: 'Cálculo entre métricas' },
@@ -142,7 +151,7 @@ document.addEventListener('alpine:init', () => {
     editingType: null,
     dashboardId: window.DASHBOARD_ID,
     drawerTab: 'data',
-    schema: { all_fields: [], numeric_fields: [], dimension_fields: [], sample_values: {} },
+    schema: { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], sample_values: {} },
     widgetManifest: window.WIDGET_MANIFEST || {},
     schemaError: '',
     _nextId: -1,
@@ -383,6 +392,27 @@ document.addEventListener('alpine:init', () => {
       return types ? types.indexOf('formula') >= 0 : this.hasMetrics;
     },
     get metricTypeOptions() { return METRIC_TYPE_OPTIONS; },
+    // Opciones de «Mostrar como» para el borrador: las que admite el widget
+    // (capabilities.windows) y, de ellas, las que valen con sus pivotes; [] = sin select.
+    // Mismas reglas que form_errors en el backend.
+    get metricWindowOptions() {
+      const allowed = this.drawerCapabilities.windows || [];
+      const hasPivots = (this.drawerDraft.fields.pivots || []).some(Boolean);
+      // Con pivote, un gráfico (sin «% de la fila») no aplica ventanas: cada serie es un valor.
+      if (!allowed.length || (hasPivots && !allowed.includes('percent_of_row'))) return [];
+      const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value)
+        && (o.value !== 'percent_of_row' || hasPivots));
+      return options.length ? [{ value: '', label: 'Valor' }, ...options] : [];
+    },
+    // ¿La ventana guardada en la métrica ya no vale (ej. se agregó un pivote)? Se quita al guardar.
+    metricWindowInvalid(metric) {
+      const type = metric && metric.window && metric.window.type;
+      return !!type && !this.metricWindowOptions.some(o => o.value === type);
+    },
+    setMetricWindow(metric, type) {
+      if (type) metric.window = { type };
+      else delete metric.window;
+    },
     get calcOpOptions() { return CALC_OP_OPTIONS; },
     // Opciones de un select que elige una métrica del widget (roles del KPI): las fijas que
     // pasa el partial (`base`, ej. «Primera métrica») + las métricas del borrador.
@@ -632,6 +662,7 @@ document.addEventListener('alpine:init', () => {
         delete metric.agg;
         delete metric.field;
         delete metric.filters;
+        delete metric.window;
         metric.op = 'div';
         const prev = list.slice(0, index).find(m => m && m.alias);
         metric.left = prev ? prev.alias : '';
@@ -810,7 +841,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     get filterOpOptions() { return FILTER_OPS; },
-    get relativeOptions() { return RELATIVE_VALUES; },
+    // Los del reloj valen en cualquier columna; los periodos, solo en columnas de tiempo.
+    relativeOptionsFor(c) {
+      const isTime = (this.schema.time_fields || []).includes(c && c.field);
+      return RELATIVE_VALUES.filter(o => !o.data || isTime);
+    },
 
     filterNeedsValue(c) { return opMeta(c.op).needsValue; },
     filterIsRange(c) { return opMeta(c.op).isRange; },
@@ -823,6 +858,8 @@ document.addEventListener('alpine:init', () => {
       if (!numeric && ['lt', 'lte', 'gt', 'gte', 'between'].includes(c.op)) c.op = 'eq';
       c.value = '';
       c.value2 = '';
+      // Un periodo («el más reciente») que la nueva columna no admite se borra.
+      if (c.relative && !this.relativeOptionsFor(c).some(o => o.value === c.relative)) c.relative = '';
       if (!meta.needsValue) return;
     },
 
@@ -888,6 +925,10 @@ document.addEventListener('alpine:init', () => {
       });
       // Un cálculo a medias tampoco (`pruneFormulas` lo quita además del borrador al guardar).
       fields.metrics = (fields.metrics || []).filter(m => !(m && m.type === 'formula' && !m.expression));
+      // Una ventana que ya no vale con los pivotes o el tipo actual no se envía (form_errors la rechazaría).
+      fields.metrics.forEach(m => {
+        if (m && m.window && this.metricWindowInvalid(m)) delete m.window;
+      });
       // Condiciones de la métrica en formato del DSL; sin ninguna, la clave no se envía.
       fields.metrics.forEach(m => {
         if (!m || !Array.isArray(m.filters)) return;
@@ -976,7 +1017,8 @@ document.addEventListener('alpine:init', () => {
           body: JSON.stringify({ prompt, widget_type: this.editingType, current, history }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || 'El servidor no respondió correctamente.');
-        thread.push({ role: 'assistant', proposal: data, applied: false, undo: null });
+        // `baseStyle`: el estilo del panel al pedir, para mostrar solo lo que la propuesta cambia.
+        thread.push({ role: 'assistant', proposal: data, baseStyle: current.style || {}, applied: false, undo: null });
       } catch (e) {
         thread.push({
           role: 'assistant',
@@ -1016,6 +1058,12 @@ document.addEventListener('alpine:init', () => {
       return (this.editingType && this.assistantSuggestions[this.editingType]) || [];
     },
 
+    registerStyleGroup(group, keys) {
+      if (!this.editingType) return;
+      const groups = this.styleGroups[this.editingType] || (this.styleGroups[this.editingType] = {});
+      (keys || []).forEach(key => { groups[key] = group; });
+    },
+
     // Un clic en un tag lo envía al chat.
     askSuggestion(text) {
       if (this.drawerAsking) return;
@@ -1023,22 +1071,23 @@ document.addEventListener('alpine:init', () => {
       this.askAssistant();
     },
 
-    // Pasos de una propuesta de la IA, en el orden del panel: qué cambia si se aplica.
-    adviceSteps(a) {
+    // Pasos de una propuesta de la IA, en el orden del panel y con el nombre de su bloque:
+    // qué cambia si se aplica.
+    adviceSteps(a, baseStyle = {}) {
       if (!a) return [];
       const f = a.fields || {};
       const list = (values) => values.join(' › ');
       const steps = [];
       const columns = (f.columns || []).map(c => (typeof c === 'string' ? c : c.label ? `${c.field} («${c.label}»)` : c.field));
-      if (columns.length) steps.push({ title: 'Columnas', detail: `Muestra, en este orden: ${list(columns)}` });
-      if ((f.dimensions || []).length) steps.push({ title: 'Filas', detail: `Agrupa, en este orden: ${list(f.dimensions)}` });
-      if ((f.pivots || []).length) steps.push({ title: 'Columnas cruzadas', detail: `Desagrega por: ${list(f.pivots)}` });
+      if (columns.length) steps.push({ title: this.columnsLabel, detail: `Muestra, en este orden: ${list(columns)}` });
+      if ((f.dimensions || []).length) steps.push({ title: this.drawerCapabilities.dimensions_label || 'Dimensiones', detail: `Agrupa, en este orden: ${list(f.dimensions)}` });
+      if ((f.pivots || []).length) steps.push({ title: 'Pivotes', detail: `Desagrega por: ${list(f.pivots)}` });
       if ((f.filters || []).length) {
-        steps.push({ title: 'Condiciones', details: f.filters.map(c => this._describeCondition(c)) });
+        steps.push({ title: 'Filtros', details: f.filters.map(c => this._describeCondition(c)) });
       }
       const metrics = f.metrics || [];
       if (metrics.length) {
-        steps.push({ title: 'Valores', details: metrics.map(m => {
+        steps.push({ title: 'Métricas', details: metrics.map(m => {
           // `metricName` ya incluye las condiciones propias de la métrica.
           const what = m.type === 'formula' ? `Cálculo: ${m.expression || ''}` : this.metricName(m);
           return [what, m.label ? `como «${m.label}»` : ''].filter(Boolean).join(' ');
@@ -1052,11 +1101,24 @@ document.addEventListener('alpine:init', () => {
         steps.push({ title: 'Orden', detail: `Ordena por ${metric ? (metric.label || this.metricName(metric)) : key}, ${descending ? 'de mayor a menor' : 'de menor a mayor'}` });
       }
       if (f.limit) steps.push({ title: 'Límite', detail: `Muestra solo las primeras ${f.limit} filas` });
-      const look = Object.entries(a.style || {})
-        .filter(([key]) => key !== 'title')
-        .map(([key, value]) => this._describeStyle(key, value, metrics))
-        .filter(Boolean);
-      if (look.length) steps.push({ title: 'Apariencia', details: look });
+      // Estilo: solo lo que cambia respecto al panel al pedir (la IA devuelve el estilo
+      // completo), agrupado como en el panel: los controles con `group` se editan en
+      // «Configurar» (ej. «Tarjeta KPI»); el resto, en «Personalizar».
+      const changed = Object.entries(a.style || {})
+        .filter(([key, value]) => key !== 'title' && JSON.stringify(value) !== JSON.stringify(baseStyle[key]));
+      const groups = new Map();
+      (this.drawerManifest.style_schema || []).forEach(control => {
+        const entry = changed.find(([key]) => key === control.key);
+        const detail = entry && this._describeStyle(entry[0], entry[1], metrics);
+        if (!detail) return;
+        const title = ((this.styleGroups[this.editingType] || {})[control.key]) || 'Personalizar';
+        if (!groups.has(title)) groups.set(title, []);
+        groups.get(title).push(detail);
+      });
+      const personalizar = groups.get('Personalizar');
+      groups.delete('Personalizar');
+      groups.forEach((details, title) => steps.push({ title, details }));
+      if (personalizar) steps.push({ title: 'Personalizar', details: personalizar });
       return steps;
     },
 
@@ -1129,6 +1191,10 @@ document.addEventListener('alpine:init', () => {
     drawerDraft: { title: '', fields: { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null }, style: {}, prompt: '' },
     // Hilos del chat con la IA por id de widget: { [id]: [{role, text} | {role, proposal, applied, undo} | {role, error}] }.
     assistantThreads: {},
+    // Bloque de «Configurar» de cada clave de style, por tipo: { [type]: { [key]: grupo } }.
+    // Lo registra el partial que pinta esos controles (registerStyleGroup); el resto es de
+    // «Personalizar». El chat agrupa así los cambios de estilo de una propuesta.
+    styleGroups: {},
     // Pedidos sugeridos por tipo de widget: { [type]: [texto, texto] }.
     assistantSuggestions: {},
     _suggestionsLoading: {},

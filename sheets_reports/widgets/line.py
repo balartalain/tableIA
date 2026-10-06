@@ -33,6 +33,7 @@ class LineWidget(BaseWidget):
         "sort": True,
         "limit": True,
         "filters": True,
+        "windows": ["percent_of_total", "running_total", "pct_change"],
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [

@@ -42,6 +42,7 @@ class FilterWidget(BaseWidget):
         "sort": False,
         "limit": False,
         "filters": False,
+        "windows": [],
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [

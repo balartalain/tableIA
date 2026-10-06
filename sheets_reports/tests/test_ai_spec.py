@@ -213,6 +213,21 @@ class ToolSchemaTests(SimpleTestCase):
             with self.subTest(widget_type=widget_type):
                 self.assertIn("filters", metric_properties(widget_type))
 
+    def test_el_schema_solo_ofrece_las_ventanas_del_widget(self):
+        def metric_properties(widget_type):
+            return (build_tool_parameters(sales_ctx(), widget_type)["properties"]["fields"]
+                    ["properties"]["metrics"]["items"]["properties"])
+
+        def window_types(widget_type):
+            return metric_properties(widget_type)["window"]["properties"]["type"]["enum"]
+
+        self.assertEqual(window_types("line"), ["percent_of_total", "running_total", "pct_change"])
+        self.assertEqual(window_types("dynamic_table"), ["percent_of_total", "percent_of_row"])
+        self.assertIn("pct_change", window_types(None))
+        for widget_type in ("kpi", "donut"):
+            with self.subTest(widget_type=widget_type):
+                self.assertNotIn("window", metric_properties(widget_type))
+
     def test_los_ejemplos_de_la_ia_solo_usan_campos_que_su_tipo_ofrece(self):
         for key, widget in WIDGETS.items():
             offered = set(build_tool_parameters(examples_ctx(), key)
@@ -291,6 +306,7 @@ class PromptTests(SimpleTestCase):
     def test_capabilities_text_en_una_linea(self):
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("kpi")),
                          "sin dimensiones, sin pivotes, métricas de 1 a 4, sin orden, sin límite, "
-                         "filtros, tendencia, condiciones por métrica")
+                         "filtros, tendencia, condiciones por métrica, sin ventanas")
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("donut")),
-                         "dimensiones 1, sin pivotes, métricas 1, orden, límite, filtros")
+                         "dimensiones 1, sin pivotes, métricas 1, orden, límite, filtros, sin ventanas")
+        self.assertNotIn("ventanas", ai_spec.capabilities_text(WIDGETS.get("table")))

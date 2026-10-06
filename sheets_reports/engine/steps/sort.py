@@ -6,6 +6,7 @@ from typing import Any, Dict
 import pandas as pd
 
 from sheets_reports.engine.steps.aggregation import hierarchy
+from sheets_reports.utils.data import is_number
 
 
 def apply_sort_limit(df: pd.DataFrame, sort_by: str | None, limit: int | None,
@@ -47,7 +48,7 @@ def _sort_nested(nested: Dict[str, Any], sort_by: str | None) -> None:
             raw = totals.get(key, {}).get(name)
         if raw is None or isinstance(raw, bool):
             return (2, "")
-        if isinstance(raw, (int, float)):
+        if is_number(raw):
             return (1, float(raw))
         return (0, str(raw))
 

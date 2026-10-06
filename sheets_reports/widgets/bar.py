@@ -43,6 +43,7 @@ class BarChartWidget(BaseWidget):
         "sort": True,
         "limit": True,
         "filters": True,
+        "windows": ["percent_of_total", "running_total", "pct_change"],
     }
 
     # Backend-driven style schema (solo ui: text | select | checkbox | number)

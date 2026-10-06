@@ -17,6 +17,14 @@ def sales_df() -> pd.DataFrame:
     })
 
 
+def sales_int_df() -> pd.DataFrame:
+    """`sales_df` con ventas enteras (int64), como llegan de una hoja sin decimales: las sumas
+    son enteros de numpy (np.int64), no `int` de Python."""
+    df = sales_df()
+    df["ventas"] = df["ventas"].astype("int64")
+    return df
+
+
 def sellers_df() -> pd.DataFrame:
     """Ventas y plan por vendedor: Ana y Luis no llegan al plan, Eva sí."""
     return pd.DataFrame({

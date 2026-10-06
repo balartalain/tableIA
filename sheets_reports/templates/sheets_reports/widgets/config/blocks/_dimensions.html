@@ -1,5 +1,6 @@
 <!-- Dimensiones: agrupación del eje/filas, o las columnas de una tabla simple -->
-<div class="space-y-2">
+<div class="space-y-2"{% if totals %}
+     x-init="$store.dashboard.registerStyleGroup('Totales', ['showTotals', 'rowSubtotal1', 'rowSubtotal2'])"{% endif %}>
   <div class="flex items-center justify-between">
     <label class="block text-xs font-semibold text-ink/70"
            x-text="$store.dashboard.drawerCapabilities.dimensions_label || 'Dimensiones'"></label>

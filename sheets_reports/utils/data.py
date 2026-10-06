@@ -50,7 +50,10 @@ def percent(part, whole):
 
 
 def is_number(value) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """Número de Python o de numpy (np.int64 no es `int`: una suma de una columna de enteros lo
+    es); nunca un booleano."""
+    return (isinstance(value, (int, float, np.integer, np.floating))
+            and not isinstance(value, (bool, np.bool_)))
 
 
 def series_dict(series: pd.Series) -> dict:
@@ -89,9 +92,9 @@ def _natural_key(value):
             for part in re.split(r"(\d+)", _plain(value)) if part]
 
 
-def chronological(values: list) -> list:
-    """De lo más antiguo a lo más reciente: números ascendentes; meses 1→12;
-    fechas en texto (ISO o día primero); resto en orden natural."""
+def time_order(values: list) -> list | None:
+    """Los valores de lo más antiguo a lo más reciente si son de tiempo (números, meses o
+    fechas en texto, ISO o día primero); None si no lo son (categorías, nombres...)."""
     values = list(values)
     if not values:
         return values
@@ -102,7 +105,21 @@ def chronological(values: list) -> list:
     dates = pd.to_datetime(pd.Series(values, dtype="string"), errors="coerce", dayfirst=True, format="mixed")
     if not dates.isna().any():
         return [values[i] for i in dates.argsort(kind="stable")]
-    return sorted(values, key=_natural_key)
+    return None
+
+
+def time_fields(df: pd.DataFrame) -> list[str]:
+    """Columnas de tiempo (números, meses o fechas en texto; ver `time_order`), en el orden de
+    la hoja: en ellas «el periodo más reciente / anterior / más antiguo» tiene sentido."""
+    return [column for column in df.columns
+            if time_order(list({to_key(v) for v in df[column].dropna()})) is not None
+            and df[column].notna().any()]
+
+
+def chronological(values: list) -> list:
+    """De lo más antiguo a lo más reciente (`time_order`); si no son de tiempo, en orden natural."""
+    ordered = time_order(values)
+    return ordered if ordered is not None else sorted(values, key=_natural_key)
 
 
 OTHERS_LABEL = "Otros"

@@ -48,14 +48,16 @@ class ViewsTests(TestCase):
         self.assertEqual(dict(zip(data["categories"], data["series"][0]["data"])),
                          {"Hogar": 175.0, "Electrónica": 500.0})
 
-    def test_kpi_porcentaje_usa_como_universo_los_filtros_del_tablero(self, _df):
+    def test_kpi_participacion_respeta_los_filtros_del_tablero(self, _df):
         Widget.objects.create(
             dashboard=self.dashboard, type="kpi", title="Participación de Hogar",
             fields={"dimensions": [], "filters": [],
-                    "metrics": [{**agg("participacion"),
-                                 "filters": [{"field": "categoria", "op": "eq", "value": "Hogar"}],
-                                 "window": {"type": "percent_of_total"}}]},
-            style={},
+                    "metrics": [{**agg("hogar"),
+                                 "filters": [{"field": "categoria", "op": "eq", "value": "Hogar"}]},
+                                agg("total"),
+                                {"type": "formula", "alias": "participacion",
+                                 "expression": "hogar / total * 100"}]},
+            style={"primary": "participacion"},
         )
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?{board_filters(ANIO_2026)}")
         kpi = next(w for w in r.json()["widgets"] if w["type"] == "kpi")
@@ -102,8 +104,8 @@ class ViewsTests(TestCase):
                 "kpi", "Ventas vs año anterior",
                 fields_data={"dimensions": [], "filters": [],
                              "metrics": [
-                                 agg("actual", filters=[{"field": "anio", "op": "eq", "relative": "max"}]),
-                                 agg("anterior", filters=[{"field": "anio", "op": "eq", "relative": "second_max"}]),
+                                 agg("actual", filters=[{"field": "anio", "op": "eq", "relative": "latest"}]),
+                                 agg("anterior", filters=[{"field": "anio", "op": "eq", "relative": "previous"}]),
                              ]},
                 style={"compare": "anterior", "targetMetric": "fixed", "target": 1000,
                        "targetLabel": "Meta", "status_good": 100, "status_warn": 50},
@@ -286,12 +288,15 @@ class ViewsTests(TestCase):
         # anio es numérica pero con pocos valores enteros: se puede agrupar. ventas no.
         self.assertEqual(r.json()["dimension_fields"], ["categoria", "mes", "anio"])
         self.assertEqual(r.json()["sample_values"]["mes"], ["Ene", "Feb", "Mar"])
+        # Columnas de tiempo (años, meses, fechas): admiten «el periodo más reciente».
+        self.assertEqual(r.json()["time_fields"], ["mes", "anio", "ventas"])
 
     def test_schema_trae_el_manifiesto_con_las_columnas_de_la_hoja(self, _df):
         manifest = self.client.get(f"/api/dashboard/{self.dashboard.id}/schema/").json()["widget_manifest"]
         self.assertEqual(manifest["bar"]["capabilities"], {
             "dimensions": [1, 1], "pivots": [0, 1], "metrics": [1, 5],
             "sort": True, "limit": True, "filters": True,
+            "windows": ["percent_of_total", "running_total", "pct_change"],
         })
         self.assertEqual(manifest["bar"]["max_per_dashboard"], None)
         self.assertEqual(manifest["filter"]["max_per_dashboard"], 1)

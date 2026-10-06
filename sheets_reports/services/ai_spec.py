@@ -86,7 +86,12 @@ consulta.
       sola métrica, usa fields.filters.
     - window (opcional): {"type": "percent_of_total" | "percent_of_row" | "running_total" |
       "pct_change"} sobre esa métrica ya agregada. "participación", "qué % representa cada...",
-      "acumulado", "variación respecto al anterior".
+      "acumulado", "variación respecto al anterior". Solo las que el widget lista en
+      «ventanas» (sin pivotes, salvo "percent_of_row", que los necesita). Un widget de un solo
+      número no lleva ventanas: la participación es una fórmula "parte / total * 100" entre una
+      métrica filtrada y otra sin filtrar (como style.primary), y la variación frente al
+      periodo anterior son dos métricas filtradas con relative "latest" y "previous" sobre la
+      columna de tiempo y style.compare con el alias de la anterior.
   - {"type": "formula", "alias", "expression"}: cálculo entre columnas YA agregadas, usando sus
     alias (ej. margen = "total_ganancia / total_ventas"). El orden de la lista decide el orden
     de las columnas; el cálculo se evalúa después de agregar.
@@ -110,8 +115,10 @@ falta cambiar nada (usa los valores por defecto).
   (solo columnas numéricas). "in"/"not_in": lista de valores. "between": [desde, hasta]
   numérico. "contains": el texto contiene "value". "is_empty"/"not_empty": sin valor.
 - relative (en vez de value) para valores que dependen de la fecha o de los datos:
-  "current_year", "previous_year", "current_month", "max" (el último valor de la columna),
-  "second_max", "min". Úsalo para "este año", "el último mes" en vez de fijar un número.
+  "current_year", "previous_year", "current_month" (del reloj); "latest" (el periodo más
+  reciente de la columna), "previous" (el anterior a ese) y "earliest" (el más antiguo), solo
+  en columnas de tiempo (años, meses, fechas). Úsalo para "este año", "el último mes" en vez
+  de fijar un número.
 Usa los valores de ejemplo de las columnas para escribir el valor exacto.
 """
 
@@ -166,7 +173,45 @@ def capabilities_text(widget) -> str:
         parts.append("tendencia")
     if admits_metric_filters(widget):
         parts.append("condiciones por métrica")
+    if (caps.get("metrics") or (0, 0))[1] > 0:
+        windows = window_types_for(widget)
+        parts.append("ventanas: " + ", ".join(WINDOW_LABELS[w] for w in windows) if windows
+                     else "sin ventanas")
     return ", ".join(parts)
+
+
+WINDOW_LABELS = {"percent_of_total": "participación", "percent_of_row": "% de la fila",
+                 "running_total": "acumulado", "pct_change": "variación"}
+
+
+def window_types_for(widget) -> tuple:
+    """Ventanas que el widget dibuja bien (`capabilities["windows"]`)."""
+    return tuple((widget.capabilities or {}).get("windows") or ())
+
+
+def _window_error(path: str, w_type: str, widget, pivots: list) -> str | None:
+    """Una ventana válida en el motor pero que en este widget se ignoraría o daría números
+    falsos. El mensaje guía a la IA en el reintento."""
+    caps = widget.capabilities or {}
+    allowed = window_types_for(widget)
+    if w_type not in allowed:
+        if caps.get("dimensions", (0, 0))[1] == 0 and caps.get("metrics", (0, 0))[1] > 0:
+            # Un solo número: no hay otras filas (ni total de grupos, ni anterior, ni acumulado).
+            return (f"{path}: este widget da un solo número y no admite 'window'. Para una "
+                    f"participación usa una métrica con filters, otra sin ellos (el total) y una "
+                    f"fórmula 'parte / total * 100' como style.primary. Para comparar con el "
+                    f"periodo anterior usa dos métricas con filters relative 'latest' y 'previous' "
+                    f"sobre la columna de tiempo y style.compare con el alias de la anterior.")
+        if not allowed:
+            return f"{path}: este widget no admite 'window'; quítalo."
+        return f"{path}: '{w_type}' no está disponible en este widget; usa {', '.join(allowed)} o quítalo."
+    if pivots and "percent_of_row" not in allowed:
+        # En los gráficos con pivote cada serie es un valor del pivote: la ventana se ignoraría.
+        return f"{path}: con pivotes este widget no aplica 'window'; quita los pivotes o la ventana."
+    if w_type == "percent_of_row" and not pivots:
+        return (f"{path}: 'percent_of_row' reparte cada fila entre las columnas cruzadas y "
+                f"necesita pivotes; sin ellos usa 'percent_of_total'.")
+    return None
 
 
 def admits_metric_filters(widget) -> bool:
@@ -370,6 +415,12 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
     if widget_type and widgets and not admits_metric_filters(widgets[0]):
         # Con una sola métrica sus condiciones serían las del widget: se ofrece fields.filters.
         del metric_properties["filters"]
+    if widget_type and widgets:
+        windows = list(window_types_for(widgets[0]))
+        if windows:
+            metric_properties["window"]["properties"]["type"]["enum"] = windows
+        else:
+            del metric_properties["window"]
     fields_properties = {
         "dimensions": {"type": "array", "items": {"type": "string", "enum": list(ctx.fields)},
                        "description": "Columnas para agrupar / mostrar como filas."},
@@ -704,6 +755,11 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
         errors += _metric_errors(metric, i, ctx, aliases)
         if isinstance(metric, dict) and metric.get("filters") and not metric_filters_ok:
             errors.append(f"metrics[{i}].filters: con una sola métrica usa fields.filters.")
+        window = metric.get("window") if isinstance(metric, dict) else None
+        if isinstance(window, dict) and window.get("type") in WINDOW_TYPES:
+            error = _window_error(f"metrics[{i}].window", window["type"], definition, pivots)
+            if error:
+                errors.append(error)
         if isinstance(metric, dict) and metric.get("alias"):
             aliases.append(metric["alias"])
 

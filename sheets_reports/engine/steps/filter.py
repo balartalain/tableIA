@@ -4,7 +4,7 @@ que lo componen: los filtros del widget, de una métrica y del tablero.
 
 Cada operador es una estrategia registrada en FILTER_OPS que reúne su regla (qué valor lleva,
 si exige columna numérica) y su implementación (la máscara de pandas). Cada valor relativo
-("el año actual", "el último valor de la columna") es otra estrategia en RELATIVE_VALUES.
+("el año actual", "el periodo más reciente de la columna") es otra estrategia en RELATIVE_VALUES.
 Nunca se evalúa texto: solo operaciones vectorizadas de pandas.
 """
 import datetime
@@ -16,7 +16,7 @@ from typing import Any, ClassVar
 import pandas as pd
 
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.utils.data import is_number, sort_key, to_key
+from sheets_reports.utils.data import is_number, sort_key, time_order, to_key
 from sheets_reports.utils.registry import Registry
 from sheets_reports.utils.validation import (
     MAX_FILTERS, MAX_IN_VALUES, SCALAR, enum_of, field_enum, schema_errors, unique,
@@ -33,6 +33,8 @@ RELATIVE_VALUES: Registry["RelativeValue"] = Registry("Valor relativo")
 class RelativeValue:
     """Valor de un filtro que se calcula al ejecutar: del reloj o de los datos de la columna."""
     key: ClassVar[str]
+    # Sale de los valores de la columna (un periodo): solo vale en columnas de tiempo.
+    data_based: ClassVar[bool] = False
 
     def resolve(self, series: pd.Series, today: datetime.date):
         raise NotImplementedError
@@ -71,10 +73,13 @@ class CurrentMonth(_ClockValue):
 
 
 class _DataValue(RelativeValue):
-    """Valor tomado de los valores distintos de la columna, ordenados. None si no hay."""
+    """Un periodo tomado de los valores distintos de una columna de tiempo, de lo más antiguo a
+    lo más reciente (años, meses Ene→Dic, fechas en texto; ver utils/data.time_order). None si
+    no hay valores o la columna no es de tiempo (ej. categorías): la condición no deja filas."""
+    data_based = True
 
     def resolve(self, series, today):
-        values = sorted({to_key(v) for v in series.dropna()}, key=sort_key)
+        values = time_order(sorted({to_key(v) for v in series.dropna()}, key=sort_key))
         return self.pick(values) if values else None
 
     def pick(self, values: list):
@@ -82,25 +87,27 @@ class _DataValue(RelativeValue):
 
 
 @RELATIVE_VALUES.register
-class MaxValue(_DataValue):
-    key = "max"
+class LatestValue(_DataValue):
+    """El periodo más reciente de la columna (ej. el último mes con datos)."""
+    key = "latest"
 
     def pick(self, values):
         return values[-1]
 
 
 @RELATIVE_VALUES.register
-class SecondMaxValue(_DataValue):
-    """El valor anterior al último (ej. el año o periodo anterior en los datos)."""
-    key = "second_max"
+class PreviousValue(_DataValue):
+    """El periodo anterior al más reciente (ej. el mes o año anterior en los datos)."""
+    key = "previous"
 
     def pick(self, values):
         return values[-2] if len(values) > 1 else None
 
 
 @RELATIVE_VALUES.register
-class MinValue(_DataValue):
-    key = "min"
+class EarliestValue(_DataValue):
+    """El periodo más antiguo de la columna."""
+    key = "earliest"
 
     def pick(self, values):
         return values[0]
@@ -272,6 +279,11 @@ class _Comparison(FilterOperator):
             return [f"{path}: falta 'value' (o 'relative')."]
         if isinstance(cond.get("value"), list):
             return [f"{path}: '{self.key}' lleva un único valor; para varios usa 'in'."]
+        relative = cond.get("relative")
+        if relative in RELATIVE_VALUES and RELATIVE_VALUES.get(relative).data_based \
+                and not ctx.is_time(cond["field"]):
+            return [f"{path}: '{relative}' solo aplica a columnas de tiempo (años, meses, fechas); "
+                    f"'{cond['field']}' no lo es: usa un valor concreto."]
         return []
 
     def mask(self, raw, value):
@@ -420,12 +432,10 @@ def apply_filters(df: pd.DataFrame, conditions: list[Condition] | None) -> pd.Da
 
 
 def filter_rows(df: pd.DataFrame, filters: list[dict] | None, metadata: dict) -> pd.DataFrame:
-    """Paso 1: las condiciones del widget recortan las FILAS que entran. Deja en
-    `metadata["universe"]` esas filas (el denominador de sus porcentajes), sin el recorte de
-    los filtros propios de cada métrica."""
+    """Paso 1: las condiciones del widget recortan las FILAS que entran (los filtros propios
+    de cada métrica se aplican al agregar)."""
     if filters:
         conditions = parse_conditions(filters)
         df = apply_filters(df, conditions)
         metadata["filters_applied"] = len(conditions)
-    metadata["universe"] = df
     return df

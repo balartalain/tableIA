@@ -44,7 +44,23 @@
                   <option x-bind:value="o.value" x-text="o.label"></option>
                 </template>
               </select>
+              <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total, acumulado…). -->
+              <template x-if="$store.dashboard.metricWindowOptions.length">
+                <select x-bind:value="(metric.window && metric.window.type) || ''"
+                        x-on:change="$store.dashboard.setMetricWindow(metric, $event.target.value)"
+                        aria-label="Mostrar como" title="Mostrar como"
+                        class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  <template x-for="o in $store.dashboard.metricWindowOptions" :key="o.value">
+                    <option x-bind:value="o.value"
+                            x-text="'Mostrar: ' + o.label.charAt(0).toLowerCase() + o.label.slice(1)"
+                            x-bind:selected="o.value === ((metric.window && metric.window.type) || '')"></option>
+                  </template>
+                </select>
+              </template>
             </div>
+            <p x-show="$store.dashboard.metricWindowInvalid(metric)" class="text-[11px] text-clay-600">
+              «Mostrar como» no aplica con esta configuración: se quitará al guardar.
+            </p>
 
             <!-- Condiciones propias: la métrica resume solo esas filas (ej. ventas de Electrónica
                  junto al total). Plegable; abierto si ya trae condiciones. -->

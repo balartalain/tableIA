@@ -33,6 +33,7 @@ class DonutWidget(BaseWidget):
         "sort": True,
         "limit": True,
         "filters": True,
+        "windows": [],
     }
 
     style_schema: ClassVar[List[Dict[str, Any]]] = [

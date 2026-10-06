@@ -70,6 +70,17 @@ class KpiTrendTests(SimpleTestCase):
         self.assertEqual(out["trend"]["data"], [400.0, 330.0, 25.0])
         json.dumps(out)  # las claves llegan en tipos que el JSON entiende
 
+    def test_participacion_por_punto(self):
+        """La fórmula se evalúa en cada mes: Hogar del mes sobre el total del mes."""
+        hogar = [{"field": "categoria", "op": "eq", "value": "Hogar"}]
+        out = compiled("kpi", kpi_fields(agg("hogar", filters=hogar), agg("total"),
+                                         calc("participacion", "hogar / total * 100"),
+                                         trend_by="mes"),
+                       {"primary": "participacion"})
+        self.assertAlmostEqual(out["value"], 23.18, places=2)   # 175 / 755
+        self.assertEqual(out["trend"]["categories"], ["Ene", "Feb", "Mar"])
+        self.assertEqual([round(v, 2) for v in out["trend"]["data"]], [25.0, 15.15, 100.0])
+
     def test_sin_trend_by_no_hay_serie(self):
         out = compiled("kpi", kpi_fields(agg("total_ventas")))
         self.assertNotIn("trend", out)

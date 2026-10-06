@@ -34,9 +34,9 @@ Reglas:
   reparto o ranking por una categoría.
 - No sugieras un año, una fecha ni un valor suelto. Un valor concreto, solo si aparece en las
   filas y para compararlo con el total o con otro (ej. «ventas de Hogar frente al total»).
-- Si comparas periodos, di contra cuál (ej. «ventas de este año frente al anterior», «el
-  último mes frente al anterior»); nunca «variación anual» o «evolución» sin referencia.
-- Sin términos técnicos (KPI, widget, métrica, condición, pivote, alias).
+- Si comparas periodos, di contra cuál (este año frente al anterior, el último mes frente al
+  anterior); nunca «variación anual» o «evolución» sin referencia.
+{capability_rules}- Sin términos técnicos (KPI, widget, métrica, condición, pivote, alias).
 - Que el widget los pueda representar y que sean distintos entre sí (otra columna u otro
   enfoque).
 - Responde solo con la lista JSON de textos."""
@@ -51,10 +51,20 @@ def _sheet_preview(df: pd.DataFrame) -> str:
     return f"Columnas: {columns}\n\nPrimeras filas:\n{rows}"
 
 
-def _cache_key(source: str, widget_type: str, preview: str) -> str:
+def _capability_rules(widget) -> str:
+    """Reglas que salen de lo que el widget exige (ej. un gráfico siempre agrupa por una
+    columna: «ventas del último mes» a secas no se puede dibujar como barras)."""
+    dimensions = (widget.capabilities or {}).get("dimensions") or [0, 0]
+    if dimensions[0] >= 1:
+        return ("- Este widget siempre agrupa por una columna: cada pedido dice por cuál (ej.\n"
+                "  «ventas por categoría», «… por vendedor: último mes frente al anterior»).\n")
+    return ""
+
+
+def _cache_key(source: str, widget_type: str, prompt: str, preview: str) -> str:
     """Si cambian las columnas, sus tipos o las primeras filas, cambia la clave. Si cambia el
     prompt, también cambia la clave."""
-    digest = hashlib.sha1((SUGGESTIONS_PROMPT + preview).encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha1((prompt + preview).encode("utf-8")).hexdigest()[:16]
     return f"widget_suggestions:{source}:{widget_type}:{digest}"
 
 
@@ -87,13 +97,6 @@ def widget_suggestions(widget, df: pd.DataFrame, source: str, refresh: bool = Fa
     `refresh` («otras ideas» en el panel) no lee la caché y reemplaza lo guardado con las
     nuevas; `avoid` son las que el usuario ya ve: la IA no debe repetirlas."""
     preview = _sheet_preview(df)
-    key = _cache_key(source, widget.key, preview)
-    if not refresh:
-        cached = cache.get(key)
-        if cached is not None:
-            return cached
-    avoid = [str(a).strip()[:MAX_SUGGESTION_CHARS] for a in (avoid or []) if str(a).strip()][:MAX_AVOID]
-
     # Los pedidos de los ejemplos del widget marcan el tono (son de otra hoja: no sus columnas).
     examples = [f"- {p}" for p, _args in widget.ai_examples]
     prompt = SUGGESTIONS_PROMPT.format(
@@ -102,7 +105,14 @@ def widget_suggestions(widget, df: pd.DataFrame, source: str, refresh: bool = Fa
         capabilities=capabilities_text(widget),
         examples=("Así escriben los usuarios (de otra hoja, no copies sus columnas):\n"
                   + "\n".join(examples) + "\n") if examples else "",
+        capability_rules=_capability_rules(widget),
     )
+    key = _cache_key(source, widget.key, prompt, preview)
+    if not refresh:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+    avoid = [str(a).strip()[:MAX_SUGGESTION_CHARS] for a in (avoid or []) if str(a).strip()][:MAX_AVOID]
     if avoid:
         prompt += ("\n- No repitas estas ni propongas variantes casi iguales:\n"
                    + "\n".join(f"  - {a}" for a in avoid))

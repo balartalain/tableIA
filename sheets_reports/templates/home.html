@@ -123,16 +123,16 @@
 <script>
   const relativeTime = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
   const RELATIVE_STEPS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400],
-                          ['hour', 3600], ['minute', 60]];
+                          ['hour', 3600], ['minute', 60], ['second', 1]];
 
-  // «hace 3 horas», «ayer»; un ISO vacío es «Nunca».
+  // «hace 3 horas», «ayer», «ahora» (todo de Intl, en la unidad más grande que cabe); un ISO
+  // vacío es «Nunca». La mayúscula inicial la pone el CSS de la celda.
   function timeAgo(iso) {
     if (!iso) return 'Nunca';
     const seconds = (new Date(iso) - Date.now()) / 1000;
-    for (const [unit, size] of RELATIVE_STEPS) {
-      if (Math.abs(seconds) >= size) return relativeTime.format(Math.round(seconds / size), unit);
-    }
-    return 'Hace un momento';
+    const [unit, size] = RELATIVE_STEPS.find(([, size]) => Math.abs(seconds) >= size)
+      || RELATIVE_STEPS[RELATIVE_STEPS.length - 1];
+    return relativeTime.format(Math.round(seconds / size), unit);
   }
 
   function homeApp() {
@@ -202,6 +202,7 @@
           index: 'id',
           layout: 'fitColumns',
           placeholder: 'No hay tableros que coincidan.',
+          rowFormatter: row => row.getElement().classList.add('cursor-pointer'),
           columns: [
             { title: 'Nombre', field: 'nombre', minWidth: 220, widthGrow: 3,
               formatter: c => `<a href="${esc(this.boardUrl(c.getData()))}" class="font-medium text-ink hover:text-moss-600">${esc(c.getValue())}</a>` },
@@ -211,7 +212,7 @@
             { title: 'Tarjetas', field: 'cardCount', hozAlign: 'right', width: 100 },
             { title: 'Última apertura', field: 'last_opened_at', width: 160,
               sorter: (a, b) => (a || '').localeCompare(b || ''),
-              formatter: c => esc(timeAgo(c.getValue())) },
+              formatter: c => `<span class="inline-block first-letter:uppercase">${esc(timeAgo(c.getValue()))}</span>` },
             { title: 'Creado', field: 'created_at', width: 140,
               sorter: (a, b) => (a || '').localeCompare(b || ''),
               formatter: c => esc(new Date(c.getValue()).toLocaleDateString('es')) },
@@ -231,6 +232,11 @@
                 if (btn.dataset.action === 'delete') this.deleteDashboard(d.id);
               } },
           ],
+        });
+        // Toda la fila abre el editor; los botones de acción y el enlace del nombre se manejan solos.
+        table.on('rowClick', (e, row) => {
+          if (e.target.closest('[data-action], a')) return;
+          window.location.href = this.boardUrl(row.getData());
         });
         return new Promise(resolve => table.on('tableBuilt', resolve));
       },

@@ -33,7 +33,26 @@ class BarChartWidget(BaseWidget):
                               'metrics': [   {   'agg': 'sum',
                                                  'field': 'ventas',
                                                  'alias': 'total_ventas'}]},
-                'style': {'stacked': True}})
+                'style': {'stacked': True}}),
+        (   'ventas por categoría del último mes frente al anterior',
+            {   'widget_type': 'bar',
+                'title': 'Ventas por categoría: último mes vs. anterior',
+                'fields': {   'dimensions': ['categoria'],
+                              'metrics': [   {   'agg': 'sum',
+                                                 'field': 'ventas',
+                                                 'alias': 'ventas_ultimo_mes',
+                                                 'label': 'Último mes',
+                                                 'filters': [   {   'field': 'mes',
+                                                                    'op': 'eq',
+                                                                    'relative': 'latest'}]},
+                                             {   'agg': 'sum',
+                                                 'field': 'ventas',
+                                                 'alias': 'ventas_mes_anterior',
+                                                 'label': 'Mes anterior',
+                                                 'filters': [   {   'field': 'mes',
+                                                                    'op': 'eq',
+                                                                    'relative': 'previous'}]}]},
+                'style': {'stacked': False}})
     ]
 
     capabilities: ClassVar[dict] = {

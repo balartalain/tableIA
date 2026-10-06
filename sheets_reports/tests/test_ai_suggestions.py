@@ -39,6 +39,12 @@ class WidgetSuggestionsTests(SimpleTestCase):
         self.assertIn("categoria,mes,anio,ventas\nHogar,Ene,2026,100.0", contents)
         self.assertNotIn("Ropa", contents)   # está más abajo de las 3 primeras filas
 
+    def test_un_grafico_pide_que_cada_sugerencia_diga_por_que_agrupar(self):
+        _, model = self.suggest(["A", "B"], widget=WIDGETS.get("bar"))
+        self.assertIn("siempre agrupa por una columna", model.call_args.args[0])
+        _, model = self.suggest(["A", "B"])
+        self.assertNotIn("siempre agrupa por una columna", model.call_args.args[0])
+
     def test_la_segunda_vez_sale_de_la_cache(self):
         self.suggest(["A", "B"])
         result, model = self.suggest(["C", "D"])

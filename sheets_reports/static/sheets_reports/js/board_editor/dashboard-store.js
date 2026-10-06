@@ -423,6 +423,8 @@ document.addEventListener('alpine:init', () => {
       if ((this.drawerCapabilities.metrics || [0, 0])[0] > 0 && !this.drawerDraft.fields.metrics.length) {
         this.addMetric();
       }
+      // Sin esperar: los tags del chat aparecen cuando llegan.
+      this.loadSuggestions(w.type);
       // El panel del tipo lo crea un `x-if`: sus listas existen en el siguiente tick.
       this.destroyListSortables();
       Alpine.nextTick(() => this.initListSortables());
@@ -994,6 +996,33 @@ document.addEventListener('alpine:init', () => {
       if (this.editingId != null) this.assistantThreads[this.editingId] = [];
     },
 
+    // Pedidos sugeridos por la IA para un tipo de widget (dependen de la hoja y del tipo, no
+    // del widget). Se piden una vez por tipo y sesión; si fallan, el chat queda sin tags.
+    async loadSuggestions(type) {
+      if (!type || type in this.assistantSuggestions || this._suggestionsLoading[type]) return;
+      this._suggestionsLoading[type] = true;
+      try {
+        const { r, data } = await fetchJsonSafe(
+          apiUrl(`/api/dashboard/${this.dashboardId}/widget-suggestions/?widget_type=${encodeURIComponent(type)}`));
+        this.assistantSuggestions[type] = (r.ok && data && Array.isArray(data.suggestions)) ? data.suggestions : [];
+      } catch (e) {
+        this.assistantSuggestions[type] = [];
+      } finally {
+        delete this._suggestionsLoading[type];
+      }
+    },
+
+    get drawerSuggestions() {
+      return (this.editingType && this.assistantSuggestions[this.editingType]) || [];
+    },
+
+    // Un clic en un tag lo envía al chat.
+    askSuggestion(text) {
+      if (this.drawerAsking) return;
+      this.drawerDraft.prompt = text;
+      this.askAssistant();
+    },
+
     // Pasos de una propuesta de la IA, en el orden del panel: qué cambia si se aplica.
     adviceSteps(a) {
       if (!a) return [];
@@ -1100,6 +1129,9 @@ document.addEventListener('alpine:init', () => {
     drawerDraft: { title: '', fields: { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null }, style: {}, prompt: '' },
     // Hilos del chat con la IA por id de widget: { [id]: [{role, text} | {role, proposal, applied, undo} | {role, error}] }.
     assistantThreads: {},
+    // Pedidos sugeridos por tipo de widget: { [type]: [texto, texto] }.
+    assistantSuggestions: {},
+    _suggestionsLoading: {},
     drawerAskOpen: false,
     drawerAsking: false,
     drawerSaving: false,

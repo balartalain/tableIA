@@ -54,6 +54,7 @@ editor visual), y el backend calcula los números con pandas y devuelve JSON lis
                     │   widget_service.py  casos de uso (CRUD + render)  │
                     │   sheets.py          lectura de la hoja + caché     │
                     │   ai_spec.py         propuesta de WidgetForm (IA)   │
+                    │   ai_suggestions.py  pedidos sugeridos del chat     │
                     └───────────────┬─────────────────────────────────────┘
                                     ▼
                     ┌─────────────────────────────────────────────────────┐
@@ -156,6 +157,7 @@ sheets_reports/
     sheets.py               # Lectura de la hoja (gviz/tq) + caché + schema
     widget_service.py       # WidgetService: CRUD, validación, render
     ai_spec.py              # WidgetForm vía Gemini: crea, o ajusta el borrador actual (current) con el historial del chat
+    ai_suggestions.py       # 2 pedidos sugeridos para el chat del panel, por tipo de widget y hoja (cacheados)
 
   utils/                    # Helpers sin conocer widgets
     registry.py             # Registry genérico + UnknownKeyError
@@ -670,3 +672,28 @@ Decide la forma final según lo que dejó la agregación en `metadata`:
 `metadata` final siempre incluye: `fields`, `dimensions`, `pivots`, `metrics`,
 `pivot_column`, `pivot_values`, `dimension_values`, `totals`, `row_totals`,
 `column_totals`, `nested`.
+
+## 9. Sugerencias del chat (`services/ai_suggestions.py`)
+
+`GET /api/dashboard/{id}/widget-suggestions/?widget_type=kpi` → `{"suggestions": [texto, texto]}`
+(vista `widget_suggestions`; 400 si el tipo no existe o no tiene `ai_enabled`, 404 si el tablero
+no es del usuario, 502 si falla la hoja).
+
+`widget_suggestions(widget, df, source)` pide a la IA dos pedidos cortos, como los escribiría
+el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
+
+- **Vista previa** (`_sheet_preview`): las cabeceras con su tipo (numérica/texto) y las
+  `PREVIEW_ROWS = 3` primeras filas en CSV. Con filas reales la IA entiende qué hay en cada
+  columna; no recibe listas de valores distintos.
+- **Prompt**: etiqueta, `ai_doc` y `capabilities_text` del widget, y los prompts de sus
+  `ai_examples` como muestra de tono. Pide los análisis más usados (totales, comparaciones,
+  evolución en el tiempo, reparto o ranking por categoría); sin años, fechas ni valores
+  sueltos (un valor concreto solo para compararlo con el total o con otro) y sin términos
+  técnicos.
+- **Modelo**: `ai_spec.generate_json` (respuesta JSON sin tools, `array<string>`,
+  `temperature=0.7`): el SDK de Gemini sigue viviendo solo en `ai_spec.py`.
+- **Limpieza** (`_clean`): solo textos, sin vacíos ni de más de 80 caracteres, sin repetidos
+  (sin distinguir mayúsculas), primera letra en mayúscula; como mucho 2.
+- **Caché**: `widget_suggestions:{sheet_id}:{gid}:{tipo}:{hash de la vista previa}`, 24 h:
+  cambia si cambian las columnas, sus tipos o las primeras filas, no el resto de la hoja.
+  Si la IA falla devuelve `[]`, que no se cachea.

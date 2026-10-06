@@ -249,6 +249,25 @@ def gemini_client(api_key: str) -> genai.Client:
     )
 
 
+def generate_json(contents: str, schema: dict, temperature: float = 0) -> object:
+    """Respuesta JSON libre (sin tools) que cumple `schema`: para pedidos auxiliares a la IA,
+    como las sugerencias del chat. Lanza si no hay API key o la respuesta no es JSON."""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
+    client = gemini_client(api_key)
+    response = client.models.generate_content(
+        model=settings.GEMINI_MODEL,
+        contents=contents,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_json_schema=schema,
+            temperature=temperature,
+        ),
+    )
+    return json.loads(response.text or "null")
+
+
 def _to_gemini_schema(node):
     """Adapta el JSON Schema de validación al subconjunto que acepta la declaración de tools."""
     if isinstance(node, list):

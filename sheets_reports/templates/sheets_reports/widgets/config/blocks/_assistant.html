@@ -15,10 +15,18 @@
   </button>
 
   <div x-show="$store.dashboard.drawerAskOpen" x-cloak class="mt-2 space-y-2">
-    <p x-show="!$store.dashboard.drawerThread.length" class="text-[11px] text-ink/60">
-      Pide un cambio sobre este widget (ej. «agrega la columna producto», «ahora por mes») y la
-      IA te dirá cómo quedaría. Recuerda la conversación mientras el tablero esté abierto.
-    </p>
+    <!-- Pedidos sugeridos por la IA para este tipo y esta hoja: un clic los envía. -->
+    <div x-show="!$store.dashboard.drawerThread.length && $store.dashboard.drawerSuggestions.length"
+         class="flex flex-wrap gap-1.5">
+      <template x-for="s in $store.dashboard.drawerSuggestions" :key="s">
+        <button type="button" x-on:click="$store.dashboard.askSuggestion(s)"
+                x-bind:disabled="$store.dashboard.drawerAsking"
+                class="max-w-full rounded-full border border-moss-100 bg-white px-2.5 py-1 text-left text-[11px] text-moss-700 hover:bg-moss-tint disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer flex items-center gap-1">
+          <i class="ti ti-sparkles text-xs shrink-0" aria-hidden="true"></i>
+          <span class="min-w-0 break-words" x-text="s"></span>
+        </button>
+      </template>
+    </div>
 
     <!-- Hilo de mensajes -->
     <div x-show="$store.dashboard.drawerThread.length"

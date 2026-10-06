@@ -354,6 +354,30 @@ def table_assistant(request, dashboard_id):
     })
 
 
+@require_http_methods(["GET"])
+def widget_suggestions(request, dashboard_id):
+    """
+    GET ?widget_type=kpi → {"suggestions": [...]}
+    Dos pedidos sugeridos para el chat del panel, según el tipo de widget y las columnas de la
+    hoja. El panel los pide al abrirse, sin esperar, y los muestra como tags.
+    """
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    widget_type = request.GET.get("widget_type") or ""
+    widget = WIDGET_REGISTRY.get(widget_type) if widget_type in WIDGET_REGISTRY else None
+    if not widget or not widget.ai_enabled:
+        return _error("Tipo de widget desconocido")
+    try:
+        df = _load_sheet(dashboard)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    from sheets_reports.services.ai_suggestions import widget_suggestions as suggest
+    source = f"{dashboard.sheet_id}:{dashboard.sheet_gid}"
+    return JsonResponse({"suggestions": suggest(widget, df, source)})
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_widget(request, dashboard_id):

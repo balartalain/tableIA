@@ -340,6 +340,25 @@ class ViewsTests(TestCase):
                          [{"role": "user", "text": "ventas por categoría"},
                           {"role": "assistant", "proposal": proposal}])
 
+    def test_sugerencias_del_chat_por_tipo(self, _df):
+        with mock.patch("sheets_reports.services.ai_suggestions.widget_suggestions",
+                        return_value=["Ventas de Hogar vs total", "Total de ventas"]) as suggest:
+            r = self.client.get(f"/api/dashboard/{self.dashboard.id}/widget-suggestions/?widget_type=kpi")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json(), {"suggestions": ["Ventas de Hogar vs total", "Total de ventas"]})
+        widget, df, source = suggest.call_args.args
+        self.assertEqual(widget.key, "kpi")
+        self.assertIn("categoria", df.columns)
+        self.assertEqual(source, "abc123:0")
+
+    def test_sugerencias_tipo_desconocido_u_otro_tablero(self, _df):
+        with mock.patch("sheets_reports.services.ai_suggestions.widget_suggestions") as suggest:
+            unknown = self.client.get(f"/api/dashboard/{self.dashboard.id}/widget-suggestions/?widget_type=x")
+            missing = self.client.get(f"/api/dashboard/{self.dashboard.id}/widget-suggestions/")
+            other = self.client.get("/api/dashboard/9999/widget-suggestions/?widget_type=kpi")
+        suggest.assert_not_called()
+        self.assertEqual((unknown.status_code, missing.status_code, other.status_code), (400, 400, 404))
+
     def test_asistente_error_legible(self, _df):
         with mock.patch("sheets_reports.services.ai_spec.generate_widget_form",
                         side_effect=SpecGenerationError("La columna Precio no existe.")):

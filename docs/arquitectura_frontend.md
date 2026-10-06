@@ -183,6 +183,16 @@ aplicada tiene `undo`, y un «Guardar» manual lo borra (`_clearAdviceUndo()`). 
 falla, el borrador queda con la propuesta y el error en el pie del panel.
 «Nueva conversación» (`clearThread()`) vacía el hilo del widget.
 
+Con el hilo vacío, el chat muestra como tags los **pedidos sugeridos** para el tipo de widget.
+`openDrawer()` llama a `loadSuggestions(type)` sin esperar: GET
+`/api/dashboard/{id}/widget-suggestions/?widget_type=…`, una vez por tipo y sesión
+(`assistantSuggestions[type]`; `_suggestionsLoading` evita pedidos repetidos; si falla queda
+`[]` y no hay tags). Si el usuario abre el chat antes de que lleguen, los tags aparecen al
+llegar. `drawerSuggestions` es la lista del `editingType`; un clic en un tag
+(`askSuggestion(text)`) lo envía con `askAssistant()`.
+
+Mientras la IA responde, el icono de «Enviar» es un spinner (`drawerAsking`).
+
 ## Widget registry
 
 ```javascript

@@ -26,6 +26,14 @@
           <span class="min-w-0 break-words" x-text="s"></span>
         </button>
       </template>
+      <!-- Otras ideas: pide 2 sugerencias nuevas (salta la caché del servidor). -->
+      <button type="button" x-on:click="$store.dashboard.refreshSuggestions()"
+              x-bind:disabled="$store.dashboard.drawerSuggestionsLoading || $store.dashboard.drawerAsking"
+              title="Otras ideas" aria-label="Otras ideas"
+              class="rounded-full border border-moss-100 bg-white px-1.5 py-1 text-moss-700 hover:bg-moss-tint disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer flex items-center">
+        <i class="ti ti-refresh text-xs" aria-hidden="true"
+           x-bind:class="$store.dashboard.drawerSuggestionsLoading ? 'animate-spin' : ''"></i>
+      </button>
     </div>
 
     <!-- Hilo de mensajes -->

@@ -18,9 +18,10 @@ class WidgetSuggestionsTests(SimpleTestCase):
         cache.clear()
         self.kpi = WIDGETS.get("kpi")
 
-    def suggest(self, answer, df=None, widget=None):
+    def suggest(self, answer, df=None, widget=None, **kwargs):
         with mock.patch.object(ai_suggestions, "_ask_model", return_value=answer) as model:
-            result = widget_suggestions(widget or self.kpi, sales_df() if df is None else df, "abc:0")
+            result = widget_suggestions(widget or self.kpi, sales_df() if df is None else df,
+                                        "abc:0", **kwargs)
         return result, model
 
     def test_limpia_la_respuesta_y_devuelve_dos(self):
@@ -69,4 +70,28 @@ class WidgetSuggestionsTests(SimpleTestCase):
             self.assertEqual(widget_suggestions(self.kpi, sales_df(), "abc:0"), [])
         result, model = self.suggest(["A", "B"])
         model.assert_called_once()
+        self.assertEqual(result, ["A", "B"])
+
+    def test_otras_ideas_saltan_la_cache_y_la_reemplazan(self):
+        self.suggest(["A", "B"])
+        result, model = self.suggest(["C", "D"], refresh=True, avoid=["A", "B"])
+        model.assert_called_once()
+        self.assertEqual(result, ["C", "D"])
+        result, model = self.suggest(["E", "F"])   # la próxima apertura ve las nuevas
+        model.assert_not_called()
+        self.assertEqual(result, ["C", "D"])
+
+    def test_no_repite_las_que_ya_ve_el_usuario(self):
+        result, model = self.suggest(["ventas por mes", "Ventas por vendedor", "Otra"],
+                                     refresh=True, avoid=["Ventas por mes"])
+        self.assertIn("No repitas", model.call_args.args[0])
+        self.assertIn("  - Ventas por mes", model.call_args.args[0])
+        self.assertEqual(result, ["Ventas por vendedor", "Otra"])
+
+    def test_si_otras_ideas_falla_se_queda_la_cache(self):
+        self.suggest(["A", "B"])
+        with mock.patch.object(ai_suggestions, "_ask_model", side_effect=RuntimeError("caída")), \
+                self.assertLogs(ai_suggestions.logger, "ERROR"):
+            self.assertEqual(widget_suggestions(self.kpi, sales_df(), "abc:0", refresh=True), [])
+        result, _ = self.suggest(["C", "D"])
         self.assertEqual(result, ["A", "B"])

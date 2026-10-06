@@ -16,6 +16,7 @@ from sheets_reports.services.ai_spec import capabilities_text, generate_json
 logger = logging.getLogger(__name__)
 
 SUGGESTIONS = 2
+MAX_AVOID = 10
 PREVIEW_ROWS = 3
 MAX_SUGGESTION_CHARS = 80
 CACHE_TTL_SECONDS = 24 * 60 * 60
@@ -59,27 +60,36 @@ def _ask_model(contents: str) -> object:
     return generate_json(contents, {"type": "array", "items": {"type": "string"}}, temperature=0.7)
 
 
-def _clean(raw) -> list[str]:
-    """Textos no vacíos, de largo razonable y sin repetir; como mucho `SUGGESTIONS`."""
+def _clean(raw, avoid: list[str] | None = None) -> list[str]:
+    """Textos no vacíos, de largo razonable, sin repetir y distintos de `avoid` (sin distinguir
+    mayúsculas); como mucho `SUGGESTIONS`."""
+    seen = {a.lower() for a in avoid or []}
     result: list[str] = []
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, str):
             continue
         text = item.strip().strip('"«»').strip()
         text = text[:1].upper() + text[1:]
-        if text and len(text) <= MAX_SUGGESTION_CHARS and text.lower() not in {r.lower() for r in result}:
+        if text and len(text) <= MAX_SUGGESTION_CHARS and text.lower() not in seen:
+            seen.add(text.lower())
             result.append(text)
     return result[:SUGGESTIONS]
 
 
-def widget_suggestions(widget, df: pd.DataFrame, source: str) -> list[str]:
+def widget_suggestions(widget, df: pd.DataFrame, source: str, refresh: bool = False,
+                       avoid: list[str] | None = None) -> list[str]:
     """Dos pedidos sugeridos para `widget` sobre la hoja `df` (`source` la identifica en la
-    caché). Si la IA falla devuelve [] y no lo cachea: se reintenta en la próxima apertura."""
+    caché). Si la IA falla devuelve [] y no lo cachea: se reintenta en la próxima apertura.
+
+    `refresh` («otras ideas» en el panel) no lee la caché y reemplaza lo guardado con las
+    nuevas; `avoid` son las que el usuario ya ve: la IA no debe repetirlas."""
     preview = _sheet_preview(df)
     key = _cache_key(source, widget.key, preview)
-    cached = cache.get(key)
-    if cached is not None:
-        return cached
+    if not refresh:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+    avoid = [str(a).strip()[:MAX_SUGGESTION_CHARS] for a in (avoid or []) if str(a).strip()][:MAX_AVOID]
 
     # Los pedidos de los ejemplos del widget marcan el tono (son de otra hoja: no sus columnas).
     examples = [f"- {p}" for p, _args in widget.ai_examples]
@@ -90,8 +100,11 @@ def widget_suggestions(widget, df: pd.DataFrame, source: str) -> list[str]:
         examples=("Así escriben los usuarios (de otra hoja, no copies sus columnas):\n"
                   + "\n".join(examples) + "\n") if examples else "",
     )
+    if avoid:
+        prompt += ("\n- No repitas estas ni propongas variantes casi iguales:\n"
+                   + "\n".join(f"  - {a}" for a in avoid))
     try:
-        suggestions = _clean(_ask_model(f"{prompt}\n\n{preview}"))
+        suggestions = _clean(_ask_model(f"{prompt}\n\n{preview}"), avoid)
     except Exception:  # noqa: BLE001 - sin sugerencias el chat funciona igual
         logger.exception("Sugerencias de la IA (widget_type=%s)", widget.key)
         return []

@@ -1040,18 +1040,36 @@ document.addEventListener('alpine:init', () => {
 
     // Pedidos sugeridos por la IA para un tipo de widget (dependen de la hoja y del tipo, no
     // del widget). Se piden una vez por tipo y sesión; si fallan, el chat queda sin tags.
-    async loadSuggestions(type) {
-      if (!type || type in this.assistantSuggestions || this._suggestionsLoading[type]) return;
+    // Con `refresh` («otras ideas») el servidor salta su caché y evita las que ya se ven; si no
+    // llegan nuevas, se quedan las actuales.
+    async loadSuggestions(type, { refresh = false } = {}) {
+      if (!type || this._suggestionsLoading[type]) return;
+      if (!refresh && type in this.assistantSuggestions) return;
+      const current = this.assistantSuggestions[type] || [];
+      const params = new URLSearchParams({ widget_type: type });
+      if (refresh) {
+        params.set('refresh', '1');
+        current.forEach(s => params.append('avoid', s));
+      }
       this._suggestionsLoading[type] = true;
       try {
         const { r, data } = await fetchJsonSafe(
-          apiUrl(`/api/dashboard/${this.dashboardId}/widget-suggestions/?widget_type=${encodeURIComponent(type)}`));
-        this.assistantSuggestions[type] = (r.ok && data && Array.isArray(data.suggestions)) ? data.suggestions : [];
+          apiUrl(`/api/dashboard/${this.dashboardId}/widget-suggestions/?${params}`));
+        const list = (r.ok && data && Array.isArray(data.suggestions)) ? data.suggestions : [];
+        this.assistantSuggestions[type] = list.length || !refresh ? list : current;
       } catch (e) {
-        this.assistantSuggestions[type] = [];
+        this.assistantSuggestions[type] = current;
       } finally {
         delete this._suggestionsLoading[type];
       }
+    },
+
+    get drawerSuggestionsLoading() {
+      return !!(this.editingType && this._suggestionsLoading[this.editingType]);
+    },
+
+    refreshSuggestions() {
+      this.loadSuggestions(this.editingType, { refresh: true });
     },
 
     get drawerSuggestions() {

@@ -203,7 +203,10 @@ widget (siguen visibles después de usar uno).
 `/api/dashboard/{id}/widget-suggestions/?widget_type=…`, una vez por tipo y sesión
 (`assistantSuggestions[type]`; `_suggestionsLoading` evita pedidos repetidos; si falla queda
 `[]` y no hay tags). Si el usuario abre el chat antes de que lleguen, los tags aparecen al
-llegar. `drawerSuggestions` es la lista del `editingType`; un clic en un tag
+llegar. El botón ↻ («Otras ideas», `refreshSuggestions()`) llama a
+`loadSuggestions(type, {refresh: true})`: pide con `refresh=1` y las actuales como `avoid`;
+si no llegan nuevas se quedan las actuales. Mientras carga, el ícono gira
+(`drawerSuggestionsLoading`). `drawerSuggestions` es la lista del `editingType`; un clic en un tag
 (`askSuggestion(text)`) lo envía con `askAssistant()`.
 
 Mientras la IA responde, el icono de «Enviar» es un spinner (`drawerAsking`).

@@ -359,7 +359,7 @@ def table_assistant(request, dashboard_id):
 @require_http_methods(["GET"])
 def widget_suggestions(request, dashboard_id):
     """
-    GET ?widget_type=kpi → {"suggestions": [...]}
+    GET ?widget_type=kpi[&refresh=1&avoid=…] → {"suggestions": [...]}
     Dos pedidos sugeridos para el chat del panel, según el tipo de widget y las columnas de la
     hoja. El panel los pide al abrirse, sin esperar, y los muestra como tags.
     """
@@ -377,7 +377,10 @@ def widget_suggestions(request, dashboard_id):
 
     from sheets_reports.services.ai_suggestions import widget_suggestions as suggest
     source = f"{dashboard.sheet_id}:{dashboard.sheet_gid}"
-    return JsonResponse({"suggestions": suggest(widget, df, source)})
+    # «Otras ideas»: refresh=1 salta la caché y avoid=… son las que ya ve el usuario.
+    return JsonResponse({"suggestions": suggest(widget, df, source,
+                                                refresh=request.GET.get("refresh") == "1",
+                                                avoid=request.GET.getlist("avoid"))})
 
 
 @csrf_exempt

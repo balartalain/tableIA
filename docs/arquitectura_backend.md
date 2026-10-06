@@ -704,7 +704,8 @@ Decide la forma final según lo que dejó la agregación en `metadata`:
 
 ## 9. Sugerencias del chat (`services/ai_suggestions.py`)
 
-`GET /api/dashboard/{id}/widget-suggestions/?widget_type=kpi` → `{"suggestions": [texto, texto]}`
+`GET /api/dashboard/{id}/widget-suggestions/?widget_type=kpi[&refresh=1&avoid=…]` →
+`{"suggestions": [texto, texto]}`
 (vista `widget_suggestions`; 400 si el tipo no existe o no tiene `ai_enabled`, 404 si el tablero
 no es del usuario, 502 si falla la hoja).
 
@@ -726,3 +727,6 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 - **Caché**: `widget_suggestions:{sheet_id}:{gid}:{tipo}:{hash de la vista previa}`, 24 h:
   cambia si cambian las columnas, sus tipos o las primeras filas, no el resto de la hoja.
   Si la IA falla devuelve `[]`, que no se cachea.
+- **Otras ideas** (`refresh=True`, `avoid`): no lee la caché y la reemplaza con las nuevas
+  (si la IA falla, la caché anterior sigue). `avoid` (hasta 10) son las que el usuario ya ve:
+  el prompt pide no repetirlas y `_clean` descarta las que coincidan.

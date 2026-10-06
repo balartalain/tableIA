@@ -356,6 +356,14 @@ class ViewsTests(TestCase):
         self.assertIn("categoria", df.columns)
         self.assertEqual(source, "abc123:0")
 
+    def test_otras_ideas_pasan_refresh_y_las_que_evitar(self, _df):
+        with mock.patch("sheets_reports.services.ai_suggestions.widget_suggestions",
+                        return_value=["C", "D"]) as suggest:
+            r = self.client.get(f"/api/dashboard/{self.dashboard.id}/widget-suggestions/"
+                                "?widget_type=kpi&refresh=1&avoid=A&avoid=B")
+        self.assertEqual(r.json(), {"suggestions": ["C", "D"]})
+        self.assertEqual(suggest.call_args.kwargs, {"refresh": True, "avoid": ["A", "B"]})
+
     def test_sugerencias_tipo_desconocido_u_otro_tablero(self, _df):
         with mock.patch("sheets_reports.services.ai_suggestions.widget_suggestions") as suggest:
             unknown = self.client.get(f"/api/dashboard/{self.dashboard.id}/widget-suggestions/?widget_type=x")

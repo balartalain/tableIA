@@ -386,15 +386,17 @@ def _admits_field(widget, key: str) -> bool:
 
 
 def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
-    """Schema de parámetros de `create_widget`, construido en cada llamada desde la hoja real
-    (enum de columnas), los registros de widgets (capabilities + style_schema) y el motor
-    (agregaciones y ventanas disponibles)."""
+    """Schema de parámetros de `create_widget`, construido en cada llamada desde los registros
+    de widgets (capabilities + style_schema) y el motor (agregaciones y ventanas disponibles).
+    Las columnas van como texto libre, no como enum: con muchas columnas o nombres largos
+    (preguntas de un formulario) el enum repetido en cada campo supera el límite de estados
+    de Gemini. Los nombres exactos van en el mensaje (`_columns_context`) y `form_errors`
+    rechaza los que no existen, con reintento."""
     widgets = [w for w in _widgets_for(widget_type) if w]
     metric_properties = {
         "agg": {"enum": sorted(set(AGGREGATIONS) - {"mean"}),
                 "description": "Agregación: " + AGG_LABELS_DESC},
-        "field": {"type": "string", "enum": list(ctx.fields),
-                  "description": "Columna de la hoja a agregar. Omitir solo en agg=count."},
+        "field": _column_schema("Columna de la hoja a agregar. Omitir solo en agg=count."),
         "alias": {"type": "string",
                   "description": "Nombre único en snake_case de la columna resultante (ej. total_ventas)."},
         "label": {"type": "string", "maxLength": 80,
@@ -425,15 +427,14 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
         else:
             del metric_properties["window"]
     fields_properties = {
-        "dimensions": {"type": "array", "items": {"type": "string", "enum": list(ctx.fields)},
+        "dimensions": {"type": "array", "items": _column_schema(),
                        "description": "Columnas para agrupar / mostrar como filas."},
-        "pivots": {"type": "array", "items": {"type": "string", "enum": list(ctx.fields)},
+        "pivots": {"type": "array", "items": _column_schema(),
                    "description": "Columnas para desagregar (series / columnas cruzadas)."},
         "columns": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                "required": ["field"],
                                                "properties": {
-                                                   "field": {"type": "string", "enum": list(ctx.fields),
-                                                             "description": "Columna de la hoja a mostrar."},
+                                                   "field": _column_schema("Columna de la hoja a mostrar."),
                                                    "label": {"type": "string",
                                                              "description": "Nombre a mostrar en la cabecera; "
                                                                             "vacío o ausente = la columna."},
@@ -446,9 +447,8 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
                     "description": "Métricas, en el orden en que se muestran."},
         "filters": {**condition_schema_for(ctx),
                     "description": "Condiciones sobre las filas del widget."},
-        "trend_by": {"type": "string", "enum": list(ctx.fields),
-                     "description": "Columna de la mini tendencia (sparkline) del número; "
-                                    "solo los widgets con tendencia. Omitir si no aplica."},
+        "trend_by": _column_schema("Columna de la mini tendencia (sparkline) del número; "
+                                   "solo los widgets con tendencia. Omitir si no aplica."),
         "sort_by": {"type": "string",
                     "description": "Columna u alias de orden, con '-' delante para descendente."},
         "limit": {"type": "integer", "description": f"Máximo de filas/grupos (1 a {MAX_LIMIT})."},
@@ -481,9 +481,20 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
     })
 
 
+def _column_schema(description: str = "") -> dict:
+    """Una columna de la hoja en el schema de la tool: texto, sin enum (ver build_tool_parameters)."""
+    hint = "Nombre exacto de una de las columnas listadas en el mensaje."
+    return {"type": "string", "description": f"{description} {hint}".strip()}
+
+
 def condition_schema_for(ctx: SheetContext) -> dict:
+    """Las condiciones del motor para la tool: igual que las que valida, pero con la columna
+    como texto libre."""
     from sheets_reports.engine.steps.filter import conditions_schema
-    return conditions_schema(ctx, MAX_IN_VALUES)
+    schema = conditions_schema(ctx, MAX_IN_VALUES)
+    items = schema["items"]
+    return {**schema, "items": {**items, "properties": {**items["properties"],
+                                                        "field": _column_schema()}}}
 
 
 def _tools(ctx: SheetContext, widget_type: str | None) -> list[types.Tool]:
@@ -847,6 +858,53 @@ def _normalize(args: dict) -> dict:
     }
 
 
+def _column_key(name) -> str:
+    """Clave para comparar nombres de columna sin importar espacios ni mayúsculas."""
+    return " ".join(str(name).split()).casefold()
+
+
+def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
+    """Cambia las columnas de la propuesta por el nombre real de la hoja cuando solo difieren en
+    espacios o mayúsculas: la IA no copia los encabezados con dobles espacios («recomendaría  la
+    UAPA»). Lo que no coincide queda igual y lo rechaza la validación."""
+    matches: dict[str, list[str]] = {}
+    for field in ctx.fields:
+        matches.setdefault(_column_key(field), []).append(field)
+    real = {key: names[0] for key, names in matches.items() if len(names) == 1}
+
+    def resolve(value):
+        if not isinstance(value, str) or value in ctx.fields:
+            return value
+        return real.get(_column_key(value), value)
+
+    def resolve_conditions(conditions):
+        for condition in conditions if isinstance(conditions, list) else []:
+            if isinstance(condition, dict) and "field" in condition:
+                condition["field"] = resolve(condition["field"])
+
+    fields = data["fields"]
+    for key in ("dimensions", "pivots"):
+        if isinstance(fields.get(key), list):
+            fields[key] = [resolve(v) for v in fields[key]]
+    if "trend_by" in fields:
+        fields["trend_by"] = resolve(fields["trend_by"])
+    for item in fields.get("columns") or []:
+        if isinstance(item, dict) and "field" in item:
+            item["field"] = resolve(item["field"])
+    for metric in fields.get("metrics") or []:
+        if isinstance(metric, dict):
+            if "field" in metric:
+                metric["field"] = resolve(metric["field"])
+            resolve_conditions(metric.get("filters"))
+    resolve_conditions(fields.get("filters"))
+    sort_by = fields.get("sort_by")
+    if isinstance(sort_by, str):
+        desc = sort_by.startswith("-")
+        name = resolve(sort_by[1:] if desc else sort_by)
+        fields["sort_by"] = f"-{name}" if desc else name
+    return data
+
+
 def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext,
                          current: dict | None = None, history: list[dict] | None = None) -> dict:
     """
@@ -876,7 +934,7 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
             _audit(prompt, widget_type, attempt, call_name, args, [])
             raise SpecGenerationError(args.get("reason") or "La IA no pudo interpretar el pedido.")
 
-        data = _normalize(args)
+        data = _resolve_columns(_normalize(args), ctx)
         errors = form_errors(data, ctx, widget_type, require_title=False)
         _audit(prompt, widget_type, attempt, call_name, args, errors)
 

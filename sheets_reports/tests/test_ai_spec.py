@@ -103,6 +103,27 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertEqual(result["fields"]["metrics"][0]["field"], "ventas")
         self.assertEqual(_audit.call_count, 2)
 
+    def test_columnas_que_solo_difieren_en_espacios_usan_el_nombre_real(self, _audit):
+        # Encabezado de formulario con doble espacio: la IA lo devuelve con uno solo.
+        real = "Probabilidad de  recomendar la UAPA"
+        df = pd.DataFrame({"Nivel": ["Grado"], real: [9]})
+        ctx = SheetContext.from_dataframe(df, "0")
+        args = {"widget_type": "bar", "fields": {
+            "dimensions": ["nivel"],
+            "metrics": [{"agg": "avg", "alias": "promedio", "field": "Probabilidad de recomendar la UAPA",
+                         "filters": [{"field": " Nivel ", "op": "eq", "value": "Grado"}]}],
+            "sort_by": "-Probabilidad de recomendar la UAPA",
+        }, "style": {}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
+            result = generate_widget_form("promedio por nivel", None, ctx)
+
+        call.assert_called_once()
+        fields = result["fields"]
+        self.assertEqual(fields["dimensions"], ["Nivel"])
+        self.assertEqual(fields["metrics"][0]["field"], real)
+        self.assertEqual(fields["metrics"][0]["filters"][0]["field"], "Nivel")
+        self.assertEqual(fields["sort_by"], f"-{real}")
+
     def test_dos_propuestas_invalidas_dan_error_legible(self, _audit):
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", INVALID_ARGS)) as call:
             with self.assertRaises(SpecGenerationError) as ctx:
@@ -153,16 +174,24 @@ class GenerateWidgetFormTests(SimpleTestCase):
 
 
 class ToolSchemaTests(SimpleTestCase):
-    def test_enum_de_campos_sale_de_las_columnas_reales(self):
+    def test_las_columnas_van_como_texto_sin_enum(self):
+        # Con muchas columnas de nombre largo el enum supera el límite de estados de Gemini.
         df = pd.DataFrame({"Carrera": ["A"], "Nota": [90]})
         params = build_tool_parameters(SheetContext.from_dataframe(df, "0"), widget_type=None)
         fields_properties = params["properties"]["fields"]["properties"]
+        metric_properties = fields_properties["metrics"]["items"]["properties"]
 
-        expected = ["Carrera", "Nota"]
-        self.assertEqual(fields_properties["dimensions"]["items"]["enum"], expected)
-        self.assertEqual(fields_properties["pivots"]["items"]["enum"], expected)
-        self.assertEqual(fields_properties["filters"]["items"]["properties"]["field"]["enum"], expected)
-        self.assertEqual(fields_properties["columns"]["items"]["properties"]["field"]["enum"], expected)
+        for schema in (fields_properties["dimensions"]["items"],
+                       fields_properties["pivots"]["items"],
+                       fields_properties["filters"]["items"]["properties"]["field"],
+                       fields_properties["columns"]["items"]["properties"]["field"],
+                       fields_properties["trend_by"],
+                       metric_properties["field"],
+                       metric_properties["filters"]["items"]["properties"]["field"]):
+            self.assertEqual(schema["type"], "string")
+            self.assertNotIn("enum", schema)
+        text = json.dumps(params, ensure_ascii=False)
+        self.assertNotIn("Carrera", text)
         self.assertNotIn("source", fields_properties)
 
     def test_agregaciones_y_ventanas_que_conoce_el_motor(self):

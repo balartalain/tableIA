@@ -2,8 +2,8 @@
 {% with B="sheets_reports/widgets/config/blocks/" %}
 <div>
   <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
-    {% include B|add:"_title.html" %}
     {% include B|add:"_source.html" %}
+    {% include B|add:"_title.html" %}
     {% include B|add:"_assistant.html" %}
     {% include B|add:"_columns.html" %}
     {% include B|add:"_filters.html" %}

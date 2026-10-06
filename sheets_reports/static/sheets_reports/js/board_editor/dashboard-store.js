@@ -500,11 +500,16 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Cambiar la fuente del widget en el panel: otro schema y otras sugerencias. Lo elegido
-    // se conserva (si no existe en la nueva hoja, Guardar lo dirá).
+    // Cambiar la fuente del widget en el panel: otro schema y otras sugerencias. Otra hoja tiene
+    // otras columnas: los campos (y los roles del KPI, que apuntan a sus métricas) se reinician
+    // y se vuelven a elegir de la nueva fuente.
     async changeDrawerSource(sourceId) {
       const id = sourceId ? Number(sourceId) : null;
+      if (id === this.drawerDraft.source) return;
       this.drawerDraft.source = id;
+      this.drawerDraft.fields = EMPTY_FIELDS();
+      const style = this.drawerDraft.style;
+      ['primary', 'compare', 'targetMetric', 'target'].forEach(key => delete style[key]);
       await this.loadSchema(id);
       if (this.drawerDraft.source === id) this._prefillDraft();
       this.loadSuggestions(this.editingType);

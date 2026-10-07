@@ -1,0 +1,106 @@
+{% comment %}Ayuda de «Dimensiones» (icono junto al label del bloque). Límites por widget de
+`capabilities["dimensions"]` en sheets_reports/widgets/*.py; columnas elegibles de
+get_dimension_fields (services/sheets.py).{% endcomment %}
+<div class="space-y-5 text-xs text-ink/80 leading-relaxed">
+
+  <div class="space-y-1">
+    <p>Una <b>dimensión</b> es una columna por la que se <b>agrupan</b> las filas de la hoja. Cada
+      valor distinto de esa columna forma un grupo, y las métricas se calculan una vez por grupo.
+      Responde al «<b>por</b>» de una pregunta: gasto <i>por departamento</i>, solicitudes
+      <i>por campus</i>.</p>
+  </div>
+
+  <!-- Ejemplo -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Ejemplo</h4>
+    <p>Suma de <span class="font-mono">Gasto_Real</span> con dimensión <span class="font-mono">Campus</span>:
+      todas las filas de Santiago se suman en una, las de Santo Domingo en otra, y así.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <table class="w-full text-[11px]">
+        <caption class="text-left text-ink/50 pb-1">Hoja (filas sueltas)</caption>
+        <tbody class="font-mono divide-y divide-line/60">
+          <tr><td class="py-0.5 font-sans">Santiago</td><td class="text-right">4 200</td></tr>
+          <tr><td class="py-0.5 font-sans">Nagua</td><td class="text-right">1 000</td></tr>
+          <tr><td class="py-0.5 font-sans">Santiago</td><td class="text-right">2 800</td></tr>
+          <tr><td class="py-0.5 font-sans">Santo Domingo</td><td class="text-right">3 500</td></tr>
+        </tbody>
+      </table>
+      <table class="w-full text-[11px]">
+        <caption class="text-left text-ink/50 pb-1">Widget (un grupo por campus)</caption>
+        <tbody class="font-mono divide-y divide-line/60">
+          <tr><td class="py-0.5 font-sans">Santiago</td><td class="text-right">7 000</td></tr>
+          <tr><td class="py-0.5 font-sans">Santo Domingo</td><td class="text-right">3 500</td></tr>
+          <tr><td class="py-0.5 font-sans">Nagua</td><td class="text-right">1 000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Sin dimensión (donde se permite), el widget resume todas las filas en un solo valor: 11 500.</p>
+  </div>
+
+  <!-- Varias dimensiones -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Varias dimensiones (tabla dinámica)</h4>
+    <p>Se anidan en el orden en que las pones: con <span class="font-mono">Campus › Departamento</span>
+      cada campus se abre en sus departamentos. Arrastra <i class="ti ti-grip-vertical" aria-hidden="true"></i>
+      para cambiar el orden. Cada nivel puede mostrar su <b>total</b>: el primero, la fila «Total
+      general» al pie; los siguientes, un subtotal por cada grupo del nivel anterior.</p>
+  </div>
+
+  <!-- Qué columnas -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">¿Qué columnas puedo elegir?</h4>
+    <ul class="list-disc pl-4 space-y-1">
+      <li>Columnas de <b>texto</b> y <b>fecha</b> (Campus, Departamento, Fecha…).</li>
+      <li>Columnas <b>numéricas enteras con pocos valores</b> que se repiten, como año, mes (1-12)
+        o trimestre.</li>
+      <li>No aparecen los montos ni las medidas continuas (Gasto_Real, Presupuesto_Asignado): esas
+        se usan como <b>métricas</b>.</li>
+      <li>Una columna de fecha agrupa por cada fecha exacta. Para agrupar por mes o año, la hoja
+        necesita una columna con el mes o el año.</li>
+      <li>Una columna no se repite: la que ya usaste no aparece en las demás filas.</li>
+    </ul>
+  </div>
+
+  <!-- Por widget -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">En cada widget</h4>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-ink/50">
+          <tr class="border-b border-line">
+            <th class="text-left font-medium py-1 pr-3">Widget</th>
+            <th class="text-left font-medium py-1 pr-3">Dimensiones</th>
+            <th class="text-left font-medium py-1">Qué son</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line/60">
+          <template x-for="w in [
+              ['bar', 'Gráfico de Barras', '1', 'Las categorías del eje: una barra (o grupo de barras) por valor.'],
+              ['line', 'Gráfico de Líneas', '1', 'Los puntos del eje X, normalmente el tiempo (mes, año).'],
+              ['donut', 'Gráfico de Dona', '1', 'Las porciones: una por valor.'],
+              ['dynamic_table', 'Tabla Dinámica', '0 a 3', 'Las filas, anidadas en orden. Sin dimensiones: una fila con el total.'],
+              ['kpi', 'Tarjeta KPI', '—', 'No agrupa: muestra un solo número.'],
+              ['table', 'Tabla', '—', 'No agrupa: muestra las filas tal cual.'],
+            ]" :key="w[0]">
+            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-moss-50' : ''">
+              <td class="py-1 pr-3 font-semibold text-ink whitespace-nowrap">
+                <span x-text="w[1]"></span>
+                <span x-show="$store.dashboard.editingType === w[0]"
+                      class="ml-1 text-[10px] font-semibold rounded-full bg-moss-500 text-white px-1.5 py-0.5">Este widget</span>
+              </td>
+              <td class="pr-3" x-text="w[2]"></td>
+              <td x-text="w[3]"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="space-y-1">
+    <h4 class="font-semibold text-ink">Dimensión o pivote</h4>
+    <p>La dimensión arma las <b>filas</b> (o el eje); el <b>pivote</b> desagrega cada una en
+      <b>columnas</b> (o series). «Gasto por Campus y por Categoría»: Campus como dimensión,
+      Categoria_Gasto como pivote.</p>
+  </div>
+</div>

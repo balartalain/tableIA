@@ -1,0 +1,94 @@
+{% comment %}Ayuda de «Pivotes» (icono junto al label del bloque). Límites por widget de
+`capabilities["pivots"]` en sheets_reports/widgets/*.py; con pivote los gráficos admiten una métrica
+(form_errors en services/ai_spec.py).{% endcomment %}
+<div class="space-y-5 text-xs text-ink/80 leading-relaxed">
+
+  <div class="space-y-1">
+    <p>Un <b>pivote</b> es una segunda agrupación que <b>cruza</b> la dimensión: cada grupo de la
+      dimensión se reparte entre los valores del pivote. En una tabla dinámica, los valores del
+      pivote pasan a ser <b>columnas</b>; en un gráfico, <b>series</b> (colores). Responde a «por X
+      <i>y por</i> Y».</p>
+  </div>
+
+  <!-- Ejemplo -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Ejemplo</h4>
+    <p>Suma de <span class="font-mono">Gasto_Real</span>, dimensión <span class="font-mono">Campus</span>,
+      pivote <span class="font-mono">Categoria_Gasto</span>:</p>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-ink/50">
+          <tr class="border-b border-line">
+            <th class="text-left font-medium py-1 pr-3">Campus</th>
+            <th class="text-right font-medium py-1 pr-3">Licencias Software</th>
+            <th class="text-right font-medium py-1 pr-3">Eventos y Orientación</th>
+            <th class="text-right font-medium py-1">Total general</th>
+          </tr>
+        </thead>
+        <tbody class="font-mono divide-y divide-line/60">
+          <tr><td class="py-1 pr-3 font-sans">Santiago</td><td class="text-right pr-3">5 000</td><td class="text-right pr-3">2 000</td><td class="text-right">7 000</td></tr>
+          <tr><td class="py-1 pr-3 font-sans">Santo Domingo</td><td class="text-right pr-3">1 500</td><td class="text-right pr-3">2 000</td><td class="text-right">3 500</td></tr>
+          <tr><td class="py-1 pr-3 font-sans">Nagua</td><td class="text-right pr-3">—</td><td class="text-right pr-3">1 000</td><td class="text-right">1 000</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Sin el pivote, la tabla tendría solo la columna del total por campus.</p>
+  </div>
+
+  <!-- En cada widget -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">En cada widget</h4>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-ink/50">
+          <tr class="border-b border-line">
+            <th class="text-left font-medium py-1 pr-3">Widget</th>
+            <th class="text-left font-medium py-1 pr-3">Pivotes</th>
+            <th class="text-left font-medium py-1">Qué hace</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line/60">
+          <template x-for="w in [
+              ['dynamic_table', 'Tabla Dinámica', '0 a 2', 'Columnas por cada valor; con dos pivotes, el segundo se anida dentro del primero. Cada métrica se repite bajo cada valor.'],
+              ['bar', 'Gráfico de Barras', '0 a 1', 'Una serie (color) por valor: barras agrupadas o apiladas (opción «Apilado»).'],
+              ['line', 'Gráfico de Líneas', '0 a 1', 'Una línea por valor.'],
+              ['donut', 'Gráfico de Dona', '—', 'No admite pivote.'],
+              ['kpi', 'Tarjeta KPI', '—', 'No admite pivote.'],
+              ['table', 'Tabla', '—', 'No admite pivote.'],
+            ]" :key="w[0]">
+            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-moss-50' : ''">
+              <td class="py-1 pr-3 font-semibold text-ink whitespace-nowrap">
+                <span x-text="w[1]"></span>
+                <span x-show="$store.dashboard.editingType === w[0]"
+                      class="ml-1 text-[10px] font-semibold rounded-full bg-moss-500 text-white px-1.5 py-0.5">Este widget</span>
+              </td>
+              <td class="pr-3" x-text="w[2]"></td>
+              <td x-text="w[3]"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Reglas -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Qué cambia al agregar un pivote</h4>
+    <ul class="list-disc pl-4 space-y-1">
+      <li><b>Gráficos</b>: con pivote admiten <b>una sola métrica</b> (cada serie ya es un valor del pivote).</li>
+      <li><b>Mostrar como</b>: solo quedan «% del total de la columna» y «% del total de la fila»; este
+        último solo existe con pivote (cada fila suma 100 %).</li>
+      <li><b>Totales (tabla dinámica)</b>: el primer pivote puede mostrar la columna «Total general» a la
+        derecha; el segundo, un subtotal por cada valor del primero.</li>
+      <li>Usa columnas con <b>pocos valores</b> distintos: cada valor es una columna o una serie, y con
+        muchos el widget se vuelve ilegible. Si hace falta, limita los valores con un filtro.</li>
+    </ul>
+  </div>
+
+  <div class="space-y-1">
+    <h4 class="font-semibold text-ink">Pivote o dimensión</h4>
+    <p>Lo que quieres leer hacia abajo va como <b>dimensión</b> (filas, eje); lo que quieres comparar
+      lado a lado va como <b>pivote</b> (columnas, series). Intercambiarlos da los mismos números
+      girados.</p>
+  </div>
+</div>

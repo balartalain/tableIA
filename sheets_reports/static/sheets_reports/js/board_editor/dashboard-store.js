@@ -352,6 +352,8 @@ document.addEventListener('alpine:init', () => {
       if (removed && removed.constructor.placement === 'header' && this.clearBoardFilters) {
         this.clearBoardFilters((removed.fields && removed.fields.dimensions) || []);
       }
+      // El panel no queda abierto con un widget que ya no existe.
+      if (this.editingId === id) this.closeDrawer();
       if (id > 0) {
         try { await fetch(apiUrl(`/api/widget/${id}/`), { method: 'DELETE' }); } catch (e) {}
       }

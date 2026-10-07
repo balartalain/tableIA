@@ -807,8 +807,8 @@ def _require_source(dashboard, raw_id):
 def table_assistant(request, dashboard_id):
     """
     POST {prompt, source?, widget_type?, current?, history?}
-    Chat con la IA del panel de un widget: la IA propone el `WidgetForm` (fields + style)
-    validado contra la hoja de la fuente, ajustando el borrador actual (`current`:
+    Chat con la IA del panel de un widget: la IA propone el `WidgetForm` (fields + style, y
+    los `calculated_fields` nuevos que usan sus métricas) validado contra la hoja de la fuente, ajustando el borrador actual (`current`:
     `{title, fields, style}`) con el contexto de los mensajes previos (`history`). El panel lo
     muestra como pasos. NO crea ni modifica widgets.
     """
@@ -850,6 +850,8 @@ def table_assistant(request, dashboard_id):
         "fields": proposal["fields"],
         "style": proposal["style"],
         "title": proposal.get("title", ""),
+        # Los campos que la IA propone crear en la fuente: sus métricas los usan (agg "auto").
+        "calculated_fields": proposal.get("calculated_fields", []),
     })
 
 

@@ -304,8 +304,11 @@ class ViewsTests(TestCase):
 
     # -------------------------------------------------------------- asistente
     def test_asistente_devuelve_el_form_sin_guardar(self, _df):
+        calculated = [{"name": "% Margen", "formula": "SUM([ventas]) / SUM([ventas]) * 100",
+                       "format": "percent"}]
         proposal = {"widget_type": "dynamic_table", "title": "Ventas por categoría",
-                    "fields": fields(pivots=["mes"]), "style": {"showTotals": True}}
+                    "fields": fields(pivots=["mes"]), "style": {"showTotals": True},
+                    "calculated_fields": calculated}
         widgets_before = Widget.objects.count()
         with mock.patch("sheets_reports.services.ai_spec.generate_widget_form",
                         return_value=proposal) as ai:
@@ -317,7 +320,8 @@ class ViewsTests(TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(ai.call_args.args[:2], ("ventas por categoría", None))
         self.assertEqual(r.json(), {"widget_type": "dynamic_table", "title": "Ventas por categoría",
-                                    "fields": fields(pivots=["mes"]), "style": {"showTotals": True}})
+                                    "fields": fields(pivots=["mes"]), "style": {"showTotals": True},
+                                    "calculated_fields": calculated})
         self.assertEqual(Widget.objects.count(), widgets_before)
 
     def test_asistente_recibe_el_borrador_y_el_historial(self, _df):

@@ -1,0 +1,160 @@
+{% comment %}Guía de métricas (modal del bloque «Métricas» del panel): qué son, agregaciones, campos
+calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget. Los límites salen de
+`capabilities` en sheets_reports/widgets/*.py; el mismo contenido está en docs/metricas.md.{% endcomment %}
+<div class="space-y-6 text-xs text-ink/80 leading-relaxed">
+
+  <!-- Qué es -->
+  <section class="space-y-1.5">
+    <h3 class="text-sm font-semibold text-ink">¿Qué es una métrica?</h3>
+    <p>Es un número que el widget calcula <b>resumiendo filas</b> de la hoja: «Suma de Gasto_Real»,
+      «Conteo», «% Ejecución Presupuestaria». Se calcula una vez por cada <b>grupo</b> que arman las
+      dimensiones y pivotes del widget; sin agrupación, sobre todas las filas (un solo número).</p>
+    <div class="rounded-lg border border-line bg-paper/60 p-2.5">
+      <p>Ej. métrica <span class="font-mono">Suma de Gasto_Real</span> con dimensión
+        <span class="font-mono">Departamento</span> → un total de gasto por departamento.
+        Sin dimensión → el gasto total de toda la hoja.</p>
+    </div>
+  </section>
+
+  <!-- Partes -->
+  <section class="space-y-1.5">
+    <h3 class="text-sm font-semibold text-ink">Partes de una métrica</h3>
+    <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1">
+      <dt class="font-semibold text-ink">Columna</dt>
+      <dd>Qué se resume: una columna de la hoja o un campo calculado. Con «Conteo» puede ser «Todas las filas».</dd>
+      <dt class="font-semibold text-ink">Agregación</dt>
+      <dd>Cómo se resume: suma, promedio, conteo… (ver abajo).</dd>
+      <dt class="font-semibold text-ink">Nombre a mostrar</dt>
+      <dd>Opcional. El texto que ve quien mira el widget; si lo dejas vacío se arma con la agregación y la columna.</dd>
+      <dt class="font-semibold text-ink">Condiciones</dt>
+      <dd>Opcional. Filtran las filas solo para esa métrica.</dd>
+      <dt class="font-semibold text-ink">Mostrar como</dt>
+      <dd>Opcional. Muestra el valor respecto a los demás: % del total, acumulado, variación.</dd>
+    </dl>
+  </section>
+
+  <!-- Agregaciones -->
+  <section class="space-y-1.5">
+    <h3 class="text-sm font-semibold text-ink">Agregaciones</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-ink/50">
+          <tr class="border-b border-line">
+            <th class="text-left font-medium py-1 pr-3">Agregación</th>
+            <th class="text-left font-medium py-1 pr-3">Qué calcula</th>
+            <th class="text-left font-medium py-1">Columnas</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line/60">
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Suma</td><td class="pr-3">El total de los valores.</td><td>Numéricas</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Promedio</td><td class="pr-3">La media aritmética.</td><td>Numéricas</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Mediana</td><td class="pr-3">El valor del medio; no la mueven los valores extremos.</td><td>Numéricas</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Mínimo</td><td class="pr-3">El valor más bajo.</td><td>Numéricas</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Máximo</td><td class="pr-3">El valor más alto.</td><td>Numéricas</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Desviación estándar</td><td class="pr-3">Cuánto se dispersan los valores respecto al promedio.</td><td>Numéricas</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Conteo</td><td class="pr-3">Cuántas filas hay.</td><td>Cualquiera</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Valores distintos</td><td class="pr-3">Cuántos valores diferentes tiene la columna (ej. cuántos campus).</td><td>Cualquiera</td></tr>
+          <tr><td class="py-1 pr-3 font-semibold text-ink">Automática</td><td class="pr-3">La de un campo calculado agregado: la agregación ya va en su fórmula.</td><td>Campos calculados agregados</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Campos calculados -->
+  <section class="space-y-1.5">
+    <h3 class="text-sm font-semibold text-ink">Campos calculados</h3>
+    <p>Se definen en la fuente de datos (editar fuente → «Campos calculados») o los propone el
+      asistente de IA, y sirven en todos los widgets del tablero. Hay dos tipos:</p>
+    <div class="rounded-lg border border-moss-100 bg-moss-50/60 p-2.5 space-y-1">
+      <p><span class="font-semibold text-moss-700">Por fila</span> — se calcula en cada fila y queda
+        como una columna más: se elige en «Columna» con cualquier agregación.</p>
+      <p class="font-mono text-[11px] text-ink/70">[Presupuesto_Asignado] - [Gasto_Real]</p>
+    </div>
+    <div class="rounded-lg border border-sky-100 bg-sky-50/60 p-2.5 space-y-1">
+      <p><span class="font-semibold text-sky-700">Agregado</span> — usa SUM, AVG, COUNT… y se calcula
+        por cada grupo del widget. Aparece en «Campos calculados agregados» y su agregación es
+        «Automática». Es la forma de calcular cocientes, porcentajes y márgenes entre totales.</p>
+      <ul class="font-mono text-[11px] text-ink/70 space-y-0.5">
+        <li>SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100 <span class="font-sans text-ink/50">— % de ejecución</span></li>
+        <li>SUM([Presupuesto_Asignado]) - SUM([Gasto_Real]) <span class="font-sans text-ink/50">— saldo disponible</span></li>
+        <li>SUM(IF([Campus] = "Santiago", [Gasto_Real], 0)) / SUM([Gasto_Real]) * 100 <span class="font-sans text-ink/50">— participación</span></li>
+      </ul>
+    </div>
+    <p>Un porcentaje entre totales va <b>agregado</b>: en cada grupo divide el total del gasto entre
+      el total del presupuesto. Calcularlo por fila y promediarlo da otro número.</p>
+  </section>
+
+  <!-- Condiciones por métrica -->
+  <section class="space-y-1.5">
+    <h3 class="text-sm font-semibold text-ink">Condiciones por métrica</h3>
+    <p>Filtran las filas <b>solo para esa métrica</b>; las demás métricas del widget no cambian.
+      Sirven para poner lado a lado «Gasto 2026» y «Gasto 2025», o «Gasto de Tecnología» junto al
+      gasto total. Solo están en widgets que admiten más de una métrica; con una sola, usa los
+      filtros del widget.</p>
+    <p>Además de valores fijos aceptan valores relativos: <b>este año</b>, <b>año anterior</b>,
+      <b>este mes</b> (según la fecha de hoy) y el <b>último periodo</b>, el <b>anterior</b> o el
+      <b>más antiguo</b> de una columna de tiempo.</p>
+  </section>
+
+  <!-- Mostrar como (la misma ayuda que abre el icono junto al select) -->
+  <section class="space-y-1.5">
+    <h3 class="text-sm font-semibold text-ink">Mostrar como</h3>
+    {% include "sheets_reports/widgets/config/blocks/_window_help.html" %}
+  </section>
+
+  <!-- Por widget -->
+  <section class="space-y-1.5">
+    <h3 class="text-sm font-semibold text-ink">Qué admite cada widget</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-ink/50">
+          <tr class="border-b border-line">
+            <th class="text-left font-medium py-1 pr-3">Widget</th>
+            <th class="text-left font-medium py-1 pr-3">Métricas</th>
+            <th class="text-left font-medium py-1 pr-3">Dimensiones</th>
+            <th class="text-left font-medium py-1 pr-3">Pivotes</th>
+            <th class="text-left font-medium py-1 pr-3">Condiciones por métrica</th>
+            <th class="text-left font-medium py-1">Mostrar como</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line/60">
+          <template x-for="w in [
+              ['kpi', 'Tarjeta KPI', '1 a 4', '—', '—', 'Sí', '—'],
+              ['bar', 'Gráfico de Barras', '1 a 5 (1 con pivote)', '1', '0 a 1', 'Sí', '% columna, % fila, acumulado, variación'],
+              ['line', 'Gráfico de Líneas', '1 a 5 (1 con pivote)', '1', '0 a 1', 'Sí', '% columna, acumulado, variación'],
+              ['donut', 'Gráfico de Dona', '1', '1', '—', 'No', '—'],
+              ['dynamic_table', 'Tabla Dinámica', '1 a 5', '0 a 3', '0 a 2', 'Sí', '% columna, % fila'],
+              ['table', 'Tabla', 'Sin métricas', '—', '—', '—', '—'],
+              ['filter', 'Filtros', 'Sin métricas', '—', '—', '—', '—'],
+            ]" :key="w[0]">
+            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-moss-50' : ''">
+              <td class="py-1 pr-3 font-semibold text-ink whitespace-nowrap">
+                <span x-text="w[1]"></span>
+                <span x-show="$store.dashboard.editingType === w[0]"
+                      class="ml-1 text-[10px] font-semibold rounded-full bg-moss-500 text-white px-1.5 py-0.5">Este widget</span>
+              </td>
+              <td class="pr-3" x-text="w[2]"></td>
+              <td class="pr-3" x-text="w[3]"></td>
+              <td class="pr-3" x-text="w[4]"></td>
+              <td class="pr-3" x-text="w[5]"></td>
+              <td x-text="w[6]"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <ul class="list-disc pl-4 space-y-1">
+      <li><b>Tarjeta KPI</b>: muestra un solo número por métrica, por eso no agrupa ni tiene «Mostrar
+        como». En «Configurar» cada métrica puede ser el <i>número principal</i>, el valor con el que se
+        <i>compara</i> (en % o absoluto) o la <i>meta</i>; también admite una mini tendencia por una
+        columna (ej. mes). Para una participación usa un campo calculado agregado; para comparar con
+        el periodo anterior, dos métricas con condiciones «último periodo» y «anterior».</li>
+      <li><b>Barras y Líneas</b>: una dimensión en el eje; con un pivote (series) admiten una sola métrica.</li>
+      <li><b>Dona</b>: una métrica repartida entre los valores de la dimensión; ya muestra la proporción de cada parte.</li>
+      <li><b>Tabla Dinámica</b>: cada métrica es una columna de valores y, con pivotes, se repite bajo
+        cada valor del pivote. Sin dimensiones muestra una sola fila con el total.</li>
+      <li><b>Tabla</b> y <b>Filtros</b>: no calculan métricas; la tabla muestra columnas tal cual y los
+        filtros son controles para el tablero.</li>
+    </ul>
+  </section>
+</div>

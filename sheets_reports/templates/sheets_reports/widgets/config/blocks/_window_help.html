@@ -1,0 +1,121 @@
+{% comment %}Ayuda de «Mostrar como» (`metric.window`): la abre el icono junto al select de cada métrica y
+también forma parte de la guía de métricas. Las ventanas por widget salen de `capabilities["windows"]`
+en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-store.js).{% endcomment %}
+<div class="space-y-5 text-xs text-ink/80 leading-relaxed">
+
+  <div class="space-y-1">
+    <p>Transforma la métrica <b>ya calculada</b> comparándola con los demás valores del widget. No
+      cambia qué se suma o se cuenta, sino cómo se presenta el resultado. Con <b>Valor</b> (la
+      opción por defecto) se muestra el número tal cual.</p>
+  </div>
+
+  <!-- Las opciones, sobre un mismo ejemplo -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Las opciones, con un ejemplo</h4>
+    <p>Suma de <span class="font-mono">Solicitudes_Atendidas</span> por <span class="font-mono">Campus</span>:</p>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-ink/50">
+          <tr class="border-b border-line">
+            <th class="text-left font-medium py-1 pr-3">Campus</th>
+            <th class="text-right font-medium py-1 pr-3">Valor</th>
+            <th class="text-right font-medium py-1 pr-3">% del total de la columna</th>
+            <th class="text-right font-medium py-1 pr-3">Acumulado</th>
+            <th class="text-right font-medium py-1">Variación vs anterior</th>
+          </tr>
+        </thead>
+        <tbody class="font-mono divide-y divide-line/60">
+          <tr><td class="py-1 pr-3 font-sans">Santiago</td><td class="text-right pr-3">120</td><td class="text-right pr-3">60 %</td><td class="text-right pr-3">120</td><td class="text-right">—</td></tr>
+          <tr><td class="py-1 pr-3 font-sans">Santo Domingo</td><td class="text-right pr-3">60</td><td class="text-right pr-3">30 %</td><td class="text-right pr-3">180</td><td class="text-right">−50 %</td></tr>
+          <tr><td class="py-1 pr-3 font-sans">Nagua</td><td class="text-right pr-3">20</td><td class="text-right pr-3">10 %</td><td class="text-right pr-3">200</td><td class="text-right">−66,7 %</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <dl class="space-y-1.5 pt-1">
+      <div>
+        <dt class="font-semibold text-ink">% del total de la columna</dt>
+        <dd>Qué parte del total representa cada valor: 120 de 200 = 60 %. La columna suma 100 %.
+          Con pivote, cada celda se divide entre el total de su columna del pivote.</dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-ink">% del total de la fila</dt>
+        <dd>Solo con pivote: qué parte de su fila es cada celda, y cada fila suma 100 %. Ej. con
+          pivote <span class="font-mono">Categoria_Gasto</span>: de las solicitudes de Santiago,
+          qué % fue de cada categoría.</dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-ink">Acumulado</dt>
+        <dd>Suma cada valor con todos los anteriores: 120, 120 + 60 = 180, 180 + 20 = 200. Sigue el
+          orden de las filas; si agrupas por una columna de tiempo (mes, año, fecha), el orden es
+          cronológico. Útil para «cuánto llevamos en el año».</dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-ink">Variación vs anterior</dt>
+        <dd>El % de cambio respecto a la fila anterior: (60 − 120) / 120 = −50 %. La primera fila
+          queda vacía porque no tiene anterior. Tiene sentido con una dimensión de tiempo
+          («crecimiento mes a mes»).</dd>
+      </div>
+    </dl>
+  </div>
+
+  <!-- Reglas -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">¿Por qué no aparecen todas las opciones?</h4>
+    <ul class="list-disc pl-4 space-y-1">
+      <li>Cada widget admite solo las que puede dibujar bien (tabla de abajo).</li>
+      <li><b>% del total de la fila</b> necesita un pivote: sin él cada fila tiene un solo valor y
+        siempre daría 100 %.</li>
+      <li><b>Con pivote</b> solo valen los dos porcentajes: el acumulado y la variación dependen del
+        orden de las filas y no se calculan celda por celda.</li>
+      <li>Si cambias la configuración (ej. agregas un pivote) y la opción elegida deja de valer, el
+        panel lo avisa y se quita al guardar.</li>
+    </ul>
+  </div>
+
+  <!-- Por widget -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Disponibles en cada widget</h4>
+    <div class="overflow-x-auto">
+      <table class="w-full text-[11px]">
+        <thead class="text-ink/50">
+          <tr class="border-b border-line">
+            <th class="text-left font-medium py-1 pr-3">Widget</th>
+            <th class="text-left font-medium py-1 pr-3">Sin pivote</th>
+            <th class="text-left font-medium py-1">Con pivote</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line/60">
+          <template x-for="w in [
+              ['bar', 'Gráfico de Barras', '% columna, acumulado, variación', '% columna, % fila'],
+              ['line', 'Gráfico de Líneas', '% columna, acumulado, variación', '% columna'],
+              ['dynamic_table', 'Tabla Dinámica', '% columna', '% columna, % fila'],
+              ['kpi', 'Tarjeta KPI', 'Ninguna (un solo número)', '—'],
+              ['donut', 'Gráfico de Dona', 'Ninguna (ya muestra proporciones)', '—'],
+            ]" :key="w[0]">
+            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-moss-50' : ''">
+              <td class="py-1 pr-3 font-semibold text-ink whitespace-nowrap">
+                <span x-text="w[1]"></span>
+                <span x-show="$store.dashboard.editingType === w[0]"
+                      class="ml-1 text-[10px] font-semibold rounded-full bg-moss-500 text-white px-1.5 py-0.5">Este widget</span>
+              </td>
+              <td class="pr-3" x-text="w[2]"></td>
+              <td x-text="w[3]"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alternativas -->
+  <div class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Cuando no está disponible</h4>
+    <ul class="list-disc pl-4 space-y-1">
+      <li><b>Una participación en un KPI</b> («qué % del gasto es de Santiago»): crea un campo
+        calculado agregado, ej.
+        <span class="font-mono">SUM(IF([Campus] = "Santiago", [Gasto_Real], 0)) / SUM([Gasto_Real]) * 100</span>.</li>
+      <li><b>Comparar con el periodo anterior en un KPI</b>: dos métricas con condiciones «último
+        periodo» y «anterior» sobre la columna de tiempo, y en «Configurar» compara una con la otra.</li>
+    </ul>
+  </div>
+</div>

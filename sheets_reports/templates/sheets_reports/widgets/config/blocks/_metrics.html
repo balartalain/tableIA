@@ -44,7 +44,7 @@
                   <option x-bind:value="o.value" x-text="o.label"></option>
                 </template>
               </select>
-              <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total, acumulado…). -->
+              <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total de la columna, acumulado…). -->
               <template x-if="$store.dashboard.metricWindowOptions.length">
                 <select x-bind:value="(metric.window && metric.window.type) || ''"
                         x-on:change="$store.dashboard.setMetricWindow(metric, $event.target.value)"

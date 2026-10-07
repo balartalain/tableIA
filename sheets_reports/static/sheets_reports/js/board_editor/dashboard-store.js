@@ -69,8 +69,8 @@ const AGG_OPTIONS = [
 // (se serializa como {"type": "formula", "expression"}, que el motor ya evalúa).
 // «Mostrar como» de una métrica (`metric.window`): cómo se muestra cada valor respecto a los demás.
 const WINDOW_OPTIONS = [
-  { value: 'percent_of_total', label: '% del total' },
-  { value: 'percent_of_row', label: '% de la fila' },
+  { value: 'percent_of_total', label: '% del total de la columna' },
+  { value: 'percent_of_row', label: '% del total de la fila' },
   { value: 'running_total', label: 'Acumulado' },
   { value: 'pct_change', label: 'Variación vs anterior' },
 ];
@@ -442,7 +442,7 @@ document.addEventListener('alpine:init', () => {
     get metricWindowOptions() {
       const allowed = this.drawerCapabilities.windows || [];
       const hasPivots = (this.drawerDraft.fields.pivots || []).some(Boolean);
-      // Con pivote solo los porcentajes se calculan por celda; «% de la fila» necesita pivote.
+      // Con pivote solo los porcentajes se calculan por celda; «% del total de la fila» necesita pivote.
       const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value)
         && (hasPivots ? PIVOT_WINDOWS.includes(o.value) : o.value !== 'percent_of_row'));
       return options.length ? [{ value: '', label: 'Valor' }, ...options] : [];

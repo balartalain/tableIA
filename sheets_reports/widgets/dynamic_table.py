@@ -13,6 +13,7 @@ from sheets_reports.widgets.presentation import (
     TOTAL_LABEL,
     humanize,
     metric_alias,
+    metric_formats,
     metric_label,
     percent_aliases,
 )
@@ -153,6 +154,7 @@ class DynamicTableWidget(BaseWidget):
             "rowFields": dimensions,
             "totals": self._totals(frame, dimensions),
             "percent": percent_aliases(fields, meta),
+            "formats": metric_formats(fields, meta),
             "style": style_dict,
         }
 
@@ -162,7 +164,8 @@ class DynamicTableWidget(BaseWidget):
           pivote) o las columnas anidadas de los pivotes (`_pivot_columns`);
         - las filas de subtotal llevan `__subtotal: True` y la etiqueta «Total <valor>»;
         - la fila de totales va en `totals` (el frontend la dibuja como pie de la tabla);
-        - `percent`: los campos que hay que formatear como porcentaje.
+        - `percent`: los campos que hay que formatear como porcentaje;
+        - `formats`: el formato de cada campo de valor (moneda, %, barra) según su métrica.
         """
         dimensions = nested["dimensions"]
         pivots = nested["pivots"]
@@ -207,12 +210,14 @@ class DynamicTableWidget(BaseWidget):
             grand = {dimensions[0]: TOTAL_LABEL, **grand}
 
         percent = percent_aliases(fields, metadata)
+        formats = metric_formats(fields, metadata)
         if pivots:
-            percent = [
-                field for alias in percent
-                for field in [*(cell_field(k, alias) for k in nested["column_keys"]),
-                              total_field(alias)]
-            ]
+            # Con pivote cada métrica es una columna por valor del pivote más su «Total general».
+            def pivot_fields(alias):
+                return [*(cell_field(k, alias) for k in nested["column_keys"]), total_field(alias)]
+
+            percent = [field for alias in percent for field in pivot_fields(alias)]
+            formats = {field: fmt for alias, fmt in formats.items() for field in pivot_fields(alias)}
 
         return {
             "type": "tabulator",
@@ -221,6 +226,7 @@ class DynamicTableWidget(BaseWidget):
             "rowFields": dimensions,
             "totals": grand,
             "percent": percent,
+            "formats": formats,
             "style": style,
         }
 

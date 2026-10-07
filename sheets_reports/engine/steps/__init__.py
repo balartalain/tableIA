@@ -50,6 +50,8 @@ def build_query_result(df: pd.DataFrame, fields, metadata: Dict[str, Any]) -> Di
         "nested": metadata.get("nested"),
         # Métricas de campos calculados con formato porcentaje.
         "percent_metrics": metadata.get("percent_metrics", []),
+        # Formato de cada métrica ({alias: "currency" | "percent" | "progress"}).
+        "metric_formats": metadata.get("metric_formats", {}),
     }
     records = df.to_dict(orient="records")
 

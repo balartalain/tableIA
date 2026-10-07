@@ -14,6 +14,7 @@ from django.views.decorators.http import require_http_methods
 from sheets_reports.models import Dashboard, DataSource, Widget
 from sheets_reports.services import google_drive, sheets
 from sheets_reports.services.sheets import (
+    COLUMN_FORMATS,
     COLUMN_TYPES,
     SheetError,
     get_dimension_fields,
@@ -135,6 +136,9 @@ def _clean_columns(columns: list) -> list[dict]:
         label = str(c.get("label") or "").strip()
         if label and label != c["name"]:
             column["label"] = label
+        # Formato (moneda, %): solo en las numéricas; sin él se muestran como número.
+        if c["type"] == "number" and c.get("format") in COLUMN_FORMATS:
+            column["format"] = c["format"]
         out.append(column)
     return out
 
@@ -156,6 +160,8 @@ def _columns_errors(columns) -> list[str]:
             return [f"Columna repetida: '{c['name']}'"]
         if c.get("label") is not None and not isinstance(c["label"], str):
             return [f"El nombre a mostrar de '{c['name']}' debe ser texto"]
+        if c.get("format") not in (None, "", "number", *COLUMN_FORMATS):
+            return [f"Formato no válido para '{c['name']}': usa number, {', '.join(COLUMN_FORMATS)}"]
         names.add(c["name"])
     included = [c for c in columns if c.get("include", True)]
     if not included:
@@ -568,7 +574,8 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
         out.append({**column,
                     "type": stored["type"] if stored else column["type"],
                     "include": stored.get("include", True) if stored else True,
-                    "label": (stored or {}).get("label", "")})
+                    "label": (stored or {}).get("label", ""),
+                    "format": (stored or {}).get("format", "")})
     return out
 
 

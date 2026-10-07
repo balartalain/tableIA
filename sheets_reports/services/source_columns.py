@@ -46,9 +46,7 @@ def map_columns(fields: dict, style: dict, fn: Callable[[str], str]) -> tuple[di
         name = apply(sort_by[1:] if desc else sort_by)
         fields["sort_by"] = f"-{name}" if desc else name
 
-    # Tablas: formato y orden de columnas guardados por nombre de columna.
-    if isinstance(style.get("formattersMap"), dict):
-        style["formattersMap"] = {apply(k): v for k, v in style["formattersMap"].items()}
+    # Tablas: orden de columnas guardado por nombre de columna.
     if isinstance(style.get("columnOrder"), list):
         style["columnOrder"] = [apply(v) for v in style["columnOrder"]]
     return fields, style

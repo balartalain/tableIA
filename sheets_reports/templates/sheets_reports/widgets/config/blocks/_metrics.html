@@ -49,13 +49,13 @@
                 </template>
               </select>
               <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total de la columna, acumulado…). -->
-              <template x-if="$store.dashboard.metricWindowOptions.length">
+              <template x-if="$store.dashboard.metricWindowOptions(metric).length">
                 <div class="flex items-center gap-1 w-full">
                   <select x-bind:value="(metric.window && metric.window.type) || ''"
                           x-on:change="$store.dashboard.setMetricWindow(metric, $event.target.value)"
                           aria-label="Mostrar como" title="Mostrar como"
                           class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                    <template x-for="o in $store.dashboard.metricWindowOptions" :key="o.value">
+                    <template x-for="o in $store.dashboard.metricWindowOptions(metric)" :key="o.value">
                       <option x-bind:value="o.value"
                               x-text="'Mostrar: ' + o.label.charAt(0).toLowerCase() + o.label.slice(1)"
                               x-bind:selected="o.value === ((metric.window && metric.window.type) || '')"></option>
@@ -68,9 +68,16 @@
                 </div>
               </template>
             </div>
-            <p x-show="$store.dashboard.metricWindowInvalid(metric)" class="text-[11px] text-clay-600">
-              «Mostrar como» no aplica con esta configuración: se quitará al guardar.
-            </p>
+            <!-- Formato: automático = el de la columna en la fuente (moneda, %) o el del campo calculado. -->
+            <select x-bind:value="metric.format || ''"
+                    x-on:change="$event.target.value ? metric.format = $event.target.value : delete metric.format"
+                    aria-label="Formato" title="Cómo se muestran los valores de esta métrica"
+                    class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+              <template x-for="o in $store.dashboard.metricFormatOptions" :key="o.value">
+                <option x-bind:value="o.value" x-text="'Formato: ' + o.label"
+                        x-bind:selected="o.value === (metric.format || '')"></option>
+              </template>
+            </select>
 
             <!-- Condiciones propias: la métrica resume solo esas filas (ej. ventas de Electrónica
                  junto al total). Plegable; abierto si ya trae condiciones. -->

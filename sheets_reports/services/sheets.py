@@ -168,6 +168,8 @@ def source_key(source) -> str:
 
 # ---------------------------------------------------------------- tipos de columna
 COLUMN_TYPES = ("text", "number", "date")
+# Cómo se muestran los valores de una columna numérica en todo el tablero (sin formato: número).
+COLUMN_FORMATS = ("currency", "percent")
 
 
 def infer_column_type(series: pd.Series) -> str:
@@ -222,7 +224,8 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
     """La hoja como la configuró el usuario al conectarla: sin las columnas excluidas, con el
     tipo elegido y con su nombre a mostrar (que reemplaza al encabezado en todo el tablero).
     Sin configuración devuelve la hoja tal cual. Las columnas que ya no existen en la hoja se
-    ignoran; las nuevas se incluyen tal cual vienen."""
+    ignoran; las nuevas se incluyen tal cual vienen. El formato de las numéricas (moneda, %)
+    queda en `df.attrs["column_formats"]` ({nombre a mostrar: formato}) para el motor."""
     if not columns:
         return df
     df = df.copy()
@@ -235,7 +238,14 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
     renames = {c["name"]: column_display_name(c) for c in columns
                if c.get("include", True) and c.get("name") in df.columns
                and column_display_name(c) != c["name"]}
-    return df.rename(columns=renames) if renames else df
+    if renames:
+        df = df.rename(columns=renames)
+    df.attrs["column_formats"] = {
+        column_display_name(c): c["format"] for c in columns
+        if c.get("include", True) and c.get("type") == "number" and c.get("format") in COLUMN_FORMATS
+        and column_display_name(c) in df.columns
+    }
+    return df
 
 
 def get_sheet_schema(df: pd.DataFrame) -> dict:

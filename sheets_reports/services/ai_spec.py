@@ -21,6 +21,7 @@ from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formul
 from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
+from sheets_reports.engine.steps.aggregation import METRIC_FORMATS
 from sheets_reports.widgets import WIDGETS
 from sheets_reports.widgets.presentation import AGG_LABELS
 from sheets_reports.widgets.schemas import WidgetForm
@@ -96,7 +97,9 @@ consulta.
       "acumulado", "variación respecto al anterior". Solo las que el widget lista en
       «ventanas». Con pivotes solo valen "percent_of_total" (cada celda sobre el total de su
       valor del pivote) y "percent_of_row" (cada celda sobre el total de su fila: "de cada X,
-      qué % es de cada Y"), que además los necesita. Un widget de un solo
+      qué % es de cada Y"), que además los necesita. Los dos % y "running_total" suman los
+      grupos: solo con agg "sum" o "count" (un promedio, un máximo o un campo calculado no se
+      suman); "pct_change" vale con cualquiera. Un widget de un solo
       número no lleva ventanas: la participación es un campo calculado agregado (ej.
       SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100), y la variación frente
       al periodo anterior son dos métricas filtradas con relative "latest" y "previous" sobre la
@@ -211,6 +214,10 @@ WINDOW_LABELS = {"percent_of_total": "% del total de la columna (participación)
 
 # Ventanas que se calculan por celda y por eso valen con pivotes (engine/steps/window.py).
 PIVOT_WINDOWS = ("percent_of_total", "percent_of_row")
+# Ventanas que suman los valores de los grupos (el % de un total, el acumulado): solo valen
+# con agregaciones aditivas. Un promedio, un máximo o un cociente no se suman.
+ADDITIVE_WINDOWS = ("percent_of_total", "percent_of_row", "running_total")
+ADDITIVE_AGGS = ("sum", "count")
 
 
 def window_types_for(widget) -> tuple:
@@ -218,7 +225,7 @@ def window_types_for(widget) -> tuple:
     return tuple((widget.capabilities or {}).get("windows") or ())
 
 
-def _window_error(path: str, w_type: str, widget, pivots: list) -> str | None:
+def _window_error(path: str, w_type: str, widget, pivots: list, agg: str | None = None) -> str | None:
     """Una ventana válida en el motor pero que en este widget se ignoraría o daría números
     falsos. El mensaje guía a la IA en el reintento."""
     caps = widget.capabilities or {}
@@ -242,6 +249,10 @@ def _window_error(path: str, w_type: str, widget, pivots: list) -> str | None:
     if w_type == "percent_of_row" and not pivots:
         return (f"{path}: 'percent_of_row' reparte cada fila entre las columnas cruzadas y "
                 f"necesita pivotes; sin ellos usa 'percent_of_total'.")
+    if w_type in ADDITIVE_WINDOWS and agg not in ADDITIVE_AGGS:
+        return (f"{path}: '{w_type}' suma los valores de los grupos y solo vale con agg "
+                f"{' o '.join(ADDITIVE_AGGS)}; con '{agg}' el total no significa nada. Quita la "
+                f"ventana o usa 'pct_change'.")
     return None
 
 
@@ -692,6 +703,8 @@ def _metric_errors(metric, index: int, ctx, seen_aliases) -> list[str]:
     label = metric.get("label")
     if label is not None and label != "" and (not isinstance(label, str) or len(label) > 80):
         errors.append(f"{path}: 'label' (nombre a mostrar) debe ser texto de hasta 80 caracteres.")
+    if metric.get("format") not in (None, "", *METRIC_FORMATS):
+        errors.append(f"{path}: format '{metric['format']}' no existe; usa uno de {', '.join(METRIC_FORMATS)}.")
 
     if metric.get("filters"):
         errors += condition_errors(metric["filters"], ctx, path=f"{path}.filters",
@@ -861,7 +874,8 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
             errors.append(f"metrics[{i}].filters: con una sola métrica usa fields.filters.")
         window = metric.get("window") if isinstance(metric, dict) else None
         if isinstance(window, dict) and window.get("type") in WINDOW_TYPES:
-            error = _window_error(f"metrics[{i}].window", window["type"], definition, pivots)
+            error = _window_error(f"metrics[{i}].window", window["type"], definition, pivots,
+                                  metric.get("agg"))
             if error:
                 errors.append(error)
         if isinstance(metric, dict) and metric.get("alias"):

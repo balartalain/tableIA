@@ -9,7 +9,7 @@ import pandas as pd
 
 from sheets_reports.utils.data import chronological, to_key
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
-from sheets_reports.widgets.presentation import metric_alias, metric_label
+from sheets_reports.widgets.presentation import metric_alias, metric_formats, metric_label
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
 logger = logging.getLogger(__name__)
@@ -244,8 +244,11 @@ class KpiWidget(BaseWidget):
         abbreviate = bool(style_dict.get("abbreviate"))
         prefix = style_dict.get("prefix") or ""
         suffix = style_dict.get("suffix") or ""
-        if not suffix and primary in (metadata or {}).get("percent_metrics", []):
-            suffix = " %"  # campo calculado con formato porcentaje
+        primary_format = metric_formats(fields, metadata).get(primary) if primary else None
+        if not suffix and primary_format in ("percent", "progress"):
+            suffix = " %"  # métrica con formato porcentaje (campo calculado, columna o elegido)
+        if not prefix and primary_format == "currency":
+            prefix = "$"
 
         def format_value(value: float) -> str:
             if abbreviate:

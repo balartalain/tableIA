@@ -14,6 +14,21 @@ Cada métrica (`fields.metrics[]`) lleva:
 | `label` | Opcional. Nombre a mostrar; sin él se muestra la agregación y la columna («Suma Gasto real»). |
 | `filters` | Opcional. Condiciones solo para esa métrica: ver [Condiciones por métrica](#condiciones-por-métrica). |
 | `window` | Opcional. Cómo se muestra respecto a los demás valores: ver [Mostrar como](#mostrar-como-ventanas). |
+| `format` | Opcional. `number`, `currency`, `percent` o `progress` (barra 0-100). Sin él, «automático»: ver [Formato](#formato). |
+
+## Formato
+
+Cómo se muestran los valores, en este orden de prioridad:
+
+1. **Métrica**: `format`, elegido en el panel.
+2. **Automático**: el `format` del campo calculado agregado o, si la agregación conserva la
+   unidad (`sum`, `avg`, `median`, `min`, `max`, `std`), el de la columna en la fuente
+   (`currency` / `percent`, en el editor de la fuente). `count` y `count_distinct` salen como número.
+   «Mostrar como» un % siempre se muestra con «%».
+
+El motor deja `metric_formats` ({alias: formato}) en los metadatos; la tabla dinámica lo envía
+como `formats` (con pivote, expandido a cada columna del pivote y al total), la tabla con el
+formato de sus columnas y el KPI antepone «$» o agrega «%».
 
 ## Agregaciones
 

@@ -760,8 +760,7 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 
 `map_columns(fields, style, fn)` aplica `fn` a cada referencia a una columna: `dimensions`,
 `pivots`, `trend_by`, `columns[].field`, `metrics[].field`, `metrics[].filters[].field`,
-`filters[].field`, `sort_by` (con su «-») y, en `style`, las claves de `formattersMap` y
-`columnOrder`. Lo usan:
+`filters[].field`, `sort_by` (con su «-») y, en `style`, `columnOrder`. Lo usan:
 
 - `rename_in_widgets(widgets, {viejo: nuevo})`: al cambiar el nombre a mostrar de una columna,
   los widgets de la fuente la siguen.

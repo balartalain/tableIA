@@ -19,7 +19,7 @@ FIELDS = {
     "trend_by": "mes",
     "sort_by": "-ventas",
 }
-STYLE = {"formattersMap": {"ventas": "currency"}, "columnOrder": ["categoria", "ventas"], "stacked": True}
+STYLE = {"columnOrder": ["categoria", "ventas"], "stacked": True}
 
 
 class MapColumnsTests(SimpleTestCase):
@@ -34,8 +34,7 @@ class MapColumnsTests(SimpleTestCase):
         self.assertEqual(fields["filters"][0]["field"], "CATEGORIA")
         self.assertEqual(fields["trend_by"], "MES")
         self.assertEqual(fields["sort_by"], "-VENTAS")                 # conserva el «-»
-        self.assertEqual(style, {"formattersMap": {"VENTAS": "currency"},
-                                 "columnOrder": ["CATEGORIA", "VENTAS"], "stacked": True})
+        self.assertEqual(style, {"columnOrder": ["CATEGORIA", "VENTAS"], "stacked": True})
 
     def test_no_modifica_los_originales(self):
         map_columns(FIELDS, STYLE, str.upper)

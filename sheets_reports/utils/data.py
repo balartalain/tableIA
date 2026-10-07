@@ -36,6 +36,12 @@ def to_key(value):
     return value
 
 
+def column_formats(df: pd.DataFrame) -> dict[str, str]:
+    """Formato de las columnas numéricas elegido en la fuente: {columna: "currency" | "percent"}
+    (lo deja services/sheets.apply_column_config en `df.attrs`)."""
+    return df.attrs.get("column_formats") or {}
+
+
 def sort_key(value):
     # Números antes que textos, para no comparar tipos distintos.
     return (0, value, "") if isinstance(value, (int, float)) else (1, 0, str(value))

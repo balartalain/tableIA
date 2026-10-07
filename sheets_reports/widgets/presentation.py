@@ -90,20 +90,29 @@ def chart_series(result, fields=None, metadata=None) -> Tuple[List[str], List[Tu
     return categories, pairs
 
 
-def percent_aliases(fields=None, metadata=None) -> list:
-    """Alias de las métricas cuyo valor ya es un porcentaje (`window` percent_* o un campo
-    calculado con formato porcentaje): el frontend las formatea con «%» y con el estilo de
-    porcentaje en las tablas."""
+def metric_formats(fields=None, metadata=None) -> dict:
+    """{alias: formato} de las métricas que no se muestran como número: el que calculó el motor
+    (elegido en la métrica, en el campo calculado o en la columna de la fuente) y, con «Mostrar
+    como» un porcentaje, «percent» salvo que la métrica pida barra."""
     if fields is None:
-        return []
-    out = list((metadata or {}).get("percent_metrics") or [])
+        return {}
+    out = dict((metadata or {}).get("metric_formats") or {})
+    for alias in (metadata or {}).get("percent_metrics") or []:
+        out.setdefault(alias, "percent")
     for metric in fields.metrics or []:
         window = (metric or {}).get("window") or {}
-        if str(window.get("type", "")).startswith("percent_"):
-            alias = metric_alias(metric)
-            if alias and alias not in out:
-                out.append(alias)
+        alias = metric_alias(metric)
+        if alias and str(window.get("type", "")).startswith("percent_") and out.get(alias) != "progress":
+            out[alias] = "percent"
     return out
+
+
+def percent_aliases(fields=None, metadata=None) -> list:
+    """Alias de las métricas cuyo valor ya es un porcentaje (`window` percent_*, un campo
+    calculado o una columna con formato porcentaje): el frontend las formatea con «%» y con el
+    estilo de porcentaje en las tablas."""
+    return [alias for alias, fmt in metric_formats(fields, metadata).items()
+            if fmt in ("percent", "progress")]
 
 
 def percent_series(pairs, fields=None, metadata=None) -> list:

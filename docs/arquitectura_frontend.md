@@ -325,7 +325,8 @@ Renderiza: tabla dinámica con jerarquía de filas, subtotales por nivel, total 
 
 - `toTabulator()`: constructor recursivo de columnas (grupos, subtotales, totales).
 - `_displayRows()`: filas con subtotales visibles/ocultos según `style.showTotals`.
-- `applyFormatter()`: cambio de formato por columna (texto, moneda, porcentaje, barra de progreso).
+- Formato de cada columna: `payload.formats` (el de su métrica o el de la columna en la fuente) y
+  `payload.percent`; no hay formato por columna en la tabla.
 - `_wireTableEvents()`: `columnMoved` → guarda `style.columnOrder`.
 
 ### TableWidget

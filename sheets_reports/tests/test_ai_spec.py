@@ -165,6 +165,24 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertEqual(errors("anio"), [])
         self.assertTrue(any("no es una columna de tiempo" in e for e in errors("categoria")))
 
+    def test_el_porcentaje_del_total_y_el_acumulado_solo_con_suma_o_conteo(self, _audit):
+        from sheets_reports.services.ai_spec import form_errors
+
+        def errors(agg, window, field="ventas"):
+            metric = {"agg": agg, "alias": "m", "window": {"type": window}}
+            if field:
+                metric["field"] = field
+            form = {"widget_type": "bar", "fields": {"dimensions": ["mes"], "metrics": [metric]},
+                    "style": {}}
+            return form_errors(form, sales_ctx(), "bar", require_title=False)
+
+        self.assertEqual(errors("sum", "percent_of_total"), [])
+        self.assertEqual(errors("count", "running_total", field=None), [])
+        self.assertEqual(errors("avg", "pct_change"), [])
+        for agg, window in (("avg", "percent_of_total"), ("max", "running_total")):
+            with self.subTest(agg=agg, window=window):
+                self.assertTrue(any("solo vale con agg" in e for e in errors(agg, window)))
+
     def test_la_ia_puede_rechazar(self, _audit):
         with mock.patch.object(ai_spec, "_call_model",
                                return_value=("reject_request", {"reason": "No hay columna de región."})):

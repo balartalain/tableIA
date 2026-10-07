@@ -1,5 +1,6 @@
 (function () {
-    const formattersMap = {
+    // Formateadores de Tabulator por formato (el de cada columna lo decide su métrica o la fuente).
+    const FORMATTERS = {
       "text": { hozAlign: "left", formatter: "plaintext" },
       "number": {
           hozAlign: "right",
@@ -9,7 +10,7 @@
             return typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value;
           }
       },
-      "currency": { hozAlign: "right", formatter: "money", formatterParams: { precision: 2, thousand: "," } },
+      "currency": { hozAlign: "right", formatter: "money", formatterParams: { symbol: "$", precision: 2, thousand: "," } },
       "percent": {
           hozAlign: "right",
           formatter: (cell) => cell.getValue() != null ? Number(cell.getValue()) + "%" : "-"
@@ -34,7 +35,7 @@
         description: 'Agrupa filas y columnas, con totales',
       };
       static defaults = { title: 'Tabla dinámica', width: 'md:col-span-6', height: 300 };
-      static formats = formattersMap;
+      static formats = FORMATTERS;
 
       static mockData() {
         return {
@@ -70,37 +71,9 @@
         return el;
       }
 
-      applyFormatter(fieldName, tipoFormato) {
-        const config = formattersMap[tipoFormato] || formattersMap["text"];
-        const update = (cols) => cols.map(col => {
-            if (col.columns) return { ...col, columns: update(col.columns) };
-            if (col.field === fieldName) {
-              const updated = { ...col, ...config };
-              if (col.bottomCalc) Object.assign(updated, DynamicTableWidget.calcFormatter(config));
-              return updated;
-            }
-            return col;
-        });
-        const cols = update(this._table.getColumnDefinitions());
-        this.style.formattersMap = { ...this.style.formattersMap, [fieldName]: tipoFormato };
-        this._table.setColumns(cols);
-        this._dirty = true;
-        const store = window.Alpine && Alpine.store('dashboard');
-        if (store && typeof store._saveWidget === 'function') {
-          store._saveWidget(this);
-        }
-      }
-
       static calcFormatter(config) {
         return { bottomCalcFormatter: config.formatter, bottomCalcFormatterParams: config.formatterParams };
       }
-
-      menuFormatter = [
-        { label: "📄 Texto", action: (e, column) => this.applyFormatter(column.getField(), "text") },
-        { label: "💲 Moneda / Número", action: (e, column) => this.applyFormatter(column.getField(), "currency") },
-        { label: "📊 Porcentaje (%)", action: (e, column) => this.applyFormatter(column.getField(), "percent") },
-        { label: "🔋 Barra de Progreso", action: (e, column) => this.applyFormatter(column.getField(), "progress") }
-      ];
 
       draw(data, style, title) {
         this.style = { ...this.style, ...style };
@@ -137,6 +110,8 @@
         if (pivotMode) host.classList.add('tb-pivot');
         if (!hasGroups) columns = this._orderedColumns(columns);
         const percentFields = new Set(payload.percent || []);
+        // Formato de cada campo según su métrica (elegido en ella o heredado de la fuente).
+        const payloadFormats = payload.formats || {};
 
         const toTabulator = (col, inherited = []) => {
           const classes = [...inherited];
@@ -148,9 +123,9 @@
             return { title: col.header, columns: children, headerHozAlign: 'center', cssClass: classes.join(' ') || undefined };
           }
           const isDimension = rowFieldSet.has(col.field);
-          const defaultFormat = isDimension ? "text" : (percentFields.has(col.field) ? "percent" : "number");
-          const format = this.style.formattersMap?.[col.field] || defaultFormat;
-          const formatterConfig = formattersMap[format] || formattersMap[defaultFormat];
+          const format = isDimension ? "text"
+            : (payloadFormats[col.field] || (percentFields.has(col.field) ? "percent" : "number"));
+          const formatterConfig = FORMATTERS[format] || FORMATTERS.number;
           const result = { title: col.header, field: col.field, ...formatterConfig };
           classes.push(isDimension ? 'tb-dim' : 'tb-num');
           if (col.total) classes.push('tb-group-start');
@@ -162,7 +137,6 @@
             result.bottomCalc = () => totals[col.field] ?? null;
             Object.assign(result, DynamicTableWidget.calcFormatter(formatterConfig));
           }
-          if (!this._readOnly) result.headerMenu = this.menuFormatter;
           return result;
         };
 

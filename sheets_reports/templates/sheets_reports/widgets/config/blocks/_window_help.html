@@ -65,10 +65,14 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
       <li>Cada widget admite solo las que puede dibujar bien (tabla de abajo).</li>
       <li><b>% del total de la fila</b> necesita un pivote: sin él cada fila tiene un solo valor y
         siempre daría 100 %.</li>
+      <li>Los dos <b>%</b> y el <b>acumulado</b> suman los valores de los grupos, así que solo
+        aparecen con <b>Suma</b> o <b>Conteo</b>. Un promedio, un máximo o un campo calculado (un
+        cociente, un %) no se suman: el «total» no significaría nada. Con ellos solo queda la
+        <b>variación vs anterior</b>, si el widget la tiene.</li>
       <li><b>Con pivote</b> solo valen los dos porcentajes: el acumulado y la variación dependen del
         orden de las filas y no se calculan celda por celda.</li>
-      <li>Si cambias la configuración (ej. agregas un pivote) y la opción elegida deja de valer, el
-        panel lo avisa y se quita al guardar.</li>
+      <li>Si cambias la configuración (ej. pasas a Promedio o agregas un pivote) y la opción elegida
+        deja de valer, se quita sola.</li>
     </ul>
   </div>
 

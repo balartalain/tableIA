@@ -61,26 +61,17 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Menú de formato de la columna (⋮): solo al pasar por el encabezado o con foco.
-   Tabulator lo mete al inicio del título; si ocupara lugar (aunque sea invisible) correría
-   el texto del encabezado respecto de las celdas y de la fila de totales. Por eso va
-   posicionado sobre el margen izquierdo de la columna, fuera del flujo. */
-.tabulator .tabulator-col .tabulator-header-popup-button {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 0 3px;
-  opacity: 0;
-  transition: opacity .12s;
-}
-.tabulator .tabulator-col:hover > .tabulator-col-content .tabulator-header-popup-button,
-.tabulator .tabulator-col .tabulator-header-popup-button:focus-visible {
-  opacity: 1;
-}
 /* Flechitas de orden — apagadas por defecto, visibles al hover/activo */
 .tabulator .tabulator-col-sorter {
   color: #C7C9C3;
+}
+/* Flecha más chica (la de Tabulator es un triángulo de 12×6 px) y menos espacio reservado
+   para ella a la derecha del título. */
+.tabulator .tabulator-col .tabulator-col-sorter .tabulator-arrow {
+  transform: scale(0.6);
+}
+.tabulator .tabulator-col.tabulator-sortable .tabulator-col-title {
+  padding-right: 16px;
 }
 .tabulator .tabulator-col.tabulator-sortable:hover {
   background: var(--tb-paper);

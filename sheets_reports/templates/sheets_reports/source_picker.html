@@ -222,6 +222,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             <th class="px-3 py-2 font-semibold">Columna</th>
             <th class="px-3 py-2 font-semibold">Nombre a mostrar</th>
             <th class="px-3 py-2 w-40 font-semibold">Tipo</th>
+            <th class="px-3 py-2 w-40 font-semibold" title="Cómo se muestran sus valores en todo el tablero">Formato</th>
             <th class="px-3 py-2 font-semibold">Ejemplos</th>
           </tr>
         </thead>
@@ -245,6 +246,17 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                     <option x-bind:value="t.value" x-text="t.label" x-bind:selected="c.type === t.value"></option>
                   </template>
                 </select>
+              </td>
+              <td class="px-3 py-2">
+                <!-- Solo las numéricas: todas las métricas que las suman, promedian… lo heredan. -->
+                <select x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include"
+                        x-bind:aria-label="`Formato de ${c.name}`"
+                        class="w-full text-sm border border-line rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                  <template x-for="f in FORMATS" :key="f.value">
+                    <option x-bind:value="f.value" x-text="f.label" x-bind:selected="(c.format || '') === f.value"></option>
+                  </template>
+                </select>
+                <span x-show="c.type !== 'number'" class="text-xs text-ink/30">—</span>
               </td>
               <td class="px-3 py-2 text-xs text-ink/50 truncate max-w-[20rem]" x-text="c.samples.join(' · ')"></td>
             </tr>

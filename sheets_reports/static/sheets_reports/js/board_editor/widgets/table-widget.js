@@ -50,16 +50,15 @@
 
       const formats = this.constructor.formats;
       const columns = this._orderedColumns(payload.columns || []).map(col => {
-        const defaultFormat = col.numeric ? 'number' : 'text';
-        const format = this.style.formattersMap?.[col.field] || defaultFormat;
+        // El de la columna en la fuente (moneda, %).
+        const format = (col.numeric && (payload.formats || {})[col.field]) || (col.numeric ? 'number' : 'text');
         const result = {
           title: col.header,
           field: col.field,
-          ...(formats[format] || formats[defaultFormat]),
+          ...(formats[format] || formats.text),
           cssClass: col.numeric ? 'tb-num' : 'tb-dim',
         };
         if (col.numeric) result.headerHozAlign = 'right';
-        if (!this._readOnly) result.headerMenu = this.menuFormatter;
         return result;
       });
       const rows = payload.rows || [];

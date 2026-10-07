@@ -14,7 +14,7 @@ import pandas as pd
 
 from sheets_reports.engine.formulas import aggregated_fields
 from sheets_reports.engine.steps.filter import parse_conditions
-from sheets_reports.utils.data import is_number, to_python
+from sheets_reports.utils.data import column_formats, is_number, to_python
 
 MAX_PIVOT_CELLS = 50_000
 
@@ -80,6 +80,36 @@ def aggregate(series: pd.Series, agg: str):
 def metric_alias(metric: dict) -> str:
     """Alias de una métrica (la columna del resultado con su valor)."""
     return metric.get("alias") or ""
+
+
+# Formatos de una métrica; `progress` (barra 0-100) solo se elige en la métrica.
+METRIC_FORMATS = ("number", "currency", "percent", "progress")
+# Agregaciones que conservan la unidad de la columna (una suma de montos es un monto); el
+# conteo no: cuenta filas.
+_UNIT_AGGS = {"sum", "avg", "mean", "median", "min", "max", "std"}
+
+
+def metric_formats(df: pd.DataFrame, metrics: list) -> Dict[str, str]:
+    """{alias: formato} de las métricas que tienen uno: el elegido en la métrica; si no, el del
+    campo calculado agregado o el de la columna en la fuente (si la agregación conserva su
+    unidad). Las que no figuran se muestran como número."""
+    calculated = aggregated_fields(df)
+    columns = column_formats(df)
+    out: Dict[str, str] = {}
+    for metric in metrics or []:
+        alias, field = metric_alias(metric), metric_field(metric)
+        chosen = (metric or {}).get("format")
+        if chosen in METRIC_FORMATS:
+            fmt = chosen
+        elif field in calculated:
+            fmt = calculated[field].format
+        elif (metric or {}).get("agg") in _UNIT_AGGS:
+            fmt = columns.get(field)
+        else:
+            fmt = None
+        if alias and fmt and fmt != "number":
+            out[alias] = fmt
+    return out
 
 
 def metric_field(metric: dict) -> str:
@@ -223,12 +253,10 @@ def apply_aggregation(
     metrics = fields.metrics or []
     if not metrics:
         return df
-    # Las métricas de campos agregados con formato porcentaje: el frontend las muestra con «%».
-    calculated = aggregated_fields(df)
-    metadata["percent_metrics"] = [
-        metric_alias(m) for m in metrics
-        if metric_field(m) in calculated and calculated[metric_field(m)].percent
-    ]
+    # Cómo mostrar cada métrica (moneda, %…): el frontend formatea sus valores con él.
+    metadata["metric_formats"] = metric_formats(df, metrics)
+    metadata["percent_metrics"] = [alias for alias, fmt in metadata["metric_formats"].items()
+                                   if fmt == "percent"]
 
     dimensions = fields.dimensions or []
     pivots = fields.pivots or []

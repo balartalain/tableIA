@@ -36,6 +36,12 @@ function sourcePicker({ mode = 'create' } = {}) {
       { value: 'number', label: 'Número' },
       { value: 'date', label: 'Fecha' },
     ],
+    // Formato de una columna numérica (lo heredan las métricas que la suman, promedian…).
+    FORMATS: [
+      { value: '', label: 'Número' },
+      { value: 'currency', label: 'Moneda' },
+      { value: 'percent', label: 'Porcentaje (%)' },
+    ],
     step: 'source',
     source: null,
     query: '',
@@ -159,8 +165,8 @@ function sourcePicker({ mode = 'create' } = {}) {
       const current = Object.fromEntries(previous.map(c => [c.name, c]));
       return fresh.map(c => {
         const edited = current[c.name];
-        return edited ? { ...c, type: edited.type, include: edited.include, label: edited.label || '' }
-          : { ...c, include: c.include ?? true, label: c.label || '' };
+        return edited ? { ...c, type: edited.type, include: edited.include, label: edited.label || '', format: edited.format || '' }
+          : { ...c, include: c.include ?? true, label: c.label || '', format: c.format || '' };
       });
     },
 
@@ -252,7 +258,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         // en la edición (las columnas de igual encabezado).
         if (refresh) this.columns = this._keepEdits(data.columns || []);
         else if (this.mode === 'replace') this.columns = this._keepEdits(data.columns || [], this._editSnapshot.columns);
-        else this.columns = (data.columns || []).map(c => ({ ...c, include: true, label: '' }));
+        else this.columns = (data.columns || []).map(c => ({ ...c, include: true, label: '', format: '' }));
         this.rows = data.rows || 0;
         const doc = this.spreadsheet.name.trim();
         if (this.mode === 'create' && !refresh) {
@@ -359,8 +365,8 @@ function sourcePicker({ mode = 'create' } = {}) {
     },
 
     _payload() {
-      const columns = this.columns.map(({ name, type, include, label }) =>
-        ({ name, type, include, label: (label || '').trim() }));
+      const columns = this.columns.map(({ name, type, include, label, format }) =>
+        ({ name, type, include, label: (label || '').trim(), format: type === 'number' ? (format || '') : '' }));
       const body = { columns, first_row_headers: this.headers };
       if (this.mode !== 'edit') {
         Object.assign(body, {

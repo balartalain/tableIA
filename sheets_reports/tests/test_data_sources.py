@@ -119,7 +119,7 @@ class SourceChangesTests(TestCase):
                                                  columns=SALES_COLUMNS)
         self.widget = Widget.objects.create(
             dashboard=self.dashboard, source=self.source, type="bar", title="Por categoría",
-            fields=fields(sort_by="-ventas"), style={"formattersMap": {"ventas": "currency"}})
+            fields=fields(sort_by="-ventas"), style={"columnOrder": ["categoria", "ventas"]})
 
     def put(self, data):
         return json_body(self.client, "put", f"/api/sources/{self.source.id}/", data)
@@ -131,7 +131,7 @@ class SourceChangesTests(TestCase):
         self.widget.refresh_from_db()
         self.assertEqual(self.widget.fields["metrics"][0]["field"], "Monto")
         self.assertEqual(self.widget.fields["sort_by"], "-Monto")
-        self.assertEqual(self.widget.style["formattersMap"], {"Monto": "currency"})
+        self.assertEqual(self.widget.style["columnOrder"], ["categoria", "Monto"])
         # La columna se llama así en todo: schema y cálculo.
         schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
         self.assertIn("Monto", schema["all_fields"])
@@ -406,3 +406,69 @@ class MigrationTests(SimpleTestCase):
         self.assertEqual(created, [{"dashboard": dashboard, "sheet_id": "ab_C-1", "gid": "5",
                                     "sheet_name": "Ventas", "tab_name": "Hoja", "columns": []}])
         self.assertEqual(updated, [({"dashboard": dashboard}, {"source": "src"})])
+
+
+@mock.patch(SHEET, side_effect=by_sheet)
+class ColumnFormatTests(TestCase):
+    """El formato de una columna numérica (moneda, %) se elige en la fuente y lo heredan las
+    métricas que la resumen; la métrica puede elegir otro."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(self.user)
+        self.dashboard, self.source = make_board(self.user, columns=SALES_COLUMNS)
+
+    def put(self, columns):
+        return json_body(self.client, "put", f"/api/sources/{self.source.id}/", {"columns": columns})
+
+    def render(self, widget_type, widget_fields, **kwargs):
+        Widget.objects.all().delete()
+        Widget.objects.create(dashboard=self.dashboard, source=self.source, type=widget_type,
+                              fields=widget_fields, style={}, **kwargs)
+        data = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/").json()["widgets"][0]
+        self.assertIsNone(data["error"])
+        return data["data"]
+
+    def test_se_guarda_solo_en_columnas_numericas(self, _df):
+        r = self.put([{**c, "format": "percent"} if c["name"] == "categoria" else
+                      {**c, "format": "currency"} if c["name"] == "ventas" else c for c in SALES_COLUMNS])
+        self.assertEqual(r.status_code, 200, r.content)
+        self.source.refresh_from_db()
+        saved = {c["name"]: c.get("format") for c in self.source.columns}
+        self.assertEqual(saved, {"categoria": None, "mes": None, "anio": None, "ventas": "currency"})
+        columns = self.client.get(f"/api/sources/{self.source.id}/columns/").json()["columns"]
+        self.assertEqual({c["name"]: c["format"] for c in columns}["ventas"], "currency")
+
+    def test_formato_desconocido_da_error(self, _df):
+        r = self.put(with_column("ventas", format="moneda"))
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Formato", r.json()["error"])
+
+    def test_la_tabla_dinamica_hereda_el_formato_en_todas_sus_columnas(self, _df):
+        self.put(with_column("ventas", format="currency"))
+        data = self.render("dynamic_table", fields(pivots=["mes"], metrics=[
+            {"field": "ventas", "agg": "sum", "alias": "total_ventas"},
+            {"agg": "count", "alias": "cantidad"},
+        ]))
+        formats = data["formats"]
+        ventas = [f for f in formats if f.endswith("total_ventas")]
+        self.assertEqual(len(ventas), 3 + 1)                       # Ene, Feb, Mar + Total general
+        self.assertEqual({formats[f] for f in ventas}, {"currency"})
+        self.assertFalse(any(f.endswith("cantidad") for f in formats))   # un conteo no es moneda
+
+    def test_la_metrica_elige_otro_formato(self, _df):
+        self.put(with_column("ventas", format="currency"))
+        data = self.render("dynamic_table", fields(metrics=[
+            {"field": "ventas", "agg": "sum", "alias": "total_ventas", "format": "progress"},
+            {"field": "ventas", "agg": "avg", "alias": "promedio", "format": "number"},
+        ]))
+        self.assertEqual(data["formats"], {"total_ventas": "progress"})
+
+    def test_la_tabla_y_el_kpi_tambien(self, _df):
+        self.put(with_column("ventas", format="currency"))
+        table = self.render("table", {"dimensions": [], "pivots": [], "metrics": [], "filters": [],
+                                      "columns": [{"field": "categoria"}, {"field": "ventas"}],
+                                      "sort_by": None, "limit": None})
+        self.assertEqual(table["formats"], {"ventas": "currency"})
+        kpi = self.render("kpi", fields(dimensions=[], metrics=[{"field": "ventas", "agg": "sum", "alias": "t"}]))
+        self.assertTrue(kpi["formatted_value"].startswith("$"))

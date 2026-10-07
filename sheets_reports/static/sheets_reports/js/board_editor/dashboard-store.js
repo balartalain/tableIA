@@ -73,8 +73,22 @@ const WINDOW_OPTIONS = [
   { value: 'pct_change', label: 'Variación vs anterior' },
 ];
 
+// Formato de una métrica (`metric.format`, METRIC_FORMATS en engine/steps/aggregation.py).
+// «Automático» hereda el de la columna en la fuente o el del campo calculado.
+const METRIC_FORMAT_OPTIONS = [
+  { value: '', label: 'automático' },
+  { value: 'number', label: 'número' },
+  { value: 'currency', label: 'moneda' },
+  { value: 'percent', label: 'porcentaje (%)' },
+  { value: 'progress', label: 'barra (0-100)' },
+];
+
 // Ventanas que valen con pivotes (PIVOT_WINDOWS en services/ai_spec.py).
 const PIVOT_WINDOWS = ['percent_of_total', 'percent_of_row'];
+// Ventanas que suman los grupos (el % de un total, el acumulado): solo con agregaciones que se
+// suman (ADDITIVE_WINDOWS / ADDITIVE_AGGS en services/ai_spec.py). Un promedio no se suma.
+const ADDITIVE_WINDOWS = ['percent_of_total', 'percent_of_row', 'running_total'];
+const ADDITIVE_AGGS = ['sum', 'count'];
 
 let CONDITION_SEQ = 0;
 
@@ -424,21 +438,25 @@ document.addEventListener('alpine:init', () => {
       const current = this.drawerDraft.fields.trend_by;
       return !!current && !(this.schema.time_fields || []).includes(current);
     },
-    // Opciones de «Mostrar como» para el borrador: las que admite el widget
-    // (capabilities.windows) y, de ellas, las que valen con sus pivotes; [] = sin select.
+    // Opciones de «Mostrar como» de una métrica: las que admite el widget
+    // (capabilities.windows), de ellas las que valen con sus pivotes y, si la agregación no se
+    // suma (promedio, máximo, campo calculado…), solo la variación; [] = sin select.
     // Mismas reglas que form_errors en el backend.
-    get metricWindowOptions() {
+    metricWindowOptions(metric) {
       const allowed = this.drawerCapabilities.windows || [];
       const hasPivots = (this.drawerDraft.fields.pivots || []).some(Boolean);
+      const additive = ADDITIVE_AGGS.includes(metric && metric.agg);
       // Con pivote solo los porcentajes se calculan por celda; «% del total de la fila» necesita pivote.
       const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value)
-        && (hasPivots ? PIVOT_WINDOWS.includes(o.value) : o.value !== 'percent_of_row'));
+        && (hasPivots ? PIVOT_WINDOWS.includes(o.value) : o.value !== 'percent_of_row')
+        && (additive || !ADDITIVE_WINDOWS.includes(o.value)));
       return options.length ? [{ value: '', label: 'Valor' }, ...options] : [];
     },
-    // ¿La ventana guardada en la métrica ya no vale (ej. se agregó un pivote)? Se quita al guardar.
+    // ¿La ventana guardada en la métrica ya no vale (ej. se agregó un pivote o se cambió a
+    // promedio)? Se quita al guardar.
     metricWindowInvalid(metric) {
       const type = metric && metric.window && metric.window.type;
-      return !!type && !this.metricWindowOptions.some(o => o.value === type);
+      return !!type && !this.metricWindowOptions(metric).some(o => o.value === type);
     },
     setMetricWindow(metric, type) {
       if (type) metric.window = { type };
@@ -699,6 +717,9 @@ document.addEventListener('alpine:init', () => {
       const oldAlias = metric.alias;
       metric.alias = this._autoAlias(metric.agg, metric.field, taken);
       if (oldAlias !== metric.alias) this._rebindAlias(oldAlias, metric.alias);
+      // «Mostrar como» que ya no vale con la nueva agregación (ej. % del total con Promedio): se
+      // quita, y el select se oculta si no queda ninguna opción.
+      if (this.metricWindowInvalid(metric)) delete metric.window;
     },
 
     // Los controles que eligen una métrica (`options_from: 'metrics'`) apuntan al alias: si
@@ -743,6 +764,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     get aggOptions() { return AGG_OPTIONS; },
+    get metricFormatOptions() { return METRIC_FORMAT_OPTIONS; },
     // Campos calculados agregados de la fuente (`schema.aggregated_fields`): solo métricas.
     get aggregatedFields() { return (this.schema.aggregated_fields || []).map(f => f.name); },
     isAggregatedField(name) { return !!name && this.aggregatedFields.includes(name); },

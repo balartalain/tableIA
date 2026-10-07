@@ -106,7 +106,8 @@ class DynamicTableWidget(BaseWidget):
     ]
 
     capabilities: ClassVar[dict] = {
-        "dimensions": [0, 3],
+        # Al menos una: sin dimensiones sería un KPI dentro de una tabla o una tabla girada.
+        "dimensions": [1, 3],
         "pivots": [0, 2],
         "metrics": [1, 5],
         "sort": True,

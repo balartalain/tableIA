@@ -34,7 +34,7 @@ get_dimension_fields (services/sheets.py).{% endcomment %}
         </tbody>
       </table>
     </div>
-    <p>Sin dimensión (donde se permite), el widget resume todas las filas en un solo valor: 11 500.</p>
+    <p>Sin dimensión (el KPI), se resumen todas las filas en un solo valor: 11 500.</p>
   </div>
 
   <!-- Varias dimensiones -->
@@ -78,7 +78,7 @@ get_dimension_fields (services/sheets.py).{% endcomment %}
               ['bar', 'Gráfico de Barras', '1', 'Las categorías del eje: una barra (o grupo de barras) por valor.'],
               ['line', 'Gráfico de Líneas', '1', 'Los puntos del eje X, normalmente el tiempo (mes, año).'],
               ['donut', 'Gráfico de Dona', '1', 'Las porciones: una por valor.'],
-              ['dynamic_table', 'Tabla Dinámica', '0 a 3', 'Las filas, anidadas en orden. Sin dimensiones: una fila con el total.'],
+              ['dynamic_table', 'Tabla Dinámica', '1 a 3', 'Las filas, anidadas en orden.'],
               ['kpi', 'Tarjeta KPI', '—', 'No agrupa: muestra un solo número.'],
               ['table', 'Tabla', '—', 'No agrupa: muestra las filas tal cual.'],
             ]" :key="w[0]">

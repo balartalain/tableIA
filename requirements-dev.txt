@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Solo para desarrollo: cobertura de los tests.
+coverage==7.16.2
+# Pruebas en el navegador (playwright ya está en requirements.txt): falta el navegador, una vez:
+#   venv/bin/python -m playwright install chromium

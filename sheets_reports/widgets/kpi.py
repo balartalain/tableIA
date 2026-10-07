@@ -3,6 +3,7 @@ Tarjeta KPI: consulta con `WidgetFields` (roles del número elegidos en el style
 `compare`, `targetMetric`; tendencia con `trend_by`), apariencia con `WidgetStyle`.
 """
 import logging
+import math
 from typing import Any, ClassVar, Dict, List, Optional
 
 import pandas as pd
@@ -335,7 +336,10 @@ class KpiWidget(BaseWidget):
 
     @staticmethod
     def _number(value) -> float:
+        """El valor como número; vacío, NaN o infinito (ej. la desviación de un solo valor) → 0:
+        el JSON no admite NaN."""
         try:
-            return float(value)
+            number = float(value)
         except (TypeError, ValueError):
             return 0.0
+        return number if math.isfinite(number) else 0.0

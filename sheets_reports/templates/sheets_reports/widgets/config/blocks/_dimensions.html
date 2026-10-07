@@ -32,7 +32,9 @@
               <option x-bind:value="c" x-text="c"></option>
             </template>
           </select>
+          <!-- La última dimensión obligatoria (barras, tabla dinámica…) no se puede quitar. -->
           <button type="button" x-on:click="$store.dashboard.removeDimension(idx)"
+                  x-show="$store.dashboard.drawerDraft.fields.dimensions.length > $store.dashboard.minDimensions"
                   class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
                   title="Quitar dimensión" aria-label="Quitar dimensión">×</button>
         </div>

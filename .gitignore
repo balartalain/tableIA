@@ -33,3 +33,7 @@ staticfiles/
 # Environment variables
 .env
 google_credentials.json
+
+# Cobertura de los tests
+.coverage
+htmlcov/

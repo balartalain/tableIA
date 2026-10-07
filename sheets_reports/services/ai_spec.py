@@ -68,7 +68,9 @@ Tú NO calculas nada ni ves los datos: solo describes QUÉ calcular. El backend 
 consulta.
 
 ## fields (los datos)
-- dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla).
+- dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). Si el
+  widget exige dimensión y el usuario no dice cómo agrupar, usa una columna de texto con pocos
+  valores distintos (ej. departamento, campus); nunca una fecha suelta ni un identificador.
 - columns: SOLO la tabla de datos: columnas de la hoja a mostrar tal cual, en orden, cada una
   como {"field": "mes", "label": "Mes"}; `label` es opcional (nombre a mostrar en la cabecera,
   sin él se muestra la columna). La tabla NO agrupa ni resume: no lleva dimensions ni metrics.
@@ -254,6 +256,22 @@ def _window_error(path: str, w_type: str, widget, pivots: list, agg: str | None 
                 f"{' o '.join(ADDITIVE_AGGS)}; con '{agg}' el total no significa nada. Quita la "
                 f"ventana o usa 'pct_change'.")
     return None
+
+
+def panel_options(widget) -> dict:
+    """Lo que el panel puede ofrecer en las métricas de `widget`, calculado con las mismas
+    reglas que valida `form_errors` (así el panel nunca ofrece algo que al guardar se rechaza):
+    - `windows`: «Mostrar como» por agregación, sin pivote (`flat`) y con pivote (`pivot`);
+    - `numeric_aggs`: agregaciones que solo valen sobre columnas numéricas;
+    - `metric_formats`: formatos que puede elegir una métrica."""
+    aggs = [agg for agg in AGGREGATIONS if agg != "mean"]
+    windows = {
+        mode: {agg: [w for w in WINDOW_TYPES if _window_error("", w, widget, pivots, agg) is None]
+               for agg in aggs}
+        for mode, pivots in (("flat", []), ("pivot", ["pivote"]))
+    }
+    return {"windows": windows, "numeric_aggs": sorted(NUMERIC_AGGS),
+            "metric_formats": list(METRIC_FORMATS)}
 
 
 def admits_metric_filters(widget) -> bool:

@@ -127,7 +127,7 @@ calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget
               ['bar', 'Gráfico de Barras', '1 a 5 (1 con pivote)', '1', '0 a 1', 'Sí', '% columna, % fila, acumulado, variación'],
               ['line', 'Gráfico de Líneas', '1 a 5 (1 con pivote)', '1', '0 a 1', 'Sí', '% columna, acumulado, variación'],
               ['donut', 'Gráfico de Dona', '1', '1', '—', 'No', '—'],
-              ['dynamic_table', 'Tabla Dinámica', '1 a 5', '0 a 3', '0 a 2', 'Sí', '% columna, % fila'],
+              ['dynamic_table', 'Tabla Dinámica', '1 a 5', '1 a 3', '0 a 2', 'Sí', '% columna, % fila'],
               ['table', 'Tabla', 'Sin métricas', '—', '—', '—', '—'],
               ['filter', 'Filtros', 'Sin métricas', '—', '—', '—', '—'],
             ]" :key="w[0]">
@@ -156,7 +156,7 @@ calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget
       <li><b>Barras y Líneas</b>: una dimensión en el eje; con un pivote (series) admiten una sola métrica.</li>
       <li><b>Dona</b>: una métrica repartida entre los valores de la dimensión; ya muestra la proporción de cada parte.</li>
       <li><b>Tabla Dinámica</b>: cada métrica es una columna de valores y, con pivotes, se repite bajo
-        cada valor del pivote. Sin dimensiones muestra una sola fila con el total.</li>
+        cada valor del pivote. Necesita al menos una dimensión (para un solo número, usa un KPI).</li>
       <li><b>Tabla</b> y <b>Filtros</b>: no calculan métricas; la tabla muestra columnas tal cual y los
         filtros son controles para el tablero.</li>
     </ul>

@@ -32,6 +32,7 @@ from sheets_reports.engine.formulas import (
     compile_formula,
     rename_columns,
 )
+from sheets_reports.services.ai_spec import panel_options
 from sheets_reports.services.source_columns import impact, rename_in_widgets
 from sheets_reports.utils.data import time_fields, to_key, to_python
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
@@ -52,6 +53,8 @@ def _widget_manifest() -> dict:
             "style_defaults": widget_cls.style_defaults(),
             "capabilities": widget_cls.capabilities,
             "max_per_dashboard": widget_cls.max_per_dashboard,
+            # Qué ofrece el panel en las métricas: las mismas reglas que valida el servidor.
+            "panel_options": panel_options(widget_cls),
         }
         for key, widget_cls in WIDGET_REGISTRY.items()
     }

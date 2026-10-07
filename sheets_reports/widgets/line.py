@@ -68,14 +68,15 @@ class LineWidget(BaseWidget):
             for name, column in pairs
         ]
 
-        # Sin orden explícito, el eje se ordena cronológicamente.
+        # Sin orden explícito, un eje de tiempo se ordena cronológicamente (como el acumulado y
+        # la variación, engine/steps/window.py); otras categorías quedan en el orden del cálculo.
         sort_by = fields.sort_by if fields else None
         if not sort_by and categories:
             try:
-                from sheets_reports.utils.data import chronological
+                from sheets_reports.utils.data import time_order
 
-                ordered = chronological(categories)
-                if ordered != categories:
+                ordered = time_order(categories)
+                if ordered is not None and ordered != categories:
                     positions = {value: index for index, value in enumerate(categories)}
                     order = [positions[value] for value in ordered if value in positions]
                     if order:

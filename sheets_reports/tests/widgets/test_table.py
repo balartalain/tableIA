@@ -135,3 +135,15 @@ class ApiTests(TestCase):
         d = self.client.delete(f"/api/widget/{widget_id}/")
         self.assertEqual(d.status_code, 200)
         self.assertEqual(Widget.objects.count(), 0)
+
+
+class TableCompileTests(SimpleTestCase):
+    def test_columnas_con_tipo_y_tope_de_filas(self):
+        out = compiled("table", table_fields(["categoria", "ventas"]))
+        self.assertEqual(out["columns"], [
+            {"header": "Categoria", "field": "categoria", "numeric": False},
+            {"header": "Ventas", "field": "ventas", "numeric": True},
+        ])
+        self.assertEqual(out["rows"][0], {"categoria": "Hogar", "ventas": 100.0})
+        self.assertFalse(out["truncated"])
+        self.assertEqual(out["total_rows"], 6)

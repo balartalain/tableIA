@@ -83,12 +83,9 @@ const METRIC_FORMAT_OPTIONS = [
   { value: 'progress', label: 'barra (0-100)' },
 ];
 
-// Ventanas que valen con pivotes (PIVOT_WINDOWS en services/ai_spec.py).
-const PIVOT_WINDOWS = ['percent_of_total', 'percent_of_row'];
-// Ventanas que suman los grupos (el % de un total, el acumulado): solo con agregaciones que se
-// suman (ADDITIVE_WINDOWS / ADDITIVE_AGGS en services/ai_spec.py). Un promedio no se suma.
-const ADDITIVE_WINDOWS = ['percent_of_total', 'percent_of_row', 'running_total'];
-const ADDITIVE_AGGS = ['sum', 'count'];
+// Las reglas de qué se puede elegir NO van aquí: las manda el servidor en
+// `widget_manifest[tipo].panel_options` (services/ai_spec.panel_options), calculadas con la
+// misma validación que aplica al guardar. Aquí solo quedan los textos de cada opción.
 
 let CONDITION_SEQ = 0;
 
@@ -423,6 +420,7 @@ document.addEventListener('alpine:init', () => {
     // Condiciones propias de una métrica: solo sirven junto a otras métricas (Electrónica vs
     // total); con una sola equivalen a los filtros del widget.
     get hasMetricFilters() { return this.maxMetrics > 1; },
+    get minDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[0]; },
     get maxDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1]; },
     get maxPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1]; },
     // Columnas para la mini tendencia: las de tiempo por las que se agrupa (año, mes, fecha…).
@@ -438,18 +436,17 @@ document.addEventListener('alpine:init', () => {
       const current = this.drawerDraft.fields.trend_by;
       return !!current && !(this.schema.time_fields || []).includes(current);
     },
-    // Opciones de «Mostrar como» de una métrica: las que admite el widget
-    // (capabilities.windows), de ellas las que valen con sus pivotes y, si la agregación no se
-    // suma (promedio, máximo, campo calculado…), solo la variación; [] = sin select.
-    // Mismas reglas que form_errors en el backend.
+    // Lo que el servidor permite elegir en las métricas de este widget (ver arriba).
+    get panelOptions() {
+      return this.drawerManifest.panel_options || {};
+    },
+    // Opciones de «Mostrar como» de una métrica: las que el servidor acepta para el widget, su
+    // agregación y si hay pivotes; [] = sin select.
     metricWindowOptions(metric) {
-      const allowed = this.drawerCapabilities.windows || [];
       const hasPivots = (this.drawerDraft.fields.pivots || []).some(Boolean);
-      const additive = ADDITIVE_AGGS.includes(metric && metric.agg);
-      // Con pivote solo los porcentajes se calculan por celda; «% del total de la fila» necesita pivote.
-      const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value)
-        && (hasPivots ? PIVOT_WINDOWS.includes(o.value) : o.value !== 'percent_of_row')
-        && (additive || !ADDITIVE_WINDOWS.includes(o.value)));
+      const byAgg = ((this.panelOptions.windows || {})[hasPivots ? 'pivot' : 'flat']) || {};
+      const allowed = byAgg[metric && metric.agg] || [];
+      const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value));
       return options.length ? [{ value: '', label: 'Valor' }, ...options] : [];
     },
     // ¿La ventana guardada en la métrica ya no vale (ej. se agregó un pivote o se cambió a
@@ -713,6 +710,8 @@ document.addEventListener('alpine:init', () => {
       // una agregación normal.
       if (this.isAggregatedField(metric.field)) metric.agg = 'auto';
       else if (metric.agg === 'auto') metric.agg = 'sum';
+      // Una agregación numérica (Suma, Promedio…) sobre una columna de texto no vale: Conteo.
+      if (!this.metricAggOptions(metric).some(o => o.value === metric.agg)) metric.agg = 'count';
       const taken = this.drawerDraft.fields.metrics.filter(m => m !== metric).map(m => m.alias);
       const oldAlias = metric.alias;
       metric.alias = this._autoAlias(metric.agg, metric.field, taken);
@@ -764,13 +763,22 @@ document.addEventListener('alpine:init', () => {
     },
 
     get aggOptions() { return AGG_OPTIONS; },
-    get metricFormatOptions() { return METRIC_FORMAT_OPTIONS; },
+    // «Automático» más los formatos que el servidor acepta en una métrica.
+    get metricFormatOptions() {
+      const allowed = this.panelOptions.metric_formats || [];
+      return METRIC_FORMAT_OPTIONS.filter(o => !o.value || allowed.includes(o.value));
+    },
     // Campos calculados agregados de la fuente (`schema.aggregated_fields`): solo métricas.
     get aggregatedFields() { return (this.schema.aggregated_fields || []).map(f => f.name); },
     isAggregatedField(name) { return !!name && this.aggregatedFields.includes(name); },
     // Agregaciones del select de una métrica: con un campo agregado, solo «Automática».
     metricAggOptions(metric) {
-      return metric && metric.agg === 'auto' ? [{ value: 'auto', label: 'Automática' }] : AGG_OPTIONS;
+      if (metric && metric.agg === 'auto') return [{ value: 'auto', label: 'Automática' }];
+      // Sobre una columna de texto solo se cuenta (las numéricas las dice el servidor).
+      const field = metric && metric.field;
+      const numericOnly = this.panelOptions.numeric_aggs || [];
+      const isText = field && !(this.schema.numeric_fields || []).includes(field);
+      return isText ? AGG_OPTIONS.filter(o => !numericOnly.includes(o.value)) : AGG_OPTIONS;
     },
 
     // ---- filtros (del widget y propios de cada métrica: la misma fila de condición)

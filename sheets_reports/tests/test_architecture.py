@@ -10,7 +10,7 @@ from django.template.loader import get_template
 from django.test import SimpleTestCase
 
 from sheets_reports.models import Widget
-from sheets_reports.services.ai_spec import WINDOW_TYPES
+from sheets_reports.services.ai_spec import WINDOW_TYPES, panel_options
 from sheets_reports.tests.fixtures import errors_for, examples_ctx
 from sheets_reports.views import _widget_manifest
 from sheets_reports.widgets import WIDGETS
@@ -179,6 +179,15 @@ class WidgetContractTests(SimpleTestCase):
                 self.assertEqual(entry["style_schema"], widget.style_schema)
                 self.assertEqual(entry["capabilities"], widget.capabilities)
                 self.assertEqual(entry["max_per_dashboard"], widget.max_per_dashboard)
+                self.assertEqual(entry["panel_options"], panel_options(widget))
+
+    def test_el_panel_no_copia_las_reglas_del_servidor(self):
+        """Las reglas de qué se puede elegir llegan en `panel_options`: si se copian en el JS
+        del panel vuelven a desalinearse con la validación."""
+        store = (PACKAGE / "static" / "sheets_reports" / "js" / "board_editor" / "dashboard-store.js").read_text()
+        for name in ("PIVOT_WINDOWS", "ADDITIVE_WINDOWS", "ADDITIVE_AGGS", "NUMERIC_AGGS"):
+            with self.subTest(constante=name):
+                self.assertNotIn(name, store)
 
     def test_los_ejemplos_de_la_ia_son_forms_validos(self):
         for key, widget in WIDGETS.items():
@@ -191,6 +200,18 @@ class WidgetContractTests(SimpleTestCase):
                                                 args.get("style"), ctx=examples_ctx(),
                                                 title=args.get("title"),
                                                 calculated_fields=args.get("calculated_fields")), [])
+
+    def test_cada_widget_tiene_sus_tests(self):
+        """Un widget nuevo trae sus pruebas: los invariantes de lo que dibuja (los comprueba la
+        matriz de configuraciones en cada combinación que acepta) y sus casos concretos."""
+        from sheets_reports.tests.test_config_matrix import INVARIANTS
+
+        for key in WIDGETS.keys():
+            with self.subTest(widget=key):
+                self.assertIn(key, INVARIANTS,
+                              f"Falta INVARIANTS['{key}'] en tests/test_config_matrix.py")
+                path = PACKAGE / "tests" / "widgets" / f"test_{key}.py"
+                self.assertTrue(path.exists(), f"Falta tests/widgets/test_{key}.py")
 
 
 class PanelPartialTests(SimpleTestCase):

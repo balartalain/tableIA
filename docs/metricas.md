@@ -115,7 +115,7 @@ métricas aceptan todas las agregaciones, incluida `auto`.
 | Gráfico de Barras (`bar`) | 1 – 5 (1 con pivote) | 1 | 0 – 1 | Sí | % total, % fila, acumulado, variación |
 | Gráfico de Líneas (`line`) | 1 – 5 (1 con pivote) | 1 | 0 – 1 | Sí | % total, acumulado, variación |
 | Gráfico de Dona (`donut`) | 1 | 1 | 0 | No | — |
-| Tabla Dinámica (`dynamic_table`) | 1 – 5 | 0 – 3 | 0 – 2 | Sí | % total, % fila |
+| Tabla Dinámica (`dynamic_table`) | 1 – 5 | 1 – 3 | 0 – 2 | Sí | % total, % fila |
 | Tabla (`table`) | 0 | 0 | 0 | — | — |
 | Filtros (`filter`) | 0 | 0 – 50 (columnas del filtro) | 0 | — | — |
 
@@ -132,6 +132,6 @@ métricas aceptan todas las agregaciones, incluida `auto`.
 - **Dona**: una métrica repartida entre los valores de la dimensión; ya muestra la proporción
   de cada parte.
 - **Tabla Dinámica**: las métricas van como columnas de valores; con pivotes, se repiten bajo
-  cada valor del pivote. Sin dimensiones muestra una sola fila con el total.
+  cada valor del pivote. Necesita al menos una dimensión (para un solo número, un KPI).
 - **Tabla**: no resume: muestra columnas de la hoja tal cual (`columns`), sin métricas.
 - **Filtros**: controles de filtro para el tablero; no calcula métricas.

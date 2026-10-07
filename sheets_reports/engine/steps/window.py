@@ -47,7 +47,7 @@ def apply_window_functions(df: pd.DataFrame, metrics: list | None, metadata: dic
         elif w_type == "running_total":
             planned[target] = df[source].cumsum()
         elif w_type == "pct_change":
-            planned[target] = (df[source].pct_change() * 100).round(2)
+            planned[target] = (df[source].pct_change(fill_method=None) * 100).round(2)
 
     if planned:
         # Se copia antes de escribir: el frame que llega de un groupby/filtro puede ser

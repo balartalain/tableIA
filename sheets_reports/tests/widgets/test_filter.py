@@ -115,3 +115,18 @@ class ApiTests(TestCase):
         selection = [{"field": "categoria", "op": "in", "value": ["Hogar", *[f"x{i}" for i in range(300)]]}]
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?filters={quote(json.dumps(selection))}")
         self.assertEqual(r.json()["filter_errors"], [])
+
+
+class FilterCompileTests(SimpleTestCase):
+    def test_un_control_por_columna(self):
+        out = compiled("filter", fields(dimensions=["anio", "categoria"], metrics=[]))
+        self.assertEqual(out["filters"], [
+            {"field": "anio", "label": "Anio", "type": "multi_select",
+             "options": [2025, 2026], "truncated": False},
+            {"field": "categoria", "label": "Categoria", "type": "multi_select",
+             "options": ["Electrónica", "Hogar", "Ropa"], "truncated": False},
+        ])
+
+    def test_sin_columnas_elegidas_expone_tod_las_de_la_hoja(self):
+        out = compiled("filter", fields(dimensions=[], metrics=[]))
+        self.assertEqual([f["field"] for f in out["filters"]], ["categoria", "mes", "anio", "ventas"])

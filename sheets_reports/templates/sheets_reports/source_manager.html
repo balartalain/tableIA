@@ -3,8 +3,7 @@ o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {
 <div x-data="sourceManager()" class="h-full flex flex-col">
 
   <div x-show="view === 'list'" class="flex-1 min-h-0 flex flex-col gap-4">
-    <div class="flex items-center justify-between gap-3">
-      <p class="text-sm text-ink/60">Cada widget elige una de estas fuentes en su panel.</p>
+    <div class="flex items-center justify-between gap-3">      
       <button type="button" x-on:click="add()"
               class="shrink-0 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-lg px-4 py-2 transition cursor-pointer inline-flex items-center gap-1.5">
         <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar fuente

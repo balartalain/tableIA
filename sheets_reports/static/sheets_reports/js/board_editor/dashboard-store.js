@@ -264,7 +264,17 @@ document.addEventListener('alpine:init', () => {
         this._reportFilterErrors(data);
         this.sources = (data.dashboard && data.dashboard.sources) || this.sources;
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
-        saved.forEach(w => w.applyRender(byId[w.id]));
+        saved.forEach(w => {
+          const entry = byId[w.id];
+          // El servidor puede reescribir un widget (ej. una columna renombrada en su fuente):
+          // sin cambios locales pendientes, manda lo guardado.
+          if (entry && !w._dirty) {
+            w.fields = entry.fields;
+            w.style = entry.style;
+            w.source_id = entry.source_id;
+          }
+          w.applyRender(entry);
+        });
       } catch (e) {
         saved.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
       }
@@ -474,8 +484,9 @@ document.addEventListener('alpine:init', () => {
       this.drawerDraft = {
         title,
         source: w.source_id ?? null,
-        fields: { ...EMPTY_FIELDS(), ...(w.fields || {}) },
-        style: { ...(manifest.style_defaults || {}), ...(w.style || {}), title },
+        // Copias: lo que se edita en el panel no toca el widget hasta «Guardar».
+        fields: { ...EMPTY_FIELDS(), ...JSON.parse(JSON.stringify(w.fields || {})) },
+        style: { ...(manifest.style_defaults || {}), ...JSON.parse(JSON.stringify(w.style || {})), title },
       };
       this._normalizeDraft();
       // Las columnas por defecto salen del schema de la fuente: se eligen cuando llega.

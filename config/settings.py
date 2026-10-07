@@ -98,7 +98,15 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
         'LOCATION': 'django_cache_table',
-    }
+    },
+    # Las hojas de las fuentes (services/sheets.py): no vencen, se releen con «Actualizar
+    # datos». Tabla propia para que el culling del caché general no las saque.
+    'sheets': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'sheet_cache_table',
+        'TIMEOUT': None,
+        'OPTIONS': {'MAX_ENTRIES': 10000},
+    },
 }
 
 
@@ -161,12 +169,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Google Sheets
 GOOGLE_SHEETS_CREDENTIALS_PATH = config("GOOGLE_SHEETS_CREDENTIALS_PATH", default="")
-
-# Segundos que se cachea el DataFrame de cada hoja (services/sheets.get_sheet_dataframe).
-SHEET_CACHE_TTL = config("SHEET_CACHE_TTL", default=300, cast=int)
-
-# Cada cuántos minutos el frontend refresca los datos del tablero (endpoint render, sin IA).
-WIDGET_REFRESH_MINUTES = config("WIDGET_REFRESH_MINUTES", default=5, cast=int)
 
 # Gemini (generación de specs JSON de widgets vía IA; ver services/ai_spec.py)
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")

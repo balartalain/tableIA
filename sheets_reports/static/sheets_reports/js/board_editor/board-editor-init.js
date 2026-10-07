@@ -217,9 +217,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }));
 
   window.addEventListener('dashboard:filters-changed', () => store.refreshData());
-  if (window.REFRESH_MINUTES > 0) {
-    setInterval(() => store.refreshData(), window.REFRESH_MINUTES * 60 * 1000);
-  }
 
   // Con forceFallback el arrastre son eventos de mouse normales: sin esto, mover el mouse con el
   // botón presionado va seleccionando el texto de la página. Se corta mientras haya algo agarrado.

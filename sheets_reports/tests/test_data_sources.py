@@ -98,6 +98,130 @@ class SourcesCrudTests(TestCase):
                          ["producto", "stock"])
 
 
+SALES_COLUMNS = [{"name": "categoria", "type": "text", "include": True},
+                 {"name": "mes", "type": "text", "include": True},
+                 {"name": "anio", "type": "number", "include": True},
+                 {"name": "ventas", "type": "number", "include": True}]
+
+
+def with_column(name, **changes):
+    return [{**c, **changes} if c["name"] == name else c for c in SALES_COLUMNS]
+
+
+@mock.patch(SHEET, side_effect=by_sheet)
+class SourceChangesTests(TestCase):
+    """Renombrar columnas, reemplazar la hoja, actualizar los datos y avisar qué se rompe."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(self.user)
+        self.dashboard, self.source = make_board(self.user, sheet_name="Ventas", tab_name="Hoja 1",
+                                                 columns=SALES_COLUMNS)
+        self.widget = Widget.objects.create(
+            dashboard=self.dashboard, source=self.source, type="bar", title="Por categoría",
+            fields=fields(sort_by="-ventas"), style={"formattersMap": {"ventas": "currency"}})
+
+    def put(self, data):
+        return json_body(self.client, "put", f"/api/sources/{self.source.id}/", data)
+
+    def test_renombrar_una_columna_reescribe_sus_widgets(self, _df):
+        r = self.put({"columns": with_column("ventas", label="Monto")})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["impact"], [])
+        self.widget.refresh_from_db()
+        self.assertEqual(self.widget.fields["metrics"][0]["field"], "Monto")
+        self.assertEqual(self.widget.fields["sort_by"], "-Monto")
+        self.assertEqual(self.widget.style["formattersMap"], {"Monto": "currency"})
+        # La columna se llama así en todo: schema y cálculo.
+        schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
+        self.assertIn("Monto", schema["all_fields"])
+        self.assertNotIn("ventas", schema["all_fields"])
+        data = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/").json()
+        self.assertIsNone(data["widgets"][0]["error"])
+        # Y se puede volver al encabezado original.
+        self.put({"columns": SALES_COLUMNS})
+        self.widget.refresh_from_db()
+        self.assertEqual(self.widget.fields["metrics"][0]["field"], "ventas")
+
+    def test_dos_columnas_con_el_mismo_nombre_a_mostrar_dan_error(self, _df):
+        r = self.put({"columns": with_column("mes", label="categoria")})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("«categoria»", r.json()["error"])
+
+    def test_dry_run_avisa_sin_guardar(self, _df):
+        r = self.put({"columns": with_column("categoria", include=False), "dry_run": True})
+        self.assertEqual(r.json(), {"impact": [{"id": self.widget.id, "title": "Por categoría",
+                                                "columns": ["categoria"]}]})
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.columns, SALES_COLUMNS)
+
+    def test_cambiar_el_tipo_tambien_avisa(self, _df):
+        r = self.put({"columns": with_column("ventas", type="text"), "dry_run": True})
+        self.assertEqual(r.json()["impact"][0]["columns"], ["ventas"])
+
+    def test_nombre_propio_de_la_fuente(self, _df):
+        r = self.put({"columns": SALES_COLUMNS, "name": "Ventas 2026"})
+        self.assertEqual((r.json()["label"], r.json()["name"], r.json()["original_label"]),
+                         ("Ventas 2026", "Ventas 2026", "Ventas · Hoja 1"))
+        r = self.put({"columns": SALES_COLUMNS, "name": " "})
+        self.assertEqual(r.json()["label"], "Ventas · Hoja 1")
+
+    def test_reemplazar_la_hoja(self, _df):
+        payload = {"sheet_id": "inv", "sheet_gid": "7", "sheet_name": "Inventario", "tab_name": "Stock",
+                   "columns": [{"name": "producto", "type": "text", "include": True},
+                               {"name": "stock", "type": "number", "include": True}]}
+        impact = self.put({**payload, "dry_run": True}).json()["impact"]
+        self.assertEqual(impact[0]["columns"], ["categoria", "ventas"])
+        r = self.put(payload)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.source.refresh_from_db()
+        self.assertEqual((self.source.sheet_id, self.source.gid, self.source.label),
+                         ("inv", "7", "Inventario · Stock"))
+        self.widget.refresh_from_db()
+        self.assertEqual(self.widget.source, self.source)   # el widget sigue en la misma fuente
+
+    def test_actualizar_datos_relee_la_hoja_sin_guardar(self, _df):
+        saved = [*with_column("ventas", label="Monto"), {"name": "borrada", "type": "text", "include": True}]
+        self.source.columns = saved
+        self.source.save()
+        with mock.patch("sheets_reports.services.sheets.refresh_sheet", return_value=sales_df()) as refresh:
+            r = self.client.get(f"/api/sources/{self.source.id}/columns/?refresh=1")
+        self.assertEqual(r.status_code, 200, r.content)
+        refresh.assert_called_once_with("abc", "0", headers=True)
+        # La estructura actual de la hoja, con lo guardado de las columnas que siguen.
+        columns = r.json()["columns"]
+        self.assertEqual([c["name"] for c in columns], ["categoria", "mes", "anio", "ventas"])
+        self.assertEqual(columns[3]["label"], "Monto")
+        # Nada se guarda hasta «Guardar cambios».
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.columns, saved)
+
+    def test_actualizar_datos_con_la_hoja_caida(self, _df):
+        with mock.patch("sheets_reports.services.sheets.refresh_sheet", side_effect=SheetError("caída")):
+            r = self.client.get(f"/api/sources/{self.source.id}/columns/?refresh=1")
+        self.assertEqual((r.status_code, r.json()["error"]), (502, "caída"))
+
+    def test_actualizar_datos_en_el_selector_de_una_hoja_nueva(self, _df):
+        with mock.patch("sheets_reports.services.sheets.refresh_sheet", return_value=stock_df()) as refresh:
+            r = self.client.get("/api/sources/google/spreadsheets/inv/tabs/3/columns/?refresh=1&headers=0")
+        self.assertEqual([c["name"] for c in r.json()["columns"]], ["producto", "stock"])
+        refresh.assert_called_once_with("inv", "3", headers=False)
+
+    def test_eliminar_en_dry_run_lista_sus_widgets(self, _df):
+        r = self.client.delete(f"/api/sources/{self.source.id}/?dry_run=1")
+        self.assertEqual(r.json()["impact"], [{"id": self.widget.id, "title": "Por categoría", "columns": []}])
+        self.assertTrue(DataSource.objects.filter(id=self.source.id).exists())
+
+    def test_columnas_para_editar_traen_el_nombre_a_mostrar_y_los_encabezados(self, _df):
+        self.source.columns = with_column("ventas", label="Monto")
+        self.source.save()
+        r = self.client.get(f"/api/sources/{self.source.id}/columns/").json()
+        self.assertTrue(r["first_row_headers"])
+        self.assertEqual({c["name"]: c["label"] for c in r["columns"]}["ventas"], "Monto")
+        self.client.get(f"/api/sources/{self.source.id}/columns/?headers=0")
+        self.assertEqual(_df.call_args.kwargs, {"headers": False})
+
+
 @mock.patch(SHEET, side_effect=by_sheet)
 class MultiSourceWidgetsTests(TestCase):
     def setUp(self):

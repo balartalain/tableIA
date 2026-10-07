@@ -23,12 +23,17 @@ templates/
     blocks/                   # Piezas compartidas que incluyen los paneles (ver «Drawer de edición»)
   board_view.html             # Vista compartida (read-only)
   home.html                   # Lista de tableros (Alpine component local)
+  sheets_reports/
+    source_manager.html       # Gestor de fuentes del tablero (bottom sheet)
+    source_picker.html        # Selector de hoja → pestaña → columnas (crear, agregar, editar, cambiar hoja)
 
 static/sheets_reports/js/board_editor/
   widget-registry.js          # WidgetRegistry (Map tipo → clase)
   base-widget.js              # BaseWidget (lifecycle, DOM, resize, chart)
   dashboard-store.js          # $store.dashboard (editor): estado + CRUD + drawer + IA
   filters.js                  # Filtros de tablero (extiende el store)
+  source-manager.js           # sourceManager(): fuentes del tablero, actualizar datos, eliminar
+  source-picker.js            # sourcePicker(): elegir/editar/reemplazar la hoja de una fuente
   board-editor-init.js        # Bootstrap: palette, drag-drop, Sortable, resize
   board-view-init.js          # Bootstrap read-only: store mínimo + mount
   utils/
@@ -97,9 +102,11 @@ DOMContentLoaded
   ├── store.loadBoard()            → GET /api/dashboard/{id}/render/
   │     └── BaseWidget.fromServer(w) → instancias
   ├── widget.mount() → DOM
-  ├── applyRender(entries[w.id])   → widget.draw(data, style, title)
-  └── setInterval(refreshData, REFRESH_MINUTES * 60000)
+  └── applyRender(entries[w.id])   → widget.draw(data, style, title)
 ```
+
+El tablero no se refresca solo: los datos de cada hoja quedan en caché en el servidor hasta
+que el usuario pulsa «Actualizar datos» al editar la fuente.
 
 ### Widget CRUD
 
@@ -330,6 +337,47 @@ Extiende `DynamicTableWidget`. Tabla simple sin jerarquía: columnas planas, pag
 
 Barra de filtros del tablero. `placement: 'header'`, singleton. Usa Virtual Select para multi-select. Al cambiar, llama `store.setBoardFilter()`.
 
+## Fuentes de datos
+
+Cada tablero tiene una o varias fuentes (una pestaña de una hoja de Google); cada widget
+elige la suya en su panel. Se gestionan en el bottom sheet «Fuentes de datos».
+
+**Gestor** (`source-manager.js`, `source_manager.html`): tabla de fuentes con su nombre (el
+propio, con «Documento · Pestaña» debajo, o el original), columnas incluidas, widgets que la
+usan y «Actualizado hace X» (`timeAgoLabel`). Acciones por fuente:
+
+- **Editar columnas** → selector en modo `edit`.
+- **Eliminar** → `DELETE ?dry_run=1` lista los widgets que se quedan sin datos y pide
+  confirmación.
+
+**Selector** (`source-picker.js`, `source_picker.html`), modos `create` (tablero nuevo),
+`add`, `edit` y `replace`. Pasos: fuente → documento de Drive → pestaña → columnas. En el paso
+de columnas:
+
+- «Usar la primera fila como encabezado» (`?headers=0|1`): sin ella, la fila 1 es un dato y
+  las columnas se llaman «Columna A», «Columna B»…
+- Por columna: incluir, **nombre a mostrar** (reemplaza al encabezado en todo el tablero) y tipo.
+- En `edit` y `replace`, nombre opcional de la fuente (vacío = el original).
+- **Actualizar datos**, junto al nombre (`refreshColumns()`): relee la pestaña de Google
+  (`?refresh=1`, pisa el caché del servidor) y muestra su estructura actual sin perder los
+  cambios todavía sin guardar (`_keepEdits`, por encabezado). Las columnas nuevas entran
+  incluidas; las que ya no están desaparecen y, al guardar, el aviso de impacto lista los
+  widgets que las usaban. Si se sale sin guardar tras actualizar, el tablero igual se recalcula
+  (`sources:changed`).
+- **Cambiar hoja**, junto a «Actualizar datos» en `edit` (`changeSheet()`): pasa a modo
+  `replace` (documento → pestaña → columnas). Las columnas con el mismo encabezado conservan lo
+  elegido en la edición, aunque no estuviera guardado; «Cancelar» vuelve a la edición tal
+  como estaba (`_backToEdit`).
+- Antes de guardar en `edit` o `replace` se pide `dry_run`: si algún widget usa columnas que
+  se quitan o cambian de tipo, se listan con «Guardar igual» / «Volver».
+- El email de la cuenta de servicio (con quien compartir las hojas) se muestra con botón
+  copiar.
+
+Tras guardar, `afterChange()` recarga las fuentes, vacía los schemas cacheados del store,
+recalcula el tablero y reabre el panel abierto. `refreshData()` toma `fields`/`style` del
+servidor para los widgets sin cambios locales: al renombrar una columna el servidor reescribe
+los widgets de esa fuente.
+
 ## Sistema de filtros
 
 Dos niveles:
@@ -394,5 +442,6 @@ Usuario abre /board/{id}/
   │           └── refreshData() → GET /render/?filters=...
   │                 └── applyRender() en cada widget
   │
-  └── setInterval → refreshData() cada REFRESH_MINUTES
+  └── Usuario actualiza, edita o reemplaza una fuente (gestor de fuentes)
+        └── afterChange() → resetSources() + refreshData() + openDrawer() si hay panel abierto
 ```

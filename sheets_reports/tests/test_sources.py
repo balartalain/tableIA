@@ -5,11 +5,16 @@ from unittest import mock
 
 import pandas as pd
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from sheets_reports.models import Dashboard
+from sheets_reports.services import sheets
 from sheets_reports.services.sheets import SheetError, apply_column_config, infer_column_types
 from sheets_reports.tests.fixtures import make_board, sales_df
+
+LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+          "sheets": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                     "LOCATION": "sheets-tests", "TIMEOUT": None}}
 
 
 def raw_df() -> pd.DataFrame:
@@ -49,6 +54,15 @@ class ColumnTypesTests(SimpleTestCase):
         self.assertEqual(df["fecha"].tolist(), ["2026-01-05", "2026-02-20", None])
         self.assertEqual(df["anio"].tolist(), ["2026", "2025", "2026"])
         self.assertEqual(df["mes"].tolist(), ["Ene", "Feb", "Mar"])  # sin configurar: intacta
+
+    def test_el_nombre_a_mostrar_reemplaza_al_encabezado(self):
+        df = apply_column_config(raw_df(), [
+            {"name": "monto", "label": "Monto total", "type": "number", "include": True},
+            {"name": "categoria", "label": "Nunca", "type": "text", "include": False},
+            {"name": "mes", "label": "", "type": "text", "include": True},
+        ])
+        self.assertEqual(list(df.columns), ["Monto total", "fecha", "mes", "anio"])
+        self.assertEqual(df["Monto total"].tolist()[:2], [1200.0, 300.0])
 
     def test_meses_y_anios_como_fecha_quedan_como_periodo(self):
         df = apply_column_config(raw_df(), [{"name": "mes", "type": "date", "include": True},
@@ -94,7 +108,7 @@ class SourceEndpointsTests(TestCase):
     def test_columnas_con_tipo_inferido_y_ejemplos(self):
         with mock.patch("sheets_reports.services.sheets.get_sheet_dataframe", return_value=sales_df()) as get:
             r = self.client.get("/api/sources/google/spreadsheets/abc/tabs/123/columns/")
-        get.assert_called_once_with("abc", "123")
+        get.assert_called_once_with("abc", "123", headers=True)
         data = r.json()
         self.assertEqual(data["rows"], 6)
         by_name = {c["name"]: c for c in data["columns"]}
@@ -155,3 +169,79 @@ class CreateFromSourceTests(TestCase):
         self.client.get(f"/tableros/{d.id}/edit/")
         d.refresh_from_db()
         self.assertIsNotNone(d.last_opened_at)
+
+
+def csv_response(text):
+    return mock.Mock(status_code=200, headers={"Content-Type": "text/csv; charset=utf-8"}, text=text)
+
+
+@mock.patch("sheets_reports.services.sheets._access_token", return_value=None)
+class FetchSheetTests(SimpleTestCase):
+    CSV = "Producto,Ventas,,\r\nA,\"1,200\",,\r\nB,300,,\r\n"
+
+    def test_con_encabezados(self, _token):
+        with mock.patch("requests.get", return_value=csv_response(self.CSV)) as get:
+            df = sheets.fetch_sheet_dataframe("abc", "5")
+        self.assertEqual(get.call_args.kwargs["params"], {"format": "csv", "gid": "5"})
+        self.assertEqual(list(df.columns), ["Producto", "Ventas"])   # sin las de relleno
+        self.assertEqual(df["Ventas"].tolist(), [1200, 300])
+
+    def test_sin_encabezados_las_columnas_se_llaman_por_su_letra(self, _token):
+        with mock.patch("requests.get", return_value=csv_response(self.CSV)):
+            df = sheets.fetch_sheet_dataframe("abc", "5", headers=False)
+        self.assertEqual(list(df.columns), ["Columna A", "Columna B"])
+        self.assertEqual(df["Columna A"].tolist(), ["Producto", "A", "B"])   # la fila 1 es un dato
+
+    def test_letras_de_columna(self, _token):
+        self.assertEqual([sheets.column_letter(i) for i in (0, 25, 26, 27, 701, 702)],
+                         ["A", "Z", "AA", "AB", "ZZ", "AAA"])
+
+    def test_respuesta_que_no_es_csv(self, _token):
+        html = mock.Mock(status_code=200, headers={"Content-Type": "text/html"}, text="<html>")
+        with mock.patch("requests.get", return_value=html):
+            with self.assertRaises(SheetError):
+                sheets.fetch_sheet_dataframe("abc", "5")
+
+
+@override_settings(CACHES=LOCMEM)
+class SheetCacheTests(SimpleTestCase):
+    def setUp(self):
+        from django.core.cache import caches
+        caches["sheets"].clear()
+
+    def test_la_hoja_queda_en_cache_hasta_actualizar(self):
+        source = mock.Mock(sheet_id="abc", gid="0", first_row_headers=True)
+        with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=sales_df()) as fetch:
+            self.assertIsNone(sheets.fetched_at(source))
+            sheets.get_sheet_dataframe("abc", "0")
+            sheets.get_sheet_dataframe("abc", "0")
+            self.assertEqual(fetch.call_count, 1)
+            first = sheets.fetched_at(source)
+            self.assertIsNotNone(first)
+
+            sheets.refresh_sheet("abc", "0")
+            self.assertEqual(fetch.call_count, 2)
+            self.assertGreaterEqual(sheets.fetched_at(source), first)
+
+            # Con otra opción de encabezados es otra lectura.
+            sheets.get_sheet_dataframe("abc", "0", headers=False)
+            self.assertEqual(fetch.call_count, 3)
+
+    def test_devuelve_copias(self):
+        with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=sales_df()):
+            sheets.get_sheet_dataframe("abc", "0")["ventas"] = 0
+            self.assertNotEqual(sheets.get_sheet_dataframe("abc", "0")["ventas"].sum(), 0)
+
+
+class ServiceAccountEmailTests(TestCase):
+    def test_sin_credenciales_no_hay_email(self):
+        with mock.patch.object(sheets, "service_account_credentials", return_value=None):
+            self.assertIsNone(sheets.service_account_email())
+
+    def test_el_selector_muestra_el_email(self):
+        user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(user)
+        creds = mock.Mock(service_account_email="lector@proyecto.iam.gserviceaccount.com")
+        with mock.patch.object(sheets, "service_account_credentials", return_value=creds):
+            r = self.client.get("/tableros/nuevo/")
+        self.assertContains(r, "lector@proyecto.iam.gserviceaccount.com")

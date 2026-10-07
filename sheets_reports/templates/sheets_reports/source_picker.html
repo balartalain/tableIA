@@ -1,10 +1,38 @@
-{% comment %}Selector de una fuente de datos (cuerpo del bottom sheet): crear tablero, agregar o
-editar una fuente. `picker_mode` es el modo inicial (ver source-picker.js).{% endcomment %}
+{% comment %}Selector de una fuente de datos (cuerpo del bottom sheet): crear tablero, agregar,
+editar o reemplazar la hoja de una fuente. `picker_mode` es el modo inicial (ver
+source-picker.js). `service_account_email` es la cuenta con la que se comparten las hojas.{% endcomment %}
 <div x-data="sourcePicker({ mode: '{{ picker_mode|default:"create" }}' })"
      x-on:source-picker:start.window="start($event.detail)" class="h-full flex flex-col">
 
   <!-- Paso 1: fuente → documento → pestaña -->
   <div x-show="step === 'source'" class="flex-1 min-h-0 flex flex-col gap-4">
+    <!-- Barra superior: atrás (al agregar o cambiar la hoja), cuenta de servicio y aceptar. -->
+    <div class="flex flex-wrap items-center justify-end gap-3">
+      <button type="button" x-show="mode === 'add' || mode === 'replace'" x-on:click="back()"
+              title="Atrás" aria-label="Atrás"
+              class="shrink-0 p-2 rounded-lg text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
+        <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
+      </button>
+      {% if service_account_email %}
+      <!-- Para ver una hoja aquí hay que compartirla con la cuenta de servicio. -->
+      <p class="mr-auto min-w-0 flex items-center gap-1.5 text-xs text-ink/50">
+        <i class="ti ti-share text-sm shrink-0" aria-hidden="true"></i>
+        <span class="shrink-0">Comparte tus hojas con</span>
+        <span class="font-medium text-ink/70 truncate">{{ service_account_email }}</span>
+        <button type="button" x-on:click="copyEmail('{{ service_account_email|escapejs }}')"
+                class="shrink-0 p-1 rounded-md text-ink/40 hover:text-ink hover:bg-paper cursor-pointer"
+                x-bind:title="emailCopied ? 'Copiado' : 'Copiar email'" x-bind:aria-label="emailCopied ? 'Copiado' : 'Copiar email'">
+          <i class="ti text-sm" x-bind:class="emailCopied ? 'ti-check text-moss-600' : 'ti-copy'" aria-hidden="true"></i>
+        </button>
+      </p>
+      {% else %}
+      <span class="mr-auto"></span>
+      {% endif %}
+      <p x-show="columnsError" x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
+      <button type="button" x-on:click="loadColumns()" x-bind:disabled="!tab || loadingColumns"
+              class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
+              x-text="loadingColumns ? 'Leyendo la pestaña…' : 'Aceptar'"></button>
+    </div>
     <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[14rem_minmax(0,1fr)_16rem] gap-4">
 
       <!-- Fuentes -->
@@ -47,7 +75,8 @@ editar una fuente. `picker_mode` es el modo inicial (ver source-picker.js).{% en
           <p x-show="sheetsError" x-text="sheetsError" role="alert" class="px-2 py-3 text-xs text-red-600"></p>
           <p x-show="source && !loadingSheets && !sheetsError && !spreadsheets.length"
              class="px-2 py-6 text-center text-xs text-ink/50">
-            No hay hojas visibles. Comparte la hoja de cálculo con el email de la cuenta de servicio.
+            No hay hojas visibles. Comparte la hoja de cálculo con
+            {% if service_account_email %}<span class="font-medium text-ink/70 break-all">{{ service_account_email }}</span>{% else %}el email de la cuenta de servicio{% endif %}.
           </p>
           <ul x-show="!loadingSheets" class="space-y-0.5">
             <template x-for="s in spreadsheets" :key="s.id">
@@ -89,29 +118,79 @@ editar una fuente. `picker_mode` es el modo inicial (ver source-picker.js).{% en
       </div>
     </div>
 
-    <div class="flex items-center justify-end gap-3">
-      <button type="button" x-show="mode === 'add'" x-on:click="back()"
-              class="mr-auto text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-lg px-4 py-2 transition cursor-pointer">Cancelar</button>
-      <p x-show="columnsError" x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
-      <button type="button" x-on:click="loadColumns()" x-bind:disabled="!tab || loadingColumns"
-              class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
-              x-text="loadingColumns ? 'Leyendo la pestaña…' : 'Aceptar'"></button>
-    </div>
   </div>
 
   <!-- Paso 2: columnas y tipos -->
   <div x-show="step === 'columns'" x-cloak class="flex-1 min-h-0 flex flex-col gap-4">
+    <!-- Barra superior: atrás, nombre, acciones sobre la hoja y guardar. -->
     <div class="flex flex-wrap items-end gap-4">
-      <label x-show="mode === 'create'" class="block flex-1 min-w-[16rem] text-xs font-semibold text-ink/70">Nombre del tablero
+      <button type="button" x-on:click="back()"
+              x-bind:title="impact ? 'Volver' : 'Atrás'" x-bind:aria-label="impact ? 'Volver' : 'Atrás'"
+              class="shrink-0 p-2 rounded-lg text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
+        <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
+      </button>
+      <label x-show="mode === 'create'" class="block flex-1 min-w-[16rem] -ml-2 text-xs font-semibold text-ink/70">Nombre del tablero
         <input type="text" x-model="name"
                class="mt-1 w-full text-sm font-normal text-ink border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
       </label>
-      <p x-show="mode !== 'create'" class="flex-1 min-w-0 truncate text-sm font-semibold text-ink"
-         x-text="mode === 'edit' && editing ? editing.label : `${spreadsheet ? spreadsheet.name.trim() : ''} · ${tab ? tab.title : ''}`"></p>
-      <p x-show="loadingColumns" class="text-xs text-ink/50 pb-2">
+      <p x-show="mode === 'add'" class="min-w-0 max-w-md truncate -ml-2 pb-2 text-sm font-semibold text-ink" x-text="originalLabel"></p>
+      <!-- Nombre propio de la fuente: opcional, el original se conserva. -->
+      <input type="text" x-show="mode === 'edit' || mode === 'replace'" x-model="sourceName"
+             x-bind:placeholder="originalLabel" maxlength="255"
+             aria-label="Nombre de la fuente (opcional)" title="Nombre de la fuente (opcional)"
+             class="w-72 max-w-full -ml-2 text-sm text-ink border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+      <!-- Cambiar hoja (al editar) y Actualizar datos: relee la hoja de Google y muestra su
+           estructura actual. -->
+      <div class="flex items-center gap-2 -ml-2">
+        <button type="button" x-show="mode === 'edit'" x-on:click="changeSheet()" x-bind:disabled="refreshing || loadingColumns"
+                class="inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-lg px-3 py-2 transition cursor-pointer disabled:opacity-50">
+          <i class="ti ti-replace text-base" aria-hidden="true"></i>
+          Cambiar hoja
+        </button>
+        <button type="button" x-on:click="refreshColumns()" x-bind:disabled="refreshing || loadingColumns"
+                class="inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-lg px-3 py-2 transition cursor-pointer disabled:opacity-50 disabled:cursor-wait">
+          <i class="ti ti-refresh text-base" x-bind:class="refreshing ? 'animate-spin' : ''" aria-hidden="true"></i>
+          Actualizar datos
+        </button>
+        <span x-show="mode === 'edit' && refreshedAt && !refreshing" class="text-[11px] text-ink/40"
+              x-text="timeAgoLabel(refreshedAt)"></span>
+      </div>
+      <span class="flex-1" aria-hidden="true"></span>
+      <div class="flex items-center gap-3">
+        <p x-show="createError" x-text="createError" role="alert" class="text-xs text-red-600"></p>
+        <button type="button" x-show="!impact" x-on:click="submit()" x-bind:disabled="!canSubmit || saving || loadingColumns"
+                class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
+                x-text="submitLabel"></button>
+        <button type="button" x-show="impact" x-on:click="submit({ confirmed: true })" x-bind:disabled="saving"
+                class="text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-40 rounded-lg px-5 py-2 transition cursor-pointer"
+                x-text="saving ? 'Guardando…' : 'Guardar igual'"></button>
+      </div>
+    </div>
+
+    <!-- Antes de guardar: los widgets que usan columnas que se quitan o cambian de tipo. -->
+    <div x-show="impact" x-cloak role="alert" class="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+      <p class="text-sm font-semibold text-amber-900">
+        <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+        <span x-text="impact && impact.length === 1 ? 'Un widget usa columnas que se quitan o cambian de tipo y mostrará un error:' : `${impact ? impact.length : 0} widgets usan columnas que se quitan o cambian de tipo y mostrarán un error:`"></span>
+      </p>
+      <ul class="text-xs text-amber-900/80 space-y-0.5 max-h-28 overflow-y-auto">
+        <template x-for="w in impact || []" :key="w.id">
+          <li><span class="font-medium" x-text="w.title"></span> — <span x-text="w.columns.join(', ')"></span></li>
+        </template>
+      </ul>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 -mb-2">
+      <!-- Alineada con las casillas de la tabla: su borde (1px) + el padding de celda (px-3). -->
+      <label class="flex items-center gap-2 pl-[13px] text-xs font-medium text-ink/70 cursor-pointer">
+        <input type="checkbox" x-model="headers" x-on:change="toggleHeaders()" x-bind:disabled="loadingColumns"
+               class="accent-moss-500">
+        Usar la primera fila como encabezado
+      </label>
+      <p x-show="loadingColumns" class="text-xs text-ink/50">
         <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Leyendo la pestaña…
       </p>
-      <p x-show="!loadingColumns" class="text-xs text-ink/50 pb-2">
+      <p x-show="!loadingColumns" class="text-xs text-ink/50">
         <span x-text="includedCount"></span> de <span x-text="columns.length"></span> columnas ·
         <span x-text="rows.toLocaleString('es')"></span> filas
       </p>
@@ -119,7 +198,7 @@ editar una fuente. `picker_mode` es el modo inicial (ver source-picker.js).{% en
 
     <div class="flex-1 min-h-0 overflow-auto border border-line rounded-xl">
       <table class="w-full text-sm">
-        <thead class="sticky top-0 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
+        <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
           <tr>
             <th class="px-3 py-2 w-20 font-semibold">
               <label class="inline-flex items-center gap-1.5 cursor-pointer">
@@ -129,6 +208,7 @@ editar una fuente. `picker_mode` es el modo inicial (ver source-picker.js).{% en
               </label>
             </th>
             <th class="px-3 py-2 font-semibold">Columna</th>
+            <th class="px-3 py-2 font-semibold">Nombre a mostrar</th>
             <th class="px-3 py-2 w-40 font-semibold">Tipo</th>
             <th class="px-3 py-2 font-semibold">Ejemplos</th>
           </tr>
@@ -140,7 +220,12 @@ editar una fuente. `picker_mode` es el modo inicial (ver source-picker.js).{% en
                 <input type="checkbox" x-model="c.include" class="accent-moss-500"
                        x-bind:aria-label="`Incluir ${c.name}`">
               </td>
-              <td class="px-3 py-2 font-medium" x-text="c.name"></td>
+              <td class="px-3 py-2 font-medium max-w-[18rem] truncate" x-text="c.name" x-bind:title="c.name"></td>
+              <td class="px-3 py-2">
+                <input type="text" x-model="c.label" x-bind:placeholder="c.name" x-bind:disabled="!c.include"
+                       x-bind:aria-label="`Nombre a mostrar de ${c.name}`" maxlength="120"
+                       class="w-full min-w-[10rem] text-sm border border-line rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
+              </td>
               <td class="px-3 py-2">
                 <select x-model="c.type" x-bind:disabled="!c.include" x-bind:aria-label="`Tipo de ${c.name}`"
                         class="w-full text-sm border border-line rounded-lg px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
@@ -154,17 +239,6 @@ editar una fuente. `picker_mode` es el modo inicial (ver source-picker.js).{% en
           </template>
         </tbody>
       </table>
-    </div>
-
-    <div class="flex items-center justify-between gap-3">
-      <button type="button" x-on:click="back()"
-              class="text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-lg px-4 py-2 transition cursor-pointer">Atrás</button>
-      <div class="flex items-center gap-3">
-        <p x-show="createError" x-text="createError" role="alert" class="text-xs text-red-600"></p>
-        <button type="button" x-on:click="submit()" x-bind:disabled="!canSubmit || saving || loadingColumns"
-                class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
-                x-text="submitLabel"></button>
-      </div>
     </div>
   </div>
 </div>

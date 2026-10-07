@@ -391,7 +391,7 @@ class ViewsTests(TestCase):
             r = self.client.get(url)
             self.assertEqual(r.status_code, 200, url)
         r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")
-        self.assertContains(r, "window.REFRESH_MINUTES = 5")
+        self.assertNotContains(r, "REFRESH_MINUTES")
         self.assertContains(r, "donut-widget.js")
         self.assertContains(r, 'id="module-rail"')
         self.assertContains(r, "tableia:rail-collapsed")
@@ -440,6 +440,8 @@ class DashboardCrudTests(TestCase):
         self.assertFalse(Dashboard.objects.filter(id=self.dashboard.id).exists())
 
     def test_duplica_con_sus_fuentes_y_widgets(self):
+        self.source.name, self.source.first_row_headers = "Mis ventas", False
+        self.source.save()
         Widget.objects.create(dashboard=self.dashboard, source=self.source, type="bar", title="Ventas",
                               fields=fields(), style={"stacked": True})
         r = self.client.post(f"/api/dashboards/{self.dashboard.id}/duplicate/", {},
@@ -452,6 +454,7 @@ class DashboardCrudTests(TestCase):
         # El widget de la copia usa la copia de la fuente, no la del tablero original.
         self.assertEqual(widget.source, copy.sources.get())
         self.assertNotEqual(widget.source_id, self.source.id)
+        self.assertEqual((widget.source.name, widget.source.first_row_headers), ("Mis ventas", False))
 
     def test_no_toca_tableros_ajenos(self):
         other, _ = make_board(get_user_model().objects.create(username="pepe"), nombre="Ajeno")

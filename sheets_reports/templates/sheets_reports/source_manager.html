@@ -1,4 +1,5 @@
-{# Fuentes de datos del tablero (cuerpo del bottom sheet): tabla + selector para agregar o editar. #}
+{% comment %} Fuentes de datos del tablero (cuerpo del bottom sheet): tabla + selector para agregar
+o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {% endcomment %}
 <div x-data="sourceManager()" class="h-full flex flex-col">
 
   <div x-show="view === 'list'" class="flex-1 min-h-0 flex flex-col gap-4">
@@ -11,6 +12,26 @@
     </div>
 
     <p x-show="error" x-text="error" role="alert" class="text-sm text-red-600"></p>
+
+    <!-- Confirmación de borrado: los widgets que se quedan sin fuente. -->
+    <div x-show="pendingDelete" x-cloak role="alertdialog" aria-label="Confirmar eliminación"
+         class="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
+      <p class="text-sm font-semibold text-red-900">
+        ¿Eliminar la fuente «<span x-text="pendingDelete && pendingDelete.source.label"></span>»?
+        <span x-show="pendingDelete && pendingDelete.impact.length" class="font-normal">Estos widgets se quedarán sin datos:</span>
+      </p>
+      <ul x-show="pendingDelete && pendingDelete.impact.length" class="text-xs text-red-900/80 space-y-0.5 max-h-28 overflow-y-auto">
+        <template x-for="w in (pendingDelete && pendingDelete.impact) || []" :key="w.id">
+          <li class="font-medium" x-text="w.title"></li>
+        </template>
+      </ul>
+      <div class="flex justify-end gap-2">
+        <button type="button" x-on:click="pendingDelete = null"
+                class="text-sm font-medium text-ink/60 bg-white hover:bg-paper rounded-lg px-3 py-1.5 transition cursor-pointer">Cancelar</button>
+        <button type="button" x-on:click="confirmRemove()"
+                class="text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg px-3 py-1.5 transition cursor-pointer">Eliminar</button>
+      </div>
+    </div>
     <p x-show="loading" class="text-xs text-ink/50">
       <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando fuentes…
     </p>
@@ -23,7 +44,7 @@
 
     <div x-show="sources.length" class="flex-1 min-h-0 overflow-auto border border-line rounded-xl">
       <table class="w-full text-sm">
-        <thead class="sticky top-0 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
+        <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
           <tr>
             <th class="px-3 py-2 font-semibold">Fuente</th>
             <th class="px-3 py-2 w-32 font-semibold">Columnas</th>
@@ -35,9 +56,14 @@
           <template x-for="s in sources" :key="s.id">
             <tr class="border-t border-line">
               <td class="px-3 py-2">
-                <span class="inline-flex items-center gap-2 min-w-0">
+                <span class="flex items-center gap-2 min-w-0">
                   <i class="ti ti-brand-google text-base text-ink/40 shrink-0" aria-hidden="true"></i>
-                  <span class="font-medium truncate" x-text="s.label"></span>
+                  <span class="min-w-0">
+                    <span class="block font-medium truncate" x-text="s.label"></span>
+                    <!-- Con nombre propio, el original («Documento · Pestaña») debajo. -->
+                    <span x-show="s.name" class="block text-xs text-ink/50 truncate" x-text="s.original_label"></span>
+                    <span x-show="s.refreshed_at" class="block text-[11px] text-ink/40" x-text="refreshedLabel(s)"></span>
+                  </span>
                 </span>
               </td>
               <td class="px-3 py-2 text-ink/60" x-text="columnsLabel(s)"></td>

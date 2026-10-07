@@ -1,22 +1,26 @@
 """
-Lectura de una pestaña de Google Sheets como DataFrame, vía el endpoint gviz/tq (CSV),
-con caché en el cache framework de Django para no golpear Google en cada request.
+Lectura de una pestaña de Google Sheets como DataFrame, vía la exportación CSV de la hoja.
+El DataFrame queda en caché (alias `sheets`) hasta que el usuario pulsa «Actualizar datos»:
+el tablero no relee Google por su cuenta.
 """
 import io
 import logging
+import string
 
 import pandas as pd
 import requests
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import caches
+from django.utils.timezone import now
 
 from sheets_reports.utils.data import time_order, to_key
 
 logger = logging.getLogger(__name__)
 
-GVIZ_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq"
-# gviz/tq acepta el token OAuth de la service account; drive.readonly cubre hojas compartidas
-# con su email aunque no sean públicas.
+# La exportación CSV devuelve las celdas tal cual se ven (gviz/tq infiere un tipo por columna y
+# anula los valores del tipo minoritario). Acepta el token OAuth de la service account;
+# drive.readonly cubre hojas compartidas con su email aunque no sean públicas.
+EXPORT_URL = "https://docs.google.com/spreadsheets/d/{sheet_id}/export"
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
@@ -37,6 +41,12 @@ def service_account_credentials():
     from google.oauth2.service_account import Credentials
 
     return Credentials.from_service_account_file(path, scopes=SCOPES)
+
+
+def service_account_email() -> str | None:
+    """Email de la cuenta de servicio: con él se comparten las hojas que el tablero puede leer."""
+    creds = service_account_credentials()
+    return getattr(creds, "service_account_email", None) if creds else None
 
 
 def _access_token() -> str | None:
@@ -66,17 +76,28 @@ def _coerce_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fetch_sheet_dataframe(sheet_id: str, gid: str) -> pd.DataFrame:
-    """Lee la pestaña sin caché. Preferir get_sheet_dataframe."""
-    headers = {}
+def column_letter(index: int) -> str:
+    """0 → A, 25 → Z, 26 → AA: la letra de la columna en la hoja."""
+    letters = ""
+    index += 1
+    while index:
+        index, rest = divmod(index - 1, 26)
+        letters = string.ascii_uppercase[rest] + letters
+    return letters
+
+
+def fetch_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+    """Lee la pestaña sin caché. Preferir get_sheet_dataframe. Con `headers=False` la primera
+    fila también es un dato y las columnas se llaman por su letra («Columna A»)."""
+    request_headers = {}
     token = _access_token()
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        request_headers["Authorization"] = f"Bearer {token}"
     try:
         response = requests.get(
-            GVIZ_URL.format(sheet_id=sheet_id),
-            params={"tqx": "out:csv", "gid": gid, "headers": 1},
-            headers=headers,
+            EXPORT_URL.format(sheet_id=sheet_id),
+            params={"format": "csv", "gid": gid},
+            headers=request_headers,
             timeout=REQUEST_TIMEOUT_S,
         )
     except requests.RequestException as e:
@@ -85,39 +106,56 @@ def fetch_sheet_dataframe(sheet_id: str, gid: str) -> pd.DataFrame:
     content_type = response.headers.get("Content-Type", "")
     if response.status_code != 200 or "text/csv" not in content_type:
         raise SheetError(
-            "No se pudo leer la hoja. Verifica la URL, el gid de la pestaña y que la hoja "
-            "esté compartida con la cuenta de servicio (o sea pública por enlace)."
+            "No se pudo leer la hoja. Verifica que la pestaña exista y que la hoja esté "
+            "compartida con la cuenta de servicio (o sea pública por enlace)."
         )
 
-    df = pd.read_csv(io.StringIO(response.text), keep_default_na=False, na_values=[""])
-    df.columns = [str(c).strip() for c in df.columns]
-    # Columnas sin encabezado y totalmente vacías (gviz las agrega a veces al final).
-    df = df.loc[:, [not (c.startswith("Unnamed:") and df[c].isna().all()) for c in df.columns]]
+    df = pd.read_csv(io.StringIO(response.text), keep_default_na=False, na_values=[""],
+                     header=0 if headers else None, dtype=str)
+    if headers:
+        df.columns = [str(c).strip() for c in df.columns]
+    else:
+        df.columns = [f"Columna {column_letter(i)}" for i in range(len(df.columns))]
+    # Columnas totalmente vacías sin encabezado (la exportación incluye las de relleno).
+    unnamed = (lambda col: col.startswith("Unnamed:")) if headers else (lambda col: True)
+    df = df.loc[:, [not (unnamed(col) and df[col].isna().all()) for col in df.columns]]
     return _coerce_numeric_columns(df)
 
 
-def get_sheet_dataframe(sheet_id: str, gid: str, ttl: int | None = None) -> pd.DataFrame:
-    """
-    Lee la hoja vía el endpoint gviz/tq como CSV y cachea el DataFrame (cache framework de
-    Django) durante `ttl` segundos por (sheet_id, gid). No golpea Google Sheets en cada request.
-    """
-    if ttl is None:
-        ttl = settings.SHEET_CACHE_TTL
-    key = f"sheet_df:{sheet_id}:{gid}"
-    df = cache.get(key)
-    if df is None:
-        df = fetch_sheet_dataframe(sheet_id, gid)
-        cache.set(key, df, ttl)
-    return df.copy()
+def _cache_key(sheet_id: str, gid: str, headers: bool) -> str:
+    return f"sheet_df:{sheet_id}:{gid}:{int(bool(headers))}"
 
 
-def invalidate_sheet_cache(sheet_id: str, gid: str) -> None:
-    cache.delete(f"sheet_df:{sheet_id}:{gid}")
+def get_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+    """La pestaña desde el caché; solo se lee de Google la primera vez (o tras
+    `refresh_sheet`). El caché no vence: los datos cambian cuando el usuario actualiza."""
+    entry = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
+    if entry is None:
+        entry = _store(sheet_id, gid, headers)
+    return entry["df"].copy()
+
+
+def refresh_sheet(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+    """Relee la pestaña de Google y pisa el caché («Actualizar datos»)."""
+    return _store(sheet_id, gid, headers)["df"].copy()
+
+
+def _store(sheet_id: str, gid: str, headers: bool) -> dict:
+    entry = {"df": fetch_sheet_dataframe(sheet_id, gid, headers), "fetched_at": now()}
+    caches["sheets"].set(_cache_key(sheet_id, gid, headers), entry, None)
+    return entry
+
+
+def fetched_at(source):
+    """Cuándo se leyó de Google la hoja de la fuente (None si todavía no está en caché)."""
+    entry = caches["sheets"].get(_cache_key(source.sheet_id, source.gid, source.first_row_headers))
+    return entry["fetched_at"] if entry else None
 
 
 def load_source(source) -> pd.DataFrame:
-    """La hoja de una fuente del tablero, con las columnas y los tipos que se eligieron."""
-    return apply_column_config(get_sheet_dataframe(source.sheet_id, source.gid), source.columns)
+    """La hoja de una fuente del tablero, con las columnas, los tipos y los nombres elegidos."""
+    df = get_sheet_dataframe(source.sheet_id, source.gid, headers=source.first_row_headers)
+    return apply_column_config(df, source.columns)
 
 
 def source_key(source) -> str:
@@ -171,10 +209,17 @@ def _as_date(series: pd.Series) -> pd.Series:
 _CASTS = {"number": _as_number, "text": _as_text, "date": _as_date}
 
 
+def column_display_name(column: dict) -> str:
+    """El nombre con el que la columna se ve y se usa en el tablero: su `label` o, sin él, el
+    encabezado de la hoja."""
+    return str(column.get("label") or "").strip() or column["name"]
+
+
 def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.DataFrame:
-    """La hoja como la configuró el usuario al conectarla: sin las columnas excluidas y con el
-    tipo elegido. Sin configuración (tableros anteriores) devuelve la hoja tal cual. Las
-    columnas que ya no existen en la hoja se ignoran; las nuevas se incluyen tal cual vienen."""
+    """La hoja como la configuró el usuario al conectarla: sin las columnas excluidas, con el
+    tipo elegido y con su nombre a mostrar (que reemplaza al encabezado en todo el tablero).
+    Sin configuración devuelve la hoja tal cual. Las columnas que ya no existen en la hoja se
+    ignoran; las nuevas se incluyen tal cual vienen."""
     if not columns:
         return df
     df = df.copy()
@@ -184,7 +229,10 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
         name, cast = column.get("name"), _CASTS.get(column.get("type"))
         if name in df.columns and cast and column.get("include", True):
             df[name] = cast(df[name])
-    return df
+    renames = {c["name"]: column_display_name(c) for c in columns
+               if c.get("include", True) and c.get("name") in df.columns
+               and column_display_name(c) != c["name"]}
+    return df.rename(columns=renames) if renames else df
 
 
 def get_sheet_schema(df: pd.DataFrame) -> dict:

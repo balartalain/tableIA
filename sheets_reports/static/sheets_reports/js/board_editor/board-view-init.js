@@ -51,7 +51,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   requestAnimationFrame(() => store.widgets.forEach(w => w.applyRender(byId[w.id])));
 
   window.addEventListener('dashboard:filters-changed', () => store.refreshData());
-  if (window.REFRESH_MINUTES > 0) {
-    setInterval(() => store.refreshData(), window.REFRESH_MINUTES * 60 * 1000);
-  }
 });

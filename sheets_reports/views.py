@@ -2,7 +2,6 @@ import json
 import logging
 import re
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -19,10 +18,11 @@ from sheets_reports.services.sheets import (
     get_dimension_fields,
     get_field_samples,
     get_sheet_schema,
+    column_display_name,
     infer_column_types,
-    invalidate_sheet_cache,
     source_key,
 )
+from sheets_reports.services.source_columns import impact, rename_in_widgets
 from sheets_reports.utils.data import time_fields
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
 from sheets_reports.utils.validation import SpecValidationError
@@ -51,8 +51,8 @@ def board_editor(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     Dashboard.objects.filter(id=dashboard.id).update(last_opened_at=now())
     return render(request, "board_editor.html", {
-        "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
-        "widget_manifest": _widget_manifest(),
+        "dashboard": dashboard, "widget_manifest": _widget_manifest(),
+        "service_account_email": sheets.service_account_email(),
     })
 
 
@@ -60,15 +60,14 @@ def board_new(request):
     """Editor sin tablero: el bottom sheet abre el selector de fuente y, al confirmar, crea el
     tablero y redirige a su editor."""
     return render(request, "board_editor.html", {
-        "dashboard": None, "refresh_minutes": 0, "widget_manifest": _widget_manifest(),
+        "dashboard": None, "widget_manifest": _widget_manifest(),
+        "service_account_email": sheets.service_account_email(),
     })
 
 
 def board_view(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
-    return render(request, "board_view.html", {
-        "dashboard": dashboard, "refresh_minutes": settings.WIDGET_REFRESH_MINUTES,
-    })
+    return render(request, "board_view.html", {"dashboard": dashboard})
 
 
 @csrf_exempt
@@ -114,13 +113,21 @@ def _source_fields(data: dict) -> tuple[dict, str | None]:
         "gid": str(data.get("sheet_gid") or "0"),
         "sheet_name": str(data.get("sheet_name") or "").strip()[:255],
         "tab_name": str(data.get("tab_name") or "").strip()[:255],
+        "name": str(data.get("name") or "").strip()[:255],
+        "first_row_headers": bool(data.get("first_row_headers", True)),
         "columns": _clean_columns(columns),
     }, None
 
 
 def _clean_columns(columns: list) -> list[dict]:
-    return [{"name": c["name"], "type": c["type"], "include": bool(c.get("include", True))}
-            for c in columns]
+    out = []
+    for c in columns:
+        column = {"name": c["name"], "type": c["type"], "include": bool(c.get("include", True))}
+        label = str(c.get("label") or "").strip()
+        if label and label != c["name"]:
+            column["label"] = label
+        out.append(column)
+    return out
 
 
 def _columns_errors(columns) -> list[str]:
@@ -138,9 +145,18 @@ def _columns_errors(columns) -> list[str]:
             return [f"Tipo no válido para '{c['name']}': usa {', '.join(COLUMN_TYPES)}"]
         if c["name"] in names:
             return [f"Columna repetida: '{c['name']}'"]
+        if c.get("label") is not None and not isinstance(c["label"], str):
+            return [f"El nombre a mostrar de '{c['name']}' debe ser texto"]
         names.add(c["name"])
-    if not any(c.get("include", True) for c in columns):
+    included = [c for c in columns if c.get("include", True)]
+    if not included:
         return ["Incluye al menos una columna"]
+    shown = set()
+    for c in included:
+        display = column_display_name(c)
+        if display in shown:
+            return [f"Dos columnas se llamarían «{display}»: cambia uno de los nombres a mostrar"]
+        shown.add(display)
     return []
 
 
@@ -181,7 +197,8 @@ def dashboard_duplicate(request, dashboard_id):
     for source in dashboard.sources.all():
         copies[source.id] = DataSource.objects.create(
             dashboard=new_dashboard, kind=source.kind, sheet_id=source.sheet_id, gid=source.gid,
-            sheet_name=source.sheet_name, tab_name=source.tab_name, columns=source.columns,
+            sheet_name=source.sheet_name, tab_name=source.tab_name, name=source.name,
+            first_row_headers=source.first_row_headers, columns=source.columns,
         )
     for widget in dashboard.widgets.all():
         Widget.objects.create(
@@ -268,14 +285,19 @@ def _serialize_dashboard(dashboard):
 
 def _serialize_source(source):
     included = [c for c in source.columns if c.get("include", True)]
+    refreshed = sheets.fetched_at(source)
     return {
         "id": source.id,
         "label": source.label,
+        "name": source.name,
+        "original_label": source.original_label,
         "kind": source.kind,
         "sheet_id": source.sheet_id,
         "gid": source.gid,
         "sheet_name": source.sheet_name,
         "tab_name": source.tab_name,
+        "first_row_headers": source.first_row_headers,
+        "refreshed_at": refreshed.isoformat() if refreshed else None,
         # Sin configuración (fuentes anteriores al selector) se usan todas: no se sabe cuántas.
         "columns_included": len(included) if source.columns else None,
         "columns_total": len(source.columns) if source.columns else None,
@@ -314,11 +336,23 @@ def _sheet_columns(df) -> list[dict]:
     return columns
 
 
+def _headers_param(request, default: bool = True) -> bool:
+    """`?headers=0|1`: si la primera fila de la pestaña son los encabezados."""
+    raw = request.GET.get("headers")
+    return default if raw in (None, "") else raw not in ("0", "false")
+
+
+def _read_sheet(request, sheet_id: str, gid: str, headers: bool):
+    """La pestaña desde el caché o, con `?refresh=1` («Actualizar datos»), releída de Google."""
+    read = sheets.refresh_sheet if request.GET.get("refresh") else sheets.get_sheet_dataframe
+    return read(sheet_id, gid, headers=headers)
+
+
 @require_http_methods(["GET"])
 def source_columns(request, spreadsheet_id, gid):
     """Columnas de la pestaña con el tipo que se infiere y algunos valores de ejemplo."""
     try:
-        df = sheets.get_sheet_dataframe(spreadsheet_id, gid)
+        df = _read_sheet(request, spreadsheet_id, gid, _headers_param(request))
     except SheetError as e:
         return _error(str(e), status=502)
     return JsonResponse({"columns": _sheet_columns(df), "rows": len(df)})
@@ -345,50 +379,113 @@ def dashboard_sources(request, dashboard_id):
     return JsonResponse(_serialize_source(source), status=201)
 
 
+def _column_change(source, new_columns: list[dict]) -> tuple[list[dict], dict[str, str]]:
+    """Qué pasa con los widgets de la fuente si sus columnas pasan a ser `new_columns`
+    ([{name, label?, type, include}], las de la hoja nueva al reemplazarla):
+    - `impact`: los widgets que usan columnas que se quitan, ya no están en la hoja o cambian
+      de tipo ([{id, title, columns}]).
+    - `renames`: nombre a mostrar viejo → nuevo de las columnas que siguen, para que los
+      widgets las sigan."""
+    old = [c for c in source.columns if c.get("include", True)]
+    old_by_display = {column_display_name(c): c for c in old}
+    new_by_name = {c["name"]: c for c in new_columns}
+    available, retyped, renames = set(), set(), {}
+    for display, column in old_by_display.items():
+        new = new_by_name.get(column["name"])
+        if not new or not new.get("include", True):
+            continue
+        available.add(display)
+        if new.get("type") != column.get("type"):
+            retyped.add(display)
+        if column_display_name(new) != display:
+            renames[display] = column_display_name(new)
+    affected = impact(source.widgets.all(), set(old_by_display), available, retyped)
+    return affected, renames
+
+
 @csrf_exempt
 @require_http_methods(["PUT", "DELETE"])
 def source_detail(request, source_id):
-    """PUT {columns}: columnas y tipos de la fuente. DELETE: la borra; sus widgets quedan sin
-    fuente y lo dicen al calcularse (no se chequea antes: una columna excluida o un tipo
-    cambiado también los rompe, y el error se ve en cada widget)."""
+    """
+    PUT {columns, name?, first_row_headers?, sheet_id?, sheet_gid?, sheet_name?, tab_name?,
+    dry_run?}: columnas (tipo, incluir, nombre a mostrar), nombre de la fuente y, con
+    `sheet_id`, otra hoja para la misma fuente (sus widgets la siguen usando). Los widgets se
+    reescriben para seguir a las columnas renombradas. Con `dry_run` solo devuelve `{impact}`:
+    los widgets que se romperían.
+
+    DELETE: la borra (`?dry_run=1` → `{impact}`: todos sus widgets). Sus widgets quedan sin
+    fuente y lo dicen al calcularse.
+    """
     source = _owned_source(request, source_id)
     if not source:
         return _error("Fuente no encontrada", status=404)
     if request.method == "DELETE":
+        if request.GET.get("dry_run"):
+            return JsonResponse({"impact": [{"id": w.id, "title": w.title, "columns": []}
+                                            for w in source.widgets.all()]})
         source.delete()
         return JsonResponse({"deleted": True})
     try:
         data = _json_body(request)
     except ValueError as e:
         return _error(str(e))
-    columns = data.get("columns")
-    errors = _columns_errors(columns)
-    if errors:
-        return _error(errors[0])
-    source.columns = _clean_columns(columns)
-    source.save(update_fields=["columns"])
-    return JsonResponse(_serialize_source(source))
+
+    if data.get("sheet_id"):
+        updates, error = _source_fields(data)
+        if error:
+            return _error(error)
+    else:
+        columns = data.get("columns")
+        errors = _columns_errors(columns)
+        if errors:
+            return _error(errors[0])
+        updates = {"columns": _clean_columns(columns)}
+        if "name" in data:
+            updates["name"] = str(data.get("name") or "").strip()[:255]
+        if "first_row_headers" in data:
+            updates["first_row_headers"] = bool(data["first_row_headers"])
+
+    affected, renames = _column_change(source, updates["columns"])
+    if data.get("dry_run"):
+        return JsonResponse({"impact": affected})
+    for key, value in updates.items():
+        setattr(source, key, value)
+    source.save()
+    rename_in_widgets(source.widgets.all(), renames)
+    return JsonResponse({**_serialize_source(source), "impact": affected})
 
 
 @require_http_methods(["GET"])
 def source_saved_columns(request, source_id):
-    """Las columnas de la hoja de la fuente para editarla: lo guardado (tipo, incluir) manda;
-    las columnas nuevas de la hoja entran incluidas y las que ya no están se descartan."""
+    """Las columnas de la hoja de la fuente para editarla: lo guardado (tipo, incluir, nombre a
+    mostrar) manda; las columnas nuevas de la hoja entran incluidas y las que ya no están se
+    descartan. `?headers=0|1` lee la pestaña con otra opción de encabezados; `?refresh=1`
+    («Actualizar datos») la relee de Google. No guarda nada: los cambios de estructura se
+    guardan con el PUT de la fuente."""
     source = _owned_source(request, source_id)
     if not source:
         return _error("Fuente no encontrada", status=404)
+    headers = _headers_param(request, source.first_row_headers)
     try:
-        df = sheets.get_sheet_dataframe(source.sheet_id, source.gid)
+        df = _read_sheet(request, source.sheet_id, source.gid, headers)
     except SheetError as e:
         return _error(str(e), status=502)
-    saved = {c["name"]: c for c in source.columns}
-    columns = []
-    for column in _sheet_columns(df):
-        stored = saved.get(column["name"])
-        columns.append({**column,
-                        "type": stored["type"] if stored else column["type"],
-                        "include": stored.get("include", True) if stored else True})
-    return JsonResponse({"columns": columns, "rows": len(df), "source": _serialize_source(source)})
+    return JsonResponse({"columns": _merge_saved_columns(_sheet_columns(df), source.columns),
+                         "rows": len(df), "first_row_headers": headers,
+                         "source": _serialize_source(source)})
+
+
+def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[dict]:
+    """Las columnas actuales de la hoja con lo guardado de cada una (por encabezado)."""
+    by_name = {c["name"]: c for c in saved}
+    out = []
+    for column in sheet_columns:
+        stored = by_name.get(column["name"])
+        out.append({**column,
+                    "type": stored["type"] if stored else column["type"],
+                    "include": stored.get("include", True) if stored else True,
+                    "label": (stored or {}).get("label", "")})
+    return out
 
 
 @require_http_methods(["GET"])
@@ -398,8 +495,6 @@ def source_schema(request, source_id):
     source = _owned_source(request, source_id)
     if not source:
         return _error("Fuente no encontrada", status=404)
-    if request.GET.get("refresh"):
-        invalidate_sheet_cache(source.sheet_id, source.gid)
     try:
         df = sheets.load_source(source)
     except SheetError as e:

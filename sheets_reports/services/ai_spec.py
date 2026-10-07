@@ -16,6 +16,7 @@ from google.genai import types
 
 from sheets_reports.engine.steps.filter import condition_errors
 from sheets_reports.engine.context import SheetContext
+from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
 from sheets_reports.widgets import WIDGETS
@@ -880,36 +881,10 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
         matches.setdefault(_column_key(field), []).append(field)
     real = {key: names[0] for key, names in matches.items() if len(names) == 1}
 
-    def resolve(value):
-        if not isinstance(value, str) or value in ctx.fields:
-            return value
-        return real.get(_column_key(value), value)
+    def resolve(value: str) -> str:
+        return value if value in ctx.fields else real.get(_column_key(value), value)
 
-    def resolve_conditions(conditions):
-        for condition in conditions if isinstance(conditions, list) else []:
-            if isinstance(condition, dict) and "field" in condition:
-                condition["field"] = resolve(condition["field"])
-
-    fields = data["fields"]
-    for key in ("dimensions", "pivots"):
-        if isinstance(fields.get(key), list):
-            fields[key] = [resolve(v) for v in fields[key]]
-    if "trend_by" in fields:
-        fields["trend_by"] = resolve(fields["trend_by"])
-    for item in fields.get("columns") or []:
-        if isinstance(item, dict) and "field" in item:
-            item["field"] = resolve(item["field"])
-    for metric in fields.get("metrics") or []:
-        if isinstance(metric, dict):
-            if "field" in metric:
-                metric["field"] = resolve(metric["field"])
-            resolve_conditions(metric.get("filters"))
-    resolve_conditions(fields.get("filters"))
-    sort_by = fields.get("sort_by")
-    if isinstance(sort_by, str):
-        desc = sort_by.startswith("-")
-        name = resolve(sort_by[1:] if desc else sort_by)
-        fields["sort_by"] = f"-{name}" if desc else name
+    data["fields"], _ = map_columns(data["fields"], {}, resolve)
     return data
 
 

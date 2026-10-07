@@ -37,7 +37,8 @@ editor visual), y el backend calcula los números con pandas y devuelve JSON lis
 |---|---|
 | Django 5.x | Web framework |
 | pandas | Transformación de datos |
-| requests | Lectura de Google Sheets (gviz/tq) |
+| requests | Lectura de Google Sheets (exportación CSV) |
+| google-api-python-client / google-auth | Listar el Drive y las pestañas (cuenta de servicio) |
 | jsonschema (Draft 2020-12) | Validación de condiciones/estilos |
 | google-genai | Generación de `WidgetForm` (solo en `services/ai_spec.py`) |
 | dj-database-url / django-environ | Configuración desde variables de entorno |
@@ -53,6 +54,7 @@ editor visual), y el backend calcula los números con pandas y devuelve JSON lis
   HTTP (views.py) → │ services/                                           │
                     │   widget_service.py  casos de uso (CRUD + render)  │
                     │   sheets.py          lectura de la hoja + caché     │
+                    │   source_columns.py  columnas que usa cada widget   │
                     │   ai_spec.py         propuesta de WidgetForm (IA)   │
                     │   ai_suggestions.py  pedidos sugeridos del chat     │
                     └───────────────┬─────────────────────────────────────┘
@@ -154,7 +156,9 @@ sheets_reports/
 
   services/
     __init__.py
-    sheets.py               # Lectura de la hoja (gviz/tq) + caché + schema
+    sheets.py               # Lectura de la hoja (exportación CSV) + caché persistente + tipos/nombres de columna + schema
+    source_columns.py       # Columnas que usa cada widget: renombrar, impacto de un cambio, IA
+    google_drive.py         # Hojas y pestañas visibles para la cuenta de servicio
     widget_service.py       # WidgetService: CRUD, validación, render
     ai_spec.py              # WidgetForm vía Gemini: crea, o ajusta el borrador actual (current) con el historial del chat
     ai_suggestions.py       # 2 pedidos sugeridos para el chat del panel, por tipo de widget y hoja (cacheados)
@@ -173,21 +177,33 @@ sheets_reports/
 
 ### 4.1 `Dashboard` (`models.py`)
 
-Tablero sobre una pestaña (`gid`) de una hoja de Google Sheets.
+Tablero de reportes. Sus datos vienen de una o varias fuentes (`DataSource`).
 
 | Campo | Tipo | Restricciones / notas |
 |---|---|---|
 | `id` | BigAutoField | PK |
-| `nombre` | `CharField(255)` | Nombre descriptivo; `help_text` |
+| `nombre` | `CharField(255)` | Nombre descriptivo |
 | `owner` | `FK → settings.AUTH_USER_MODEL` | `on_delete=CASCADE`, `related_name="dashboards"` |
-| `sheet_url` | `URLField(500)` | URL completa de la hoja |
-| `sheet_gid` | `CharField(50)` | `default="0"`; gid de la pestaña (número tras `#gid=`) |
+| `last_opened_at` | `DateTimeField(null=True)` | Última apertura en el editor |
 | `created_at` | `DateTimeField(auto_now_add=True)` | |
 
-- `Meta`: `ordering = ["-created_at"]`, verbose names «Dashboard(s)».
-- **`sheet_id`** (property): extrae el ID de la hoja con
-  `re.search(r"/spreadsheets/d/([a-zA-Z0-9_-]+)", sheet_url)`; `""` si no hay match.
-- `__str__` → `nombre`.
+### 4.1b `DataSource` (`models.py`)
+
+Una pestaña (`gid`) de una hoja de Google Sheets conectada a un tablero.
+
+| Campo | Tipo | Restricciones / notas |
+|---|---|---|
+| `dashboard` | `FK → Dashboard` | `related_name="sources"`, CASCADE |
+| `kind` | `CharField(30)` | `"google_sheet"` |
+| `sheet_id` / `gid` | `CharField` | Documento y pestaña |
+| `sheet_name` / `tab_name` | `CharField(255)` | Nombres al conectarla: forman `original_label` |
+| `name` | `CharField(255, blank)` | Nombre propio opcional; `label` = `name` o `original_label` |
+| `first_row_headers` | `BooleanField(default=True)` | La fila 1 son los encabezados; si no, «Columna A»… |
+| `columns` | `JSONField` | `[{name, label?, type: text\|number\|date, include}]` |
+
+- `name` de cada columna es el encabezado de la hoja; `label`, el **nombre a mostrar**, que la
+  reemplaza en todo el tablero (schema, motor, filtros, IA). Los widgets guardan ese nombre.
+- `label` (property): `name` o `original_label` («Documento · Pestaña»).
 
 ### 4.2 `Widget` (`models.py`)
 
@@ -196,6 +212,7 @@ Un widget del tablero. Guarda el contrato plano, no código.
 | Campo | Tipo | Restricciones / notas |
 |---|---|---|
 | `dashboard` | `FK → Dashboard` | `related_name="widgets"`, CASCADE |
+| `source` | `FK → DataSource` | `null=True`, `SET_NULL`: sin fuente, el render devuelve un error legible |
 | `type` | `CharField(50)` | `choices=widget_type_choices` (función, no lista) |
 | `title` | `CharField(255)` | `default="Nuevo Widget"` |
 | `position` | `JSONField` | `default=default_position` → `{"x":0,"y":0,"w":6,"h":300}` |
@@ -730,3 +747,50 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 - **Otras ideas** (`refresh=True`, `avoid`): no lee la caché y la reemplaza con las nuevas
   (si la IA falla, la caché anterior sigue). `avoid` (hasta 10) son las que el usuario ya ve:
   el prompt pide no repetirlas y `_clean` descarta las que coincidan.
+
+## 10. Fuentes de datos (`services/sheets.py`, `services/source_columns.py`)
+
+### 10.1 Lectura y caché
+
+- `fetch_sheet_dataframe(sheet_id, gid, headers=True)` lee la pestaña con la **exportación
+  CSV** de Google (`/export?format=csv&gid=`), con el token de la cuenta de servicio si hay
+  credenciales. Devuelve las celdas tal cual (gviz/tq, en cambio, infiere un tipo por columna
+  y anula los valores del tipo minoritario). Con `headers=False` la fila 1 es un dato y las
+  columnas se llaman «Columna A», «Columna B»… Descarta las columnas vacías de relleno y
+  convierte a número las de texto cuyos valores son todos numéricos.
+- **Caché persistente**: alias `sheets` (`DatabaseCache` en `sheet_cache_table`, sin
+  vencimiento, tabla propia para que el culling del caché general no la vacíe). Clave
+  `sheet_df:{sheet_id}:{gid}:{headers}` → `{df, fetched_at}`. `get_sheet_dataframe` solo lee
+  de Google si no está; `refresh_sheet` relee y pisa; `fetched_at(source)` da la hora de la
+  última lectura. El tablero no se refresca solo.
+- `load_source(source)` = hoja en caché + `apply_column_config`: quita las excluidas, aplica
+  el tipo y renombra cada columna a su nombre a mostrar.
+- `service_account_email()`: el email con el que se comparten las hojas (se muestra en el
+  selector).
+
+### 10.2 Columnas que usa cada widget
+
+`map_columns(fields, style, fn)` aplica `fn` a cada referencia a una columna: `dimensions`,
+`pivots`, `trend_by`, `columns[].field`, `metrics[].field`, `metrics[].filters[].field`,
+`filters[].field`, `sort_by` (con su «-») y, en `style`, las claves de `formattersMap` y
+`columnOrder`. Lo usan:
+
+- `rename_in_widgets(widgets, {viejo: nuevo})`: al cambiar el nombre a mostrar de una columna,
+  los widgets de la fuente la siguen.
+- `impact(widgets, current, available, retyped)`: los widgets que usan columnas que dejan de
+  existir o cambian de tipo → `[{id, title, columns}]`.
+- `ai_spec._resolve_columns`: los nombres que la IA escribe con otros espacios o mayúsculas.
+
+### 10.3 Endpoints
+
+| Endpoint | Qué hace |
+|---|---|
+| `GET /api/sources/google/spreadsheets/?q=` | Hojas del Drive de la cuenta de servicio |
+| `GET …/spreadsheets/{id}/tabs/` | Pestañas de una hoja |
+| `GET …/tabs/{gid}/columns/?headers=0\|1&refresh=` | Columnas con tipo inferido y ejemplos (`refresh=1` relee la hoja) |
+| `GET/POST /api/dashboard/{id}/sources/` | Fuentes del tablero / agregar una |
+| `PUT /api/sources/{id}/` | Columnas (tipo, incluir, nombre a mostrar), `name`, `first_row_headers` y, con `sheet_id`, otra hoja (los widgets siguen en la fuente). Reescribe los widgets por los renombres. `dry_run` → solo `{impact}` |
+| `DELETE /api/sources/{id}/` | Borra la fuente (sus widgets quedan sin fuente). `?dry_run=1` → `{impact}` con todos sus widgets |
+| `GET /api/sources/{id}/columns/?headers=&refresh=` | Columnas actuales de la hoja con lo guardado de cada una. `refresh=1` («Actualizar datos») la relee de Google y pisa el caché; no guarda nada |
+| `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget |
+

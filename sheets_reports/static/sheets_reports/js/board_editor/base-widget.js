@@ -195,7 +195,11 @@
       </div>`;
     }
 
-    static EMPTY_FIELDS = { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null };
+    // Campos vacíos nuevos en cada llamada: un objeto compartido con sus arrays haría que lo que
+    // un widget agrega (ej. la métrica inicial del panel) aparezca en los siguientes.
+    static emptyFields() {
+      return { dimensions: [], pivots: [], metrics: [], filters: [], columns: [], sort_by: null, limit: null };
+    }
 
     constructor(raw = {}) {
       const defaults = this.constructor.defaults;
@@ -205,7 +209,7 @@
       this.title = raw.title || defaults.title;
       this.chart_type = this.constructor.type;
       this.position = raw.position || { x: 0, y: 0, w: 6, h: 300 };
-      this.fields = raw.fields || { ...BaseWidget.EMPTY_FIELDS };
+      this.fields = raw.fields || BaseWidget.emptyFields();
       this.style = raw.style || {};
       this.data = raw.data || null;
       this._dirty = raw._dirty ?? false;
@@ -244,7 +248,7 @@
         source_id: w.source_id ?? null,
         title: w.title,
         position: { x: pos.x || 0, y: pos.y || 0, w: pos.w || 6, h: pos.h || 300 },
-        fields: w.fields || { ...BaseWidget.EMPTY_FIELDS },
+        fields: w.fields || BaseWidget.emptyFields(),
         style: w.style || {},
         data: w.data || null,
       });

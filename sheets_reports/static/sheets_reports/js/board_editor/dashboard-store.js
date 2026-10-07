@@ -411,10 +411,18 @@ document.addEventListener('alpine:init', () => {
     get hasMetricFilters() { return this.maxMetrics > 1; },
     get maxDimensions() { return (this.drawerCapabilities.dimensions || [0, 0])[1]; },
     get maxPivots() { return (this.drawerCapabilities.pivots || [0, 0])[1]; },
-    // Columnas para la mini tendencia: las de dimensión (año, mes, categoría…), como en main.
+    // Columnas para la mini tendencia: las de tiempo por las que se agrupa (año, mes, fecha…).
+    // Ni categorías (Campus: la línea no sería una evolución) ni montos (también ordenables).
     get trendOptions() {
-      const dims = this.schema.dimension_fields || [];
-      return dims.length ? dims : (this.schema.all_fields || []);
+      const time = this.schema.time_fields || [];
+      const options = (this.schema.dimension_fields || []).filter(c => time.includes(c));
+      // La guardada se conserva aunque ya no valga: se ve en el select y se puede quitar.
+      const current = this.drawerDraft.fields.trend_by;
+      return current && !options.includes(current) ? [...options, current] : options;
+    },
+    get trendInvalid() {
+      const current = this.drawerDraft.fields.trend_by;
+      return !!current && !(this.schema.time_fields || []).includes(current);
     },
     // Opciones de «Mostrar como» para el borrador: las que admite el widget
     // (capabilities.windows) y, de ellas, las que valen con sus pivotes; [] = sin select.

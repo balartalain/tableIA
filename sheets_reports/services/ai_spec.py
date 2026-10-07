@@ -74,8 +74,9 @@ consulta.
 - pivots: columnas para desagregar además de la dimensión (columnas de una tabla dinámica,
   series de un gráfico). [] si no aplica.
 - filters: condiciones sobre las FILAS que entran al widget. [] si no hay.
-- trend_by: columna de la mini tendencia (sparkline) bajo el número del KPI (ej. "mes");
-  solo en widgets con tendencia. Omitir si no aplica.
+- trend_by: columna de TIEMPO (año, mes, fecha) de la mini tendencia (sparkline) bajo el
+  número del KPI (ej. "mes"); nunca una categoría. Solo en widgets con tendencia. Omitir si no
+  aplica.
 - metrics: lista de métricas, en orden. Cada una lleva un `alias` único en snake_case que es el
   nombre de la columna con la que se calcula (ej. "total_ventas") y, si hace falta un texto más
   claro para la persona que mira el widget, un `label` (nombre a mostrar, ej. "Costos totales";
@@ -470,8 +471,9 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
                     "description": "Métricas, en el orden en que se muestran."},
         "filters": {**condition_schema_for(ctx),
                     "description": "Condiciones sobre las filas del widget."},
-        "trend_by": _column_schema("Columna de la mini tendencia (sparkline) del número; "
-                                   "solo los widgets con tendencia. Omitir si no aplica."),
+        "trend_by": _column_schema("Columna de TIEMPO (año, mes, fecha) de la mini tendencia "
+                                   "(sparkline) del número; solo los widgets con tendencia. "
+                                   "Omitir si no aplica."),
         "sort_by": {"type": "string",
                     "description": "Columna u alias de orden, con '-' delante para descendente."},
         "limit": {"type": "integer", "description": f"Máximo de filas/grupos (1 a {MAX_LIMIT})."},
@@ -809,6 +811,10 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
             errors.append(f"fields.trend_by: «{definition.label}» no muestra tendencia.")
         elif trend_by not in ctx.fields:
             errors.append(f"fields.trend_by: la columna '{trend_by}' no existe en la hoja.")
+        elif trend_by not in ctx.time_fields:
+            errors.append(f"fields.trend_by: '{trend_by}' no es una columna de tiempo (año, mes, "
+                          f"fecha): la tendencia es la evolución en el tiempo. Usa una de tiempo u "
+                          f"omite trend_by.")
         elif trend_by in dimensions:
             errors.append("fields.trend_by: ya está en las dimensiones.")
 

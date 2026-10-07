@@ -153,6 +153,18 @@ class GenerateWidgetFormTests(SimpleTestCase):
                 generate_widget_form("ventas y cantidad por categoría y mes", None, sales_ctx())
         self.assertEqual(call.call_count, 2)
 
+    def test_la_tendencia_solo_por_una_columna_de_tiempo(self, _audit):
+        from sheets_reports.services.ai_spec import form_errors
+        kpi = {"widget_type": "kpi", "fields": {"metrics": [agg()], "filters": []}, "style": {}}
+
+        def errors(trend_by):
+            form = {**kpi, "fields": {**kpi["fields"], "trend_by": trend_by}}
+            return form_errors(form, sales_ctx(), "kpi", require_title=False)
+
+        self.assertEqual(errors("mes"), [])
+        self.assertEqual(errors("anio"), [])
+        self.assertTrue(any("no es una columna de tiempo" in e for e in errors("categoria")))
+
     def test_la_ia_puede_rechazar(self, _audit):
         with mock.patch.object(ai_spec, "_call_model",
                                return_value=("reject_request", {"reason": "No hay columna de región."})):

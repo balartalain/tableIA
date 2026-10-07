@@ -293,7 +293,7 @@ class ViewsTests(TestCase):
         self.assertEqual(manifest["bar"]["capabilities"], {
             "dimensions": [1, 1], "pivots": [0, 1], "metrics": [1, 5],
             "sort": True, "limit": True, "filters": True,
-            "windows": ["percent_of_total", "running_total", "pct_change"],
+            "windows": ["percent_of_total", "percent_of_row", "running_total", "pct_change"],
         })
         self.assertEqual(manifest["bar"]["max_per_dashboard"], None)
         self.assertEqual(manifest["filter"]["max_per_dashboard"], 1)

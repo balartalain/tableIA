@@ -87,7 +87,9 @@ consulta.
     - window (opcional): {"type": "percent_of_total" | "percent_of_row" | "running_total" |
       "pct_change"} sobre esa métrica ya agregada. "participación", "qué % representa cada...",
       "acumulado", "variación respecto al anterior". Solo las que el widget lista en
-      «ventanas» (sin pivotes, salvo "percent_of_row", que los necesita). Un widget de un solo
+      «ventanas». Con pivotes solo valen "percent_of_total" (cada celda sobre el total de su
+      valor del pivote) y "percent_of_row" (cada celda sobre el total de su fila: "de cada X,
+      qué % es de cada Y"), que además los necesita. Un widget de un solo
       número no lleva ventanas: la participación es una fórmula "parte / total * 100" entre una
       métrica filtrada y otra sin filtrar (como style.primary), y la variación frente al
       periodo anterior son dos métricas filtradas con relative "latest" y "previous" sobre la
@@ -187,6 +189,10 @@ WINDOW_LABELS = {"percent_of_total": "participación", "percent_of_row": "% de l
                  "running_total": "acumulado", "pct_change": "variación"}
 
 
+# Ventanas que se calculan por celda y por eso valen con pivotes (engine/steps/window.py).
+PIVOT_WINDOWS = ("percent_of_total", "percent_of_row")
+
+
 def window_types_for(widget) -> tuple:
     """Ventanas que el widget dibuja bien (`capabilities["windows"]`)."""
     return tuple((widget.capabilities or {}).get("windows") or ())
@@ -208,9 +214,11 @@ def _window_error(path: str, w_type: str, widget, pivots: list) -> str | None:
         if not allowed:
             return f"{path}: este widget no admite 'window'; quítalo."
         return f"{path}: '{w_type}' no está disponible en este widget; usa {', '.join(allowed)} o quítalo."
-    if pivots and "percent_of_row" not in allowed:
-        # En los gráficos con pivote cada serie es un valor del pivote: la ventana se ignoraría.
-        return f"{path}: con pivotes este widget no aplica 'window'; quita los pivotes o la ventana."
+    if pivots and w_type not in PIVOT_WINDOWS:
+        # Con pivote cada valor es una celda del cruce: solo los porcentajes se calculan por celda.
+        usable = [w for w in allowed if w in PIVOT_WINDOWS]
+        hint = f"usa {', '.join(usable)}, " if usable else ""
+        return f"{path}: con pivotes '{w_type}' no se aplica; {hint}quita los pivotes o la ventana."
     if w_type == "percent_of_row" and not pivots:
         return (f"{path}: 'percent_of_row' reparte cada fila entre las columnas cruzadas y "
                 f"necesita pivotes; sin ellos usa 'percent_of_total'.")

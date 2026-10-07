@@ -47,8 +47,13 @@ class FormErrorsTests(SimpleTestCase):
         self.assertEqual(errors_for("bar", with_window("pct_change", dimensions=["mes"])), [])
         self.assertIn("metrics[0].window: este widget no admite 'window'; quítalo.",
                       errors_for("donut", with_window("pct_change")))
-        self.assertIn("con pivotes este widget no aplica 'window'",
-                      errors_for("bar", with_window("percent_of_total", pivots=["mes"]))[0])
+        # Con pivote solo los porcentajes, que se calculan por celda.
+        self.assertEqual(errors_for("bar", with_window("percent_of_row", pivots=["mes"])), [])
+        self.assertEqual(errors_for("bar", with_window("percent_of_total", pivots=["mes"])), [])
+        self.assertIn("con pivotes 'running_total' no se aplica; usa percent_of_total, percent_of_row",
+                      errors_for("bar", with_window("running_total", pivots=["mes"]))[0])
+        self.assertIn("con pivotes 'running_total' no se aplica; usa percent_of_total",
+                      errors_for("line", with_window("running_total", pivots=["mes"]))[0])
         self.assertIn("'running_total' no está disponible en este widget",
                       errors_for("dynamic_table", with_window("running_total"))[0])
 

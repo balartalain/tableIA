@@ -4,7 +4,7 @@ Gráfico de Líneas: consulta con `WidgetFields`, apariencia con `WidgetStyle`.
 from typing import Any, ClassVar, Dict, List, Optional
 
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
-from sheets_reports.widgets.presentation import chart_series, percent_aliases
+from sheets_reports.widgets.presentation import chart_series, percent_series
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
 
@@ -86,6 +86,6 @@ class LineWidget(BaseWidget):
                 pass
 
         output = {"categories": categories, "series": series,
-                  "percent": percent_aliases(fields)}
+                  "percent": percent_series(pairs, fields, metadata)}
 
         return output

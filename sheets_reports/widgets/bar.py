@@ -4,7 +4,7 @@ Gráfico de Barras: consulta con `WidgetFields`, apariencia con `WidgetStyle`.
 from typing import Any, ClassVar, Dict, List, Optional
 
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
-from sheets_reports.widgets.presentation import chart_series, percent_aliases
+from sheets_reports.widgets.presentation import chart_series, percent_series
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
 
@@ -62,7 +62,7 @@ class BarChartWidget(BaseWidget):
         "sort": True,
         "limit": True,
         "filters": True,
-        "windows": ["percent_of_total", "running_total", "pct_change"],
+        "windows": ["percent_of_total", "percent_of_row", "running_total", "pct_change"],
     }
 
     # Backend-driven style schema (solo ui: text | select | checkbox | number)
@@ -107,7 +107,7 @@ class BarChartWidget(BaseWidget):
             "categories": categories,
             "series": series,
             "stacked": stacked,
-            "percent": percent_aliases(fields),
+            "percent": percent_series(pairs, fields, metadata),
         }
         if horizontal:
             output["horizontal"] = True

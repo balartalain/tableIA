@@ -16,7 +16,7 @@ AGG_LABELS = {
     "min": "Mínimo",
     "max": "Máximo",
     "std": "Desviación estándar",
-    "count": "Conteo de filas",
+    "count": "Conteo",
     "count_distinct": "Valores distintos",
 }
 
@@ -100,6 +100,18 @@ def percent_aliases(fields=None) -> list:
             if alias:
                 out.append(alias)
     return out
+
+
+def percent_series(pairs, fields=None, metadata=None) -> list:
+    """Nombres de las series (de `chart_series`) que son porcentajes: el frontend de los
+    gráficos las reconoce por nombre. Con pivote cada serie es `{valor}_{alias}`."""
+    aliases = percent_aliases(fields)
+    pivoted = bool((metadata or {}).get("pivots"))
+
+    def is_percent(column) -> bool:
+        return any(column == alias or (pivoted and column.endswith(f"_{alias}")) for alias in aliases)
+
+    return [name for name, column in pairs if is_percent(str(column))]
 
 
 def value_column(result, fields=None, metadata=None) -> Optional[str]:

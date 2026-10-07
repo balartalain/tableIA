@@ -61,7 +61,7 @@ const AGG_OPTIONS = [
   { value: 'min', label: 'Mínimo' },
   { value: 'max', label: 'Máximo' },
   { value: 'std', label: 'Desviación estándar' },
-  { value: 'count', label: 'Conteo de filas' },
+  { value: 'count', label: 'Conteo' },
   { value: 'count_distinct', label: 'Valores distintos' },
 ];
 
@@ -74,6 +74,9 @@ const WINDOW_OPTIONS = [
   { value: 'running_total', label: 'Acumulado' },
   { value: 'pct_change', label: 'Variación vs anterior' },
 ];
+
+// Ventanas que valen con pivotes (PIVOT_WINDOWS en services/ai_spec.py).
+const PIVOT_WINDOWS = ['percent_of_total', 'percent_of_row'];
 
 const METRIC_TYPE_OPTIONS = [
   { value: 'agg', label: 'Agregación' },
@@ -429,10 +432,9 @@ document.addEventListener('alpine:init', () => {
     get metricWindowOptions() {
       const allowed = this.drawerCapabilities.windows || [];
       const hasPivots = (this.drawerDraft.fields.pivots || []).some(Boolean);
-      // Con pivote, un gráfico (sin «% de la fila») no aplica ventanas: cada serie es un valor.
-      if (!allowed.length || (hasPivots && !allowed.includes('percent_of_row'))) return [];
+      // Con pivote solo los porcentajes se calculan por celda; «% de la fila» necesita pivote.
       const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value)
-        && (o.value !== 'percent_of_row' || hasPivots));
+        && (hasPivots ? PIVOT_WINDOWS.includes(o.value) : o.value !== 'percent_of_row'));
       return options.length ? [{ value: '', label: 'Valor' }, ...options] : [];
     },
     // ¿La ventana guardada en la métrica ya no vale (ej. se agregó un pivote)? Se quita al guardar.

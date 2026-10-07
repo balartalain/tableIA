@@ -24,6 +24,9 @@ def apply_window_functions(df: pd.DataFrame, metrics: list | None, metadata: dic
         # una fórmula entre métricas (ej. hogar / total * 100).
         return df
 
+    if metadata.get("pivoted"):
+        return _pivot_windows(df, metrics, metadata)
+
     if any((m.get("window") or {}).get("type") in ORDERED_WINDOWS for m in metrics or []):
         df = _chronological_rows(df, metadata)
 
@@ -52,6 +55,36 @@ def apply_window_functions(df: pd.DataFrame, metrics: list | None, metadata: dic
         df = df.copy()
         for target, values in planned.items():
             df[target] = values
+        metadata["window_applied"] = True
+    return df
+
+
+def _pivot_windows(df: pd.DataFrame, metrics: list | None, metadata: dict) -> pd.DataFrame:
+    """Con pivote (gráficos), cada métrica es una columna `{valor}_{alias}` por valor del
+    pivote: los porcentajes se calculan por celda, como en la tabla dinámica. `percent_of_row`
+    divide entre el total de su fila (cada barra apilada suma 100 %); `percent_of_total`, entre
+    el de su columna (cada valor del pivote suma 100 %). El resto de ventanas no aplica con
+    pivote."""
+    planned: Dict[str, Any] = {}
+    for metric in metrics or []:
+        w_type = (metric.get("window") or {}).get("type")
+        if w_type not in ("percent_of_total", "percent_of_row"):
+            continue
+        alias = metric.get("alias") or metric.get("field")
+        columns = [f"{value}_{alias}" for value in metadata.get("pivot_values") or []]
+        columns = [col for col in columns if col in df.columns]
+        if not columns:
+            continue
+        cells = df[columns].astype(float)
+        axis = 1 if w_type == "percent_of_row" else 0
+        totals = cells.sum(axis=axis).replace(0, float("nan"))
+        shares = (cells.div(totals, axis=1 - axis) * 100).round(2).fillna(0)
+        planned.update({col: shares[col] for col in columns})
+
+    if planned:
+        df = df.copy()
+        for col, values in planned.items():
+            df[col] = values
         metadata["window_applied"] = True
     return df
 

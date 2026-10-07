@@ -40,8 +40,13 @@
       const container = this.getContentContainer();
       container.innerHTML = '';
       container.style.backgroundColor = '#fff';
-      container.style.flex = '0 1 auto';
+      // Ocupa todo el alto bajo el título: la tabla arranca arriba aunque tenga pocas filas.
+      container.style.flex = '1 1 0%';
       container.classList.remove('tb-pivot');
+      // La tabla va en un hijo con alto máximo = el del contenedor: mide lo que sus filas (el
+      // pie queda pegado a la última) y solo con muchas llega al fondo y hace scroll.
+      const host = document.createElement('div');
+      container.appendChild(host);
 
       const formats = this.constructor.formats;
       const columns = this._orderedColumns(payload.columns || []).map(col => {
@@ -58,7 +63,7 @@
         return result;
       });
       const rows = payload.rows || [];
-      this._table = new Tabulator(container, {
+      this._table = new Tabulator(host, {
         data: rows,
         nestedFieldSeparator: false,
         movableColumns: true,

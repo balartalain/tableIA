@@ -151,9 +151,13 @@
   background: var(--tb-paper);
 }
 
+/* A la derecha; a la izquierda queda el aviso del pie si lo hay («Mostrando N de M filas»). */
 .tabulator .tabulator-footer .tabulator-paginator {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  margin-left: auto;
   gap: 4px;
 }
 

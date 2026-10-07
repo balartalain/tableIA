@@ -116,8 +116,13 @@
         const container = this.getContentContainer();
         container.innerHTML = '';
         container.style.backgroundColor = '#fff';
-        container.style.flex = '0 1 auto';
+        // Ocupa todo el alto bajo el título: la tabla arranca arriba aunque tenga pocas filas.
+        container.style.flex = '1 1 0%';
         container.classList.remove('tb-pivot');
+        // La tabla va en un hijo con alto máximo = el del contenedor: mide lo que sus filas (el
+        // «Total general» queda pegado a la última) y solo con muchas llega al fondo y hace scroll.
+        const host = document.createElement('div');
+        container.appendChild(host);
 
         // «Mostrar totales» por nivel (estilo del widget): la columna «Total general» y las
         // «Total <valor>» de cada pivote se quitan (con sus hijos) si ese nivel está apagado.
@@ -129,7 +134,7 @@
         const totals = this.style.showTotals !== false ? payload.totals : null;
         const hasGroups = columns.some(c => c.children);
         const pivotMode = hasGroups || hierarchical;
-        if (pivotMode) container.classList.add('tb-pivot');
+        if (pivotMode) host.classList.add('tb-pivot');
         if (!hasGroups) columns = this._orderedColumns(columns);
         const percentFields = new Set(payload.percent || []);
 
@@ -163,7 +168,7 @@
 
         columns = columns.map(col => toTabulator(col));
 
-        this._table = new Tabulator(container, {
+        this._table = new Tabulator(host, {
           data: rows,
           nestedFieldSeparator: false,
           movableColumns: !hasGroups,

@@ -124,6 +124,18 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertEqual(fields["metrics"][0]["filters"][0]["field"], "Nivel")
         self.assertEqual(fields["sort_by"], f"-{real}")
 
+    def test_la_ia_propone_un_campo_calculado_y_lo_usa(self, _audit):
+        args = {"widget_type": "bar", "calculated_fields": [
+            {"name": "Doble", "formula": "SUM(ventas) * 2", "format": "number"}],
+            "fields": {"dimensions": ["categoria"],
+                       "metrics": [{"field": "Doble", "agg": "auto", "alias": "doble"}]}, "style": {}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
+            result = generate_widget_form("el doble de las ventas", None, sales_ctx())
+        call.assert_called_once()
+        self.assertEqual(result["calculated_fields"],
+                         [{"name": "Doble", "formula": "SUM(ventas) * 2", "format": "number"}])
+        self.assertEqual(result["fields"]["metrics"][0]["agg"], "auto")
+
     def test_dos_propuestas_invalidas_dan_error_legible(self, _audit):
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", INVALID_ARGS)) as call:
             with self.assertRaises(SpecGenerationError) as ctx:

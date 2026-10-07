@@ -10,6 +10,8 @@
 // (`dry_run`) y, si hay alguno, se pide confirmación.
 // «Actualizar datos» relee la pestaña de Google y muestra su estructura actual sin perder lo
 // que el usuario ya cambió; se guarda con el resto.
+// Al editar, la pestaña «Campos calculados» define fórmulas sobre las columnas (por fila o
+// agregadas, ver engine/formulas.py), con una vista previa que calcula el servidor.
 // El gestor de fuentes lo arranca con el evento `source-picker:start` ({mode, source}) y
 // recibe `sources:changed` al guardar (o al volver tras actualizar datos) y `sources:back`.
 
@@ -66,6 +68,13 @@ function sourcePicker({ mode = 'create' } = {}) {
     _columnsRequest: 0,
     // Al cambiar de hoja, la edición de la que se partió (columnas, filas, encabezados).
     _editSnapshot: null,
+    // Pestaña del paso de columnas al editar: 'columns' | 'calculated'.
+    columnsTab: 'columns',
+    // Campos calculados: {id, name, formula, format} + estado de la vista previa
+    // (_kind 'row'|'aggregated', _values, _error, _checking).
+    calculated: [],
+    helpOpen: false,
+    _previewTimers: {},
 
     get includedCount() {
       return this.columns.filter(c => c.include).length;
@@ -94,6 +103,10 @@ function sourcePicker({ mode = 'create' } = {}) {
         sourceName: source ? source.name || '' : '',
         headers: source ? source.first_row_headers !== false : true, impact: null,
         refreshing: false, dataRefreshed: false, refreshedAt: source ? source.refreshed_at : null,
+        columnsTab: 'columns', helpOpen: false,
+        calculated: ((source && source.calculated_fields) || []).map(f => ({
+          ...f, _kind: null, _values: null, _error: '', _checking: false,
+        })),
         sheetsError: '', tabsError: '', columnsError: '', createError: '', saving: false,
       });
       if (mode === 'edit') this.loadSavedColumns();
@@ -120,6 +133,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         this.columns = refresh ? this._keepEdits(data.columns || []) : data.columns || [];
         this.rows = data.rows || 0;
         this.refreshedAt = data.source ? data.source.refreshed_at : this.refreshedAt;
+        this.calculated.forEach(f => this.previewCalculated(f, { now: true }));
       } catch (e) {
         if (request === this._columnsRequest) this.createError = e.message;
       } finally {
@@ -153,7 +167,7 @@ function sourcePicker({ mode = 'create' } = {}) {
     // «Cambiar hoja»: elige otra hoja para la fuente, partiendo de lo que hay en la edición.
     changeSheet() {
       this._editSnapshot = { columns: this.columns, rows: this.rows, headers: this.headers };
-      Object.assign(this, { mode: 'replace', step: 'source', impact: null, createError: '',
+      Object.assign(this, { mode: 'replace', step: 'source', impact: null, createError: '', columnsTab: 'columns',
                             spreadsheet: null, tabs: [], tab: null });
       if (!this.source) this.selectSource('google');
     },
@@ -257,6 +271,72 @@ function sourcePicker({ mode = 'create' } = {}) {
       return iso ? new Date(iso).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
     },
 
+    // ---- campos calculados
+    // Nombres que una fórmula puede usar: las columnas incluidas (con su nombre a mostrar).
+    get formulaColumns() {
+      return this.columns.filter(c => c.include).map(c => (c.label || '').trim() || c.name);
+    },
+
+    addCalculated() {
+      const id = `cf_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      this.calculated.push({ id, name: '', formula: '', format: 'number',
+                             _kind: null, _values: null, _error: '', _checking: false });
+    },
+
+    removeCalculated(index) {
+      this.calculated.splice(index, 1);
+    },
+
+    // Agrega `[columna]` al final de la fórmula.
+    insertColumn(field, name) {
+      if (!name) return;
+      const formula = field.formula || '';
+      field.formula = `${formula}${formula && !/[\s(]$/.test(formula) ? ' ' : ''}[${name}]`;
+      this.previewCalculated(field);
+    },
+
+    // Vista previa (con pausa mientras se escribe): tipo del campo, primeros valores o error.
+    previewCalculated(field, { now = false } = {}) {
+      clearTimeout(this._previewTimers[field.id]);
+      if (!field.formula.trim()) {
+        Object.assign(field, { _kind: null, _values: null, _error: '', _checking: false });
+        return;
+      }
+      field._checking = true;
+      this._previewTimers[field.id] = setTimeout(() => this._runPreview(field), now ? 0 : 400);
+    },
+
+    async _runPreview(field) {
+      const formula = field.formula;
+      const index = this.calculated.indexOf(field);
+      const previous = this.calculated.slice(0, Math.max(index, 0))
+        .filter(f => f.name.trim() && f.formula.trim())
+        .map(({ id, name, formula: text, format }) => ({ id, name: name.trim(), formula: text, format }));
+      try {
+        const data = await this._send('POST', `/api/sources/${this.editing.id}/formula/`, {
+          formula, first_row_headers: this.headers, calculated_fields: previous,
+          columns: this.columns.map(({ name, type, include, label }) => ({ name, type, include, label: (label || '').trim() })),
+        });
+        if (field.formula !== formula) return;   // se siguió escribiendo: manda la próxima
+        Object.assign(field, { _kind: data.kind || null, _values: data.values || null, _error: data.error || '' });
+      } catch (e) {
+        if (field.formula === formula) field._error = e.message;
+      } finally {
+        if (field.formula === formula) field._checking = false;
+      }
+    },
+
+    previewText(field) {
+      const show = v => (v == null ? '—'
+        : typeof v === 'number' ? v.toLocaleString('es', { maximumFractionDigits: 2 }) : String(v));
+      if (!field._values) return '';
+      if (field._kind === 'aggregated') {
+        const value = field._values[0];
+        return `Toda la hoja: ${show(value)}${field.format === 'percent' && value != null ? ' %' : ''}`;
+      }
+      return `Primeras filas: ${field._values.map(show).join(' · ')}`;
+    },
+
     async copyEmail(email) {
       try {
         await navigator.clipboard.writeText(email);
@@ -290,7 +370,14 @@ function sourcePicker({ mode = 'create' } = {}) {
           tab_name: this.tab.title,
         });
       }
-      if (this.mode === 'edit' || this.mode === 'replace') body.name = this.sourceName.trim();
+      if (this.mode === 'edit' || this.mode === 'replace') {
+        body.name = this.sourceName.trim();
+        body.calculated_fields = this.calculated
+          .filter(f => f.name.trim() || f.formula.trim())
+          .map(({ id, name, formula, format }) => ({
+            id, name: name.trim(), formula: formula.trim(), format: format || 'number',
+          }));
+      }
       return body;
     },
 

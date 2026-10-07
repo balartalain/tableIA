@@ -75,7 +75,7 @@
         tooltip: { shared: true, intersect: false, y: { formatter: BaseWidget.percentAwareFormatter(payload.percent) } },
         annotations: reference.annotations,
         yaxis: {
-          ...(allPercent && { labels: { formatter: (val) => `${Math.round(val)}%` } }),
+          labels: { formatter: allPercent ? (val) => `${Math.round(val)}%` : BaseWidget.axisNumber },
           ...(reference.max != null && {
             min: (min) => Math.min(min, reference.min),
             max: (max) => Math.max(max, reference.max),

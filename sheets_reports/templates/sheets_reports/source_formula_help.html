@@ -1,0 +1,73 @@
+{% comment %}Ayuda de los campos calculados (popover del editor de la fuente): qué son, los dos
+tipos con ejemplos, cuál elegir y la sintaxis de las fórmulas (engine/formulas.py).{% endcomment %}
+<div class="space-y-4 text-xs text-ink/80 leading-relaxed">
+  <div>
+    <p class="text-sm font-semibold text-ink">Campos calculados</p>
+    <p>Columnas nuevas que se calculan con una fórmula sobre las columnas de esta fuente. Se
+      definen una vez y se usan en todos los widgets del tablero.</p>
+  </div>
+
+  <div class="space-y-1.5">
+    <p class="font-semibold text-ink">Hay dos tipos y lo decide la fórmula</p>
+    <div class="rounded-lg border border-moss-100 bg-moss-50/60 p-2.5 space-y-1">
+      <p><span class="font-semibold text-moss-700">Por fila</span> — la fórmula <b>no</b> usa SUM,
+        AVG, COUNT… Se calcula en cada fila de la hoja, antes de agrupar, y queda como una columna
+        más: sirve de dimensión, de filtro o de métrica (eligiendo Suma, Promedio…).</p>
+      <ul class="font-mono text-[11px] text-ink/70 space-y-0.5 pl-2">
+        <li>[Gasto_Real] - [Presupuesto_Asignado]</li>
+        <li>IF([Respuesta] = "Sí", 1, 0)</li>
+        <li>IF([Gasto_Real] &gt; [Presupuesto_Asignado], "Excedido", "En presupuesto")</li>
+      </ul>
+    </div>
+    <div class="rounded-lg border border-sky-100 bg-sky-50/60 p-2.5 space-y-1">
+      <p><span class="font-semibold text-sky-700">Agregado</span> — la fórmula usa SUM, AVG, COUNT,
+        COUNT_DISTINCT, MIN o MAX. Se calcula sobre las filas de <b>cada grupo</b> del widget (cada
+        departamento, cada mes…). Solo se usa como métrica y su agregación es «Automática»: ya va
+        en la fórmula.</p>
+      <ul class="font-mono text-[11px] text-ink/70 space-y-0.5 pl-2">
+        <li>SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100 <span class="font-sans text-ink/50">— % de ejecución</span></li>
+        <li>AVG(IF([Respuesta] = "Sí", 1, 0)) * 100 <span class="font-sans text-ink/50">— % que respondió Sí</span></li>
+        <li>SUM([Gasto_Real]) / COUNT([ID_Registro]) <span class="font-sans text-ink/50">— gasto por registro</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="space-y-1.5">
+    <p class="font-semibold text-ink">¿Cuál uso?</p>
+    <p>Un cociente entre totales (un porcentaje de ejecución, un margen) va <b>agregado</b>.
+      Calcularlo por fila y luego promediarlo da otro número:</p>
+    <table class="w-full text-[11px]">
+      <thead class="text-ink/50">
+        <tr><th class="text-left font-medium py-0.5">Tecnología</th><th class="text-right font-medium">Presupuesto</th><th class="text-right font-medium">Gasto</th><th class="text-right font-medium">% por fila</th></tr>
+      </thead>
+      <tbody class="font-mono">
+        <tr><td class="py-0.5 font-sans">Registro 201</td><td class="text-right">5 000</td><td class="text-right">4 200</td><td class="text-right">84,0 %</td></tr>
+        <tr><td class="py-0.5 font-sans">Registro 205</td><td class="text-right">8 000</td><td class="text-right">8 500</td><td class="text-right">106,3 %</td></tr>
+        <tr><td class="py-0.5 font-sans">Registro 210</td><td class="text-right">3 000</td><td class="text-right">2 800</td><td class="text-right">93,3 %</td></tr>
+        <tr class="border-t border-line"><td class="py-0.5 font-sans font-semibold">Total</td><td class="text-right">16 000</td><td class="text-right">15 500</td><td></td></tr>
+      </tbody>
+    </table>
+    <p>Por fila y promedio: (84,0 + 106,3 + 93,3) / 3 = <b>94,5 %</b> ✗<br>
+      Agregado, SUM / SUM: 15 500 / 16 000 = <b>96,9 %</b> ✓</p>
+    <p>Para contar o recodificar fila a fila («Sí» → 1, rangos, categorías) usa <b>por fila</b>.</p>
+  </div>
+
+  <div class="space-y-1">
+    <p class="font-semibold text-ink">No se mezclan</p>
+    <p><span class="font-mono">SUM([Gasto_Real]) / [Presupuesto_Asignado]</span> no vale: compara un
+      total con el valor de una fila suelta. Envuelve la columna en una agregación:
+      <span class="font-mono">SUM([Presupuesto_Asignado])</span>.</p>
+  </div>
+
+  <div class="space-y-1">
+    <p class="font-semibold text-ink">Cómo se escribe</p>
+    <ul class="list-disc pl-4 space-y-0.5">
+      <li>Columnas por su nombre, entre corchetes si tienen espacios o signos: <span class="font-mono">[Gasto Real]</span>, <span class="font-mono">[Recinto:]</span>. Puedes usar los campos por fila definidos antes.</li>
+      <li>Texto entre comillas: <span class="font-mono">"Sí"</span>. Números con punto decimal: <span class="font-mono">1.5</span>.</li>
+      <li>Operaciones <span class="font-mono">+ - * /</span> y paréntesis. Comparaciones <span class="font-mono">= != &gt; &gt;= &lt; &lt;=</span>, y <span class="font-mono">AND OR NOT</span>.</li>
+      <li><span class="font-mono">IF(condición, valor si se cumple, valor si no)</span>.</li>
+      <li>Agregaciones: <span class="font-mono">SUM AVG COUNT COUNT_DISTINCT MIN MAX</span>, cada una sobre una columna o una expresión por fila.</li>
+      <li><b>Formato porcentaje</b> (solo en agregados) muestra el valor con «%»: la fórmula ya debe multiplicar por 100.</li>
+    </ul>
+  </div>
+</div>

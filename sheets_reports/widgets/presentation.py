@@ -51,6 +51,9 @@ def metric_label(metric: dict) -> str:
     if label:
         return label
     agg = str(metric.get("agg") or "").strip()
+    if agg == "auto":
+        # Campo calculado agregado: su nombre ya dice qué es (ej. «% Ejecución»).
+        return str(metric.get("field") or metric_alias(metric))
     if agg:
         return f"{agg_label(agg)} {humanize(metric.get('field') or '')}".strip()
     alias = metric_alias(metric)
@@ -87,17 +90,18 @@ def chart_series(result, fields=None, metadata=None) -> Tuple[List[str], List[Tu
     return categories, pairs
 
 
-def percent_aliases(fields=None) -> list:
-    """Alias de las métricas cuyo valor ya es un porcentaje (`window` percent_*): el frontend
-    las formatea con «%» y con el estilo de porcentaje en las tablas."""
+def percent_aliases(fields=None, metadata=None) -> list:
+    """Alias de las métricas cuyo valor ya es un porcentaje (`window` percent_* o un campo
+    calculado con formato porcentaje): el frontend las formatea con «%» y con el estilo de
+    porcentaje en las tablas."""
     if fields is None:
         return []
-    out = []
+    out = list((metadata or {}).get("percent_metrics") or [])
     for metric in fields.metrics or []:
         window = (metric or {}).get("window") or {}
         if str(window.get("type", "")).startswith("percent_"):
             alias = metric_alias(metric)
-            if alias:
+            if alias and alias not in out:
                 out.append(alias)
     return out
 
@@ -105,7 +109,7 @@ def percent_aliases(fields=None) -> list:
 def percent_series(pairs, fields=None, metadata=None) -> list:
     """Nombres de las series (de `chart_series`) que son porcentajes: el frontend de los
     gráficos las reconoce por nombre. Con pivote cada serie es `{valor}_{alias}`."""
-    aliases = percent_aliases(fields)
+    aliases = percent_aliases(fields, metadata)
     pivoted = bool((metadata or {}).get("pivots"))
 
     def is_percent(column) -> bool:

@@ -1,4 +1,4 @@
-"""Paso 5 del motor: orden (`sort_by`, con «-» delante para descendente) y `limit`."""
+"""Paso 4 del motor: orden (`sort_by`, con «-» delante para descendente) y `limit`."""
 from __future__ import annotations
 
 from typing import Any, Dict

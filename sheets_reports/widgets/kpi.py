@@ -87,22 +87,16 @@ class KpiWidget(BaseWidget):
         (   'qué porcentaje de las ventas es de Hogar',
             {   'widget_type': 'kpi',
                 'title': 'Participación de Hogar',
+                'calculated_fields': [   {   'name': 'Participación de Hogar',
+                                             'formula': 'SUM(IF([categoria] = "Hogar", [ventas], 0)) '
+                                                        '/ SUM([ventas]) * 100',
+                                             'format': 'percent'}],
                 'fields': {   'dimensions': [],
                               'trend_by': 'mes',
-                              'metrics': [   {   'agg': 'sum',
-                                                 'field': 'ventas',
-                                                 'alias': 'ventas_hogar',
-                                                 'filters': [   {   'field': 'categoria',
-                                                                    'op': 'eq',
-                                                                    'value': 'Hogar'}]},
-                                             {   'agg': 'sum',
-                                                 'field': 'ventas',
-                                                 'alias': 'ventas_total'},
-                                             {   'type': 'formula',
-                                                 'alias': 'participacion',
-                                                 'label': 'Participación',
-                                                 'expression': 'ventas_hogar / ventas_total * 100'}]},
-                'style': {'primary': 'participacion', 'suffix': ' %', 'decimals': 1}}),
+                              'metrics': [   {   'agg': 'auto',
+                                                 'field': 'Participación de Hogar',
+                                                 'alias': 'participacion'}]},
+                'style': {'decimals': 1}}),
         (   'cuántas órdenes entregamos y cómo van contra la meta',
             {   'widget_type': 'kpi',
                 'title': 'Órdenes',
@@ -125,7 +119,7 @@ class KpiWidget(BaseWidget):
         "sort": False,
         "limit": False,
         "filters": True,
-        # Un solo número: sin ventanas. La participación es una fórmula (ver ai_examples).
+        # Un solo número: sin ventanas. La participación es un campo calculado (ver ai_examples).
         "windows": [],
         "trend": True,
     }
@@ -203,7 +197,7 @@ class KpiWidget(BaseWidget):
     def _without_eq_filter_on(metric: dict, column: str) -> dict:
         """Dentro de un punto de la serie, una condición eq de la métrica sobre la columna de
         la tendencia ya la fija el punto: sin quitarla vaciaría el valor."""
-        if metric.get("type") == "formula" or not metric.get("filters"):
+        if not metric.get("filters"):
             return metric
         kept = [c for c in metric["filters"]
                 if not (isinstance(c, dict) and c.get("field") == column and c.get("op") == "eq")]
@@ -250,6 +244,8 @@ class KpiWidget(BaseWidget):
         abbreviate = bool(style_dict.get("abbreviate"))
         prefix = style_dict.get("prefix") or ""
         suffix = style_dict.get("suffix") or ""
+        if not suffix and primary in (metadata or {}).get("percent_metrics", []):
+            suffix = " %"  # campo calculado con formato porcentaje
 
         def format_value(value: float) -> str:
             if abbreviate:

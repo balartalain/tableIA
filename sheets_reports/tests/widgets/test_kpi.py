@@ -4,8 +4,14 @@ import json
 import pandas as pd
 from django.test import SimpleTestCase
 
-from sheets_reports.tests.fixtures import (agg, calc, compiled, errors_for, fields,
+from sheets_reports.engine.formulas import apply_calculated_fields
+from sheets_reports.tests.fixtures import (agg, compiled, errors_for, fields,
                                             sales_df, sellers_df)
+
+
+def with_field(df, name, formula):
+    """`df` con un campo calculado agregado (como lo deja `load_source`)."""
+    return apply_calculated_fields(df, [{"id": "c", "name": name, "formula": formula}])
 
 
 def kpi_fields(*metrics, **overrides):
@@ -71,12 +77,11 @@ class KpiTrendTests(SimpleTestCase):
         json.dumps(out)  # las claves llegan en tipos que el JSON entiende
 
     def test_participacion_por_punto(self):
-        """La fórmula se evalúa en cada mes: Hogar del mes sobre el total del mes."""
-        hogar = [{"field": "categoria", "op": "eq", "value": "Hogar"}]
-        out = compiled("kpi", kpi_fields(agg("hogar", filters=hogar), agg("total"),
-                                         calc("participacion", "hogar / total * 100"),
-                                         trend_by="mes"),
-                       {"primary": "participacion"})
+        """El campo agregado se evalúa en cada mes: Hogar del mes sobre el total del mes."""
+        df = with_field(sales_df(), "Participación",
+                        'SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100')
+        out = compiled("kpi", kpi_fields({"field": "Participación", "agg": "auto", "alias": "participacion"},
+                                         trend_by="mes"), df=df)
         self.assertAlmostEqual(out["value"], 23.18, places=2)   # 175 / 755
         self.assertEqual(out["trend"]["categories"], ["Ene", "Feb", "Mar"])
         self.assertEqual([round(v, 2) for v in out["trend"]["data"]], [25.0, 15.15, 100.0])
@@ -103,11 +108,12 @@ class KpiTrendTests(SimpleTestCase):
         json.dumps(out)
 
     def test_la_serie_es_del_numero_principal_elegido(self):
+        df = with_field(sellers_df(), "Diferencia", "SUM([ventas]) - SUM([plan])")
         out = compiled("kpi", kpi_fields(
             agg("total_ventas"), agg("total_plan", field="plan"),
-            calc("diferencia", "total_ventas - total_plan"),
+            {"field": "Diferencia", "agg": "auto", "alias": "diferencia"},
             trend_by="anio",
-        ), {"primary": "diferencia"}, df=sellers_df())
+        ), {"primary": "diferencia"}, df=df)
         self.assertEqual(out["value"], 50.0)
         self.assertEqual(out["trend"]["categories"], [2025, 2026])
         self.assertEqual(out["trend"]["data"], [0.0, 50.0])

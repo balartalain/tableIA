@@ -6,6 +6,7 @@ las columnas reales de la hoja y el `style_schema` del widget. Nada de lo que de
 ejecuta tal cual.
 """
 import copy
+import dataclasses
 import json
 import logging
 import re
@@ -16,6 +17,7 @@ from google.genai import types
 
 from sheets_reports.engine.steps.filter import condition_errors
 from sheets_reports.engine.context import SheetContext
+from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula
 from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
@@ -44,9 +46,10 @@ WINDOW_TYPES = ("percent_of_total", "percent_of_row", "running_total", "pct_chan
 AGG_LABELS_DESC = ", ".join(f"{k}={v.lower()}" for k, v in sorted(AGG_LABELS.items()))
 NUMERIC_AGGS = {"sum", "avg", "median", "min", "max", "std"}
 ALIAS_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
-EXPR_RE = re.compile(r"^[A-Za-z0-9_\s+\-*/().,%]+$")
 
 MAX_LIMIT = 500
+# Campos calculados nuevos que la IA puede proponer en una respuesta.
+MAX_NEW_CALCULATED = 3
 
 
 class SpecGenerationError(Exception):
@@ -81,6 +84,8 @@ consulta.
     - agg "count": "cuántos", "cantidad de". Cuenta filas y NO lleva field.
     - agg "count_distinct": "cuántos distintos" de una columna (cualquier tipo).
     - agg "sum"/"avg"/"median"/"min"/"max"/"std": SOLO sobre columnas numéricas.
+    - agg "auto": SOLO con un campo calculado agregado: uno de los que lista el mensaje o uno
+      que propongas en `calculated_fields` (ver abajo). Ya traen su agregación.
     - filters (opcional): condiciones SOLO para esa métrica. Sirven para poner en el mismo
       widget "ventas 2026" y "ventas 2025", o "ventas de Hogar" junto al total. Solo en
       widgets con "condiciones por métrica" (los que admiten más de una métrica); con una
@@ -91,15 +96,27 @@ consulta.
       «ventanas». Con pivotes solo valen "percent_of_total" (cada celda sobre el total de su
       valor del pivote) y "percent_of_row" (cada celda sobre el total de su fila: "de cada X,
       qué % es de cada Y"), que además los necesita. Un widget de un solo
-      número no lleva ventanas: la participación es una fórmula "parte / total * 100" entre una
-      métrica filtrada y otra sin filtrar (como style.primary), y la variación frente al
-      periodo anterior son dos métricas filtradas con relative "latest" y "previous" sobre la
+      número no lleva ventanas: la participación es un campo calculado agregado (ej.
+      SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100), y la variación frente
+      al periodo anterior son dos métricas filtradas con relative "latest" y "previous" sobre la
       columna de tiempo y style.compare con el alias de la anterior.
-  - {"type": "formula", "alias", "expression"}: cálculo entre columnas YA agregadas, usando sus
-    alias (ej. margen = "total_ganancia / total_ventas"). El orden de la lista decide el orden
-    de las columnas; el cálculo se evalúa después de agregar.
 - sort_by: columna u alias por el que ordenar, con "-" delante para descendente (ej.
   "-total_ventas"). Null si no importa.
+
+## calculated_fields (campos calculados nuevos, opcional)
+Cuando el pedido necesita un cálculo entre totales (una diferencia, un cociente, un %, un
+margen, una participación, un promedio de una condición) y no hay un campo calculado que ya lo
+haga, propón el campo en `calculated_fields` y úsalo como métrica con agg "auto" y `field` igual
+a su `name`. Se crea en la fuente al aplicar la propuesta y queda para todo el tablero.
+- {"name", "formula", "format"}: `name` corto y claro (ej. "% Ejecución", "Ganancia"), distinto
+  de las columnas; `format` "percent" si el resultado es un porcentaje (la fórmula multiplica
+  por 100), si no "number".
+- `formula` SIEMPRE agregada: cada columna dentro de SUM, AVG, COUNT, COUNT_DISTINCT, MIN o MAX.
+  Columnas entre corchetes ([Ventas]), textos entre comillas, + - * / ( ), comparaciones
+  (= != > >= < <=), AND OR NOT e IF(condición, sí, no) dentro de las agregaciones.
+  Ej.: SUM([Ventas]) - SUM([Costo]); SUM([Gasto]) / SUM([Presupuesto]) * 100;
+  AVG(IF([Respuesta] = "Sí", 1, 0)) * 100; SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100.
+- No combines columnas sueltas con agregaciones (SUM([a]) / [b] no vale).
 - limit: máximo de filas/grupos a mostrar ("top 5" → 5). Null si no aplica.
 
 ## style (la apariencia)
@@ -209,8 +226,8 @@ def _window_error(path: str, w_type: str, widget, pivots: list) -> str | None:
         if caps.get("dimensions", (0, 0))[1] == 0 and caps.get("metrics", (0, 0))[1] > 0:
             # Un solo número: no hay otras filas (ni total de grupos, ni anterior, ni acumulado).
             return (f"{path}: este widget da un solo número y no admite 'window'. Para una "
-                    f"participación usa una métrica con filters, otra sin ellos (el total) y una "
-                    f"fórmula 'parte / total * 100' como style.primary. Para comparar con el "
+                    f"participación propón un campo calculado agregado (ej. SUM(IF([cat] = \"X\", "
+                    f"[valor], 0)) / SUM([valor]) * 100) y úsalo con agg 'auto'. Para comparar con el "
                     f"periodo anterior usa dos métricas con filters relative 'latest' y 'previous' "
                     f"sobre la columna de tiempo y style.compare con el alias de la anterior.")
         if not allowed:
@@ -412,10 +429,6 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
         "label": {"type": "string", "maxLength": 80,
                   "description": "Nombre a mostrar de la métrica en el widget (ej. 'Costos totales'); "
                                  "vacío o ausente = el alias en texto."},
-        "type": {"enum": ["formula"],
-                 "description": "Solo para métricas calculadas: obliga a usar expression en vez de agg."},
-        "expression": {"type": "string",
-                       "description": "Fórmula entre alias ya agregados (ej. 'total_ganancia / total_ventas')."},
         "filters": {**condition_schema_for(ctx),
                     "description": "Condiciones SOLO para esta métrica."},
         "window": {
@@ -484,6 +497,18 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
         "required": ["widget_type", "fields"],
         "properties": {
             "widget_type": {"enum": [w.key for w in widgets]},
+            "calculated_fields": {
+                "type": "array", "maxItems": MAX_NEW_CALCULATED,
+                "description": "Campos calculados agregados nuevos que usan las métricas (agg 'auto').",
+                "items": {"type": "object", "additionalProperties": False,
+                          "required": ["name", "formula", "format"],
+                          "properties": {
+                              "name": {"type": "string", "description": "Nombre del campo."},
+                              "formula": {"type": "string",
+                                          "description": "Fórmula agregada, ej. SUM([Ventas]) - SUM([Costo])."},
+                              "format": {"enum": list(FORMATS)},
+                          }},
+            },
             "fields": {"type": "object", "additionalProperties": False,
                        "properties": fields_properties},
             "style": style,
@@ -534,7 +559,12 @@ def _columns_context(ctx: SheetContext) -> str:
         if ctx.samples.get(field):
             line += f" — valores de ejemplo: {json.dumps(ctx.samples[field], ensure_ascii=False)}"
         lines.append(line)
-    return "Columnas de la hoja:\n" + "\n".join(lines)
+    text = "Columnas de la hoja:\n" + "\n".join(lines)
+    if ctx.aggregated_fields:
+        text += ("\n\nCampos calculados agregados (solo como métrica, con agg \"auto\"):\n"
+                 + "\n".join(f"- {json.dumps(name, ensure_ascii=False)}"
+                              for name in sorted(ctx.aggregated_fields)))
+    return text
 
 
 def _history_text(history: list[dict] | None) -> str:
@@ -617,21 +647,21 @@ def _metric_errors(metric, index: int, ctx, seen_aliases) -> list[str]:
     errors = []
     agg = metric.get("agg")
     alias = metric.get("alias")
-    is_formula = metric.get("type") == "formula"
 
-    if is_formula:
-        if not metric.get("expression"):
-            errors.append(f"{path}: las métricas con type='formula' necesitan 'expression'.")
-        elif not EXPR_RE.match(str(metric["expression"])):
-            errors.append(f"{path}: 'expression' solo admite columnas, números y operadores (+ - * / ( )).")
-        elif not metric.get("field"):
-            # ok: la fórmula trabaja sobre alias
-            pass
+    if ctx.is_aggregated(metric.get("field")) or agg == "auto":
+        # Campo calculado agregado: la agregación ya viene en su fórmula.
+        if not ctx.is_aggregated(metric.get("field")):
+            errors.append(f"{path}: agg 'auto' solo se usa con un campo calculado agregado.")
+        elif agg != "auto":
+            errors.append(f"{path}: '{metric['field']}' es un campo calculado agregado: "
+                          f"usa agg 'auto' (la agregación ya está en su fórmula).")
         if metric.get("window"):
-            errors.append(f"{path}: una métrica con formula no admite 'window'.")
+            w = metric["window"].get("type") if isinstance(metric["window"], dict) else None
+            if w not in WINDOW_TYPES:
+                errors.append(f"{path}: window.type '{w}' no existe; usa uno de {', '.join(WINDOW_TYPES)}.")
     else:
         if agg not in AGGREGATIONS:
-            allowed = ", ".join(sorted(AGGREGATIONS))
+            allowed = ", ".join(sorted(set(AGGREGATIONS) - {"auto"}))
             errors.append(f"{path}: agg '{agg}' no existe; usa uno de {allowed}.")
         if agg == "count" and not metric.get("field"):
             pass  # count sin campo: cuenta filas
@@ -694,6 +724,43 @@ def _column_errors(column, index: int, ctx, seen_columns) -> list[str]:
     return errors
 
 
+def _calculated_fields_errors(items, ctx: SheetContext) -> tuple[list[str], list[str]]:
+    """Los `calculated_fields` de una propuesta: [{name, formula, format}], siempre agregados.
+    → (nombres válidos, errores)."""
+    if items in (None, []):
+        return [], []
+    if not isinstance(items, list):
+        return [], ["calculated_fields debe ser una lista."]
+    if len(items) > MAX_NEW_CALCULATED:
+        return [], [f"calculated_fields: como mucho {MAX_NEW_CALCULATED}."]
+    names, errors = [], []
+    for i, item in enumerate(items):
+        path = f"calculated_fields[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{path}: debe ser un objeto {{name, formula, format}}.")
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            errors.append(f"{path}: falta 'name'.")
+            continue
+        if name in ctx.fields or name in ctx.aggregated_fields or name in names:
+            errors.append(f"{path}: ya existe una columna o un campo llamado '{name}'; usa otro nombre.")
+            continue
+        if item.get("format", "number") not in FORMATS:
+            errors.append(f"{path}: format debe ser uno de {', '.join(FORMATS)}.")
+        try:
+            formula = compile_formula(str(item.get("formula") or ""), ctx.fields, ctx.aggregated_fields)
+        except FormulaError as e:
+            errors.append(f"{path}: {e}")
+            continue
+        if not formula.aggregated:
+            errors.append(f"{path}: la fórmula debe ser agregada (cada columna dentro de SUM, AVG, "
+                          f"COUNT, COUNT_DISTINCT, MIN o MAX).")
+            continue
+        names.append(name)
+    return names, errors
+
+
 def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
                 require_title: bool = True) -> list[str]:
     """Valida un WidgetForm propuesto contra la hoja y las capacidades del widget. La propuesta
@@ -712,6 +779,13 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
     caps = definition.capabilities or {}
     fields = data.get("fields") if isinstance(data.get("fields"), dict) else {}
     errors: list[str] = []
+
+    # Los campos calculados que propone la IA: válidos contra la hoja, y desde aquí el resto
+    # del form los puede usar como métricas «auto».
+    new_fields, calc_errors = _calculated_fields_errors(data.get("calculated_fields"), ctx)
+    errors += calc_errors
+    if new_fields:
+        ctx = dataclasses.replace(ctx, aggregated_fields=ctx.aggregated_fields | set(new_fields))
 
     for key in fields:
         if key not in {"dimensions", "pivots", "metrics", "columns", "filters",
@@ -860,9 +934,15 @@ def _normalize(args: dict) -> dict:
     data = copy.deepcopy(args) if isinstance(args, dict) else {}
     fields = data.get("fields") if isinstance(data.get("fields"), dict) else {}
     style = data.get("style") if isinstance(data.get("style"), dict) else {}
+    calculated = data.get("calculated_fields") if isinstance(data.get("calculated_fields"), list) else []
     return {
         "widget_type": data.get("widget_type"),
         "title": "",
+        "calculated_fields": [
+            {"name": str(f.get("name") or "").strip(), "formula": str(f.get("formula") or "").strip(),
+             "format": f.get("format") or "number"}
+            for f in calculated if isinstance(f, dict)
+        ],
         "fields": {k: v for k, v in fields.items() if v is not None},
         "style": {k: v for k, v in style.items() if k not in NOT_AI_STYLE_KEYS},
     }
@@ -877,13 +957,14 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
     """Cambia las columnas de la propuesta por el nombre real de la hoja cuando solo difieren en
     espacios o mayúsculas: la IA no copia los encabezados con dobles espacios («recomendaría  la
     UAPA»). Lo que no coincide queda igual y lo rechaza la validación."""
+    known = (*ctx.fields, *sorted(ctx.aggregated_fields))
     matches: dict[str, list[str]] = {}
-    for field in ctx.fields:
+    for field in known:
         matches.setdefault(_column_key(field), []).append(field)
     real = {key: names[0] for key, names in matches.items() if len(names) == 1}
 
     def resolve(value: str) -> str:
-        return value if value in ctx.fields else real.get(_column_key(value), value)
+        return value if value in known else real.get(_column_key(value), value)
 
     data["fields"], _ = map_columns(data["fields"], {}, resolve)
     return data

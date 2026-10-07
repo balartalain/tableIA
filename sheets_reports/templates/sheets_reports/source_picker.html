@@ -180,7 +180,19 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       </ul>
     </div>
 
-    <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 -mb-2">
+    <!-- Al editar: columnas de la hoja y campos calculados. -->
+    <div x-show="mode === 'edit'" class="flex items-center gap-1 border-b border-line -mb-2" role="tablist">
+      <button type="button" role="tab" x-on:click="columnsTab = 'columns'" x-bind:aria-selected="columnsTab === 'columns'"
+              x-bind:class="columnsTab === 'columns' ? 'border-moss-500 text-ink' : 'border-transparent text-ink/50 hover:text-ink'"
+              class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition cursor-pointer">Columnas</button>
+      <button type="button" role="tab" x-on:click="columnsTab = 'calculated'" x-bind:aria-selected="columnsTab === 'calculated'"
+              x-bind:class="columnsTab === 'calculated' ? 'border-moss-500 text-ink' : 'border-transparent text-ink/50 hover:text-ink'"
+              class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition cursor-pointer">
+        Campos calculados <span x-show="calculated.length" class="text-ink/40" x-text="`(${calculated.length})`"></span>
+      </button>
+    </div>
+
+    <div x-show="columnsTab === 'columns'" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 -mb-2">
       <!-- Alineada con las casillas de la tabla: su borde (1px) + el padding de celda (px-3). -->
       <label class="flex items-center gap-2 pl-[13px] text-xs font-medium text-ink/70 cursor-pointer">
         <input type="checkbox" x-model="headers" x-on:change="toggleHeaders()" x-bind:disabled="loadingColumns"
@@ -196,7 +208,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       </p>
     </div>
 
-    <div class="flex-1 min-h-0 overflow-auto border border-line rounded-xl">
+    <div x-show="columnsTab === 'columns'" class="flex-1 min-h-0 overflow-auto border border-line rounded-xl">
       <table class="w-full text-sm">
         <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
           <tr>
@@ -239,6 +251,82 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           </template>
         </tbody>
       </table>
+    </div>
+
+    <!-- Campos calculados: fórmula, tipo (lo decide la fórmula), formato y vista previa. -->
+    <div x-show="columnsTab === 'calculated'" x-cloak class="flex-1 min-h-0 flex flex-col gap-3">
+      <div class="flex items-center gap-2">
+        <p class="text-xs text-ink/60">Fórmulas sobre las columnas de esta fuente, para usar en todos los widgets.</p>
+        <!-- Ayuda: qué son, los dos tipos con ejemplos y la sintaxis. -->
+        <div class="relative" x-on:keydown.escape.window="helpOpen = false">
+          <button type="button" x-on:click="helpOpen = !helpOpen" x-bind:aria-expanded="helpOpen ? 'true' : 'false'"
+                  aria-label="Ayuda de campos calculados" title="¿Cómo funcionan?"
+                  class="p-1 rounded-md text-ink/40 hover:text-moss-700 hover:bg-paper cursor-pointer">
+            <i class="ti ti-help-circle text-base" aria-hidden="true"></i>
+          </button>
+          <div x-show="helpOpen" x-cloak x-on:click.outside="helpOpen = false" role="dialog" aria-label="Ayuda de campos calculados"
+               class="absolute left-0 top-full mt-1 z-40 w-[30rem] max-w-[calc(100vw-2rem)] max-h-[65vh] overflow-y-auto rounded-xl border border-line bg-white p-4 shadow-lg">
+            {% include "sheets_reports/source_formula_help.html" %}
+          </div>
+        </div>
+        <span class="flex-1" aria-hidden="true"></span>
+        <button type="button" x-on:click="addCalculated()"
+                class="inline-flex items-center gap-1.5 text-sm font-medium text-moss-700 hover:text-moss-800 cursor-pointer">
+          <i class="ti ti-plus text-base" aria-hidden="true"></i> Agregar campo
+        </button>
+      </div>
+
+      <div class="flex-1 min-h-0 overflow-y-auto space-y-2">
+        <div x-show="!calculated.length"
+             class="flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-xl py-10">
+          <i class="ti ti-math-function text-2xl text-ink/30" aria-hidden="true"></i>
+          <p class="text-sm text-ink/60">Sin campos calculados.</p>
+          <p class="text-xs text-ink/50">Ej. <span class="font-mono">SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100</span></p>
+        </div>
+
+        <template x-for="(f, index) in calculated" :key="f.id">
+          <div class="rounded-xl border border-line bg-white p-3 space-y-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <input type="text" x-model="f.name" placeholder="Nombre del campo" maxlength="120"
+                     x-bind:aria-label="`Nombre del campo ${index + 1}`"
+                     class="w-64 max-w-full text-sm font-medium border border-line rounded-lg px-3 py-1.5 focus:outline-none focus:border-moss-500">
+              <!-- El tipo lo decide la fórmula: con SUM, AVG… es agregado. -->
+              <span x-show="f._kind === 'row'" title="Se calcula en cada fila; se usa como una columna más"
+                    class="text-[11px] font-semibold rounded-full bg-moss-50 text-moss-700 border border-moss-100 px-2 py-0.5">Por fila</span>
+              <span x-show="f._kind === 'aggregated'" title="Se calcula por grupo del widget; solo como métrica"
+                    class="text-[11px] font-semibold rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5">Agregado</span>
+              <select x-show="f._kind === 'aggregated'" x-model="f.format" aria-label="Formato"
+                      class="text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                <option value="number" x-bind:selected="f.format !== 'percent'">Número</option>
+                <option value="percent" x-bind:selected="f.format === 'percent'">Porcentaje (%)</option>
+              </select>
+              <span class="flex-1" aria-hidden="true"></span>
+              <select x-on:change="insertColumn(f, $event.target.value); $event.target.value = ''" aria-label="Insertar columna"
+                      class="max-w-[14rem] text-xs border border-line rounded-md px-2 py-1 bg-white text-ink/70 focus:outline-none focus:border-moss-500">
+                <option value="">Insertar columna…</option>
+                <template x-for="col in formulaColumns" :key="col">
+                  <option x-bind:value="col" x-text="col"></option>
+                </template>
+              </select>
+              <button type="button" x-on:click="removeCalculated(index)" title="Eliminar campo"
+                      x-bind:aria-label="`Eliminar ${f.name || 'campo'}`"
+                      class="p-1.5 rounded-md text-ink/40 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+                <i class="ti ti-trash text-base" aria-hidden="true"></i>
+              </button>
+            </div>
+            <textarea x-model="f.formula" x-on:input="previewCalculated(f)" rows="2" spellcheck="false"
+                      placeholder="Ej. SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100"
+                      x-bind:aria-label="`Fórmula de ${f.name || 'campo'}`"
+                      class="w-full font-mono text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500"
+                      x-bind:class="f._error ? 'border-red-300' : ''"></textarea>
+            <p x-show="f._checking" class="text-xs text-ink/40">
+              <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Comprobando…
+            </p>
+            <p x-show="!f._checking && f._error" x-text="f._error" role="alert" class="text-xs text-red-600"></p>
+            <p x-show="!f._checking && !f._error && f._values" x-text="previewText(f)" class="text-xs text-ink/50 truncate"></p>
+          </div>
+        </template>
+      </div>
     </div>
   </div>
 </div>

@@ -8,10 +8,11 @@ Paso 2 del motor: agregación y/o pivote.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 import pandas as pd
 
+from sheets_reports.engine.formulas import aggregated_fields
 from sheets_reports.engine.steps.filter import parse_conditions
 from sheets_reports.utils.data import is_number, to_python
 
@@ -32,6 +33,8 @@ AGGREGATIONS: Dict[str, str] = {
     "std": "std",
     "count": "count",
     "count_distinct": "nunique",
+    # Campo calculado agregado de la fuente: la agregación viene en su fórmula.
+    "auto": "auto",
 }
 
 
@@ -56,6 +59,16 @@ def total_field(metric: str) -> str:
 def agg_name(agg: str) -> str:
     """Traduce una agregación del form al nombre que entiende Pandas."""
     return AGGREGATIONS.get(agg, agg)
+
+
+def _calculated_aggregator(df: pd.DataFrame, field) -> Callable[[pd.Series], Any]:
+    """Agregador de un campo calculado agregado: recibe la columna intermedia de un grupo (sus
+    filas, NaN las que excluyen las condiciones de la métrica) y evalúa la fórmula sobre esas
+    filas de `df`. Sirve igual para groupby, pivot_table y el total general."""
+    def aggregate_group(series: pd.Series):
+        return field.formula.aggregate(df.loc[series.dropna().index])
+    aggregate_group.__name__ = "calculated"
+    return aggregate_group
 
 
 def aggregate(series: pd.Series, agg: str):
@@ -100,13 +113,17 @@ def _metric_columns(df: pd.DataFrame, metrics: list) -> Tuple[pd.DataFrame, List
     métrica resume solo sus filas dentro del mismo groupby/pivote.
     """
     df = df.copy()
+    calculated = aggregated_fields(df)
     specs = []
     for i, metric in enumerate(metrics):
-        if metric.get("type") == "formula":
-            continue  # la calcula el paso 3, sobre las columnas ya agregadas
         field_name, agg, alias = metric_field(metric), metric.get("agg"), metric_alias(metric)
         column = f"__metric_{i}"
-        if field_name:
+        func = agg_name(agg)
+        if field_name in calculated:
+            # Campo agregado: la columna solo marca las filas; su agregador evalúa la fórmula.
+            df[column] = 1.0
+            func = _calculated_aggregator(df, calculated[field_name])
+        elif field_name:
             df[column] = df[field_name]
         elif agg == "count":
             df[column] = 1
@@ -114,7 +131,7 @@ def _metric_columns(df: pd.DataFrame, metrics: list) -> Tuple[pd.DataFrame, List
             continue
         if metric.get("filters"):
             df.loc[~metric_mask(df, metric), column] = float("nan")
-        specs.append((column, agg_name(agg), alias))
+        specs.append((column, func, alias))
     return df, specs
 
 
@@ -206,6 +223,12 @@ def apply_aggregation(
     metrics = fields.metrics or []
     if not metrics:
         return df
+    # Las métricas de campos agregados con formato porcentaje: el frontend las muestra con «%».
+    calculated = aggregated_fields(df)
+    metadata["percent_metrics"] = [
+        metric_alias(m) for m in metrics
+        if metric_field(m) in calculated and calculated[metric_field(m)].percent
+    ]
 
     dimensions = fields.dimensions or []
     pivots = fields.pivots or []
@@ -224,12 +247,13 @@ def apply_aggregation(
 # -- escalar (KPI) ---------------------------------------------------------
 def _scalar(df, metrics, metadata) -> pd.DataFrame:
     values = {}
+    calculated = aggregated_fields(df)
     for m in metrics:
-        if m.get("type") == "formula":
-            continue
         rows = _metric_rows(df, m)
         field_name, agg, alias = metric_field(m), m.get("agg"), metric_alias(m)
-        if field_name:
+        if field_name in calculated:
+            values[alias] = calculated[field_name].formula.aggregate(rows)
+        elif field_name:
             values[alias] = aggregate(rows[field_name], agg)
         elif agg == "count":
             values[alias] = len(rows)
@@ -316,13 +340,9 @@ def _nested(df, dimensions, pivots, metrics, metadata) -> pd.DataFrame:
             )
 
     aliases = [a for a in (metric_alias(m) for m in metrics) if a]
-    formulas = [m for m in metrics if m.get("type") == "formula" and m.get("expression")]
     windows = [m for m in metrics if (m.get("window") or {}).get("type")]
-    if formulas or windows:
-        _cell_metrics(agg_cells, formulas, windows)
-        aliases = list(dict.fromkeys(
-            [*aliases, *(m.get("alias") for m in formulas if m.get("alias"))]
-        ))
+    if windows:
+        _cell_windows(agg_cells, windows)
 
     rows = [
         {
@@ -352,19 +372,11 @@ def _nested(df, dimensions, pivots, metrics, metadata) -> pd.DataFrame:
     return _wide_frame(dimensions, pivots, row_keys, col_keys, agg_cells)
 
 
-def _cell_metrics(cells: Dict[tuple, dict], formulas: list, windows: list) -> None:
-    """Métricas calculadas y ventanas sobre TODAS las celdas (hoja, subtotales y total
-    general): una fórmula o un porcentaje se recalcula en cada nivel, no se suma."""
+def _cell_windows(cells: Dict[tuple, dict], windows: list) -> None:
+    """Ventanas sobre TODAS las celdas (hoja, subtotales y total general): un porcentaje se
+    recalcula en cada nivel, no se suma."""
     keys = list(cells)
     frame = pd.DataFrame([cells[key] for key in keys])
-    for metric in formulas:
-        alias, expression = metric.get("alias"), metric.get("expression")
-        if not (alias and expression):
-            continue
-        try:
-            frame[alias] = frame.eval(expression)
-        except Exception:  # noqa: BLE001 - una fórmula mala no tumba el widget entero
-            frame[alias] = None
     columns = list(frame.columns)
     for metric in windows:
         _cell_window(frame, metric, keys, columns)

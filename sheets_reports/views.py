@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import uuid
 
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
@@ -22,8 +23,16 @@ from sheets_reports.services.sheets import (
     infer_column_types,
     source_key,
 )
+from sheets_reports.engine.formulas import (
+    FORMATS as FORMULA_FORMATS,
+    FormulaError,
+    aggregated_fields,
+    apply_calculated_fields,
+    compile_formula,
+    rename_columns,
+)
 from sheets_reports.services.source_columns import impact, rename_in_widgets
-from sheets_reports.utils.data import time_fields
+from sheets_reports.utils.data import time_fields, to_key, to_python
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
 from sheets_reports.utils.validation import SpecValidationError
 from sheets_reports.services.widget_service import WidgetService
@@ -301,6 +310,7 @@ def _serialize_source(source):
         # Sin configuración (fuentes anteriores al selector) se usan todas: no se sabe cuántas.
         "columns_included": len(included) if source.columns else None,
         "columns_total": len(source.columns) if source.columns else None,
+        "calculated_fields": source.calculated_fields,
         "widgets": source.widgets.count(),
     }
 
@@ -331,7 +341,8 @@ def _sheet_columns(df) -> list[dict]:
     types = infer_column_types(df)
     columns = []
     for col in df.columns:
-        values = [v for v in df[col].dropna().astype(str).str.strip().unique() if v]
+        # to_key: 5000.0 → «5000», como se ve en la hoja.
+        values = [v for v in dict.fromkeys(str(to_key(x)).strip() for x in df[col].dropna()) if v]
         columns.append({"name": col, "type": types[col], "samples": values[:SOURCE_SAMPLES]})
     return columns
 
@@ -379,16 +390,27 @@ def dashboard_sources(request, dashboard_id):
     return JsonResponse(_serialize_source(source), status=201)
 
 
-def _column_change(source, new_columns: list[dict]) -> tuple[list[dict], dict[str, str]]:
+def _as_columns(calculated: list[dict]) -> list[dict]:
+    """Los campos calculados como columnas para comparar versiones: se siguen por su `id`, así
+    un campo renombrado sigue siendo el mismo."""
+    return [{"name": f"calc:{f['id']}", "label": f["name"], "type": "calc", "include": True}
+            for f in calculated]
+
+
+def _column_change(source, new_columns: list[dict],
+                   new_calculated: list[dict] | None = None) -> tuple[list[dict], dict[str, str]]:
     """Qué pasa con los widgets de la fuente si sus columnas pasan a ser `new_columns`
-    ([{name, label?, type, include}], las de la hoja nueva al reemplazarla):
-    - `impact`: los widgets que usan columnas que se quitan, ya no están en la hoja o cambian
-      de tipo ([{id, title, columns}]).
-    - `renames`: nombre a mostrar viejo → nuevo de las columnas que siguen, para que los
-      widgets las sigan."""
-    old = [c for c in source.columns if c.get("include", True)]
+    ([{name, label?, type, include}], las de la hoja nueva al reemplazarla) y sus campos
+    calculados, `new_calculated`:
+    - `impact`: los widgets que usan columnas o campos que se quitan, ya no están en la hoja o
+      cambian de tipo ([{id, title, columns}]).
+    - `renames`: nombre a mostrar viejo → nuevo de las columnas y campos que siguen, para que
+      los widgets (y las fórmulas) los sigan."""
+    if new_calculated is None:
+        new_calculated = source.calculated_fields
+    old = [c for c in source.columns if c.get("include", True)] + _as_columns(source.calculated_fields)
     old_by_display = {column_display_name(c): c for c in old}
-    new_by_name = {c["name"]: c for c in new_columns}
+    new_by_name = {c["name"]: c for c in [*new_columns, *_as_columns(new_calculated)]}
     available, retyped, renames = set(), set(), {}
     for display, column in old_by_display.items():
         new = new_by_name.get(column["name"])
@@ -403,12 +425,61 @@ def _column_change(source, new_columns: list[dict]) -> tuple[list[dict], dict[st
     return affected, renames
 
 
+def _calculated_errors(fields) -> str | None:
+    """La forma de `calculated_fields`: [{id, name, formula, format}]. Las fórmulas se validan
+    contra la hoja aparte (`_check_calculated`)."""
+    if not isinstance(fields, list):
+        return "'calculated_fields' debe ser una lista"
+    ids, names = set(), set()
+    for f in fields:
+        if not isinstance(f, dict):
+            return "Cada campo calculado debe ser un objeto"
+        if not str(f.get("id") or "").strip():
+            return "Cada campo calculado necesita un 'id'"
+        name = str(f.get("name") or "").strip()
+        if not name:
+            return "Cada campo calculado necesita un nombre"
+        if f.get("format", "number") not in FORMULA_FORMATS:
+            return f"Formato no válido para «{name}»: usa {', '.join(FORMULA_FORMATS)}"
+        if f["id"] in ids or name in names:
+            return f"Hay dos campos calculados llamados «{name}»"
+        ids.add(f["id"])
+        names.add(name)
+    return None
+
+
+def _clean_calculated(fields: list[dict]) -> list[dict]:
+    return [{"id": str(f["id"]).strip(), "name": str(f["name"]).strip()[:120],
+             "formula": str(f.get("formula") or "").strip(), "format": f.get("format") or "number"}
+            for f in fields]
+
+
+def _check_calculated(source, updates: dict) -> str | None:
+    """Evalúa los campos calculados contra la hoja como quedaría: un error legible o None."""
+    if not updates.get("calculated_fields"):
+        return None
+    sheet_id = updates.get("sheet_id", source.sheet_id)
+    gid = updates.get("gid", source.gid)
+    headers = updates.get("first_row_headers", source.first_row_headers)
+    try:
+        df = sheets.get_sheet_dataframe(sheet_id, gid, headers=headers)
+    except SheetError as e:
+        return str(e)
+    df = sheets.apply_column_config(df, updates.get("columns", source.columns))
+    try:
+        apply_calculated_fields(df, updates["calculated_fields"], strict=True)
+    except FormulaError as e:
+        return str(e)
+    return None
+
+
 @csrf_exempt
 @require_http_methods(["PUT", "DELETE"])
 def source_detail(request, source_id):
     """
-    PUT {columns, name?, first_row_headers?, sheet_id?, sheet_gid?, sheet_name?, tab_name?,
-    dry_run?}: columnas (tipo, incluir, nombre a mostrar), nombre de la fuente y, con
+    PUT {columns, calculated_fields?, name?, first_row_headers?, sheet_id?, sheet_gid?,
+    sheet_name?, tab_name?, dry_run?}: columnas (tipo, incluir, nombre a mostrar), campos
+    calculados (validados contra la hoja), nombre de la fuente y, con
     `sheet_id`, otra hoja para la misma fuente (sus widgets la siguen usando). Los widgets se
     reescriben para seguir a las columnas renombradas. Con `dry_run` solo devuelve `{impact}`:
     los widgets que se romperían.
@@ -444,10 +515,23 @@ def source_detail(request, source_id):
             updates["name"] = str(data.get("name") or "").strip()[:255]
         if "first_row_headers" in data:
             updates["first_row_headers"] = bool(data["first_row_headers"])
+    if "calculated_fields" in data:
+        error = _calculated_errors(data["calculated_fields"])
+        if error:
+            return _error(error)
+        updates["calculated_fields"] = _clean_calculated(data["calculated_fields"])
 
-    affected, renames = _column_change(source, updates["columns"])
+    calculated = updates.get("calculated_fields", source.calculated_fields)
+    affected, renames = _column_change(source, updates["columns"], calculated)
     if data.get("dry_run"):
         return JsonResponse({"impact": affected})
+    # Las fórmulas siguen a las columnas y campos renombrados en esta misma edición.
+    if renames and calculated:
+        updates["calculated_fields"] = [{**f, "formula": rename_columns(f["formula"], renames)}
+                                        for f in calculated]
+    error = _check_calculated(source, updates)
+    if error:
+        return _error(error)
     for key, value in updates.items():
         setattr(source, key, value)
     source.save()
@@ -488,6 +572,88 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
     return out
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def source_add_calculated(request, source_id):
+    """
+    Agrega campos calculados a la fuente: POST {fields: [{name, formula, format}]} (los que
+    propone la IA al aplicar su propuesta). Un campo que ya existe con la misma fórmula se deja
+    tal cual (aplicar otra vez la misma propuesta); con otra fórmula es un error.
+    → la fuente serializada, o {error}.
+    """
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    items = data.get("fields")
+    if not isinstance(items, list) or not items:
+        return _error("'fields' debe ser una lista con al menos un campo")
+    existing = {f["name"]: f for f in source.calculated_fields}
+    added = []
+    for item in items:
+        if not isinstance(item, dict):
+            return _error("Cada campo calculado debe ser un objeto")
+        name = str(item.get("name") or "").strip()
+        formula = str(item.get("formula") or "").strip()
+        if name in existing:
+            if existing[name]["formula"] != formula:
+                return _error(f"Ya hay un campo calculado «{name}» con otra fórmula")
+            continue
+        added.append({"id": f"cf_{uuid.uuid4().hex[:12]}", "name": name, "formula": formula,
+                      "format": item.get("format") or "number"})
+    calculated = [*source.calculated_fields, *added]
+    error = _calculated_errors(calculated) or _check_calculated(source, {"calculated_fields": calculated})
+    if error:
+        return _error(error)
+    source.calculated_fields = calculated
+    source.save(update_fields=["calculated_fields"])
+    return JsonResponse(_serialize_source(source))
+
+
+FORMULA_PREVIEW_ROWS = 5
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def source_formula(request, source_id):
+    """
+    Vista previa de un campo calculado mientras se escribe: POST {formula, columns?,
+    first_row_headers?, calculated_fields?} (lo que hay en el editor, sin guardar; los campos
+    calculados son los anteriores a este) → {kind: "row"|"aggregated", values: [...]} con los
+    primeros valores (por fila) o el total de la hoja (agregado), o {error} si la fórmula no vale.
+    """
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    headers = bool(data.get("first_row_headers", source.first_row_headers))
+    try:
+        df = sheets.get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
+    except SheetError as e:
+        return _error(str(e), status=502)
+    columns = data.get("columns")
+    valid_columns = isinstance(columns, list) and columns and not _columns_errors(columns)
+    df = sheets.apply_column_config(df, _clean_columns(columns) if valid_columns else source.columns)
+    previous = data.get("calculated_fields") or []
+    if _calculated_errors(previous) is None:
+        df = apply_calculated_fields(df, _clean_calculated(previous))
+    try:
+        formula = compile_formula(str(data.get("formula") or ""), df.columns, aggregated_fields(df))
+        if formula.aggregated:
+            values = [to_python(formula.aggregate(df))]
+        else:
+            values = [to_python(v) for v in formula.evaluate_rows(df).head(FORMULA_PREVIEW_ROWS)]
+    except FormulaError as e:
+        return JsonResponse({"error": str(e)})
+    return JsonResponse({"kind": "aggregated" if formula.aggregated else "row", "values": values})
+
+
 @require_http_methods(["GET"])
 def source_schema(request, source_id):
     """Columnas de la fuente para el panel de un widget (agrupables, numéricas, de tiempo y
@@ -500,7 +666,10 @@ def source_schema(request, source_id):
     except SheetError as e:
         return _error(str(e), status=502)
     schema = {**get_sheet_schema(df), "dimension_fields": get_dimension_fields(df),
-              "time_fields": time_fields(df)}
+              "time_fields": time_fields(df),
+              # Solo métricas, con agregación «auto»: no son columnas de la hoja.
+              "aggregated_fields": [{"name": f.name, "format": f.format}
+                                    for f in aggregated_fields(df).values()]}
     return JsonResponse({
         **schema, "sample_values": get_field_samples(df),
         "widget_manifest": _widget_manifest(),

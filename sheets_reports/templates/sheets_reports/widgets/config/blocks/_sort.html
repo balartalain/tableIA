@@ -7,7 +7,7 @@
             class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500">
       <option value="">Sin orden</option>
       <template x-for="o in $store.dashboard.sortOptions" :key="o.value">
-        <option x-bind:value="o.value" x-text="o.label"></option>
+        <option x-bind:value="o.value" x-text="o.label" x-bind:selected="o.value === $store.dashboard.sortValue"></option>
       </template>
     </select>
   </div>

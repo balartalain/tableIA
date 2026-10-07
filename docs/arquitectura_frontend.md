@@ -129,6 +129,7 @@ con su `{% include %}`. Cada partial tiene un único elemento raíz con dos `<di
 | `_title`, `_assistant`, `_json` | título, asistente de IA, visor JSON | — |
 | `_columns`, `_dimensions`, `_pivots`, `_metrics` | listas de `fields` (arrastrables) | `_dimensions` / `_pivots`: `with totals=True` pinta «Mostrar totales» por nivel (tabla dinámica) |
 | `_trend`, `_filters`, `_sort`, `_limit` | resto de `fields` | — |
+| `_metrics` · campos agregados | `metric.field` + `metric.agg` | el select de columna suma un grupo «Campos calculados agregados» (`schema.aggregated_fields`); al elegir uno, `onMetricFieldChange` pone `agg: 'auto'` y el select de agregación muestra solo «Automática» (deshabilitado). `metricName` usa el nombre del campo |
 | `_metrics` · «Mostrar como» | `metric.window` de cada métrica de agregación | select con `metricWindowOptions` (`WINDOW_OPTIONS`: «% del total de la columna», «% del total de la fila», «Acumulado», «Variación vs anterior», más «Valor» = sin ventana), mostradas con el prefijo «Mostrar: …» (ej. «Mostrar: valor») para que se lea junto a la agregación. Solo las de `capabilities.windows`; con pivotes, solo los dos porcentajes (`PIVOT_WINDOWS`, se calculan por celda), y «% del total de la fila» solo con pivotes (mismas reglas que `form_errors`). Si la ventana guardada deja de valer, avisa «se quitará al guardar» |
 | `_condition_row` | una condición `{field, op, valor}` dentro de un `x-for="(c, ci) in …"` | `with list="…"`: la lista que la contiene. La usan `_filters` (filtros del widget) y `_metrics` (condiciones propias de cada métrica de agregación, plegables en «Solo filas donde…», solo si `hasMetricFilters`: el widget admite más de una métrica) |
 | `_style_checkbox`, `_style_text`, `_style_number`, `_style_palette` | una clave de `style` | `key`, `label` (+ `placeholder` / `min`, `max`, `step`) |
@@ -141,25 +142,20 @@ meta y borra `style.target` cuando la meta deja de ser «Valor fijo».
 `openDrawer(id)`:
 1. Construye `drawerDraft` desde el widget + defaults del manifest.
 2. `_normalizeDraft()`: asegura arrays, dedupes columnas, normaliza tipos y pasa a borrador
-   (`conditionFromPayload`) los filtros del widget y los de cada métrica. Una fórmula que
-   llega solo con `expression` (las de la IA) se lee a los selects del «Cálculo entre
-   métricas» con `_parseFormula` (inversa de `_formulaFor`: `a - b`, `a + b`, `a * b`, `a / b`,
-   `a / b * 100`, `((a - b) / b * 100)`, con `b` métrica anterior o número). Si no encaja
-   (ej. `(a + b) / c`) queda como **fórmula personalizada**: el panel la muestra en solo
-   lectura, se guarda tal cual y «elige una operación» (`editFormulaWithSelects`) la pasa a
-   los selects.
+   (`conditionFromPayload`) los filtros del widget y los de cada métrica. Los cálculos entre
+   totales no son métricas del widget: son campos calculados agregados de la fuente (ver
+   «Fuentes de datos»), que la métrica usa con agregación «Automática».
 3. Auto-pick: columnas/dimensiones/métricas iniciales si está vacío.
 4. `initListSortables()` en el siguiente tick (`Alpine.nextTick`): el `x-if` crea el panel
    del tipo después de cambiar `editingType`.
 
 `saveDrawer()`:
-1. `pruneFormulas()`: descarta fórmulas incompletas.
-2. Limpia campos vacíos (dimensions, pivots, columns).
-3. Mapea filtros a formato backend (`conditionToPayload`), también los de cada métrica; una
+1. Limpia campos vacíos (dimensions, pivots, columns).
+2. Mapea filtros a formato backend (`conditionToPayload`), también los de cada métrica; una
    métrica sin condiciones no lleva la clave `filters`. Quita el `window` de las métricas
    cuya ventana ya no vale (`metricWindowInvalid`), así guardar no choca con `form_errors`.
-4. Normaliza `trend_by`, `sort_by`, `limit`.
-5. `_saveWidget(w)`: `style` va tal cual lo dejó el panel.
+3. Normaliza `trend_by`, `sort_by`, `limit`.
+4. `_saveWidget(w)`: `style` va tal cual lo dejó el panel.
 
 ### Getters de capacidades
 
@@ -168,7 +164,6 @@ Límites y opciones que usan los bloques (qué bloques muestra cada tipo lo deci
 ```javascript
 get hasColumns()      // capabilities.columns[1] > 0 (auto-pick al abrir)
 get maxColumns() / maxDimensions() / maxPivots() / maxMetrics()   // tope de cada lista
-get hasFormulaMetrics()   // admite métricas de tipo fórmula
 get hasMetricFilters()    // maxMetrics > 1: cada métrica admite sus propias condiciones
 get metricWindowOptions() // «Mostrar como»: capabilities.windows válidas con los pivotes del borrador
 get trendOptions()    // dimension_fields (fallback: all_fields)
@@ -186,14 +181,15 @@ recargar; borrar el widget borra su hilo; un widget nuevo lo conserva al recibir
 `askAssistant()` (Enter o «Enviar»): POST `/api/dashboard/{id}/table-assistant/` con
 `{prompt, widget_type, current, history}`:
 - `current` = `_draftPayload()`: el borrador del panel tal como lo guardaría «Guardar»
-  (`{title, fields, style}`, sin filas a medio elegir ni cálculos incompletos). La IA lo
+  (`{title, fields, style}`, sin filas a medio elegir). La IA lo
   **ajusta** en vez de crear desde cero.
 - `history` = los mensajes previos del hilo (pedidos y propuestas; los errores no viajan).
 
-La respuesta (`{widget_type, fields, style}`; `title` va vacío: el título de la tarjeta lo
+La respuesta (`{widget_type, calculated_fields, fields, style}`; `title` va vacío: el título de la tarjeta lo
 pone el usuario, la IA no lo genera) se agrega al hilo y **no** toca el borrador.
 `adviceSteps(proposal, baseStyle)` la convierte en pasos legibles en el orden del panel
-y con el nombre de cada bloque (`columnsLabel`, «Dimensiones» o `dimensions_label`,
+y con el nombre de cada bloque (los campos calculados que propone crear, `columnsLabel`,
+«Dimensiones» o `dimensions_label`,
 «Pivotes», «Filtros», «Métricas», tendencia, orden y límite). Del
 `style` solo lista lo que **cambia** respecto a `baseStyle` (el estilo del panel al pedir,
 guardado en el mensaje: la IA devuelve el estilo completo), con las etiquetas del
@@ -202,11 +198,14 @@ registró con `registerStyleGroup(grupo, claves)` (ej. `_kpi_config.html` → «
 `_dimensions` / `_pivots` con `totals` → «Totales») van bajo ese grupo; el resto, bajo
 «Personalizar». El grupo es maquetación: vive en el partial (`styleGroups[tipo]`), no en el
 `style_schema`, que solo declara datos. Cada propuesta lleva su botón «Aplicar y guardar»:
-`applyAdvice(message)` copia `fields` al borrador, **suma** el `style` propuesto al actual
+`applyAdvice(message)` primero crea en la fuente los `calculated_fields` propuestos
+(`_createCalculatedFields`: `POST /api/sources/{id}/calculated-fields/` y recarga el schema),
+luego copia `fields` al borrador, **suma** el `style` propuesto al actual
 (el título no cambia) y guarda con `saveDrawer({fromAssistant: true})`, así el widget se
 redibuja al momento. El mensaje guarda en `undo` el `_draftPayload()` previo: «Deshacer»
 (`undoAdvice(message)`) lo restaura en el borrador y lo guarda. Solo la última propuesta
-aplicada tiene `undo`, y un «Guardar» manual lo borra (`_clearAdviceUndo()`). Si el guardado
+aplicada tiene `undo`, y un «Guardar» manual lo borra (`_clearAdviceUndo()`); deshacer no
+borra los campos calculados creados, que quedan en la fuente. Si el guardado
 falla, el borrador queda con la propuesta y el error en el pie del panel.
 «Nueva conversación» (`clearThread()`) vacía el hilo del widget.
 
@@ -357,6 +356,12 @@ de columnas:
 - «Usar la primera fila como encabezado» (`?headers=0|1`): sin ella, la fila 1 es un dato y
   las columnas se llaman «Columna A», «Columna B»…
 - Por columna: incluir, **nombre a mostrar** (reemplaza al encabezado en todo el tablero) y tipo.
+- En `edit`, pestaña **Campos calculados**: nombre, fórmula (con «Insertar columna…»), el tipo
+  que decide la fórmula («Por fila» / «Agregado») y, en los agregados, formato Número o
+  Porcentaje. Mientras se escribe, `previewCalculated` pide a `POST /api/sources/{id}/formula/`
+  los primeros valores (o el total de la hoja) o el error, con lo que hay en el editor sin
+  guardar. El ícono de ayuda abre `source_formula_help.html`: los dos tipos con ejemplos, cuál
+  elegir y la sintaxis.
 - En `edit` y `replace`, nombre opcional de la fuente (vacío = el original).
 - **Actualizar datos**, junto al nombre (`refreshColumns()`): relee la pestaña de Google
   (`?refresh=1`, pisa el caché del servidor) y muestra su estructura actual sin perder los

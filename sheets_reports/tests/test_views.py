@@ -46,15 +46,15 @@ class ViewsTests(TestCase):
                          {"Hogar": 175.0, "Electrónica": 500.0})
 
     def test_kpi_participacion_respeta_los_filtros_del_tablero(self, _df):
+        self.source.calculated_fields = [{
+            "id": "p", "name": "Participación", "format": "percent",
+            "formula": 'SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100'}]
+        self.source.save()
         Widget.objects.create(
             dashboard=self.dashboard, source=self.source, type="kpi", title="Participación de Hogar",
             fields={"dimensions": [], "filters": [],
-                    "metrics": [{**agg("hogar"),
-                                 "filters": [{"field": "categoria", "op": "eq", "value": "Hogar"}]},
-                                agg("total"),
-                                {"type": "formula", "alias": "participacion",
-                                 "expression": "hogar / total * 100"}]},
-            style={"primary": "participacion"},
+                    "metrics": [{"field": "Participación", "agg": "auto", "alias": "participacion"}]},
+            style={},
         )
         r = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/?{board_filters(ANIO_2026)}")
         kpi = next(w for w in r.json()["widgets"] if w["type"] == "kpi")

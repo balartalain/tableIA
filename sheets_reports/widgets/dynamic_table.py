@@ -138,7 +138,7 @@ class DynamicTableWidget(BaseWidget):
         meta = metadata or {}
         nested = meta.get("nested")
         if nested:
-            return self._compile_nested(nested, style_dict, fields)
+            return self._compile_nested(nested, style_dict, fields, meta)
 
         frame = result.rows
         dimensions = [d for d in (meta.get("dimensions") or []) if d in frame.columns]
@@ -152,11 +152,11 @@ class DynamicTableWidget(BaseWidget):
             "rows": frame.to_dict(orient="records"),
             "rowFields": dimensions,
             "totals": self._totals(frame, dimensions),
-            "percent": percent_aliases(fields),
+            "percent": percent_aliases(fields, meta),
             "style": style_dict,
         }
 
-    def _compile_nested(self, nested: dict, style: dict, fields) -> dict:
+    def _compile_nested(self, nested: dict, style: dict, fields, metadata=None) -> dict:
         """
         - una columna por cada fila de la dimensión (`rowFields`), luego las métricas (sin
           pivote) o las columnas anidadas de los pivotes (`_pivot_columns`);
@@ -206,7 +206,7 @@ class DynamicTableWidget(BaseWidget):
         if dimensions:
             grand = {dimensions[0]: TOTAL_LABEL, **grand}
 
-        percent = percent_aliases(fields)
+        percent = percent_aliases(fields, metadata)
         if pivots:
             percent = [
                 field for alias in percent

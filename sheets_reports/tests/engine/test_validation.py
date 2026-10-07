@@ -34,7 +34,7 @@ class FormErrorsTests(SimpleTestCase):
                 errors = errors_for("kpi", kpi_fields(agg("total"), agg("v", window={"type": w_type})))
                 self.assertEqual(len(errors), 1)
                 self.assertIn("metrics[1].window: este widget da un solo número", errors[0])
-                self.assertIn("'parte / total * 100'", errors[0])
+                self.assertIn("campo calculado agregado", errors[0])
                 self.assertIn("'latest' y 'previous'", errors[0])
         variacion = agg("variacion", window={"type": "pct_change"})
         self.assertEqual(errors_for("line", fields(dimensions=["mes"], metrics=[variacion])), [])
@@ -143,13 +143,25 @@ class FormErrorsTests(SimpleTestCase):
     def test_count_sin_campo_cuenta_filas(self):
         self.assertEqual(errors_for("bar", fields(metrics=[{"agg": "count", "alias": "filas"}])), [])
 
-    def test_metrica_formula(self):
-        self.assertEqual(errors_for("dynamic_table", fields(metrics=[
-            agg("total"), {"type": "formula", "alias": "doble", "expression": "total * 2", "field": "ventas"},
-        ])), [])
-        self.assertIn("solo admite columnas", errors_for("dynamic_table", fields(metrics=[
-            agg("total"), {"type": "formula", "alias": "x", "expression": "total; import os", "field": "ventas"},
-        ]))[0])
+    def test_campos_calculados_que_propone_la_ia(self):
+        share = {"name": "Participación", "formula": "SUM(ventas) / SUM(anio) * 100", "format": "percent"}
+        uses = fields(metrics=[{"field": "Participación", "agg": "auto", "alias": "p"}])
+        self.assertEqual(errors_for("dynamic_table", uses, calculated_fields=[share]), [])
+        # Sin proponerlo, el campo no existe.
+        self.assertIn("solo se usa con un campo calculado agregado", errors_for("dynamic_table", uses)[0])
+        cases = {
+            "por fila": ({**share, "formula": "ventas * 2"}, "debe ser agregada"),
+            "mezcla": ({**share, "formula": "SUM(ventas) / anio"}, "mezcla"),
+            "nombre de columna": ({**share, "name": "ventas"}, "ya existe una columna"),
+            "formato": ({**share, "format": "moneda"}, "format debe ser"),
+        }
+        for case, (item, message) in cases.items():
+            with self.subTest(case=case):
+                errors = errors_for("dynamic_table", uses, calculated_fields=[item])
+                self.assertTrue(any(message in e for e in errors), errors)
+        # Las métricas de cálculo entre métricas ya no existen.
+        old = fields(metrics=[agg("total"), {"type": "formula", "alias": "d", "expression": "total * 2"}])
+        self.assertIn("metrics[1]", errors_for("dynamic_table", old)[0])
 
     def test_orden_y_limite(self):
         self.assertIn("'nada' no es una columna ni un alias",

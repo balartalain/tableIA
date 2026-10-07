@@ -8,7 +8,8 @@ from sheets_reports.engine import ResultTooLargeError
 from sheets_reports.engine import AGGREGATIONS, agg_name, build_query_result, run_steps
 from sheets_reports.engine.steps.aggregation import apply_aggregation
 from sheets_reports.engine.steps.filter import filter_rows
-from sheets_reports.tests.fixtures import (agg, calc, execute, fields, sales_df, sales_int_df,
+from sheets_reports.engine.formulas import apply_calculated_fields
+from sheets_reports.tests.fixtures import (agg, execute, fields, sales_df, sales_int_df,
                                             sellers_df)
 from sheets_reports.widgets.schemas import WidgetFields
 
@@ -16,7 +17,7 @@ from sheets_reports.widgets.schemas import WidgetFields
 class AggregationTests(SimpleTestCase):
     def test_agregaciones_disponibles_se_traducen_a_pandas(self):
         self.assertEqual(sorted(AGGREGATIONS), [
-            "avg", "count", "count_distinct", "max", "mean", "median", "min", "std", "sum",
+            "auto", "avg", "count", "count_distinct", "max", "mean", "median", "min", "std", "sum",
         ])
         self.assertEqual(agg_name("avg"), "mean")
         self.assertEqual(agg_name("count_distinct"), "nunique")
@@ -127,15 +128,7 @@ class ScalarTests(SimpleTestCase):
         self.assertEqual(out["data"]["values"]["filas"], 6)
 
 
-class CalculatedAndWindowTests(SimpleTestCase):
-    def test_formula_sobre_las_columnas_agregadas(self):
-        out = execute(sales_df(), fields(metrics=[agg("total"), calc("doble", "total * 2")]))
-        self.assertEqual(out["data"][0]["doble"], 350.0)  # Hogar: 175 × 2
-
-    def test_una_formula_mala_no_tumba_el_resultado(self):
-        out = execute(sales_df(), fields(metrics=[agg("total"), calc("rota", "no_existe(")]))
-        self.assertIsNone(out["data"][0]["rota"])
-
+class WindowTests(SimpleTestCase):
     def test_percent_of_total_sobre_el_alias(self):
         out = execute(sales_df(), fields(metrics=[
             agg("total"), {"field": "ventas", "agg": "sum", "alias": "pct",
@@ -253,12 +246,11 @@ class NestedPivotTests(SimpleTestCase):
                         metrics=[agg("total")])
         self.assertEqual([r["key"] for r in n["rows"]], [["Electrónica"], ["Hogar"], ["Ropa"]])
 
-    def test_las_formulas_se_calculan_tambien_en_los_subtotales(self):
-        n = self.nested(sellers_df(), dimensions=["categoria", "anio"],
-                        metrics=[agg("total_ventas"), agg("total_plan", "sum", "plan"),
-                                 {"type": "formula", "alias": "margen",
-                                  "expression": "total_plan / total_ventas", "field": "ventas"}])
-        self.assertIn("margen", n["metrics"])
+    def test_los_campos_agregados_se_calculan_tambien_en_los_subtotales(self):
+        df = apply_calculated_fields(sellers_df(), [
+            {"id": "m", "name": "Margen", "formula": "SUM([plan]) / SUM([ventas])"}])
+        n = self.nested(df, dimensions=["categoria", "anio"],
+                        metrics=[{"field": "Margen", "agg": "auto", "alias": "margen"}])
         hogar = next(r for r in n["rows"] if r["key"] == ["Hogar"])
         # El subtotal NO suma los márgenes de sus hijos: es plan/ventas del propio subtotal.
         self.assertAlmostEqual(hogar["totals"]["margen"], 520 / 600, places=6)

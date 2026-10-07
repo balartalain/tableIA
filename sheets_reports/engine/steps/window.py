@@ -1,5 +1,5 @@
 """
-Paso 4 del motor: ventanas sobre las métricas, declaradas dentro del propio diccionario de la
+Paso 3 del motor: ventanas sobre las métricas, declaradas dentro del propio diccionario de la
 métrica: `{"alias": "pct_total", "field": "monto", "agg": "sum",
 "window": {"type": "percent_of_total"}}`.
 """
@@ -21,7 +21,7 @@ def apply_window_functions(df: pd.DataFrame, metrics: list | None, metadata: dic
         return df
     if metadata.get("scalar_result") is not None:
         # Un solo número (KPI): no hay otras filas que mirar. La participación se hace con
-        # una fórmula entre métricas (ej. hogar / total * 100).
+        # un campo calculado agregado (ej. SUM(IF(cat = "Hogar", ventas, 0)) / SUM(ventas) * 100).
         return df
 
     if metadata.get("pivoted"):

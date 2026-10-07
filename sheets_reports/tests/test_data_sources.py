@@ -222,6 +222,100 @@ class SourceChangesTests(TestCase):
         self.assertEqual(_df.call_args.kwargs, {"headers": False})
 
 
+SHARE = {"id": "s", "name": "Participación", "formula": "SUM(ventas) / SUM(anio) * 100", "format": "percent"}
+
+
+@mock.patch(SHEET, side_effect=by_sheet)
+class CalculatedFieldsTests(TestCase):
+    """Campos calculados de la fuente: se guardan validados contra la hoja, los widgets los
+    usan (por fila como columna, agregados como métrica «auto») y siguen sus renombres."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(self.user)
+        self.dashboard, self.source = make_board(self.user, columns=SALES_COLUMNS)
+
+    def put(self, data):
+        return json_body(self.client, "put", f"/api/sources/{self.source.id}/",
+                         {"columns": SALES_COLUMNS, **data})
+
+    def test_guardar_y_usar_en_widgets(self, _df):
+        double = {"id": "d", "name": "Doble", "formula": "ventas * 2"}
+        r = self.put({"calculated_fields": [double, SHARE]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["calculated_fields"][1]["format"], "percent")
+        schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
+        self.assertIn("Doble", schema["all_fields"])                   # por fila: una columna más
+        self.assertEqual(schema["aggregated_fields"], [{"name": "Participación", "format": "percent"}])
+        Widget.objects.create(dashboard=self.dashboard, source=self.source, type="bar", fields=fields(
+            metrics=[{"field": "Participación", "agg": "auto", "alias": "p"}]), style={})
+        data = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/").json()["widgets"][0]
+        self.assertIsNone(data["error"])
+        self.assertEqual(data["data"]["percent"], ["Participación"])
+
+    def test_formula_invalida_no_se_guarda(self, _df):
+        r = self.put({"calculated_fields": [{"id": "x", "name": "Malo", "formula": "SUM(ventas) / anio"}]})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("«Malo»", r.json()["error"])
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.calculated_fields, [])
+
+    def test_forma_invalida(self, _df):
+        for bad, message in (([{"id": "a", "name": "", "formula": "1"}], "nombre"),
+                             ([SHARE, {**SHARE}], "dos campos"),
+                             ([{**SHARE, "format": "moneda"}], "Formato")):
+            with self.subTest(message=message):
+                r = self.put({"calculated_fields": bad})
+                self.assertEqual(r.status_code, 400)
+                self.assertIn(message, r.json()["error"])
+
+    def test_renombrar_una_columna_reescribe_las_formulas(self, _df):
+        self.put({"calculated_fields": [SHARE]})
+        r = self.put({"columns": with_column("ventas", label="Monto"), "calculated_fields": [SHARE]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["calculated_fields"][0]["formula"], "SUM([Monto]) / SUM(anio) * 100")
+
+    def test_renombrar_o_quitar_un_campo_sigue_a_sus_widgets(self, _df):
+        self.put({"calculated_fields": [SHARE]})
+        widget = Widget.objects.create(dashboard=self.dashboard, source=self.source, type="bar", title="Part.",
+                                       fields=fields(metrics=[{"field": "Participación", "agg": "auto", "alias": "p"}]),
+                                       style={})
+        self.put({"calculated_fields": [{**SHARE, "name": "% Part."}]})
+        widget.refresh_from_db()
+        self.assertEqual(widget.fields["metrics"][0]["field"], "% Part.")
+        impact = self.put({"calculated_fields": [], "dry_run": True}).json()["impact"]
+        self.assertEqual(impact, [{"id": widget.id, "title": "Part.", "columns": ["% Part."]}])
+
+    def test_agregar_los_campos_que_propone_la_ia(self, _df):
+        url = f"/api/sources/{self.source.id}/calculated-fields/"
+        new = {"name": "Participación", "formula": SHARE["formula"], "format": "percent"}
+        r = json_body(self.client, "post", url, {"fields": [new]})
+        self.assertEqual(r.status_code, 200, r.content)
+        saved = r.json()["calculated_fields"]
+        self.assertEqual([(f["name"], f["format"]) for f in saved], [("Participación", "percent")])
+        self.assertTrue(saved[0]["id"].startswith("cf_"))
+        # Aplicar otra vez la misma propuesta no lo duplica; otra fórmula con el mismo nombre falla.
+        self.assertEqual(len(json_body(self.client, "post", url, {"fields": [new]}).json()["calculated_fields"]), 1)
+        clash = json_body(self.client, "post", url, {"fields": [{**new, "formula": "SUM(ventas)"}]})
+        self.assertEqual(clash.status_code, 400)
+        broken = json_body(self.client, "post", url, {"fields": [{"name": "Malo", "formula": "SUM(nada)"}]})
+        self.assertIn("no existe", broken.json()["error"])
+
+    def test_vista_previa_de_la_formula(self, _df):
+        url = f"/api/sources/{self.source.id}/formula/"
+        row = json_body(self.client, "post", url, {"formula": "ventas * 2"}).json()
+        self.assertEqual(row, {"kind": "row", "values": [200.0, 600.0, 100.0, 160.0, 400.0]})
+        total = json_body(self.client, "post", url, {"formula": "SUM(ventas)"}).json()
+        self.assertEqual(total, {"kind": "aggregated", "values": [755.0]})
+        # Con lo que hay en el editor sin guardar: una columna renombrada y un campo anterior.
+        draft = json_body(self.client, "post", url, {
+            "formula": "[Doble] + [Monto]", "columns": with_column("ventas", label="Monto"),
+            "calculated_fields": [{"id": "d", "name": "Doble", "formula": "Monto * 2"}]}).json()
+        self.assertEqual(draft["values"][0], 300.0)
+        error = json_body(self.client, "post", url, {"formula": "SUM(ventas) / anio"}).json()
+        self.assertIn("mezcla", error["error"])
+
+
 @mock.patch(SHEET, side_effect=by_sheet)
 class MultiSourceWidgetsTests(TestCase):
     def setUp(self):

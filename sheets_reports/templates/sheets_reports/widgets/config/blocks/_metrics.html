@@ -17,31 +17,29 @@
         <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none mt-0.5"
            aria-hidden="true" title="Arrastra para reordenar"></i>
         <div class="flex-1 min-w-0 space-y-1.5">
-        <!-- Agregación o cálculo entre métricas -->
-        <select x-show="$store.dashboard.hasFormulaMetrics"
-                x-bind:value="metric.type || 'agg'"
-                x-on:change="$store.dashboard.onMetricTypeChange(idx, $event.target.value)"
-                aria-label="Tipo de métrica"
-                class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-          <template x-for="o in $store.dashboard.metricTypeOptions" :key="o.value">
-            <option x-bind:value="o.value" x-text="o.label"></option>
-          </template>
-        </select>
-
-        <template x-if="(metric.type || 'agg') !== 'formula'">
           <div class="space-y-1.5">
             <select x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
                     class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
               <option value="" x-show="metric.agg === 'count' || !metric.field" x-text="metric.agg === 'count' ? 'Todas las filas' : '— elegir —'"></option>
               <template x-for="col in $store.dashboard.schema.all_fields || []" :key="col">
-                <option x-bind:value="col" x-text="col"></option>
+                <option x-bind:value="col" x-text="col" x-bind:selected="metric.field === col"></option>
+              </template>
+              <!-- Campos calculados agregados de la fuente: traen su agregación («Automática»). -->
+              <template x-if="$store.dashboard.aggregatedFields.length">
+                <optgroup label="Campos calculados agregados">
+                  <template x-for="name in $store.dashboard.aggregatedFields" :key="name">
+                    <option x-bind:value="name" x-text="name" x-bind:selected="metric.field === name"></option>
+                  </template>
+                </optgroup>
               </template>
             </select>
             <div class="flex gap-1.5">
               <select x-model="metric.agg" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Agregación"
-                      class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                <template x-for="o in $store.dashboard.aggOptions" :key="o.value">
-                  <option x-bind:value="o.value" x-text="o.label"></option>
+                      x-bind:disabled="metric.agg === 'auto'"
+                      x-bind:title="metric.agg === 'auto' ? 'La agregación viene en la fórmula del campo calculado' : ''"
+                      class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:bg-paper disabled:text-ink/60">
+                <template x-for="o in $store.dashboard.metricAggOptions(metric)" :key="o.value">
+                  <option x-bind:value="o.value" x-text="o.label" x-bind:selected="metric.agg === o.value"></option>
                 </template>
               </select>
               <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total de la columna, acumulado…). -->
@@ -86,71 +84,6 @@
               </div>
             </template>
           </div>
-        </template>
-
-        <!-- Cálculo entre las métricas anteriores -->
-        <template x-if="metric.type === 'formula' && metric.op">
-          <div class="space-y-1.5">
-            <p x-show="!$store.dashboard.formulaOperandOptions(idx).length" class="text-[11px] text-clay-600">
-              Agrega antes las métricas con las que quieres calcular.
-            </p>
-            <div class="flex flex-wrap items-center gap-1.5">
-              <select x-model="metric.left" x-on:change="$store.dashboard.onFormulaChange(idx)"
-                      aria-label="Primera métrica"
-                      class="flex-1 min-w-[6.5rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                <option value="">Elige una métrica…</option>
-                <template x-for="o in $store.dashboard.formulaOperandOptions(idx)" :key="o.value">
-                  <option x-bind:value="o.value" x-text="o.label"></option>
-                </template>
-              </select>
-              <select x-model="metric.op" x-on:change="$store.dashboard.onFormulaChange(idx)"
-                      aria-label="Operación"
-                      class="w-32 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                <template x-for="o in $store.dashboard.calcOpOptions" :key="o.value">
-                  <option x-bind:value="o.value" x-text="o.label"></option>
-                </template>
-              </select>
-              <select x-model="metric.rightKind" x-on:change="$store.dashboard.onFormulaChange(idx)"
-                      aria-label="Operar con"
-                      class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                <option value="metric">métrica</option>
-                <option value="number">número</option>
-              </select>
-              <template x-if="(metric.rightKind || 'number') !== 'number'">
-                <select x-model="metric.right" x-on:change="$store.dashboard.onFormulaChange(idx)"
-                        aria-label="Segunda métrica"
-                        class="flex-1 min-w-[6.5rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-                  <option value="">Elige una métrica…</option>
-                  <template x-for="o in $store.dashboard.formulaOperandOptions(idx)" :key="o.value">
-                    <option x-bind:value="o.value" x-text="o.label"></option>
-                  </template>
-                </select>
-              </template>
-              <template x-if="(metric.rightKind || 'number') === 'number'">
-                <input type="text" x-model="metric.right" x-on:input="$store.dashboard.onFormulaChange(idx)"
-                       placeholder="Número" aria-label="Número"
-                       class="w-24 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-              </template>
-            </div>
-            <p x-show="!metric.expression" class="text-[11px] text-clay-600">
-              Cálculo incompleto: se descarta si guardas así.
-            </p>
-          </div>
-        </template>
-
-        <!-- Fórmula personalizada (ej. de la IA) que no encaja en una operación del panel:
-             se muestra y se guarda tal cual. -->
-        <template x-if="metric.type === 'formula' && !metric.op">
-          <div class="space-y-1">
-            <code class="block w-full break-words rounded-md border border-line bg-white px-1.5 py-1 font-mono text-[11px] text-ink/80"
-                  x-text="metric.expression"></code>
-            <p class="text-[11px] text-ink/50">
-              Fórmula personalizada: para cambiarla, pídeselo a la IA o
-              <button type="button" x-on:click="$store.dashboard.editFormulaWithSelects(idx)"
-                      class="font-medium text-moss-700 hover:text-moss-800 underline cursor-pointer">elige una operación</button>.
-            </p>
-          </div>
-        </template>
 
         <input type="text" x-model="metric.label" aria-label="Nombre a mostrar"
                x-bind:title="'Se muestra: ' + $store.dashboard.metricName(metric)"

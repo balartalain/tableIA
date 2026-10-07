@@ -57,11 +57,6 @@ def agg(alias: str = "total_ventas", agg: str = "sum", field: str | None = "vent
     return metric
 
 
-def calc(alias: str, expression: str, field: str = "ventas") -> dict:
-    """Métrica calculada sobre columnas ya agregadas (`type: formula`)."""
-    return {"type": "formula", "alias": alias, "expression": expression, "field": field}
-
-
 def fields(**overrides) -> dict:
     """`WidgetFields` plano con los defaults de siempre."""
     base = {
@@ -116,10 +111,13 @@ def execute(df: pd.DataFrame, fields_data: dict):
 
 
 def errors_for(widget_type: str, fields_data: dict, style: dict | None = None,
-               ctx: SheetContext | None = None, title: str = "Ventas") -> list[str]:
-    """Validación de un `WidgetForm` contra la hoja y las capacidades del tipo."""
+               ctx: SheetContext | None = None, title: str = "Ventas",
+               calculated_fields: list | None = None) -> list[str]:
+    """Validación de un `WidgetForm` contra la hoja y las capacidades del tipo (con los campos
+    calculados nuevos que propone la IA, si los hay)."""
     return form_errors(
-        {"widget_type": widget_type, "title": title, "fields": fields_data, "style": style or {}},
+        {"widget_type": widget_type, "title": title, "fields": fields_data, "style": style or {},
+         "calculated_fields": calculated_fields},
         ctx or sales_ctx(),
         widget_type,
     )

@@ -1,11 +1,11 @@
 """
-El motor: cinco pasos atómicos que un widget encadena en `BaseWidget.process_query`.
+El motor: cuatro pasos atómicos que un widget encadena en `BaseWidget.process_query`.
 
     1. filter_rows               (filter.py)       condiciones sobre las filas
     2. apply_aggregation         (aggregation.py)  groupby, pivote, escalar o tabla dinámica
-    3. apply_calculated_metrics  (calculated.py)   métricas tipo "formula"
-    4. apply_window_functions    (window.py)       percent_of_total, running_total, ...
-    5. apply_sort_limit          (sort.py)         sort_by + limit
+                                                   (incluidos los campos calculados agregados)
+    3. apply_window_functions    (window.py)       percent_of_total, running_total, ...
+    4. apply_sort_limit          (sort.py)         sort_by + limit
 
 Cada paso recibe el frame y un dict `metadata` compartido, donde la agregación deja la forma
 del resultado. `run_steps` es la secuencia por defecto; un widget con necesidades atípicas
@@ -18,18 +18,16 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 from sheets_reports.engine.steps.aggregation import apply_aggregation
-from sheets_reports.engine.steps.calculated import apply_calculated_metrics
 from sheets_reports.engine.steps.filter import filter_rows
 from sheets_reports.engine.steps.sort import apply_sort_limit
 from sheets_reports.engine.steps.window import apply_window_functions
 
 
 def run_steps(df: pd.DataFrame, fields, widget_type: Optional[str] = None) -> Dict[str, Any]:
-    """La secuencia por defecto de los cinco pasos sobre `df`."""
+    """La secuencia por defecto de los cuatro pasos sobre `df`."""
     metadata: Dict[str, Any] = {}
     df = filter_rows(df, fields.filters, metadata)
     df = apply_aggregation(df, fields, metadata, widget_type=widget_type)
-    df = apply_calculated_metrics(df, fields.metrics, metadata)
     df = apply_window_functions(df, fields.metrics, metadata)
     df = apply_sort_limit(df, fields.sort_by, fields.limit, metadata)
     return build_query_result(df, fields, metadata)
@@ -50,6 +48,8 @@ def build_query_result(df: pd.DataFrame, fields, metadata: Dict[str, Any]) -> Di
         "column_totals": metadata.get("column_totals", []),
         # Tabla dinámica: resultado jerárquico con subtotales y total general.
         "nested": metadata.get("nested"),
+        # Métricas de campos calculados con formato porcentaje.
+        "percent_metrics": metadata.get("percent_metrics", []),
     }
     records = df.to_dict(orient="records")
 

@@ -150,13 +150,12 @@ sheets_reports/
       __init__.py           # run_steps (secuencia por defecto) + build_query_result
       filter.py             # Paso 1 filter_rows + FilterOperator, RelativeValue, Condition
       aggregation.py        # Paso 2 apply_aggregation + AGGREGATIONS, MAX_PIVOT_CELLS
-      calculated.py         # Paso 3 apply_calculated_metrics
-      window.py             # Paso 4 apply_window_functions
-      sort.py               # Paso 5 apply_sort_limit
+      window.py             # Paso 3 apply_window_functions
+      sort.py               # Paso 4 apply_sort_limit
 
   services/
     __init__.py
-    sheets.py               # Lectura de la hoja (exportación CSV) + caché persistente + tipos/nombres de columna + schema
+    sheets.py               # Lectura de la hoja (exportación CSV) + caché persistente + tipos/nombres de columna + campos calculados + schema
     source_columns.py       # Columnas que usa cada widget: renombrar, impacto de un cambio, IA
     google_drive.py         # Hojas y pestañas visibles para la cuenta de servicio
     widget_service.py       # WidgetService: CRUD, validación, render
@@ -200,6 +199,7 @@ Una pestaña (`gid`) de una hoja de Google Sheets conectada a un tablero.
 | `name` | `CharField(255, blank)` | Nombre propio opcional; `label` = `name` o `original_label` |
 | `first_row_headers` | `BooleanField(default=True)` | La fila 1 son los encabezados; si no, «Columna A»… |
 | `columns` | `JSONField` | `[{name, label?, type: text\|number\|date, include}]` |
+| `calculated_fields` | `JSONField` | `[{id, name, formula, format: number\|percent}]` (ver §10.4) |
 
 - `name` de cada columna es el encabezado de la hoja; `label`, el **nombre a mostrar**, que la
   reemplaza en todo el tablero (schema, motor, filtros, IA). Los widgets guardan ese nombre.
@@ -265,14 +265,12 @@ class WidgetFields:
 
 | Clave | Tipo | Descripción |
 |---|---|---|
-| `agg` | str | `sum`, `avg`, `median`, `min`, `max`, `std`, `count`, `count_distinct` (y `mean` como alias de `avg` en `AGGREGATIONS`) |
-| `field` | str | Columna a agregar. Obligatorio salvo en `count` sin campo (cuenta filas) |
+| `agg` | str | `sum`, `avg`, `median`, `min`, `max`, `std`, `count`, `count_distinct` (y `mean` como alias de `avg` en `AGGREGATIONS`); `auto` solo con un campo calculado agregado (§10.4) |
+| `field` | str | Columna a agregar o campo calculado agregado. Obligatorio salvo en `count` sin campo (cuenta filas) |
 | `alias` | str | Nombre técnico de la columna resultante, **snake_case** (`^[a-z][a-z0-9_]{0,40}$` en la validación de IA) |
 | `label` | str? | Nombre a mostrar (hasta 80 chars). Sin él se usa `metric_label()` |
 | `filters` | list? | Condiciones **solo de esta métrica** (p. ej. «ventas 2026» y «ventas 2025» en el mismo widget) |
 | `window` | dict? | `{"type": "percent_of_total" \| "percent_of_row" \| "running_total" \| "pct_change"}` |
-| `type` | `"formula"`? | Marca la métrica como fórmula |
-| `expression` | str? | Fórmula entre **alias ya agregados** (`DataFrame.eval`): `"total_g / total_v"` |
 
 Dos métricas sobre el mismo campo no colisionan: la agregación crea una columna intermedia
 `__metric_{i}` por métrica.
@@ -520,9 +518,9 @@ Todos los tipos tienen `ai_enabled = True`.
   - Si `df` está vacío → payload cero sin `compare`/`target`/`status`.
 - **Sin ventanas** (`windows: []`); los dos cálculos «respecto a otro» del KPI se arman con
   métricas (ambos son `ai_examples`):
-  - **Participación** («qué % de las ventas es de Hogar»): métrica filtrada + métrica total +
-    fórmula `parte / total * 100` como `primary`. La fórmula se evalúa también en cada punto
-    de la tendencia: la sparkline es la participación de cada mes.
+  - **Participación** («qué % de las ventas es de Hogar»): un campo calculado agregado
+    (`SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100`) usado con `agg: "auto"`.
+    Se evalúa también en cada punto de la tendencia: la sparkline es la participación de cada mes.
   - **Frente al periodo anterior**: dos métricas filtradas con `relative` `latest` y `previous`
     sobre la columna de tiempo + `style.compare` con la anterior.
 
@@ -579,9 +577,8 @@ def run_steps(df, fields, widget_type=None):
     metadata = {}
     df = filter_rows(df, fields.filters, metadata)                         # 1
     df = apply_aggregation(df, fields, metadata, widget_type=widget_type)  # 2
-    df = apply_calculated_metrics(df, fields.metrics, metadata)            # 3
-    df = apply_window_functions(df, fields.metrics, metadata)              # 4
-    df = apply_sort_limit(df, fields.sort_by, fields.limit, metadata)      # 5
+    df = apply_window_functions(df, fields.metrics, metadata)              # 3
+    df = apply_sort_limit(df, fields.sort_by, fields.limit, metadata)      # 4
     return build_query_result(df, fields, metadata)
 ```
 
@@ -647,23 +644,14 @@ Detalles importantes:
 - **`_nested`**: `row_leaf`/`col_leaf` (`_ordered_keys`, sin nulos, orden de aparición) →
   `hierarchy()` construye el árbol de claves con subtotales por nivel (como las tablas
   dinámicas de una hoja). Un groupby por pareja (nivel de fila, nivel de columna) en `tables`;
-  cruza todas las celdas; controla `MAX_PIVOT_CELLS`. Aplica fórmulas y ventanas **celda a
-  celda** (`_cell_metrics`/`_cell_window`: `percent_of_total` sobre el total de su columna,
+  cruza todas las celdas; controla `MAX_PIVOT_CELLS`. Aplica las ventanas **celda a
+  celda** (`_cell_windows`/`_cell_window`: `percent_of_total` sobre el total de su columna,
   `percent_of_row` sobre el de su fila). Metadata `nested`: `{dimensions, pivots, metrics,
   row_leaf, column_keys, cells, rows, grand}`.
 - **`_pivot`**: solo usa `pivots[0]`; `fill_value=0`; `sort=False`; renombra
   `{valor}_{columna}` → `{valor}_{alias}`; comprueba el fan-out contra `MAX_PIVOT_CELLS`.
 
-### 8.5 Paso 3 — `apply_calculated_metrics` (`calculated.py`)
-
-- Si `nested` ya calculó celda a celda → no hace nada.
-- Si `scalar_result` → evalúa cada `type: "formula"` sobre el dict de
-  valores **en el orden de la lista** (una fórmula puede usar la anterior) vía
-  `pd.DataFrame([values]).eval()`.
-- Si no → `df[alias] = df.eval(expression)` por cada métrica formula.
-- Cualquier error de evaluación deja `alias = None` (una fórmula mala no tumba el widget).
-
-### 8.6 Paso 4 — `apply_window_functions` (`window.py`)
+### 8.5 Paso 3 — `apply_window_functions` (`window.py`)
 
 Se declara **dentro** de la métrica: `{"alias": "pct", "field": "monto", "agg": "sum",
 "window": {"type": "percent_of_total"}}`.
@@ -679,17 +667,17 @@ Se declara **dentro** de la métrica: `{"alias": "pct", "field": "monto", "agg":
 - `running_total` y `pct_change` dependen del orden: si la primera dimensión es de tiempo
   (`utils/data.time_order`: números, meses o fechas en texto) se calculan de lo más antiguo a
   lo más reciente, el mismo orden del eje del gráfico de líneas; el frame queda en ese orden
-  y `sort_by` (paso 5) reordena después. Con otra dimensión (categorías) se respeta su orden.
+  y `sort_by` (paso 4) reordena después. Con otra dimensión (categorías) se respeta su orden.
 - Qué ventana admite cada widget lo declara `capabilities["windows"]` (§7); `form_errors`
   además rechaza ventanas en barras/líneas con pivote (cada serie es un valor del pivote y la
   ventana se ignoraría) y `percent_of_row` sin pivotes (daría 100 % en todas las celdas).
 - **KPI (`scalar`)**: no aplica ventanas. Con una sola fila no hay otras filas que mirar (ni
   total de grupos, ni anterior, ni acumulado); el KPI declara `windows: []` y la IA no puede
-  proponerlas. La participación es una fórmula entre métricas (§7.2 `kpi`).
+  proponerlas. La participación es un campo calculado agregado (§7.2 `kpi`).
 - `nested`: ya calculado celda a celda → se omite.
 - Copia el frame antes de escribir (evita escribir sobre una vista de pandas).
 
-### 8.7 Paso 5 — `apply_sort_limit` (`sort.py`)
+### 8.6 Paso 4 — `apply_sort_limit` (`sort.py`)
 
 - `sort_by`: `"col"` ascendente, `"-col"` descendente; si la columna no existe, no ordena.
 - `limit`: `df.head(limit)`.
@@ -792,5 +780,43 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 | `PUT /api/sources/{id}/` | Columnas (tipo, incluir, nombre a mostrar), `name`, `first_row_headers` y, con `sheet_id`, otra hoja (los widgets siguen en la fuente). Reescribe los widgets por los renombres. `dry_run` → solo `{impact}` |
 | `DELETE /api/sources/{id}/` | Borra la fuente (sus widgets quedan sin fuente). `?dry_run=1` → `{impact}` con todos sus widgets |
 | `GET /api/sources/{id}/columns/?headers=&refresh=` | Columnas actuales de la hoja con lo guardado de cada una. `refresh=1` («Actualizar datos») la relee de Google y pisa el caché; no guarda nada |
-| `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget |
+| `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget; `aggregated_fields` lista los campos agregados (`{name, format}`) |
+| `POST /api/sources/{id}/formula/` | Vista previa de una fórmula con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{kind, values}` o `{error}` |
+
+### 10.4 Campos calculados (`engine/formulas.py`)
+
+Fórmulas al estilo de una hoja de cálculo sobre las columnas de la fuente, con un parser propio
+(nunca se ejecuta código). **La fórmula decide el tipo:**
+
+- **Por fila** (sin agregaciones): `[Gasto_Real] - [Presupuesto_Asignado]`,
+  `IF([Respuesta] = "Sí", 1, 0)`. `apply_calculated_fields` la evalúa en cada fila y la agrega
+  como columna: el resto del sistema la ve como una columna más (dimensión, filtro, métrica con
+  la agregación que se elija). Un campo puede usar los por fila definidos antes.
+- **Agregado** (con `SUM AVG COUNT COUNT_DISTINCT MIN MAX`):
+  `SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100`. Queda en
+  `df.attrs["aggregated_fields"]` (`AggregatedField`: fórmula + formato). Solo es métrica, con
+  `agg: "auto"`; `_metric_columns` le da un agregador propio (`_calculated_aggregator`) que
+  evalúa la fórmula sobre las filas de cada grupo, así funciona igual en groupby, pivote, tabla
+  dinámica (subtotales y total = cociente de totales) y KPI, y respeta las condiciones de la
+  métrica. Con formato `percent`, `metadata["percent_metrics"]` hace que se muestre con «%».
+
+Sintaxis: columnas por nombre o entre corchetes (`[Gasto Real]`), textos entre comillas,
+`+ - * /`, comparaciones, `AND OR NOT`, `IF(c, sí, no)`. Errores legibles: columnas que no
+existen, sintaxis, agregaciones anidadas y **mezclar** agregados con columnas sueltas
+(`SUM(a) / b`). `rename_columns` reescribe una fórmula cuando se renombran columnas.
+
+Al guardar la fuente (`PUT`), los campos se validan contra la hoja (`strict`); se siguen por su
+`id` (`_column_change` los trata como columnas `calc:<id>`): renombrar uno reescribe sus
+widgets y las fórmulas que lo usan; quitarlo aparece en el aviso de impacto. Al leer la fuente
+(`load_source`), un campo cuya fórmula ya no vale se omite y sus widgets muestran el error.
+`SheetContext.aggregated_fields` permite validar `agg: "auto"` y la IA los recibe en el mensaje
+como «campos calculados agregados».
+
+Los cálculos entre totales (diferencias, cocientes, porcentajes, participación) son siempre
+campos calculados: los widgets no tienen métricas de fórmula. Cuando un pedido necesita uno
+que no existe, la IA lo propone en `calculated_fields` (`[{name, formula, format}]`, siempre
+agregados; `_calculated_fields_errors` los valida y el resto del form los puede usar con
+`agg: "auto"`). Al aplicar la propuesta, el panel los crea con
+`POST /api/sources/{id}/calculated-fields/` (un campo igual ya existente se deja; mismo nombre
+con otra fórmula es un error) y luego guarda el widget.
 

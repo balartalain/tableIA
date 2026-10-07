@@ -65,6 +65,6 @@ class DonutWidget(BaseWidget):
             values = []
 
         output = {"series": values, "labels": labels,
-                  "percent": percent_aliases(fields)}
+                  "percent": percent_aliases(fields, metadata)}
 
         return output

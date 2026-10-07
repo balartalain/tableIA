@@ -13,6 +13,7 @@ from django.conf import settings
 from django.core.cache import caches
 from django.utils.timezone import now
 
+from sheets_reports.engine.formulas import apply_calculated_fields
 from sheets_reports.utils.data import time_order, to_key
 
 logger = logging.getLogger(__name__)
@@ -153,9 +154,11 @@ def fetched_at(source):
 
 
 def load_source(source) -> pd.DataFrame:
-    """La hoja de una fuente del tablero, con las columnas, los tipos y los nombres elegidos."""
+    """La hoja de una fuente del tablero, con las columnas, los tipos y los nombres elegidos, y
+    sus campos calculados: los por fila como columnas; los agregados en
+    `df.attrs["aggregated_fields"]` para el motor."""
     df = get_sheet_dataframe(source.sheet_id, source.gid, headers=source.first_row_headers)
-    return apply_column_config(df, source.columns)
+    return apply_calculated_fields(apply_column_config(df, source.columns), source.calculated_fields)
 
 
 def source_key(source) -> str:

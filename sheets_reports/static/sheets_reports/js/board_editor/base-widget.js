@@ -70,6 +70,13 @@
       };
     }
 
+    // Etiquetas del eje de valores: sin formato, ApexCharts toma los decimales de la serie más
+    // fina (un 0,97 junto a miles da «17920.0000000000»).
+    static axisNumber(val) {
+      return val == null || isNaN(val) ? val
+        : Number(val).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+
     static allSeriesPercent(payload, series) {
       const names = new Set(payload.percent || []);
       return series.length > 0 && series.every(s => names.has(s.name));

@@ -82,7 +82,7 @@
 
       const horizontal = this.style.horizontal ?? false;
       const allPercent = BaseWidget.allSeriesPercent(payload, series);
-      const percentAxis = allPercent ? { formatter: (val) => `${Math.round(val)}%` } : {};
+      const percentAxis = { formatter: allPercent ? (val) => `${Math.round(val)}%` : BaseWidget.axisNumber };
 
       const reference = BaseWidget.referenceAnnotations(payload.referenceLines || [], series, {
         horizontal, format: BaseWidget.referenceFormat(allPercent),

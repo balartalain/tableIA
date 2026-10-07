@@ -189,7 +189,8 @@ class WidgetContractTests(SimpleTestCase):
                 with self.subTest(widget=key, prompt=prompt):
                     self.assertEqual(errors_for(args["widget_type"], args["fields"],
                                                 args.get("style"), ctx=examples_ctx(),
-                                                title=args.get("title")), [])
+                                                title=args.get("title"),
+                                                calculated_fields=args.get("calculated_fields")), [])
 
 
 class PanelPartialTests(SimpleTestCase):

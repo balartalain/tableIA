@@ -54,6 +54,12 @@ class DataSource(models.Model):
                   '`label`, el nombre a mostrar que lo reemplaza en todo el tablero. Vacío = '
                   'todas, con el tipo que trae la hoja.',
     )
+    calculated_fields = models.JSONField(
+        default=list, blank=True,
+        help_text='Campos calculados: [{"id", "name", "formula", "format": "number"|"percent"}]. '
+                  'Sin agregaciones son por fila (una columna más); con SUM, AVG… son agregados '
+                  '(solo métricas). Ver engine/formulas.py.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

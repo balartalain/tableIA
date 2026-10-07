@@ -490,8 +490,8 @@ Todos los tipos tienen `ai_enabled = True`.
 | `bar` | `title`, `horizontal`, `stacked`, `color_scheme`, `yAxisWidth`, `barWidth`, `dataLabelFormatter`, `chartWidth`, `showGrid` |
 | `line` | `title`, `color_scheme`, `curve`, `showGrid`, `showMarkers` |
 | `donut` | `title`, `labelMode`, `donutSize`, `showLegend` |
-| `table` | `title`, `pageSize`, `showPagination`, `boldLastRow` |
-| `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels`, `boldLastRow` |
+| `table` | `title`, `pageSize`, `showPagination` |
+| `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels` |
 | `filter` | `title`, `layout` (`horizontal`/`vertical`) |
 
 ### 7.2 Detalle por widget

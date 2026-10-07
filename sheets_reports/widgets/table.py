@@ -44,7 +44,6 @@ class TableWidget(BaseWidget):
         {"key": "title", "label": "Título", "type": "string", "default": "Tabla"},
         {"key": "pageSize", "label": "Filas por página", "type": "number", "default": 10},
         {"key": "showPagination", "label": "Mostrar paginación", "type": "boolean", "default": True},
-        {"key": "boldLastRow", "label": "Resaltar última fila", "type": "boolean", "default": False},
     ]
 
     def process_query(self, df, fields: WidgetFields) -> WidgetResult:

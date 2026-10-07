@@ -15,7 +15,6 @@
   <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
     {% include B|add:"_style_number.html" with key="pageSize" label="Filas por página" min=5 step=5 %}
     {% include B|add:"_style_checkbox.html" with key="showPagination" label="Mostrar paginación" %}
-    {% include B|add:"_style_checkbox.html" with key="boldLastRow" label="Resaltar última fila" %}
   </div>
 </div>
 {% endwith %}

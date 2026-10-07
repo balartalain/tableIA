@@ -125,7 +125,6 @@ class DynamicTableWidget(BaseWidget):
         {"key": "showColumnTotals", "label": "Columna «Total general» a la derecha", "type": "boolean", "default": False},
         {"key": "columnSubtotal1", "label": "Subtotales «Total …» de cada pivote", "type": "boolean", "default": False},
         {"key": "repeatRowLabels", "label": "Repetir etiquetas de fila", "type": "boolean", "default": False},
-        {"key": "boldLastRow", "label": "Resaltar última fila", "type": "boolean", "default": False},
     ]
 
     def compile(

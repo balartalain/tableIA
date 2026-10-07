@@ -49,13 +49,6 @@
 .tabulator-col .tabulator-col-content .tabulator-col-title {
   white-space: normal !important;
 }
-.tabulator .tabulator-row.tabulator-row-bold {
-  font-weight: bold;
-  background-color: var(--color-header) !important;
-}
-.tabulator .tabulator-row.tabulator-row-bold .tabulator-cell{
-  color: #fff;
-}
 /* Números: cifras del mismo ancho para que encolumnen */
 .tabulator .tb-num {
   font-variant-numeric: tabular-nums;

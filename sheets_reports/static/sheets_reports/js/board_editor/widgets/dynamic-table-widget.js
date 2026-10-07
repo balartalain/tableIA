@@ -82,6 +82,7 @@
         const payload = data || this.constructor.mockData();
         this._lastData = payload;
 
+        this._stopFillWidth();
         if (this._table) {
           this._table.destroy();
           this._table = null;
@@ -156,19 +157,61 @@
           rowFormatter: (row) => this._formatRow(row),
         });
         this._wireTableEvents();
+        // Con pivote las columnas miden lo que su contenido (fitData, con scroll si no caben); si
+        // sobra ancho, se reparte para que la tabla llene la tarjeta como el pie.
+        if (pivotMode) this._startFillWidth(container);
+      }
+
+      _startFillWidth(container) {
+        this._naturalWidths = new Map();
+        const table = this._table;
+        // Hasta que la tabla está construida no hay anchos que medir.
+        table.on('tableBuilt', () => { this._fillReady = table; this._fillWidth(); });
+        if (typeof ResizeObserver === 'undefined') return;
+        let frame = null;
+        this._fillObserver = new ResizeObserver(() => {
+          if (frame) return;
+          frame = requestAnimationFrame(() => { frame = null; this._fillWidth(); });
+        });
+        this._fillObserver.observe(container);
+      }
+
+      _stopFillWidth() {
+        if (this._fillObserver) this._fillObserver.disconnect();
+        this._fillObserver = null;
+        this._naturalWidths = null;
+      }
+
+      // Cada columna crece en proporción a su ancho natural (el que le dio fitData) hasta llenar
+      // el ancho disponible; si no caben, vuelven a su ancho natural y aparece el scroll.
+      _fillWidth() {
+        const table = this._table;
+        if (!table || this._fillReady !== table || !this._naturalWidths) return;
+        const holder = table.element.querySelector('.tabulator-tableholder');
+        if (!holder) return;
+        const leaves = table.getColumns().filter(c => c.getField() && c.isVisible());
+        if (!leaves.length) return;
+        leaves.forEach(c => {
+          if (!this._naturalWidths.has(c.getField())) this._naturalWidths.set(c.getField(), c.getWidth());
+        });
+        const natural = leaves.map(c => this._naturalWidths.get(c.getField()));
+        const total = natural.reduce((sum, w) => sum + w, 0);
+        const available = holder.clientWidth;
+        if (!total || !available) return;
+        const factor = Math.max(1, available / total);
+        let used = 0;
+        leaves.forEach((c, i) => {
+          // La última se queda con el resto del redondeo.
+          const width = i < leaves.length - 1 || factor === 1
+            ? Math.floor(natural[i] * factor)
+            : available - used;
+          used += width;
+          if (c.getWidth() !== width) c.setWidth(width);
+        });
       }
 
       _formatRow(row) {
-        row.getElement().classList.remove("tabulator-row-bold");
         row.getElement().classList.toggle("tabulator-row-subtotal", !!row.getData().__subtotal);
-
-        if (this.style.boldLastRow) {
-          const todasLasFilas = row.getTable().getRows("active");
-          const ultimaFila = todasLasFilas[todasLasFilas.length - 1];
-          if (ultimaFila && row.getPosition() === ultimaFila.getPosition()) {
-            row.getElement().classList.add("tabulator-row-bold");
-          }
-        }
       }
 
       _wireTableEvents() {
@@ -234,6 +277,7 @@
       }
 
       destroy() {
+        this._stopFillWidth();
         if (this._table) {
           this._table.destroy();
           this._table = null;

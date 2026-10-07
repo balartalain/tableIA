@@ -230,7 +230,7 @@ class ViewsTests(TestCase):
         )
         style = {"showTotals": False, "rowSubtotal1": True, "rowSubtotal2": False,
                  "showColumnTotals": True, "columnSubtotal1": False, "repeatRowLabels": True,
-                 "pageSize": 25, "showPagination": False, "boldLastRow": True}
+                 "pageSize": 25, "showPagination": False}
         r = self.client.put(f"/api/widget/{table.id}/", json.dumps({"style": style}),
                             content_type="application/json")
         self.assertEqual(r.status_code, 200, r.content)

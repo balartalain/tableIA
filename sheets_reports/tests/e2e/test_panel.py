@@ -2,8 +2,9 @@
 El panel del editor en un navegador de verdad (Playwright + Chromium): lo que los tests de
 Python no ven, el JS del panel y el dibujo de las tablas.
 
-Solo corren con E2E=1 (necesitan Chromium y los CDN de Alpine, Tabulator y ApexCharts):
+Solo corren con E2E=1 (necesitan Playwright, Chromium y los CDN de Alpine, Tabulator y ApexCharts):
 
+    venv/bin/pip install -r requirements-dev.txt       # una vez
     venv/bin/python -m playwright install chromium     # una vez
     E2E=1 venv/bin/python manage.py test sheets_reports.tests.e2e
 """
@@ -25,7 +26,7 @@ COLUMNS = [{"name": "categoria", "type": "text", "include": True},
            {"name": "ventas", "type": "number", "include": True, "format": "currency"}]
 
 
-@unittest.skipUnless(E2E, "Pruebas en el navegador: correr con E2E=1")
+@unittest.skipUnless(E2E, "Pruebas en el navegador: correr con E2E=1 (requirements-dev.txt + Chromium)")
 class PanelTests(StaticLiveServerTestCase):
     @classmethod
     def setUpClass(cls):

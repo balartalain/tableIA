@@ -5,6 +5,7 @@ venv/bin/python manage.py test sheets_reports                      # toda la sui
 venv/bin/python manage.py test sheets_reports.tests.test_config_matrix
 
 # En el navegador (Playwright + Chromium; necesitan internet para los CDN). Una vez:
+#   venv/bin/pip install -r requirements-dev.txt
 #   venv/bin/python -m playwright install chromium
 E2E=1 venv/bin/python manage.py test sheets_reports.tests.e2e
 

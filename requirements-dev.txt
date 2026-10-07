@@ -2,5 +2,8 @@
 
 # Solo para desarrollo: cobertura de los tests.
 coverage==7.16.2
-# Pruebas en el navegador (playwright ya está en requirements.txt): falta el navegador, una vez:
+# Pruebas en el navegador (tests/e2e). Además del paquete hace falta el navegador, una vez:
 #   venv/bin/python -m playwright install chromium
+playwright==1.61.0
+greenlet==3.5.3
+pyee==13.0.1

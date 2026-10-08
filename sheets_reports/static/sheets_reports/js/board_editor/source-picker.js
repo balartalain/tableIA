@@ -11,7 +11,8 @@
 // «Actualizar datos» relee la pestaña de Google y muestra su estructura actual sin perder lo
 // que el usuario ya cambió; se guarda con el resto.
 // Al editar, la pestaña «Campos calculados» define fórmulas sobre las columnas (por fila o
-// agregadas, ver engine/formulas.py), con una vista previa que calcula el servidor.
+// agregadas, ver engine/formulas.py) armándolas con bloques (formula-builder.js), con una
+// vista previa que calcula el servidor.
 // El gestor de fuentes lo arranca con el evento `source-picker:start` ({mode, source}) y
 // recibe `sources:changed` al guardar (o al volver tras actualizar datos) y `sources:back`.
 
@@ -76,11 +77,35 @@ function sourcePicker({ mode = 'create' } = {}) {
     _editSnapshot: null,
     // Pestaña del paso de columnas al editar: 'columns' | 'calculated'.
     columnsTab: 'columns',
-    // Campos calculados: {id, name, formula, format} + estado de la vista previa
-    // (_kind 'row'|'aggregated', _values, _error, _checking).
+    // Campos calculados: {id, name, formula, format} + su árbol de bloques (_tree; _unreadable
+    // si la fórmula guardada no se pudo leer) y el estado de la vista previa (_kind
+    // 'row'|'aggregated', _values, _error, _checking).
     calculated: [],
     helpOpen: false,
     _previewTimers: {},
+    // Constructor: el campo abierto, el lugar del árbol elegido con clic y el valor que se escribe.
+    selectedId: null,
+    fbSelected: null,
+    valueType: 'number',
+    valueInput: '',
+    columnQuery: '',
+    // Piezas del panel del constructor y la barra de operadores.
+    CONDITION_PIECES: [
+      { label: '[ ] = [ ]', title: 'Comparación: =, ≠, >, ≥, <, ≤', piece: FormulaBlocks.pieces.compare() },
+      { label: '[ ] Y [ ]', title: 'Se cumplen las dos', piece: FormulaBlocks.pieces.logic('AND') },
+      { label: '[ ] O [ ]', title: 'Se cumple alguna', piece: FormulaBlocks.pieces.logic('OR') },
+      { label: 'NO [ ]', title: 'No se cumple', piece: FormulaBlocks.pieces.not() },
+    ],
+    FUNCTION_PIECES: [
+      { label: 'SI', title: 'SI(condición, valor si se cumple, valor si no): fila a fila', piece: FormulaBlocks.pieces.func('IF') },
+      ...Object.entries(FormulaBlocks.AGGREGATES).map(([name, title]) =>
+        ({ label: name, title, piece: FormulaBlocks.pieces.func(name) })),
+    ],
+    OPERATOR_PIECES: FormulaBlocks.ARITHMETIC.map(op =>
+      ({ label: FormulaBlocks.SYMBOL[op] || op, title: { '+': 'Sumar', '-': 'Restar', '*': 'Multiplicar', '/': 'Dividir' }[op],
+         piece: FormulaBlocks.pieces.arithmetic(op) })),
+    // Nombre a mostrar de cada columna la última vez que se miraron las fórmulas (para renombrar).
+    _columnNames: {},
 
     get includedCount() {
       return this.columns.filter(c => c.include).length;
@@ -110,12 +135,16 @@ function sourcePicker({ mode = 'create' } = {}) {
         headers: source ? source.first_row_headers !== false : true, impact: null,
         refreshing: false, dataRefreshed: false, refreshedAt: source ? source.refreshed_at : null,
         columnsTab: 'columns', helpOpen: false,
-        calculated: ((source && source.calculated_fields) || []).map(f => ({
-          ...f, _kind: null, _values: null, _error: '', _checking: false,
+        calculated: ((source && source.calculated_fields) || []).map(({ tree, ...f }) => ({
+          ...f, _tree: tree || null, _unreadable: !tree && !!(f.formula || '').trim(),
+          _kind: null, _values: null, _error: '', _checking: false,
         })),
+        fbSelected: null, valueInput: '', columnQuery: '',
         sheetsError: '', tabsError: '', columnsError: '', createError: '', saving: false,
       });
+      this.selectedId = this.calculated.length ? this.calculated[0].id : null;
       if (mode === 'edit') this.loadSavedColumns();
+      FormulaBlocks.setupDrag();
     },
 
     // Atrás: del paso de columnas a la elección de hoja; desde la hoja, al cambiarla, vuelve a
@@ -139,6 +168,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         this.columns = refresh ? this._keepEdits(data.columns || []) : data.columns || [];
         this.rows = data.rows || 0;
         this.refreshedAt = data.source ? data.source.refreshed_at : this.refreshedAt;
+        if (!refresh) this._columnNames = this._displayNames();
         this.calculated.forEach(f => this.previewCalculated(f, { now: true }));
       } catch (e) {
         if (request === this._columnsRequest) this.createError = e.message;
@@ -283,22 +313,165 @@ function sourcePicker({ mode = 'create' } = {}) {
       return this.columns.filter(c => c.include).map(c => (c.label || '').trim() || c.name);
     },
 
+    get selectedField() {
+      return this.calculated.find(f => f.id === this.selectedId) || null;
+    },
+
+    // Las columnas del panel del constructor: las de la hoja y los campos por fila anteriores.
+    get builderColumns() {
+      const field = this.selectedField;
+      const index = field ? this.calculated.indexOf(field) : 0;
+      const earlier = this.calculated.slice(0, index)
+        .filter(f => f._kind === 'row' && f.name.trim()).map(f => f.name.trim());
+      return [...this.formulaColumns, ...earlier];
+    },
+
+    get filteredBuilderColumns() {
+      const q = this.columnQuery.trim().toLowerCase();
+      return q ? this.builderColumns.filter(c => c.toLowerCase().includes(q)) : this.builderColumns;
+    },
+
+    columnPiece(name) {
+      return FormulaBlocks.pieces.column(name);
+    },
+
+    // La ficha del subpanel «Valores», o null si lo escrito no vale.
+    get valuePiece() {
+      const raw = this.valueInput;
+      if (this.valueType === 'text') {
+        return raw.includes('"') && raw.includes("'") ? null : FormulaBlocks.pieces.text(raw);
+      }
+      const number = raw.trim().replace(',', '.');
+      return /^-?\d+(\.\d+)?$/.test(number) ? FormulaBlocks.pieces.number(Number(number)) : null;
+    },
+
+    get valueError() {
+      if (this.valueType === 'text') return this.valuePiece ? '' : 'Un texto no puede llevar comillas dobles y simples a la vez.';
+      return this.valueInput.trim() && !this.valuePiece ? 'Escribe un número, ej. 100 o 1.5' : '';
+    },
+
     addCalculated() {
       const id = `cf_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-      this.calculated.push({ id, name: '', formula: '', format: 'number',
+      this.calculated.push({ id, name: '', formula: '', format: 'number', _tree: null, _unreadable: false,
                              _kind: null, _values: null, _error: '', _checking: false });
+      this.selectField(id);
     },
 
     removeCalculated(index) {
-      this.calculated.splice(index, 1);
+      const [removed] = this.calculated.splice(index, 1);
+      if (removed && removed.id === this.selectedId) {
+        const next = this.calculated[Math.min(index, this.calculated.length - 1)];
+        this.selectField(next ? next.id : null);
+      }
     },
 
-    // Agrega `[columna]` al final de la fórmula.
-    insertColumn(field, name) {
-      if (!name) return;
-      const formula = field.formula || '';
-      field.formula = `${formula}${formula && !/[\s(]$/.test(formula) ? ' ' : ''}[${name}]`;
+    selectField(id) {
+      this.selectedId = id;
+      this.fbSelected = null;
+    },
+
+    // «Campos calculados»: antes de mostrar los bloques, siguen a las columnas renombradas.
+    openCalculated() {
+      this.columnsTab = 'calculated';
+      this.syncColumnNames();
+    },
+
+    _displayNames() {
+      return Object.fromEntries(this.columns.map(c => [c.name, (c.label || '').trim() || c.name]));
+    },
+
+    syncColumnNames() {
+      const now = this._displayNames();
+      const mapping = {};
+      Object.entries(this._columnNames).forEach(([name, before]) => {
+        if (now[name] && now[name] !== before) mapping[before] = now[name];
+      });
+      this._columnNames = now;
+      if (Object.keys(mapping).length) this._renameInTrees(mapping);
+    },
+
+    // Un campo calculado renombrado: las fórmulas que lo usan lo siguen.
+    renameField(field) {
+      const before = (field._nameBefore || '').trim();
+      const after = field.name.trim();
+      if (before && after && before !== after) this._renameInTrees({ [before]: after });
+    },
+
+    _renameInTrees(mapping) {
+      this.calculated.forEach(f => {
+        if (!f._tree) return;
+        FormulaBlocks.renameColumns(f._tree, mapping);
+        this.treeChanged(f);
+      });
+    },
+
+    // Dibuja los bloques del campo abierto (lo llama un x-effect: se repite al cambiar el árbol).
+    renderCanvas(container) {
+      const field = this.selectedField;
+      if (!field) return;
+      FormulaBlocks.render(container, field._tree, this.fbSelected, {
+        select: path => { if (!FormulaBlocks.justDragged()) this.fbSelected = path; },
+        remove: path => this._setTree(field, FormulaBlocks.setAt(field._tree, path, null), path),
+        setOp: (path, op) => {
+          FormulaBlocks.getAt(field._tree, path).value = op;
+          this.treeChanged(field);
+        },
+      });
+    },
+
+    // Clic en una pieza del panel: va al lugar elegido (o a la raíz).
+    clickPiece(piece) {
+      const field = this.selectedField;
+      if (!field || FormulaBlocks.justDragged() || !piece) return;
+      this._placePiece(field, FormulaBlocks.clone(piece), this.fbSelected || []);
+    },
+
+    // Fin de un arrastre (evento `formula:drop` de formula-builder.js).
+    onFormulaDrop({ source, target }) {
+      const field = this.selectedField;
+      if (!field) return;
+      if (source.piece) {
+        if (!target.trash) this._placePiece(field, source.piece, target.path);
+        return;
+      }
+      // Un bloque del canvas: al panel se quita; no cae dentro de sí mismo.
+      if (target.trash) {
+        this._setTree(field, FormulaBlocks.setAt(field._tree, source.path, null), source.path);
+        return;
+      }
+      if (FormulaBlocks.isInside(target.path, source.path)) return;
+      const moved = FormulaBlocks.clone(FormulaBlocks.getAt(field._tree, source.path));
+      const root = FormulaBlocks.setAt(field._tree, source.path, null);
+      this._placePiece(field, moved, target.path, root);
+    },
+
+    _placePiece(field, piece, path, root = field._tree) {
+      const placed = FormulaBlocks.place(root, path, piece);
+      this._setTree(field, placed.root, placed.path);
+    },
+
+    // Árbol nuevo: queda elegido el siguiente hueco para seguir armando con clics.
+    _setTree(field, root, path = []) {
+      field._tree = root;
+      field._unreadable = false;
+      this.fbSelected = root == null ? null : FormulaBlocks.nextHole(root, path);
+      this.treeChanged(field);
+    },
+
+    // La fórmula como texto (vacía si quedan huecos) y su vista previa.
+    treeChanged(field) {
+      const text = FormulaBlocks.text(field._tree);
+      field.formula = text || '';
+      if (text == null) {
+        clearTimeout(this._previewTimers[field.id]);
+        Object.assign(field, { _kind: null, _values: null, _error: '', _checking: false });
+        return;
+      }
       this.previewCalculated(field);
+    },
+
+    isIncomplete(field) {
+      return !!field._tree && FormulaBlocks.text(field._tree) == null;
     },
 
     // Vista previa (con pausa mientras se escribe): tipo del campo, primeros valores o error.
@@ -390,6 +563,14 @@ function sourcePicker({ mode = 'create' } = {}) {
     // `confirmed`: el usuario ya vio qué widgets se rompen y eligió «Guardar igual».
     async submit({ confirmed = false } = {}) {
       if (!this.canSubmit || this.saving) return;
+      const incomplete = this.calculated.find(f => this.isIncomplete(f));
+      if (incomplete) {
+        this.createError = `Completa los huecos de «${incomplete.name.trim() || 'Campo sin nombre'}».`;
+        this.columnsTab = 'calculated';
+        this.selectField(incomplete.id);
+        return;
+      }
+      this.syncColumnNames();
       this.saving = true;
       this.createError = '';
       const body = this._payload();

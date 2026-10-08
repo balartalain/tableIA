@@ -803,6 +803,9 @@ Sintaxis: columnas por nombre o entre corchetes (`[Gasto Real]`), textos entre c
 `+ - * /`, comparaciones, `AND OR NOT`, `IF(c, sí, no)`. Errores legibles: columnas que no
 existen, sintaxis, agregaciones anidadas y **mezclar** agregados con columnas sueltas
 (`SUM(a) / b`). `rename_columns` reescribe una fórmula cuando se renombran columnas.
+`formula_tree` devuelve el árbol tal como está escrito (`{kind, value, args}`, sin resolver
+columnas; `None` si no se entiende): las fuentes lo entregan en `calculated_fields[].tree` y
+el editor arma con él los bloques (no se guarda).
 
 Al guardar la fuente (`PUT`), los campos se validan contra la hoja (`strict`); se siguen por su
 `id` (`_column_change` los trata como columnas `calc:<id>`): renombrar uno reescribe sus

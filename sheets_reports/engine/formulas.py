@@ -311,6 +311,19 @@ def compile_formula(text: str, columns, aggregated_names=()) -> Formula:
     return Formula(text, tree, aggregated, tuple(dict.fromkeys(used)))
 
 
+def formula_tree(text: str) -> dict | None:
+    """El árbol de la fórmula tal como está escrita ({kind, value, args}), para el constructor
+    de bloques del editor de la fuente; None si no se entiende."""
+    try:
+        tree = _Parser(tokenize((text or "").strip())).parse()
+    except FormulaError:
+        return None
+
+    def as_dict(node: Node) -> dict:
+        return {"kind": node.kind, "value": node.value, "args": [as_dict(a) for a in node.args]}
+    return as_dict(tree)
+
+
 def _resolve(node: Node, names: dict) -> Node:
     if node.kind == "col":
         return Node("col", names.get(node.value, node.value))

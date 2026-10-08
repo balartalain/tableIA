@@ -244,6 +244,10 @@ class CalculatedFieldsTests(TestCase):
         r = self.put({"calculated_fields": [double, SHARE]})
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.json()["calculated_fields"][1]["format"], "percent")
+        # Con su árbol para el constructor de bloques (no se guarda).
+        self.assertEqual(r.json()["calculated_fields"][0]["tree"]["kind"], "bin")
+        self.source.refresh_from_db()
+        self.assertNotIn("tree", self.source.calculated_fields[0])
         schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
         self.assertIn("Doble", schema["all_fields"])                   # por fila: una columna más
         self.assertEqual(schema["aggregated_fields"], [{"name": "Participación", "format": "percent"}])

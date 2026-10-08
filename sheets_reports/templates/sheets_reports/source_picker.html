@@ -185,7 +185,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <button type="button" role="tab" x-on:click="columnsTab = 'columns'" x-bind:aria-selected="columnsTab === 'columns'"
               x-bind:class="columnsTab === 'columns' ? 'border-moss-500 text-ink' : 'border-transparent text-ink/50 hover:text-ink'"
               class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition cursor-pointer">Columnas</button>
-      <button type="button" role="tab" x-on:click="columnsTab = 'calculated'" x-bind:aria-selected="columnsTab === 'calculated'"
+      <button type="button" role="tab" x-on:click="openCalculated()" x-bind:aria-selected="columnsTab === 'calculated'"
               x-bind:class="columnsTab === 'calculated' ? 'border-moss-500 text-ink' : 'border-transparent text-ink/50 hover:text-ink'"
               class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition cursor-pointer">
         Campos calculados <span x-show="calculated.length" class="text-ink/40" x-text="`(${calculated.length})`"></span>
@@ -265,11 +265,13 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       </table>
     </div>
 
-    <!-- Campos calculados: fórmula, tipo (lo decide la fórmula), formato y vista previa. -->
-    <div x-show="columnsTab === 'calculated'" x-cloak class="flex-1 min-h-0 flex flex-col gap-3">
+    <!-- Campos calculados: cada fórmula se arma con bloques (formula-builder.js); el tipo lo
+         decide la fórmula, con formato en los agregados y vista previa. -->
+    <div x-show="columnsTab === 'calculated'" x-cloak class="flex-1 min-h-0 flex flex-col gap-3"
+         x-on:formula:drop.window="onFormulaDrop($event.detail)">
       <div class="flex items-center gap-2">
         <p class="text-xs text-ink/60">Fórmulas sobre las columnas de esta fuente, para usar en todos los widgets.</p>
-        <!-- Ayuda: qué son, los dos tipos con ejemplos y la sintaxis. -->
+        <!-- Ayuda: qué son, los dos tipos con ejemplos y cómo se arman. -->
         <div class="relative" x-on:keydown.escape.window="helpOpen = false">
           <button type="button" x-on:click="helpOpen = !helpOpen" x-bind:aria-expanded="helpOpen ? 'true' : 'false'"
                   aria-label="Ayuda de campos calculados" title="¿Cómo funcionan?"
@@ -288,57 +290,149 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
         </button>
       </div>
 
-      <div class="flex-1 min-h-0 overflow-y-auto space-y-2">
-        <div x-show="!calculated.length"
-             class="flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-xl py-10">
-          <i class="ti ti-math-function text-2xl text-ink/30" aria-hidden="true"></i>
-          <p class="text-sm text-ink/60">Sin campos calculados.</p>
-          <p class="text-xs text-ink/50">Ej. <span class="font-mono">SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100</span></p>
-        </div>
+      <div x-show="!calculated.length"
+           class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-xl py-10">
+        <i class="ti ti-math-function text-2xl text-ink/30" aria-hidden="true"></i>
+        <p class="text-sm text-ink/60">Sin campos calculados.</p>
+        <p class="text-xs text-ink/50">Agrega uno y arma su fórmula arrastrando columnas, condiciones y funciones.</p>
+      </div>
 
-        <template x-for="(f, index) in calculated" :key="f.id">
-          <div class="rounded-xl border border-line bg-white p-3 space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <input type="text" x-model="f.name" placeholder="Nombre del campo" maxlength="120"
-                     x-bind:aria-label="`Nombre del campo ${index + 1}`"
-                     class="w-64 max-w-full text-sm font-medium border border-line rounded-lg px-3 py-1.5 focus:outline-none focus:border-moss-500">
-              <!-- El tipo lo decide la fórmula: con SUM, AVG… es agregado. -->
-              <span x-show="f._kind === 'row'" title="Se calcula en cada fila; se usa como una columna más"
-                    class="text-[11px] font-semibold rounded-full bg-moss-50 text-moss-700 border border-moss-100 px-2 py-0.5">Por fila</span>
-              <span x-show="f._kind === 'aggregated'" title="Se calcula por grupo del widget; solo como métrica"
-                    class="text-[11px] font-semibold rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5">Agregado</span>
-              <select x-show="f._kind === 'aggregated'" x-model="f.format" aria-label="Formato"
-                      class="text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
-                <option value="number" x-bind:selected="f.format !== 'percent'">Número</option>
-                <option value="percent" x-bind:selected="f.format === 'percent'">Porcentaje (%)</option>
-              </select>
-              <span class="flex-1" aria-hidden="true"></span>
-              <select x-on:change="insertColumn(f, $event.target.value); $event.target.value = ''" aria-label="Insertar columna"
-                      class="max-w-[14rem] text-xs border border-line rounded-md px-2 py-1 bg-white text-ink/70 focus:outline-none focus:border-moss-500">
-                <option value="">Insertar columna…</option>
-                <template x-for="col in formulaColumns" :key="col">
-                  <option x-bind:value="col" x-text="col"></option>
-                </template>
-              </select>
-              <button type="button" x-on:click="removeCalculated(index)" title="Eliminar campo"
-                      x-bind:aria-label="`Eliminar ${f.name || 'campo'}`"
-                      class="p-1.5 rounded-md text-ink/40 hover:text-red-600 hover:bg-red-50 cursor-pointer">
-                <i class="ti ti-trash text-base" aria-hidden="true"></i>
-              </button>
-            </div>
-            <textarea x-model="f.formula" x-on:input="previewCalculated(f)" rows="2" spellcheck="false"
-                      placeholder="Ej. SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100"
-                      x-bind:aria-label="`Fórmula de ${f.name || 'campo'}`"
-                      class="w-full font-mono text-sm border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500"
-                      x-bind:class="f._error ? 'border-red-300' : ''"></textarea>
-            <p x-show="f._checking" class="text-xs text-ink/40">
-              <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Comprobando…
-            </p>
-            <p x-show="!f._checking && f._error" x-text="f._error" role="alert" class="text-xs text-red-600"></p>
-            <p x-show="!f._checking && !f._error && f._values" x-text="previewText(f)" class="text-xs text-ink/50 truncate"></p>
-          </div>
+      <!-- Los campos: el elegido se arma abajo. -->
+      <div x-show="calculated.length" class="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Campos calculados">
+        <template x-for="f in calculated" :key="f.id">
+          <button type="button" role="tab" x-on:click="selectField(f.id)" x-bind:aria-selected="f.id === selectedId"
+                  x-bind:class="f.id === selectedId ? 'border-moss-500 bg-moss-50 text-ink' : 'border-line bg-white text-ink/70 hover:border-moss-300'"
+                  class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition cursor-pointer">
+            <span class="w-1.5 h-1.5 rounded-full"
+                  x-bind:class="f._error || isIncomplete(f) || f._unreadable ? 'bg-red-500' : f._kind === 'aggregated' ? 'bg-sky-500' : f._kind === 'row' ? 'bg-moss-500' : 'bg-ink/20'"
+                  aria-hidden="true"></span>
+            <span class="max-w-[12rem] truncate" x-text="f.name.trim() || 'Campo sin nombre'"></span>
+          </button>
         </template>
       </div>
+
+      <template x-for="f in selectedField ? [selectedField] : []" :key="f.id">
+        <div class="flex-1 min-h-0 flex flex-col gap-3 rounded-xl border border-line bg-white p-3 overflow-y-auto sm:overflow-visible">
+          <div class="flex flex-wrap items-center gap-2">
+            <input type="text" x-model="f.name" placeholder="Nombre del campo" maxlength="120"
+                   x-on:focus="f._nameBefore = f.name" x-on:change="renameField(f)" aria-label="Nombre del campo"
+                   class="w-64 max-w-full text-sm font-medium border border-line rounded-lg px-3 py-1.5 focus:outline-none focus:border-moss-500">
+            <!-- El tipo lo decide la fórmula: con SUM, AVG… es agregado. -->
+            <span x-show="f._kind === 'row'" title="Se calcula en cada fila; se usa como una columna más"
+                  class="text-[11px] font-semibold rounded-full bg-moss-50 text-moss-700 border border-moss-100 px-2 py-0.5">Por fila</span>
+            <span x-show="f._kind === 'aggregated'" title="Se calcula por grupo del widget; solo como métrica"
+                  class="text-[11px] font-semibold rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5">Agregado</span>
+            <select x-show="f._kind === 'aggregated'" x-model="f.format" aria-label="Formato"
+                    class="text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+              <option value="number" x-bind:selected="f.format !== 'percent'">Número</option>
+              <option value="percent" x-bind:selected="f.format === 'percent'">Porcentaje (%)</option>
+            </select>
+            <span class="flex-1" aria-hidden="true"></span>
+            <button type="button" x-on:click="removeCalculated(calculated.indexOf(f))" title="Eliminar campo"
+                    x-bind:aria-label="`Eliminar ${f.name || 'campo'}`"
+                    class="p-1.5 rounded-md text-ink/40 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+              <i class="ti ti-trash text-base" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="sm:flex-1 sm:min-h-0 grid grid-cols-1 sm:grid-cols-[15rem_minmax(0,1fr)] gap-3">
+            <!-- Panel de piezas: se arrastran al canvas o, con un lugar elegido, se colocan con
+                 un clic. Soltar aquí un bloque del canvas lo quita. -->
+            <aside data-fb-trash aria-label="Piezas de la fórmula"
+                   class="sm:min-h-0 sm:overflow-y-auto rounded-lg border border-line bg-paper/60 p-2 space-y-3 text-xs">
+              <section class="space-y-1.5">
+                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Columnas</h4>
+                <input type="search" x-model="columnQuery" placeholder="Buscar columna" aria-label="Buscar columna"
+                       class="w-full text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                <div class="flex flex-wrap gap-1">
+                  <template x-for="col in filteredBuilderColumns" :key="col">
+                    <button type="button" x-bind:data-fb-piece="JSON.stringify(columnPiece(col))" x-on:click="clickPiece(columnPiece(col))"
+                            x-bind:title="col"
+                            class="max-w-full truncate rounded-md border border-moss-200 bg-moss-50 px-2 py-1 font-medium text-moss-800 hover:border-moss-400 cursor-grab"
+                            x-text="col"></button>
+                  </template>
+                </div>
+                <!-- Valores: un número o un texto escrito a mano, listo para arrastrar. -->
+                <div class="mt-2 border-t border-line pt-2 space-y-1.5">
+                  <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Valores</h4>
+                  <div class="inline-flex rounded-md border border-line bg-white p-0.5" role="radiogroup" aria-label="Tipo de valor">
+                    <template x-for="t in [['number', 'Número'], ['text', 'Texto']]" :key="t[0]">
+                      <button type="button" role="radio" x-on:click="valueType = t[0]" x-bind:aria-checked="valueType === t[0]"
+                              x-bind:class="valueType === t[0] ? 'bg-moss-500 text-white' : 'text-ink/60 hover:text-ink'"
+                              class="rounded px-2 py-0.5 font-medium cursor-pointer" x-text="t[1]"></button>
+                    </template>
+                  </div>
+                  <input type="text" x-model="valueInput" x-bind:placeholder="valueType === 'number' ? 'Ej. 100 o 1.5' : 'Ej. Sí'"
+                         x-bind:inputmode="valueType === 'number' ? 'decimal' : 'text'" aria-label="Valor"
+                         x-on:keydown.enter.prevent="clickPiece(valuePiece)"
+                         class="w-full text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  <p x-show="valueError" x-text="valueError" class="text-[11px] text-red-600"></p>
+                  <div x-show="valuePiece && (valueType === 'text' || valueInput.trim())" class="flex items-center gap-1.5">
+                    <button type="button" x-bind:data-fb-piece="valuePiece ? JSON.stringify(valuePiece) : null"
+                            x-on:click="clickPiece(valuePiece)" title="Arrástralo a la fórmula"
+                            x-bind:class="valueType === 'text' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-sky-200 bg-sky-50 text-sky-900'"
+                            class="max-w-full truncate rounded-md border px-2 py-1 font-mono cursor-grab"
+                            x-text="valueType === 'text' ? `&quot;${valueInput}&quot;` : valueInput.trim()"></button>
+                    <span class="text-[11px] text-ink/40">← arrástralo</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="space-y-1.5">
+                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Condición</h4>
+                <div class="flex flex-wrap gap-1">
+                  <template x-for="p in CONDITION_PIECES" :key="p.label">
+                    <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                            class="rounded-md border border-line bg-white px-2 py-1 font-semibold text-ink/70 hover:border-moss-400 cursor-grab"
+                            x-text="p.label"></button>
+                  </template>
+                </div>
+              </section>
+
+              <section class="space-y-1.5">
+                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Funciones</h4>
+                <div class="flex flex-wrap gap-1">
+                  <template x-for="p in FUNCTION_PIECES" :key="p.label">
+                    <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                            x-bind:class="p.label === 'SI' ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-sky-200 bg-sky-50 text-sky-700'"
+                            class="rounded-md border px-2 py-1 font-mono font-semibold cursor-grab"
+                            x-text="p.label"></button>
+                  </template>
+                </div>
+              </section>
+            </aside>
+
+            <div class="sm:min-h-0 flex flex-col gap-2">
+              <!-- Canvas: la fórmula como bloques; el fondo es la raíz. -->
+              <div data-fb-drop="" x-on:click="fbSelected = null" aria-label="Fórmula"
+                   class="flex-1 min-h-[10rem] overflow-auto rounded-lg border border-line bg-paper/30 p-3">
+                <div x-show="f._unreadable" class="mb-2 flex flex-wrap items-center gap-2 text-xs text-amber-800">
+                  <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+                  <span>No se pudo leer esta fórmula: <span class="font-mono" x-text="f.formula"></span></span>
+                  <button type="button" x-on:click.stop="_setTree(f, null)" class="font-medium underline cursor-pointer">Empezar de nuevo</button>
+                </div>
+                <div x-effect="renderCanvas($el)"></div>
+              </div>
+              <!-- Operadores: soltados sobre un bloque, lo envuelven ([ventas] → [ventas] + [ ]). -->
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] font-semibold uppercase tracking-wider text-ink/50 mr-1">Operadores</span>
+                <template x-for="p in OPERATOR_PIECES" :key="p.label">
+                  <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                          x-bind:aria-label="p.title"
+                          class="w-8 h-8 rounded-md border border-line bg-white text-sm font-semibold text-ink/70 hover:border-moss-400 cursor-grab"
+                          x-text="p.label"></button>
+                </template>
+              </div>
+              <p x-show="isIncomplete(f)" class="text-xs text-ink/50">Completa los huecos para ver el resultado.</p>
+              <p x-show="f._checking" class="text-xs text-ink/40">
+                <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Comprobando…
+              </p>
+              <p x-show="!f._checking && f._error" x-text="f._error" role="alert" class="text-xs text-red-600"></p>
+              <p x-show="!f._checking && !f._error && f._values" x-text="previewText(f)" class="text-xs text-ink/50 truncate"></p>
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </div>

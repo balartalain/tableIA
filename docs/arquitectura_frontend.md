@@ -34,6 +34,7 @@ static/sheets_reports/js/board_editor/
   filters.js                  # Filtros de tablero (extiende el store)
   source-manager.js           # sourceManager(): fuentes del tablero, actualizar datos, eliminar
   source-picker.js            # sourcePicker(): elegir/editar/reemplazar la hoja de una fuente
+  formula-builder.js          # FormulaBlocks: árbol ↔ texto, bloques y arrastre de los campos calculados
   board-editor-init.js        # Bootstrap: palette, drag-drop, Sortable, resize
   board-view-init.js          # Bootstrap read-only: store mínimo + mount
   utils/
@@ -357,12 +358,42 @@ de columnas:
 - «Usar la primera fila como encabezado» (`?headers=0|1`): sin ella, la fila 1 es un dato y
   las columnas se llaman «Columna A», «Columna B»…
 - Por columna: incluir, **nombre a mostrar** (reemplaza al encabezado en todo el tablero) y tipo.
-- En `edit`, pestaña **Campos calculados**: nombre, fórmula (con «Insertar columna…»), el tipo
-  que decide la fórmula («Por fila» / «Agregado») y, en los agregados, formato Número o
-  Porcentaje. Mientras se escribe, `previewCalculated` pide a `POST /api/sources/{id}/formula/`
-  los primeros valores (o el total de la hoja) o el error, con lo que hay en el editor sin
-  guardar. El ícono de ayuda abre `source_formula_help.html`: los dos tipos con ejemplos, cuál
-  elegir y la sintaxis.
+- En `edit`, pestaña **Campos calculados**: los campos como fichas (el elegido se arma abajo),
+  nombre, el tipo que decide la fórmula («Por fila» / «Agregado») y, en los agregados, formato
+  Número o Porcentaje. La fórmula se **arma con bloques** (ver abajo); con cada cambio,
+  `previewCalculated` pide a `POST /api/sources/{id}/formula/` los primeros valores (o el total
+  de la hoja) o el error, con lo que hay en el editor sin guardar. El ícono de ayuda abre
+  `source_formula_help.html`: los dos tipos con ejemplos, cuál elegir, cómo calcula cada
+  función y cómo se arma.
+
+#### Constructor de fórmulas (`formula-builder.js`)
+
+La fórmula es un árbol `{kind, value, args}` — el mismo del parser del servidor; la fuente lo
+trae en `calculated_fields[].tree` (`formula_tree`) — donde un hueco es `null`.
+
+- **Panel izquierdo** (`aside[data-fb-trash]`): *Columnas* (`builderColumns`: las incluidas con
+  su nombre a mostrar y los campos por fila anteriores, con buscador) y su subpanel *Valores*
+  (Número/Texto → `valuePiece`); *Condición* (comparación, Y, O, NO); *Funciones* (SI y las
+  agregaciones). Bajo el canvas, la barra de operadores `+ − × ÷`.
+- **Canvas**: `FormulaBlocks.render` dibuja el árbol (Alpine no tiene templates recursivos)
+  desde un `x-effect`. SI es un bloque vertical con tres huecos rotulados; las agregaciones,
+  `SUM( [ ] )`; comparaciones, aritmética y Y/O, `[ ] op [ ]` con el operador en un `select`
+  (cambia dentro de su familia).
+- **Colocar** (`FormulaBlocks.place`): en un hueco, la pieza entra; sobre un bloque lleno, una
+  pieza con huecos lo envuelve (pasa a su primer hueco) y una sin huecos lo reemplaza. Mover un
+  bloque deja su hueco y no puede caer dentro de sí mismo; soltarlo en el panel lo quita.
+  Después queda elegido el siguiente hueco (`nextHole`), así también se arma solo con clics
+  (clic en hueco + clic en pieza; `fbSelected`).
+- **Arrastre**: interact.js con selectores delegados (`[data-fb-piece]` del panel, JSON de la
+  pieza; `[data-fb-drag]` de los bloques, su ruta). El destino es el `[data-fb-drop]` más
+  interno bajo el puntero; al soltar se emite `formula:drop` y `onFormulaDrop` aplica el cambio.
+- **Texto**: `FormulaBlocks.text` escribe el árbol con la precedencia del parser (paréntesis solo
+  donde hacen falta para que vuelva el mismo árbol); con huecos devuelve `null`, la vista previa
+  no se pide y guardar avisa «Completa los huecos». Se guarda el texto (`formula`), como siempre.
+- Renombres: al abrir la pestaña (y al guardar) `syncColumnNames` lleva a los árboles los nombres
+  a mostrar cambiados en *Columnas*; renombrar un campo (`renameField`) actualiza las fórmulas
+  que lo usan. Una fórmula guardada que no se puede leer (`tree: null`) se avisa con «Empezar de
+  nuevo».
 - En `edit` y `replace`, nombre opcional de la fuente (vacío = el original).
 - **Actualizar datos**, junto al nombre (`refreshColumns()`): relee la pestaña de Google
   (`?refresh=1`, pisa el caché del servidor) y muestra su estructura actual sin perder los

@@ -30,6 +30,7 @@ from sheets_reports.engine.formulas import (
     aggregated_fields,
     apply_calculated_fields,
     compile_formula,
+    formula_tree,
     rename_columns,
 )
 from sheets_reports.services.ai_spec import panel_options
@@ -319,7 +320,9 @@ def _serialize_source(source):
         # Sin configuración (fuentes anteriores al selector) se usan todas: no se sabe cuántas.
         "columns_included": len(included) if source.columns else None,
         "columns_total": len(source.columns) if source.columns else None,
-        "calculated_fields": source.calculated_fields,
+        # Con su árbol: el editor la arma como bloques.
+        "calculated_fields": [{**f, "tree": formula_tree(f.get("formula", ""))}
+                              for f in source.calculated_fields],
         "widgets": source.widgets.count(),
     }
 

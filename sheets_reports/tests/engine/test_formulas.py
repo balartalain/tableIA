@@ -9,6 +9,7 @@ from sheets_reports.engine.formulas import (
     aggregated_fields,
     apply_calculated_fields,
     compile_formula,
+    formula_tree,
     rename_columns,
 )
 from sheets_reports.tests.fixtures import compiled, errors_for, execute, fields
@@ -82,6 +83,18 @@ class FormulaLanguageTests(SimpleTestCase):
         # Las agregaciones numéricas ignoran el texto: sin números, vacío.
         self.assertIsNone(value("AVG([Respuesta])"))
         self.assertEqual(value("MAX([Gasto_Real] - [Presupuesto_Asignado])", ti), 500)
+
+    def test_arbol_para_el_constructor(self):
+        def node(kind, value=None, *args):
+            return {"kind": kind, "value": value, "args": list(args)}
+        self.assertEqual(
+            formula_tree('IF([grado] = "a" OR grado = \'b\', "X", -1.5)'),
+            node("func", "IF",
+                 node("bin", "OR", node("bin", "=", node("col", "grado"), node("str", "a")),
+                      node("bin", "=", node("col", "grado"), node("str", "b"))),
+                 node("str", "X"), node("neg", None, node("num", 1.5))))
+        self.assertEqual(formula_tree("AVG([Gasto Real])"), node("func", "AVG", node("col", "Gasto Real")))
+        self.assertIsNone(formula_tree("SUM("))
 
     def test_division_entre_cero_queda_vacia(self):
         df = budget_df()

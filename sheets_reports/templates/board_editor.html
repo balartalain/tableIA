@@ -67,6 +67,16 @@
   .resize-handle { touch-action: none; user-select: none; }
   /* Asa del panel inferior: mismo motivo, el gesto táctil vertical es del arrastre. */
   .bottom-sheet-handle { touch-action: none; user-select: none; }
+  /* Constructor de fórmulas: piezas arrastrables y el lugar donde caería la pieza. */
+  [data-fb-piece], [data-fb-drag] { touch-action: none; user-select: none; }
+  .fb-over { outline: 2px solid var(--color-moss-500); outline-offset: 2px; background-color: var(--color-moss-tint); }
+  /* «Quitar» de un bloque: solo el del bloque bajo el puntero (no el de los que lo contienen). */
+  .fb-remove { opacity: 0; }
+  .fb-block:hover:not(:has(.fb-block:hover)) > .fb-remove,
+  .fb-block:hover:not(:has(.fb-block:hover)) > .fb-head > .fb-remove,
+  .fb-selected > .fb-remove, .fb-selected > .fb-head > .fb-remove, .fb-remove:focus-visible { opacity: 1; }
+  @media (hover: none) { .fb-remove { opacity: 1; } }
+  [data-fb-trash].fb-over { outline-color: #dc2626; background-color: rgb(220 38 38 / 0.05); }
   /* Fila fantasma al arrastrar dimensiones, pivotes o métricas del panel. */
   .metric-ghost-preview {
     background-color: #f1f5f9 !important;
@@ -339,6 +349,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/bottom-sheet.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/formula-builder.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/source-picker.js' %}"></script>
 {% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/source-manager.js' %}"></script>{% endif %}
 <script src="{% static 'sheets_reports/js/board_editor/board-editor-init.js' %}"></script>

@@ -1,5 +1,7 @@
 {% comment %}Ayuda de los campos calculados (popover del editor de la fuente): qué son, los dos
-tipos con ejemplos, cuál elegir y la sintaxis de las fórmulas (engine/formulas.py).{% endcomment %}
+tipos con ejemplos, cuál elegir, cómo calcula cada función (engine/formulas.py) y cómo se arma
+la fórmula con bloques (formula-builder.js). Los ejemplos van en texto: es la forma corta de
+escribirlos.{% endcomment %}
 <div class="space-y-4 text-xs text-ink/80 leading-relaxed">
   <div>
     <p class="text-sm font-semibold text-ink">Campos calculados</p>
@@ -93,13 +95,22 @@ tipos con ejemplos, cuál elegir y la sintaxis de las fórmulas (engine/formulas
   </div>
 
   <div class="space-y-1">
-    <p class="font-semibold text-ink">Cómo se escribe</p>
+    <p class="font-semibold text-ink">Cómo se arma</p>
     <ul class="list-disc pl-4 space-y-0.5">
-      <li>Columnas por su nombre, entre corchetes si tienen espacios o signos: <span class="font-mono">[Gasto Real]</span>, <span class="font-mono">[Recinto:]</span>. Puedes usar los campos por fila definidos antes.</li>
-      <li>Texto entre comillas: <span class="font-mono">"Sí"</span>. Números con punto decimal: <span class="font-mono">1.5</span>.</li>
-      <li>Operaciones <span class="font-mono">+ - * /</span> y paréntesis. Comparaciones <span class="font-mono">= != &gt; &gt;= &lt; &lt;=</span>, y <span class="font-mono">AND OR NOT</span>.</li>
-      <li><span class="font-mono">IF(condición, valor si se cumple, valor si no)</span>.</li>
-      <li>Agregaciones: <span class="font-mono">SUM AVG COUNT COUNT_DISTINCT MIN MAX</span>, cada una con un solo argumento: una columna o una expresión por fila (ver arriba).</li>
+      <li>Arrastra piezas del panel izquierdo a los huecos punteados del canvas. Cada bloque trae sus
+        huecos: <b>SI</b> tres (condición, si se cumple, si no), <b>SUM</b>, <b>AVG</b>… uno, una
+        comparación o un operador dos.</li>
+      <li>Soltar un operador, una condición o una función <b>sobre un bloque</b> lo envuelve: el
+        bloque pasa a su primer hueco (<span class="font-mono">[ventas]</span> + «+» →
+        <span class="font-mono">[ventas] + [ ]</span>). Una columna o un valor encima lo reemplaza.</li>
+      <li>Sin arrastrar: haz clic en un hueco y luego en la pieza; queda elegido el siguiente hueco.</li>
+      <li><b>Valores</b> (bajo Columnas): elige Número o Texto, escríbelo y arrastra la ficha.
+        Los números con punto o coma decimal: <span class="font-mono">1.5</span>.</li>
+      <li>El operador de un bloque (<span class="font-mono">= ≠ &gt; ≥ &lt; ≤</span>,
+        <span class="font-mono">+ − × ÷</span>, Y / O) se cambia en su lista, sin rearmarlo.</li>
+      <li>Para quitar un bloque, su «×» o arrástralo al panel izquierdo. Los bloques también se
+        mueven arrastrándolos a otro hueco.</li>
+      <li>Columnas: las de la hoja y los campos por fila definidos antes.</li>
       <li><b>Formato porcentaje</b> (solo en agregados) muestra el valor con «%»: la fórmula ya debe multiplicar por 100.</li>
     </ul>
   </div>

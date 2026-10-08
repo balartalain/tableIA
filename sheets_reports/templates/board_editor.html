@@ -270,6 +270,9 @@
       <template x-if="$store.dashboard.editingType === 'filter'">
         {% include "sheets_reports/widgets/config/_filter_config.html" %}
       </template>
+      <template x-if="$store.dashboard.editingType === 'ranking'">
+        {% include "sheets_reports/widgets/config/_ranking_config.html" %}
+      </template>
 
     </div>
 
@@ -347,6 +350,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/dynamic-table-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/table-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/filter-widget.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/widgets/ranking-widget.js' %}"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>

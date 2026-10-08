@@ -434,10 +434,11 @@ tipo. Por ejemplo, el partial del KPI vacía `target` cuando la meta deja de ser
 ```python
 # widgets/__init__.py
 from sheets_reports.widgets.base import WIDGETS, BaseWidget
-from sheets_reports.widgets import kpi, bar, line, donut, dynamic_table, table, filter
+from sheets_reports.widgets import kpi, bar, line, donut, dynamic_table, table, filter, ranking
 ```
 
-Importar el paquete registra los 7 tipos. Un widget nuevo son dos piezas:
+Importar el paquete registra los 8 tipos (`ranking`: el top N de los grupos de una columna,
+los mejores o los peores; ver `widgets/ranking.py`). Un widget nuevo son dos piezas:
 1. un módulo en `widgets/` con su subclase decorada con `@WIDGETS.register`, importado en
    `widgets/__init__.py`;
 2. su panel `templates/sheets_reports/widgets/config/_<key>_config.html` (las dos pestañas,

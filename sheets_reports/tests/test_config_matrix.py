@@ -263,6 +263,26 @@ def _filter(data, fields) -> list[str]:
     return [] if shown == wanted else [f"filtros {shown} en vez de {wanted}"]
 
 
+def _ranking(data, fields) -> list[str]:
+    problems = []
+    items = data["items"]
+    if len(items) > (fields.get("limit") or 10):
+        problems.append("el ranking muestra más que el límite")
+    ranks = [i["rank"] for i in items]
+    if ranks != sorted(ranks):
+        problems.append(f"las posiciones bajan: {ranks}")
+    values = [i["value"] for i in items]
+    descending = not fields.get("sort_by") or fields["sort_by"].startswith("-")
+    if values != sorted(values, reverse=descending):
+        problems.append(f"los valores no van en orden: {values}")
+    shares = [i["share"] for i in items]
+    if all(s is not None for s in shares) and shares:
+        rest = (data.get("rest") or {}).get("share") or 0
+        if not _close(sum(shares) + rest, items=len(shares) + 1):
+            problems.append("el % del total del top y del resto no suma 100")
+    return problems
+
+
 INVARIANTS = {
     "bar": _chart,
     "line": _chart,
@@ -271,6 +291,7 @@ INVARIANTS = {
     "dynamic_table": _dynamic_table,
     "table": _table,
     "filter": _filter,
+    "ranking": _ranking,
 }
 
 

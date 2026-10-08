@@ -1,0 +1,80 @@
+{# Panel del editor del ranking: «Configurar» (qué se clasifica, por qué métrica, los mejores o
+   los peores, cuántos y la condición) y «Personalizar». #}
+{% with B="sheets_reports/widgets/config/blocks/" %}
+<div>
+  <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
+    {% include B|add:"_source.html" %}
+    {% include B|add:"_title.html" %}
+    {% include B|add:"_assistant.html" %}
+    {% include B|add:"_dimensions.html" %}
+    {% include B|add:"_metrics.html" %}
+
+    <!-- Ranking: clasifica por la única métrica. «Mostrar» (los mejores o los peores) y «Un valor
+         más alto es mejor» deciden juntos la dirección de `fields.sort_by`; N es `fields.limit`. -->
+    <div class="space-y-3 rounded border border-line/60 bg-paper/60 p-3"
+         x-data="{
+           get fields() { return this.$store.dashboard.drawerDraft.fields; },
+           get style() { return this.$store.dashboard.drawerDraft.style; },
+           // El alias de la métrica que clasifica.
+           get by() { return (this.$store.dashboard.metricRoleOptions()[0] || {}).value || ''; },
+           get descending() { return !this.fields.sort_by || String(this.fields.sort_by).startsWith('-'); },
+           get higher() { return this.style.higher_is_better !== false; },
+           get show() { return this.descending === this.higher ? 'best' : 'worst'; },
+           setSort(by, show) {
+             const descending = (show === 'best') === this.higher;
+             this.fields.sort_by = by ? (descending ? '-' + by : by) : null;
+           },
+           // Cambiar qué es mejor no cambia lo que se ve en «Mostrar»: cambia la dirección.
+           setHigher(checked) {
+             const show = this.show;
+             this.style.higher_is_better = checked;
+             this.setSort(this.by, show);
+           },
+           // Si cambia el alias de la métrica, sort_by lo sigue (con la misma dirección): uno
+           // viejo no pasaría la validación al guardar.
+           sync() {
+             const by = this.by;
+             if (!by || !this.fields.sort_by) return;
+             const wanted = this.descending ? '-' + by : by;
+             if (this.fields.sort_by !== wanted) this.fields.sort_by = wanted;
+           },
+         }"
+         x-effect="sync()"
+         x-init="$store.dashboard.registerStyleGroup('Ranking', ['higher_is_better'])">
+      <label class="block text-xs font-semibold text-ink/70">Ranking</label>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-[11px] font-semibold text-ink/60 mb-1">Mostrar</label>
+          <select x-bind:value="show" x-on:change="setSort(by, $event.target.value)"
+                  class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+            <option value="best" x-bind:selected="show === 'best'">Los mejores</option>
+            <option value="worst" x-bind:selected="show === 'worst'">Los peores</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-ink/60 mb-1">Cuántos</label>
+          <input type="number" min="1" max="50" placeholder="10"
+                 x-model.number="$store.dashboard.drawerDraft.fields.limit"
+                 class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+        </div>
+      </div>
+      <label class="flex items-center gap-2 text-[11px] font-semibold text-ink/60 cursor-pointer">
+        <input type="checkbox" x-bind:checked="higher" x-on:change="setHigher($event.target.checked)"
+               class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+        <span>Un valor más alto es mejor</span>
+      </label>
+      <p class="text-[11px] text-ink/45">Desmárcalo en métricas donde lo bajo es lo bueno (días de entrega, reclamos).</p>
+    </div>
+
+    {% include B|add:"_filters.html" with label="Condición" %}
+    {% include B|add:"_json.html" %}
+  </div>
+
+  <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+    {% include B|add:"_style_checkbox.html" with key="showBars" label="Mostrar barras" %}
+    {% include B|add:"_style_checkbox.html" with key="showShare" label="Mostrar % del total" %}
+    {% include B|add:"_style_checkbox.html" with key="showRest" label="Mostrar el resto" %}
+    {% include B|add:"_style_checkbox.html" with key="abbreviate" label="Abreviar (1.2M)" %}
+  </div>
+</div>
+{% endwith %}

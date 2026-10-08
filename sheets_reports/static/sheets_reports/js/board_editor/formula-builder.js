@@ -109,7 +109,7 @@ const FormulaBlocks = (() => {
     const isSelected = selected != null && pathKey(selected) === key;
     if (n == null) {
       const slot = el('span', 'fb-slot inline-flex items-center justify-center min-w-[5.5rem] h-7 px-2 rounded-md border border-dashed text-[11px] cursor-pointer select-none '
-        + (isSelected ? 'border-moss-500 bg-moss-50 text-moss-700' : 'border-ink/25 text-ink/35 hover:border-moss-400'),
+        + (isSelected ? 'border-moss-500 bg-moss-50 text-moss-700' : 'border-ink/25 text-ink/35 hover:border-moss-500'),
         'suelta aquí');
       slot.dataset.fbDrop = key;
       slot.addEventListener('click', e => { e.stopPropagation(); actions.select(path); });
@@ -121,7 +121,7 @@ const FormulaBlocks = (() => {
     let block;
     if (leaf) {
       const styles = {
-        col: 'bg-moss-50 border-moss-200 text-moss-800 font-medium',
+        col: 'bg-moss-50 border-moss-300 text-moss-700 font-medium',
         str: 'bg-amber-50 border-amber-200 text-amber-900 font-mono',
       };
       block = el('span', `fb-block inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-md border text-xs ${styles[n.kind] || 'bg-sky-50 border-sky-200 text-sky-900 font-mono'}${ring}`);

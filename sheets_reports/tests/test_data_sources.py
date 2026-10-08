@@ -492,4 +492,4 @@ class ColumnFormatTests(TestCase):
                                       "sort_by": None, "limit": None})
         self.assertEqual(table["formats"], {"ventas": "currency"})
         kpi = self.render("kpi", fields(dimensions=[], metrics=[{"field": "ventas", "agg": "sum", "alias": "t"}]))
-        self.assertTrue(kpi["formatted_value"].startswith("$"))
+        self.assertEqual(kpi["format"], "currency")

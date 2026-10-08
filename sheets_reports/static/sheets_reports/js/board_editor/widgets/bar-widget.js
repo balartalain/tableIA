@@ -82,7 +82,7 @@
 
       const horizontal = this.style.horizontal ?? false;
       const allPercent = BaseWidget.allSeriesPercent(payload, series);
-      const percentAxis = { formatter: allPercent ? (val) => `${Math.round(val)}%` : BaseWidget.axisNumber };
+      const percentAxis = { formatter: allPercent ? (val) => formatNumber(val, { percent: true, decimals: 0 }) : BaseWidget.axisNumber };
 
       const reference = BaseWidget.referenceAnnotations(payload.referenceLines || [], series, {
         horizontal, format: BaseWidget.referenceFormat(allPercent),
@@ -92,7 +92,7 @@
         max: (max) => Math.max(max, reference.max ?? max) * 1.12,
       };
 
-      const roundLabel = (val) => (val == null || isNaN(val) ? val : Math.round(Number(val)));
+      const roundLabel = (val) => (val == null || isNaN(val) ? val : formatNumber(val, { decimals: 0 }));
       const template = this.style.dataLabelFormatter;
       const withTemplate = (format) => (val) => (val == null ? val : template.replace('{value}', format(val)));
 

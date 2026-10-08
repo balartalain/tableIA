@@ -1,33 +1,18 @@
 (function () {
-    // Hasta 2 decimales: un campo calculado llega sin redondear (96,87500000…).
-    const twoDecimals = (value) => Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
-
-    // Formateadores de Tabulator por formato (el de cada columna lo decide su métrica o la fuente).
+    // Formateadores de Tabulator por formato (el de cada columna lo decide su métrica o la
+    // fuente); los valores, con el formateador común (utils/number-format.js).
     const FORMATTERS = {
       "text": { hozAlign: "left", formatter: "plaintext" },
-      "number": {
-          hozAlign: "right",
-          formatter: (cell) => {
-            const value = cell.getValue();
-            if (value == null || value === '') return "-";
-            return typeof value === 'number' ? twoDecimals(value) : value;
-          }
-      },
-      "currency": { hozAlign: "right", formatter: "money", formatterParams: { symbol: "$", precision: 2, thousand: "," } },
-      "percent": {
-          hozAlign: "right",
-          formatter: (cell) => {
-            const value = cell.getValue();
-            return value == null || value === '' ? "-" : twoDecimals(value) + "%";
-          }
-      },
+      "number": { hozAlign: "right", formatter: (cell) => formatNumber(cell.getValue()) },
+      "currency": { hozAlign: "right", formatter: (cell) => formatNumber(cell.getValue(), { currency: true }) },
+      "percent": { hozAlign: "right", formatter: (cell) => formatNumber(cell.getValue(), { percent: true }) },
       "progress": {
           formatter: "progress",
           hozAlign: "left",
           formatterParams: {
             min: 0, max: 100,
             color: ["#ef4444", "#f59e0b", "#10b981"],
-            legend: function(value) { return twoDecimals(value) + "%"; }
+            legend: (value) => formatNumber(value, { percent: true }),
           }
       }
     };

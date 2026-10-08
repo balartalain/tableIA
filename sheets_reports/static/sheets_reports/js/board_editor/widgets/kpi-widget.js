@@ -32,18 +32,11 @@
     format(value, { percent = false, signed = false } = {}) {
       if (typeof value !== 'number') return value ?? '—';
       const decimals = this.style.decimals === '' || this.style.decimals == null ? null : Number(this.style.decimals);
-      const abbreviate = this.style.abbreviate ?? false;
-      const prefix = this.style.prefix ?? '';
-      const suffix = this.style.suffix ?? '';
-      const options = decimals === null
-        ? { maximumFractionDigits: 2 }
-        : { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
-      if (abbreviate && !percent) {
-        Object.assign(options, { notation: 'compact', maximumFractionDigits: decimals ?? 1 });
-      }
-      if (signed) options.signDisplay = 'exceptZero';
-      const text = value.toLocaleString(undefined, options);
-      return percent ? `${text}%` : `${prefix || ''}${text}${suffix ? ` ${suffix}` : ''}`;
+      return formatNumber(value, {
+        percent, signed, decimals, currency: !percent && !!this._currency,
+        compact: !percent && (this.style.abbreviate ?? false),
+        prefix: this.style.prefix ?? '', suffix: this.style.suffix ?? '',
+      });
     }
 
     _compareHTML(compare, percent) {
@@ -88,7 +81,9 @@
       this._lastData = payload;
 
       const esc = BaseWidget.escapeHTML;
-      const percent = !!payload.percent;
+      // El formato de la métrica principal lo manda el servidor; los decimales, prefijo y sufijo, el estilo.
+      const percent = payload.format === 'percent' || payload.format === 'progress';
+      this._currency = payload.format === 'currency' && !this.style.prefix;
       const statusClass = STATUS_CLASS[payload.status] || 'text-ink';
       const valueText = this.format(payload.value, { percent });
 

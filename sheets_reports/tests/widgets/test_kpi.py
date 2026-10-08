@@ -218,9 +218,12 @@ class KpiCompileTests(SimpleTestCase):
         self.assertIsNone(out["target"])
         self.assertEqual(out["status"], "warn")
 
-    def test_formato_prefijo_abreviacion_y_decimales(self):
-        out = compiled("kpi", self.kpi(agg("actual")), {"prefix": "RD$ ", "abbreviate": True})
-        self.assertEqual(out["formatted_value"], "RD$ 755")
+    def test_el_formato_de_la_metrica_va_al_front(self):
+        """El número lo formatea el front (formatNumber): el servidor manda el formato de la
+        métrica principal (el de un campo calculado porcentaje, el elegido…)."""
+        self.assertIsNone(compiled("kpi", self.kpi(agg("actual")))["format"])
+        chosen = compiled("kpi", self.kpi({**agg("actual"), "format": "currency"}))
+        self.assertEqual(chosen["format"], "currency")
 
     def test_los_defaults_del_estilo_vienen_de_backend(self):
         out = render("kpi", self.kpi(agg("actual")))

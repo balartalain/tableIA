@@ -149,6 +149,21 @@ class PanelTests(StaticLiveServerTestCase):
         cells = card.locator(".tabulator-row .tb-num").all_inner_texts()
         self.assertIn("15.15%", cells)
 
+    def test_el_formateador_comun_de_numeros(self):
+        """`formatNumber` (utils/number-format.js): el formato de todos los valores de datos."""
+        self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
+        cases = [
+            ([15.151515], "15.15"), ([15.151515, {"percent": True}], "15.15%"), ([1234567], "1,234,567"),
+            ([1234.5, {"currency": True}], "$1,234.50"), ([-5, {"currency": True}], "-$5.00"),
+            ([25, {"decimals": 1}], "25.0"), ([25.04, {"percent": True, "decimals": 0}], "25%"),
+            ([12345, {"compact": True}], "12.3K"), ([3, {"signed": True, "percent": True}], "+3%"),
+            ([10, {"prefix": "RD$", "suffix": "pesos"}], "RD$10 pesos"),
+            ([None], "-"), (["", {"empty": "—"}], "—"), (["Hogar"], "Hogar"), (["7.5"], "7.5"),
+        ]
+        for args, expected in cases:
+            with self.subTest(args=args):
+                self.assertEqual(self.page.evaluate("args => formatNumber(...args)", args), expected)
+
 @unittest.skipUnless(E2E, "Pruebas en el navegador: correr con E2E=1 (requirements-dev.txt + Chromium)")
 class FormulaBuilderTests(PanelTests):
     """El constructor de fórmulas por bloques (pestaña «Campos calculados» al editar la fuente)."""

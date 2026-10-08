@@ -61,20 +61,20 @@
       return div.innerHTML;
     }
 
-    static percentAwareFormatter(percentNames, fallback = (val) => val, maxDigits = 2) {
+    // `decimals`: null = hasta 2 (como formatNumber).
+    static percentAwareFormatter(percentNames, fallback = (val) => val, decimals = null) {
       const names = new Set(percentNames || []);
       return (val, opts) => {
         const name = opts && opts.w ? opts.w.globals.seriesNames[opts.seriesIndex] : null;
         if (val == null || !names.has(name)) return fallback(val);
-        return `${Number(val).toLocaleString(undefined, { maximumFractionDigits: maxDigits })}%`;
+        return formatNumber(val, { percent: true, decimals });
       };
     }
 
     // Etiquetas del eje de valores: sin formato, ApexCharts toma los decimales de la serie más
     // fina (un 0,97 junto a miles da «17920.0000000000»).
     static axisNumber(val) {
-      return val == null || isNaN(val) ? val
-        : Number(val).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      return val == null || isNaN(val) ? val : formatNumber(val);
     }
 
     static allSeriesPercent(payload, series) {
@@ -134,8 +134,7 @@
 
     static referenceFormat(percentAxis) {
       return (val) => {
-        const text = Number(val).toLocaleString(undefined, { maximumFractionDigits: 2 });
-        return percentAxis ? `${text}%` : text;
+        return formatNumber(val, { percent: percentAxis });
       };
     }
 

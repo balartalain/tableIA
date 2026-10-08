@@ -95,8 +95,8 @@
           },
           dropShadow: { enabled: false },
           formatter: (val, opts) => (labelMode === 'value'
-            ? Number(opts.w.globals.series[opts.seriesIndex]).toLocaleString(undefined, { maximumFractionDigits: 2 })
-            : `${Number(val).toFixed(1)}%`),
+            ? formatNumber(opts.w.globals.series[opts.seriesIndex])
+            : formatNumber(val, { percent: true, decimals: 1 })),
         }
       };
       this.renderApexChart(this.getContentContainer(), options);

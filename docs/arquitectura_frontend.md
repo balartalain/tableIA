@@ -39,6 +39,7 @@ static/sheets_reports/js/board_editor/
   board-view-init.js          # Bootstrap read-only: store mínimo + mount
   utils/
     formatearEtiquetaApex.js  # Wrap de labels largos para ApexCharts
+    number-format.js          # formatNumber: el formato de todo valor de datos
   widgets/
     kpi-widget.js             # KpiWidget (número + comparación + meta + sparkline)
     bar-widget.js             # BarWidget (barras + leyenda arrastrable)
@@ -57,7 +58,7 @@ En `board_editor.html` (y `board_view.html`), los scripts se cargan en orden:
 base.html:  formatearEtiquetaApex.js → Alpine.js (defer)
 board_editor.html:
   SortableJS → interact.js → ApexCharts → Tabulator → Virtual Select
-  base-widget.js → widget-registry.js → widgets/*.js → dashboard-store.js → filters.js → board-editor-init.js
+  utils/number-format.js → base-widget.js → widget-registry.js → widgets/*.js → dashboard-store.js → filters.js → board-editor-init.js
 ```
 
 Alpine carga con `defer` en `base.html`, pero los stores y widgets se registran antes de que Alpine arranque (los scripts inline se ejecutan antes que el defer).
@@ -294,13 +295,30 @@ Utilidades compartidas:
 - `chartExportToolbar()`: toolbar de exportación (CSV, SVG, PNG).
 - `escapeHTML()`: escape de HTML.
 
+## Formato de los números (`utils/number-format.js`)
+
+El motor manda los valores sin redondear; todo valor de datos que se muestra (celdas de las
+tablas, KPI, etiquetas y ejes de los gráficos, vista previa de los campos calculados) pasa por
+`formatNumber(valor, opciones)`, así la misma cifra se ve igual en todas partes:
+
+- Hasta 2 decimales por defecto; `decimals` fija una cantidad exacta.
+- `percent` agrega «%» (el valor ya viene × 100); `currency` antepone «$» con 2 decimales.
+- `compact` (1,2 mil), `signed` (signo también en positivos), `prefix` / `suffix`.
+- Vacío → `empty` (`-` por defecto); un texto no numérico se devuelve tal cual.
+- Locale: `NUMBER_LOCALE` (el del navegador), en un solo lugar.
+
+El servidor no formatea: dice **qué formato** tiene cada métrica (`payload.formats` /
+`payload.percent` en tablas y gráficos, `payload.format` en el KPI) y el front aplica
+`formatNumber`.
+
 ## Tipos de widget (frontend)
 
 ### KpiWidget
 
 Renderiza: número grande + etiqueta + badge de comparación + barra de progreso (meta) + sparkline (tendencia).
 
-- `format(value, {percent, signed})`: decimales, abreviar, prefijo, sufijo.
+- `format(value, {percent, signed})`: `formatNumber` con el formato de la métrica principal
+  (`payload.format`: porcentaje, moneda…) y los decimales, abreviar, prefijo y sufijo del estilo.
 - `_compareHTML()`: delta con flecha y color.
 - `_targetHTML()`: barra de progreso con porcentaje.
 - `_renderTrend()`: ApexCharts area sparkline (height 48).

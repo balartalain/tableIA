@@ -233,7 +233,7 @@ class AggregatedFieldInEngineTests(SimpleTestCase):
 
     def test_kpi_con_formato_porcentaje(self):
         out = compiled("kpi", fields(dimensions=[], metrics=[self.metric]), df=with_fields(EXECUTION))
-        self.assertTrue(out["formatted_value"].endswith(" %"))
+        self.assertEqual(out["format"], "percent")
 
 
 class AggregatedFieldValidationTests(SimpleTestCase):

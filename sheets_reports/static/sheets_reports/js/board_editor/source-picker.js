@@ -510,12 +510,10 @@ function sourcePicker({ mode = 'create' } = {}) {
     },
 
     previewText(field) {
-      const show = v => (v == null ? '—'
-        : typeof v === 'number' ? v.toLocaleString('es', { maximumFractionDigits: 2 }) : String(v));
+      const show = (v, options = {}) => (typeof v === 'number' ? formatNumber(v, options) : (v == null ? '—' : String(v)));
       if (!field._values) return '';
       if (field._kind === 'aggregated') {
-        const value = field._values[0];
-        return `Toda la hoja: ${show(value)}${field.format === 'percent' && value != null ? ' %' : ''}`;
+        return `Toda la hoja: ${show(field._values[0], { percent: field.format === 'percent' })}`;
       }
       return `Primeras filas: ${field._values.map(show).join(' · ')}`;
     },

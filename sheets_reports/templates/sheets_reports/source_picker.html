@@ -284,11 +284,6 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             {% include "sheets_reports/source_formula_help.html" %}
           </div>
         </div>
-        <span class="flex-1" aria-hidden="true"></span>
-        <button type="button" x-on:click="addCalculated()"
-                class="inline-flex items-center gap-1.5 text-sm font-medium text-moss-700 hover:text-moss-800 cursor-pointer">
-          <i class="ti ti-plus text-base" aria-hidden="true"></i> Agregar campo
-        </button>
       </div>
 
       <div x-show="!calculated.length"
@@ -298,8 +293,10 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
         <p class="text-xs text-ink/50">Agrega uno y arma su fórmula arrastrando columnas, condiciones y funciones.</p>
       </div>
 
-      <!-- Los campos: el elegido se arma abajo. -->
-      <div x-show="calculated.length" class="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Campos calculados">
+      <!-- Los campos (el elegido se arma abajo) y, al final, «Agregar campo» con el mismo
+           formato pero punteado y en verde, para distinguirlo. -->
+      <div class="flex flex-wrap items-center gap-1.5">
+        <div class="contents" role="tablist" aria-label="Campos calculados">
         <template x-for="f in calculated" :key="f.id">
           <button type="button" role="tab" x-on:click="selectField(f.id)" x-bind:aria-selected="f.id === selectedId"
                   x-bind:class="f.id === selectedId ? 'border-moss-500 bg-moss-50 text-ink' : 'border-line bg-white text-ink/70 hover:border-moss-300'"
@@ -310,6 +307,11 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             <span class="max-w-[12rem] truncate" x-text="f.name.trim() || 'Campo sin nombre'"></span>
           </button>
         </template>
+        </div>
+        <button type="button" x-on:click="addCalculated()"
+                class="inline-flex items-center gap-1 rounded-full border border-dashed border-moss-500 bg-moss-50 px-3 py-1 text-xs font-medium text-moss-700 hover:bg-moss-100 transition cursor-pointer">
+          <i class="ti ti-plus text-sm leading-none" aria-hidden="true"></i> Agregar campo
+        </button>
       </div>
 
       <template x-for="f in selectedField ? [selectedField] : []" :key="f.id">
@@ -349,7 +351,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                   <template x-for="col in filteredBuilderColumns" :key="col">
                     <button type="button" x-bind:data-fb-piece="JSON.stringify(columnPiece(col))" x-on:click="clickPiece(columnPiece(col))"
                             x-bind:title="col"
-                            class="max-w-full truncate rounded-md border border-moss-200 bg-moss-50 px-2 py-1 font-medium text-moss-800 hover:border-moss-400 cursor-grab"
+                            class="max-w-full truncate rounded-md border border-moss-300 bg-moss-50 px-2 py-1 font-medium text-moss-700 hover:border-moss-500 cursor-grab"
                             x-text="col"></button>
                   </template>
                 </div>
@@ -384,7 +386,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 <div class="flex flex-wrap gap-1">
                   <template x-for="p in CONDITION_PIECES" :key="p.label">
                     <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
-                            class="rounded-md border border-line bg-white px-2 py-1 font-semibold text-ink/70 hover:border-moss-400 cursor-grab"
+                            class="rounded-md border border-line bg-white px-2 py-1 font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
                             x-text="p.label"></button>
                   </template>
                 </div>
@@ -420,7 +422,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 <template x-for="p in OPERATOR_PIECES" :key="p.label">
                   <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
                           x-bind:aria-label="p.title"
-                          class="w-8 h-8 rounded-md border border-line bg-white text-sm font-semibold text-ink/70 hover:border-moss-400 cursor-grab"
+                          class="w-8 h-8 rounded-md border border-line bg-white text-sm font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
                           x-text="p.label"></button>
                 </template>
               </div>

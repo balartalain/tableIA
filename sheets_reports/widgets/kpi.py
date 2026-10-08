@@ -234,30 +234,17 @@ class KpiWidget(BaseWidget):
         compare = chosen_compare if chosen_compare in aliases and chosen_compare != primary else None
 
         if df.empty:
-            return {"type": "kpi", "value": 0, "formatted_value": "0", "label": "",
+            return {"type": "kpi", "value": 0, "format": None, "label": "",
                     "compare": None, "target": None, "status": None, "style": style_dict}
 
         row = df.iloc[0]
         primary_value = self._number(row.get(primary, 0)) if primary else 0.0
         compare_value = self._number(row.get(compare, 0)) if compare else 0
 
-        decimals = int(style_dict.get("decimals", 0) or 0)
-        abbreviate = bool(style_dict.get("abbreviate"))
-        prefix = style_dict.get("prefix") or ""
-        suffix = style_dict.get("suffix") or ""
+        # El formato de la métrica principal (porcentaje, moneda…: el elegido, el del campo
+        # calculado o el de la columna); el número lo formatea el front (formatNumber) con él y
+        # con los decimales, prefijo y sufijo del estilo.
         primary_format = metric_formats(fields, metadata).get(primary) if primary else None
-        if not suffix and primary_format in ("percent", "progress"):
-            suffix = " %"  # métrica con formato porcentaje (campo calculado, columna o elegido)
-        if not prefix and primary_format == "currency":
-            prefix = "$"
-
-        def format_value(value: float) -> str:
-            if abbreviate:
-                if abs(value) >= 1_000_000:
-                    return f"{value / 1_000_000:.1f}M"
-                if abs(value) >= 1_000:
-                    return f"{value / 1_000:.1f}K"
-            return f"{value:,.{decimals}f}"
 
         # Etiqueta del número principal: usa el «Nombre a mostrar» de la métrica si existe
         primary_label = metric_label(_metric_by_alias(primary)) if primary else ""
@@ -265,7 +252,7 @@ class KpiWidget(BaseWidget):
         output: Dict[str, Any] = {
             "type": "kpi",
             "value": primary_value,
-            "formatted_value": f"{prefix}{format_value(primary_value)}{suffix}",
+            "format": primary_format,
             "label": primary_label,
             "compare": None,
             "target": None,

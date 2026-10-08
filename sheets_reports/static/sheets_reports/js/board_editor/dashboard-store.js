@@ -640,11 +640,22 @@ document.addEventListener('alpine:init', () => {
       this.drawerDraft.fields.dimensions = (source || []).slice(0, max);
     },
 
-    // Una Tabla nueva arranca con las primeras columnas de la hoja.
+    // Columnas que el widget puede elegir: todas, o solo las numéricas si calcula con ellas
+    // (`columns_numeric`, la correlación).
+    get columnFields() {
+      return (this.drawerCapabilities.columns_numeric ? this.schema.numeric_fields : this.schema.all_fields) || [];
+    },
+
+    // Un widget nuevo de columnas arranca con las primeras de la hoja (la Tabla, 8; la
+    // correlación, 4 numéricas que no sean de tiempo ni identificadores: un año o un ID no se
+    // correlacionan).
     _autoPickColumns() {
-      const max = Math.min(this.maxColumns || 0, 8);
-      this.drawerDraft.fields.columns = (this.schema.all_fields || []).slice(0, max)
-        .map(field => ({ field }));
+      const numeric = this.drawerCapabilities.columns_numeric;
+      const time = this.schema.time_fields || [];
+      const isId = f => /(^|[_\s-])(id|codigo|código)([_\s-]|$)/i.test(f);
+      const fields = numeric ? this.columnFields.filter(f => !time.includes(f) && !isId(f)) : this.columnFields;
+      const max = Math.min(this.maxColumns || 0, numeric ? 4 : 8);
+      this.drawerDraft.fields.columns = fields.slice(0, max).map(field => ({ field }));
     },
 
     // ---- dimensiones / pivotes
@@ -689,13 +700,13 @@ document.addEventListener('alpine:init', () => {
     columnOptions(idx) {
       const list = this.drawerDraft.fields.columns;
       const current = (list[idx] || {}).field;
-      return (this.schema.all_fields || []).filter(c => c === current || !list.some(x => x.field === c));
+      return this.columnFields.filter(c => c === current || !list.some(x => x.field === c));
     },
 
     addColumn() {
       const list = this.drawerDraft.fields.columns;
       if (list.length >= this.maxColumns) return;
-      const field = (this.schema.all_fields || []).find(c => !list.some(x => x.field === c));
+      const field = this.columnFields.find(c => !list.some(x => x.field === c));
       if (field) list.push({ field });
     },
 

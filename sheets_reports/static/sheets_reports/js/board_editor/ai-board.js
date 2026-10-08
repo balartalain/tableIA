@@ -5,17 +5,6 @@
 // en orden: un campo calculado creado para un widget ya lo ve el siguiente, y cada widget
 // aparece en el lienzo apenas está listo. Lo abre el evento `ai-board:open`.
 
-const AI_BOARD_EXAMPLES = [
-  {
-    label: 'Control de presupuesto',
-    text: 'Crea un dashboard de control de presupuesto por departamento. Muestra el presupuesto asignado y el gasto real como KPIs principales, un gráfico de barras comparativo por departamento y un gráfico de área con la tendencia temporal.',
-  },
-  {
-    label: 'Ventas y productos',
-    text: 'Genera un tablero de ventas mensuales. Incluye los ingresos totales como tarjeta KPI, un gráfico de líneas para la evolución de ventas en el tiempo, un gráfico de barras con el Top 5 productos más vendidos y una gráfica de dona con la distribución por categoría.',
-  },
-];
-
 function aiBoard() {
   return {
     open: false,
@@ -30,7 +19,6 @@ function aiBoard() {
     error: '',
     loading: false,
     building: false,
-    examples: AI_BOARD_EXAMPLES,
 
     get store() { return Alpine.store('dashboard'); },
     get sources() { return this.store.sources || []; },
@@ -49,11 +37,6 @@ function aiBoard() {
     // Mientras crea, la ventana se puede cerrar: sigue creando y se reabre con el progreso.
     close() {
       this.open = false;
-    },
-
-    useExample(example) {
-      this.prompt = example.text;
-      this.$nextTick(() => this.$refs.prompt && this.$refs.prompt.focus());
     },
 
     icon(type) {

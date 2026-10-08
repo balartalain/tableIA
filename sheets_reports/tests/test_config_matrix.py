@@ -114,7 +114,7 @@ def _metric_configs(caps: dict):
 def _column_configs(caps: dict):
     """La tabla: columnas a mostrar × orden × límite × filtro."""
     for columns, sort_by, limit, filters in itertools.product(
-            (["categoria"], ["categoria", "ventas"], ["ventas", "mes", "anio"]),
+            (["categoria"], ["categoria", "ventas"], ["ventas", "mes", "anio"], ["ventas", "anio"]),
             (None, "-ventas"), (None, 2),
             ([], [{"field": "anio", "op": "eq", "value": 2026}])):
         yield {"dimensions": [], "pivots": [], "metrics": [], "filters": filters,
@@ -283,6 +283,23 @@ def _ranking(data, fields) -> list[str]:
     return problems
 
 
+def _correlation(data, fields) -> list[str]:
+    problems = []
+    matrix, size = data["matrix"], len(fields["columns"])
+    if len(matrix) != size or any(len(row) != size for row in matrix):
+        return [f"la matriz no es de {size}×{size}"]
+    for i in range(size):
+        if matrix[i][i] not in (1.0, None):
+            problems.append(f"la diagonal {i} vale {matrix[i][i]}")
+        for j in range(size):
+            r = matrix[i][j]
+            if r is not None and not -1 <= r <= 1:
+                problems.append(f"r fuera de [-1, 1]: {r}")
+            if r != matrix[j][i]:
+                problems.append(f"no es simétrica en ({i}, {j})")
+    return problems
+
+
 INVARIANTS = {
     "bar": _chart,
     "line": _chart,
@@ -292,6 +309,7 @@ INVARIANTS = {
     "table": _table,
     "filter": _filter,
     "ranking": _ranking,
+    "correlation": _correlation,
 }
 
 

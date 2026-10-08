@@ -25,18 +25,6 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
                       placeholder="Describe qué quieres ver: los números clave, las comparaciones, la evolución en el tiempo…"
                       class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500 resize-y"></textarea>
           </div>
-          <div>
-            <p class="text-[11px] font-semibold text-ink/50 mb-1.5">Ejemplos</p>
-            <div class="flex flex-wrap gap-2">
-              <template x-for="example in examples" :key="example.label">
-                <button type="button" x-on:click="useExample(example)" x-bind:title="example.text"
-                        class="inline-flex items-center gap-1 text-xs text-ink/70 border border-line rounded-full px-3 py-1 hover:bg-paper hover:text-ink cursor-pointer">
-                  <i class="ti ti-bulb text-sm text-ink/40" aria-hidden="true"></i>
-                  <span x-text="example.label"></span>
-                </button>
-              </template>
-            </div>
-          </div>
           <div x-show="sources.length > 1">
             <label for="ai-board-source" class="block text-xs font-semibold text-ink/70 mb-1">Fuente de datos</label>
             <select id="ai-board-source" x-model.number="source"

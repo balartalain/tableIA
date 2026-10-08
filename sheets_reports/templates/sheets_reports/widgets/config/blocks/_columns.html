@@ -37,6 +37,7 @@
       </div>
     </template>
   </div>
-  <p class="text-[11px] text-ink/50"
+  <!-- `columns_hint` del widget; vacío ("") no muestra ayuda; sin declarar, la de la Tabla. -->
+  <p class="text-[11px] text-ink/50" x-show="$store.dashboard.drawerCapabilities.columns_hint !== ''"
      x-text="$store.dashboard.drawerCapabilities.columns_hint || 'Columnas visibles, en este orden. Sin «Nombre a mostrar» se muestra la columna tal cual.'"></p>
 </div>

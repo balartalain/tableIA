@@ -1,0 +1,64 @@
+{# Panel del editor de la matriz de correlación: en «Configurar», las variables (columnas
+   numéricas), el método, cómo se lee la escala y la condición; en «Personalizar», cómo se ve. #}
+{% with B="sheets_reports/widgets/config/blocks/" %}
+<div>
+  <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
+    {% include B|add:"_source.html" %}
+    {% include B|add:"_title.html" %}
+    {% include B|add:"_assistant.html" %}
+    {% include B|add:"_columns.html" %}
+    <!-- Método: es parte del cálculo. Registra su clave de style para que el chat de la IA
+         la muestre bajo «Matriz de correlación». -->
+    <div x-data x-init="$store.dashboard.registerStyleGroup('Matriz de correlación', ['method'])">
+      <label class="block text-xs font-semibold text-ink/70 mb-1">Método</label>
+      <select x-model="$store.dashboard.drawerDraft.style.method"
+              class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500">
+        <option value="pearson">Pearson (relación lineal)</option>
+        <option value="spearman">Spearman (por rangos)</option>
+      </select>
+      <ul class="mt-1 list-disc pl-4 space-y-0.5 text-[11px] text-ink/50">
+        <li><span class="font-semibold text-ink/60">Pearson:</span> mide si los valores suben o bajan juntos en línea recta. Úsalo con datos sin valores extremos.</li>
+        <li><span class="font-semibold text-ink/60">Spearman:</span> compara el orden de los valores, no su tamaño: aguanta valores extremos y relaciones que no son una línea recta.</li>
+      </ul>
+    </div>
+    <!-- Cómo se lee: la escala de fuerza de correlation-widget.js (window.CORRELATION_SCALE), la
+         misma que colorea las celdas y nombra la fuerza en el tooltip. -->
+    <div class="space-y-2 rounded border border-line/60 bg-paper/60 p-3"
+         x-data="{
+           get levels() {
+             const scale = window.CORRELATION_SCALE || [];
+             const fmt = v => String(v).replace('.', ',');
+             return scale.map((level, i) => ({
+               ...level,
+               range: i === 0 ? `< ${fmt(scale[1].min)}`
+                 : i === scale.length - 1 ? `≥ ${fmt(level.min)}`
+                 : `${fmt(level.min)} – ${fmt(scale[i + 1].min)}`,
+             }));
+           },
+         }">
+      <label class="block text-xs font-semibold text-ink/70">Cómo se lee</label>
+      <ul class="space-y-1">
+        <template x-for="level in levels" :key="level.label">
+          <li class="flex items-center gap-2 text-[11px] text-ink/70">
+            <span class="flex shrink-0" aria-hidden="true">
+              <span class="h-3.5 w-5 rounded-l-sm border border-line/60" x-bind:style="`background:${level.negative}`"></span>
+              <span class="h-3.5 w-5 rounded-r-sm border border-l-0 border-line/60" x-bind:style="`background:${level.positive}`"></span>
+            </span>
+            <span class="font-medium w-20" x-text="level.label"></span>
+            <span class="tabular-nums text-ink/50" x-text="level.range"></span>
+          </li>
+        </template>
+      </ul>
+      <p class="text-[11px] text-ink/50">Valor absoluto de la correlación (de 0 a 1). Azul: cuando una sube, la otra también. Rojo: cuando una sube, la otra baja. Gris: sin datos suficientes.</p>
+    </div>
+    {% include B|add:"_filters.html" with label="Condición" %}
+    {% include B|add:"_json.html" %}
+  </div>
+
+  <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+    {% include B|add:"_style_checkbox.html" with key="showValues" label="Mostrar valores" %}
+    {% include B|add:"_style_checkbox.html" with key="lowerOnly" label="Solo la mitad inferior" %}
+    {% include B|add:"_style_checkbox.html" with key="showTop" label="Mostrar lo más relacionado" %}
+  </div>
+</div>
+{% endwith %}

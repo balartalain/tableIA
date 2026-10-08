@@ -186,6 +186,8 @@ def capabilities_text(widget) -> str:
             parts.append(f"columnas {low}")
         else:
             parts.append(f"columnas de {low} a {high}")
+        if caps.get("columns_numeric"):
+            parts.append("solo columnas numéricas")
     for key, label in (("dimensions", "dimensiones"), ("pivots", "pivotes"), ("metrics", "métricas")):
         rng = caps.get(key)
         if not rng:
@@ -908,6 +910,11 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
     seen_columns: list[str] = []
     for i, column in enumerate(columns):
         errors += _column_errors(column, i, ctx, seen_columns)
+        # Widgets que calculan con las columnas (correlación): solo numéricas.
+        name = column.get("field") if isinstance(column, dict) else column
+        if caps.get("columns_numeric") and name in ctx.fields and not ctx.is_numeric(name):
+            errors.append(f"fields.columns[{i}]: '{name}' no es numérica: este widget solo usa "
+                          "columnas con números.")
 
     metrics = fields.get("metrics") or []
     if not isinstance(metrics, list):

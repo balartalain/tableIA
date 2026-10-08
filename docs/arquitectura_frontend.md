@@ -421,6 +421,11 @@ huecos y rótulos, operadores con su símbolo y título) vienen de `BUILDER_CATA
   bloque deja su hueco y no puede caer dentro de sí mismo; soltarlo en el panel lo quita.
   Después queda elegido el siguiente hueco (`nextHole`), así también se arma solo con clics
   (clic en hueco + clic en pieza; `fbSelected`).
+- **Generar con IA** (barra sobre el canvas): `generateWithAI(field)` manda el pedido con la hoja
+  como está en el editor (`_draftBody`, lo mismo que la vista previa) a
+  `POST /api/sources/{id}/formula/ai/`. Con éxito, el árbol que vuelve reemplaza el del campo
+  (`_setTree`) y, si el campo no tiene nombre, toma el que propone la IA; si no pudo, su motivo
+  queda en `field._aiError` y el lienzo no cambia.
 - **Arrastre**: interact.js con selectores delegados (`[data-fb-piece]` del panel, JSON de la
   pieza; `[data-fb-drag]` de los bloques, su ruta). El destino es el `[data-fb-drop]` más
   interno bajo el puntero; al soltar se emite `formula:drop` y `onFormulaDrop` aplica el cambio.

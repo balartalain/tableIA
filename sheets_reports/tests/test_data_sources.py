@@ -320,6 +320,18 @@ class CalculatedFieldsTests(TestCase):
         error = json_body(self.client, "post", url, {"formula": "SUM(ventas) / anio"}).json()
         self.assertIn("mezcla", error["error"])
 
+    def test_generar_la_formula_con_ia(self, _df):
+        url = f"/api/sources/{self.source.id}/formula/ai/"
+        answer = {"ok": True, "formula": "[Monto] * 2", "name": "Doble"}
+        with mock.patch("sheets_reports.services.ai_formula.generate_json", return_value=answer):
+            # Con lo que hay en el editor sin guardar: «ventas» se muestra como «Monto».
+            out = json_body(self.client, "post", url, {"prompt": "el doble", "columns": with_column("ventas", label="Monto")}).json()
+        self.assertEqual((out["formula"], out["name"], out["kind"]), ("[Monto] * 2", "Doble", "row"))
+        self.assertEqual(out["tree"], formula_tree("[Monto] * 2"))
+        with mock.patch("sheets_reports.services.ai_formula.generate_json", return_value={"ok": False, "reason": "No hay costos."}):
+            self.assertIn("No hay costos.", json_body(self.client, "post", url, {"prompt": "margen"}).json()["error"])
+        self.assertEqual(json_body(self.client, "post", url, {"prompt": " "}).status_code, 400)
+
     def test_el_constructor_manda_el_arbol(self, _df):
         """El constructor de bloques manda `tree`: el servidor lo escribe como texto."""
         url = f"/api/sources/{self.source.id}/formula/"

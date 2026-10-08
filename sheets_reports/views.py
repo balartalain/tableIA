@@ -639,6 +639,21 @@ def source_add_calculated(request, source_id):
 FORMULA_PREVIEW_ROWS = 5
 
 
+def _draft_frame(source, data: dict):
+    """La hoja de la fuente como está en el editor, sin guardar: `first_row_headers`, `columns`
+    (tipos y nombres a mostrar) y `calculated_fields` (los campos anteriores al que se arma).
+    Lanza SheetError si no se puede leer."""
+    headers = bool(data.get("first_row_headers", source.first_row_headers))
+    df = sheets.get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
+    columns = data.get("columns")
+    valid_columns = isinstance(columns, list) and columns and not _columns_errors(columns)
+    df = sheets.apply_column_config(df, _clean_columns(columns) if valid_columns else source.columns)
+    previous = data.get("calculated_fields") or []
+    if _calculated_errors(previous) is None:
+        df = apply_calculated_fields(df, _clean_calculated(previous))
+    return df
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def source_formula(request, source_id):
@@ -656,17 +671,10 @@ def source_formula(request, source_id):
         data = _json_body(request)
     except ValueError as e:
         return _error(str(e))
-    headers = bool(data.get("first_row_headers", source.first_row_headers))
     try:
-        df = sheets.get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
+        df = _draft_frame(source, data)
     except SheetError as e:
         return _error(str(e), status=502)
-    columns = data.get("columns")
-    valid_columns = isinstance(columns, list) and columns and not _columns_errors(columns)
-    df = sheets.apply_column_config(df, _clean_columns(columns) if valid_columns else source.columns)
-    previous = data.get("calculated_fields") or []
-    if _calculated_errors(previous) is None:
-        df = apply_calculated_fields(df, _clean_calculated(previous))
     try:
         text = formula_text(data["tree"]) if "tree" in data else str(data.get("formula") or "")
         formula = compile_formula(text, df.columns, aggregated_fields(df))
@@ -678,6 +686,36 @@ def source_formula(request, source_id):
         return JsonResponse({"error": str(e)})
     return JsonResponse({"formula": formula.text, "kind": "aggregated" if formula.aggregated else "row",
                          "values": values})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def source_formula_ai(request, source_id):
+    """
+    «Generar con IA» en el constructor de un campo calculado: POST {prompt, columns?,
+    first_row_headers?, calculated_fields?} (lo mismo que la vista previa) → {formula, tree,
+    name, kind} o {error} con el motivo si la IA no pudo armarla.
+    """
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    prompt = str(data.get("prompt") or "").strip()
+    if not prompt:
+        return _error("Describe el cálculo que quieres.")
+    try:
+        df = _draft_frame(source, data)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    from sheets_reports.services.ai_formula import FormulaAIError, generate_formula
+    try:
+        return JsonResponse(generate_formula(prompt, df, aggregated_fields(df)))
+    except FormulaAIError as e:
+        return JsonResponse({"error": str(e)})
 
 
 @require_http_methods(["GET"])

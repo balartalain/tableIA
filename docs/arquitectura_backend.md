@@ -781,6 +781,7 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 | `GET /api/sources/{id}/columns/?headers=&refresh=` | Columnas actuales de la hoja con lo guardado de cada una. `refresh=1` («Actualizar datos») la relee de Google y pisa el caché; no guarda nada |
 | `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget; `aggregated_fields` lista los campos agregados (`{name, format}`) |
 | `POST /api/sources/{id}/formula/` | Vista previa de una fórmula (`formula` o `tree`, el árbol del constructor) con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{formula, kind, values}` o `{error}` |
+| `POST /api/sources/{id}/formula/ai/` | «Generar con IA» del constructor: `{prompt}` + lo mismo que la vista previa → `{formula, tree, name, kind}` o `{error}` con el motivo si la IA no pudo (`services/ai_formula.py`) |
 
 ### 10.4 Campos calculados (`engine/formulas.py`)
 
@@ -809,6 +810,11 @@ El constructor de bloques del editor trabaja con árboles; la gramática está s
 - `formula_text(árbol)`: el inverso; paréntesis solo donde hacen falta para que vuelva el mismo
   árbol, números sin notación científica. Valida la forma (huecos, funciones, operadores,
   aridad, comillas) con `FormulaError`. La vista previa y el `PUT` aceptan `tree` y lo escriben.
+- `services/ai_formula.py` (`generate_formula`): un pedido en lenguaje natural → una fórmula. El
+  mensaje a la IA lleva las columnas (tipo y valores de ejemplo), las funciones y operadores del
+  catálogo, reglas cortas y ejemplos; responde `{ok, formula, name}` o `{ok: false, reason}`. El
+  motor valida la fórmula (`compile_formula`) y, si no vale, se le devuelve el error una vez.
+  Errores de la IA (sin API key, red) llegan como `FormulaAIError` con mensaje para el usuario.
 - `BUILDER_CATALOG`: las piezas del constructor (funciones con sus huecos y rótulos, operadores
   con símbolo y título), publicado en la página del editor. Una función nueva se agrega al
   parser, a `formula_text` y al catálogo, todo en este archivo.

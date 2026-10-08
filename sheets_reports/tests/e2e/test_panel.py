@@ -237,3 +237,27 @@ class FormulaBuilderTests(PanelTests):
         self.drag(canvas.locator("[data-fb-drag='1']"), panel.get_by_text("Condición"))
         canvas.get_by_text("suelta aquí").wait_for()
         self.page.get_by_text("Completa los huecos").wait_for()
+
+    def test_generar_con_ia_reemplaza_el_lienzo(self):
+        self.source.calculated_fields = [{"id": "t", "name": "", "formula": "SUM([ventas])", "format": "number"}]
+        self.source.save()
+        panel = self.open_calculated()
+        canvas = self.page.locator('[aria-label="Fórmula"]')
+        prompt = self.page.get_by_label("Pedido para generar la fórmula con IA")
+        ask = "sheets_reports.services.ai_formula.generate_json"
+        # No pudo: el motivo y el lienzo igual.
+        with mock.patch(ask, return_value={"ok": False, "reason": "La hoja no tiene costos."}):
+            prompt.fill("el margen")
+            self.page.get_by_role("button", name="Generar").click()
+            self.page.get_by_text("No pude armar la fórmula: La hoja no tiene costos.").wait_for()
+        canvas.get_by_text("SUM", exact=True).wait_for()
+        # Pudo: los bloques nuevos reemplazan los anteriores y el campo toma el nombre propuesto.
+        answer = {"ok": True, "formula": 'IF([categoria] = "Hogar", "Sí", "No")', "name": "Es Hogar"}
+        with mock.patch(ask, return_value=answer):
+            prompt.fill("marca si es de Hogar")
+            prompt.press("Enter")
+            self.page.get_by_text("Primeras filas: Sí · No · Sí · No · No").wait_for()
+        self.assertEqual(canvas.get_by_text("SUM", exact=True).count(), 0)
+        self.assertEqual(self.page.get_by_label("Nombre del campo").input_value(), "Es Hogar")
+        self.assertEqual(prompt.input_value(), "")
+

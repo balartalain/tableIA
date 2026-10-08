@@ -80,7 +80,8 @@ function sourcePicker({ mode = 'create' } = {}) {
     // Campos calculados: {id, name, formula, format} + su árbol de bloques (_tree; _unreadable
     // si la fórmula guardada no se pudo leer; _rev cuenta sus cambios) y el estado de la vista
     // previa (_kind 'row'|'aggregated', _values, _error, _checking). Al servidor va el árbol
-    // (él lo escribe como texto); `formula` es el último texto que devolvió.
+    // (él lo escribe como texto); `formula` es el último texto que devolvió. «Generar con IA»:
+    // _aiPrompt, _aiLoading, _aiError (por campo).
     calculated: [],
     helpOpen: false,
     _previewTimers: {},
@@ -137,6 +138,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         columnsTab: 'columns', helpOpen: false,
         calculated: ((source && source.calculated_fields) || []).map(({ tree, ...f }) => ({
           ...f, _tree: tree || null, _unreadable: !tree && !!(f.formula || '').trim(), _rev: 0,
+          _aiPrompt: '', _aiLoading: false, _aiError: '',
           _kind: null, _values: null, _error: '', _checking: false,
         })),
         fbSelected: null, valueInput: '', columnQuery: '',
@@ -353,6 +355,7 @@ function sourcePicker({ mode = 'create' } = {}) {
     addCalculated() {
       const id = `cf_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       this.calculated.push({ id, name: '', formula: '', format: 'number', _tree: null, _unreadable: false, _rev: 0,
+                             _aiPrompt: '', _aiLoading: false, _aiError: '',
                              _kind: null, _values: null, _error: '', _checking: false });
       this.selectField(id);
     },
@@ -486,19 +489,49 @@ function sourcePicker({ mode = 'create' } = {}) {
       this._previewTimers[field.id] = setTimeout(() => this._runPreview(field), now ? 0 : 400);
     },
 
-    async _runPreview(field) {
-      const rev = field._rev;
-      const body = this._formulaBody(field);
-      if (!body) return;
+    // La hoja como está en el editor, sin guardar, para un campo: encabezados, columnas y los
+    // campos calculados anteriores a él (vista previa y «Generar con IA»).
+    _draftBody(field) {
       const index = this.calculated.indexOf(field);
       const previous = this.calculated.slice(0, Math.max(index, 0))
         .filter(f => f.name.trim() && this._formulaBody(f))
         .map(f => ({ id: f.id, name: f.name.trim(), format: f.format, ...this._formulaBody(f) }));
+      return {
+        first_row_headers: this.headers, calculated_fields: previous,
+        columns: this.columns.map(({ name, type, include, label }) => ({ name, type, include, label: (label || '').trim() })),
+      };
+    },
+
+    // «Generar con IA»: la fórmula que arma la IA reemplaza lo que haya en el lienzo; si no
+    // pudo, queda su motivo y el lienzo no cambia.
+    async generateWithAI(field) {
+      const prompt = field._aiPrompt.trim();
+      if (!prompt || field._aiLoading) return;
+      Object.assign(field, { _aiLoading: true, _aiError: '' });
       try {
-        const data = await this._send('POST', `/api/sources/${this.editing.id}/formula/`, {
-          ...body, first_row_headers: this.headers, calculated_fields: previous,
-          columns: this.columns.map(({ name, type, include, label }) => ({ name, type, include, label: (label || '').trim() })),
-        });
+        const data = await this._send('POST', `/api/sources/${this.editing.id}/formula/ai/`,
+          { prompt, ...this._draftBody(field) });
+        if (data.error) {
+          field._aiError = data.error;
+          return;
+        }
+        if (!field.name.trim() && data.name) field.name = data.name;
+        field._aiPrompt = '';
+        this._setTree(field, data.tree);
+      } catch (e) {
+        field._aiError = e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message;
+      } finally {
+        field._aiLoading = false;
+      }
+    },
+
+    async _runPreview(field) {
+      const rev = field._rev;
+      const body = this._formulaBody(field);
+      if (!body) return;
+      try {
+        const data = await this._send('POST', `/api/sources/${this.editing.id}/formula/`,
+          { ...body, ...this._draftBody(field) });
         if (field._rev !== rev) return;   // se siguió armando: manda la próxima
         if (data.formula) field.formula = data.formula;
         Object.assign(field, { _kind: data.kind || null, _values: data.values || null, _error: data.error || '' });

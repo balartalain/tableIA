@@ -34,7 +34,7 @@ Un archivo por widget en `tests/widgets/test_<tipo>.py`: `test_bar`, `test_line`
 ### Panel en el navegador (`tests/e2e/test_panel.py`, solo con `E2E=1`)
 El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de la fuente llega a todas las columnas de la tabla dinámica; «Mostrar como» desaparece al pasar a Promedio; la dimensión obligatoria no se puede quitar; sobre una columna de texto solo se cuenta; la tabla dinámica llena el ancho y el total queda pegado a las filas; un porcentaje de un campo calculado sale con 2 decimales; el formateador común de números (`formatNumber`).
 
-`FormulaBuilderTests`, el constructor de fórmulas por bloques: armar un SI solo con clics y guardarlo; arrastrar de verdad (mouse) un operador que envuelve un bloque, un valor a un hueco y un bloque al panel para quitarlo.
+`FormulaBuilderTests`, el constructor de fórmulas por bloques: armar un SI solo con clics y guardarlo; arrastrar de verdad (mouse) un operador que envuelve un bloque, un valor a un hueco y un bloque al panel para quitarlo; «Generar con IA» (IA simulada) reemplaza el lienzo o muestra el motivo si no pudo.
 
 ### Motor
 | Archivo | Qué prueba |
@@ -55,6 +55,7 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 |---|---|
 | `tests/test_ai_spec.py` | Generación del formulario por la IA (con el modelo simulado): reintento con errores, schema de la tool, prompt. |
 | `tests/test_ai_suggestions.py` | Pedidos sugeridos del chat: limpieza y caché. |
+| `tests/test_ai_formula.py` | «Generar con IA» de un campo calculado (modelo simulado): fórmula con su árbol, motivo cuando no puede, reintento con el error del motor, errores legibles. |
 
 ## Widget nuevo
 1. Su clase en `sheets_reports/widgets/` y su partial del panel.

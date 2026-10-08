@@ -91,7 +91,7 @@
       const matrix = payload.matrix || [];
       const counts = payload.n || [];
       const size = variables.length;
-      const lowerOnly = !!this.style.lowerOnly;
+      const lowerOnly = this.style.lowerOnly !== false;
       const showValues = this.style.showValues !== false;
 
       if (this._chart) {

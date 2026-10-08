@@ -63,7 +63,7 @@ class CorrelationWidget(BaseWidget):
             {"value": "spearman", "label": "Spearman (por rangos)"},
         ]},
         {"key": "showValues", "label": "Mostrar valores", "type": "boolean", "default": True},
-        {"key": "lowerOnly", "label": "Solo la mitad inferior", "type": "boolean", "default": False},
+        {"key": "lowerOnly", "label": "Solo la mitad inferior", "type": "boolean", "default": True},
         {"key": "showTop", "label": "Mostrar lo más relacionado", "type": "boolean", "default": True},
     ]
 

@@ -3,8 +3,11 @@ Gráfico de Barras: consulta con `WidgetFields`, apariencia con `WidgetStyle`.
 """
 from typing import Any, ClassVar, Dict, List, Optional
 
+import pandas as pd
+
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
-from sheets_reports.widgets.presentation import chart_series, percent_series
+from sheets_reports.widgets.presentation import (chart_series, metric_alias, metric_label, percent_aliases,
+                                                 percent_series)
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
 
@@ -56,7 +59,9 @@ class BarChartWidget(BaseWidget):
     ]
 
     capabilities: ClassVar[dict] = {
-        "dimensions": [1, 1],
+        # Sin dimensión compara totales: una barra por métrica (al menos 2).
+        "dimensions": [0, 1],
+        "ungrouped_min_metrics": 2,
         "pivots": [0, 1],
         "metrics": [1, 5],
         "sort": True,
@@ -91,13 +96,16 @@ class BarChartWidget(BaseWidget):
         metadata: Optional[dict] = None,
     ) -> dict:
         style_dict = style.to_dict()
-        categories, pairs = chart_series(result, fields, metadata)
-
-        df = result.rows
-        series = [
-            {"name": name, "data": df[column].fillna(0).tolist()}
-            for name, column in pairs
-        ]
+        if fields is not None and not fields.dimensions:
+            categories, series, percent = self._ungrouped(result, fields, metadata)
+        else:
+            categories, pairs = chart_series(result, fields, metadata)
+            df = result.rows
+            series = [
+                {"name": name, "data": df[column].fillna(0).tolist()}
+                for name, column in pairs
+            ]
+            percent = percent_series(pairs, fields, metadata)
 
         horizontal = bool(style_dict.get("horizontal"))
         stacked = bool(style_dict.get("stacked"))
@@ -107,14 +115,30 @@ class BarChartWidget(BaseWidget):
             "categories": categories,
             "series": series,
             "stacked": stacked,
-            "percent": percent_series(pairs, fields, metadata),
+            "percent": percent,
         }
+        if fields is not None and not fields.dimensions:
+            # Cada barra es una métrica: color por barra y sin leyenda (el nombre va en el eje).
+            output["ungrouped"] = True
         if horizontal:
             output["horizontal"] = True
         if reference_lines:
             output["referenceLines"] = self._build_annotations(reference_lines, horizontal)
 
         return output
+
+    @staticmethod
+    def _ungrouped(result: WidgetResult, fields: WidgetFields, metadata: Optional[dict]):
+        """Sin dimensión: el total de cada métrica, una barra por métrica en una sola serie."""
+        metrics = [m for m in fields.metrics or [] if metric_alias(m)]
+        row = result.rows.iloc[0] if not result.rows.empty else {}
+        values = []
+        for metric in metrics:
+            value = row.get(metric_alias(metric)) if hasattr(row, "get") else None
+            values.append(0 if value is None or pd.isna(value) else float(value))
+        percent_all = set(percent_aliases(fields, metadata))
+        percent = ["Total"] if metrics and all(metric_alias(m) in percent_all for m in metrics) else []
+        return [metric_label(m) for m in metrics], [{"name": "Total", "data": values}], percent
 
     def _build_annotations(self, lines, horizontal):
         annotations = {"xaxis": [], "yaxis": []}

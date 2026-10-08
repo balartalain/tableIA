@@ -97,7 +97,7 @@ class FormErrorsTests(SimpleTestCase):
         self.assertIn("pivotes: exactamente 0",
                       errors_for("donut", fields(pivots=["mes"]))[0])
         # La barra se dibuja sobre UNA dimensión: la segunda no tiene eje donde caer.
-        self.assertIn("dimensiones: exactamente 1",
+        self.assertIn("dimensiones: entre 0 y 1",
                       errors_for("bar", fields(dimensions=["anio", "categoria"]))[0])
         self.assertEqual(errors_for("bar", fields(dimensions=["categoria"])), [])
         # La línea también usa UN solo eje de categorías.
@@ -106,6 +106,18 @@ class FormErrorsTests(SimpleTestCase):
         self.assertEqual(errors_for("line", fields(dimensions=["mes"])), [])
         self.assertIn("este widget no admite orden", errors_for("kpi", fields(
             dimensions=[], metrics=[agg("total")], sort_by="total_ventas"))[0])
+
+    def test_barras_sin_dimension_comparan_totales(self):
+        two = [agg("total_ventas"), {"agg": "count", "alias": "cantidad"}]
+        self.assertEqual(errors_for("bar", fields(dimensions=[], metrics=two)), [])
+        self.assertIn("al menos 2 métricas", errors_for("bar", fields(dimensions=[]))[0])
+        errors = errors_for("bar", fields(dimensions=[], pivots=["mes"], metrics=[agg()]))
+        self.assertTrue(any("sin dimensión no hay grupos que cruzar" in e for e in errors), errors)
+        windowed = [agg(window={"type": "percent_of_total"}), {"agg": "count", "alias": "cantidad"}]
+        errors = errors_for("bar", fields(dimensions=[], metrics=windowed))
+        self.assertTrue(any("sin agrupar hay un solo valor" in e for e in errors), errors)
+        # La línea necesita su eje: sin dimensión se sigue rechazando.
+        self.assertIn("dimensiones", errors_for("line", fields(dimensions=[], metrics=two))[0])
 
     def test_pivote_y_dimension_no_se_solapan(self):
         errors = errors_for("dynamic_table", fields(dimensions=["categoria"], pivots=["categoria"]))

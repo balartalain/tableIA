@@ -40,8 +40,11 @@ class WidgetSuggestionsTests(SimpleTestCase):
         self.assertNotIn("Ropa", contents)   # está más abajo de las 3 primeras filas
 
     def test_un_grafico_pide_que_cada_sugerencia_diga_por_que_agrupar(self):
-        _, model = self.suggest(["A", "B"], widget=WIDGETS.get("bar"))
+        _, model = self.suggest(["A", "B"], widget=WIDGETS.get("line"))
         self.assertIn("siempre agrupa por una columna", model.call_args.args[0])
+        # Barras: agrupa, o sin agrupar compara varios totales.
+        _, model = self.suggest(["A", "B"], widget=WIDGETS.get("bar"))
+        self.assertIn("Sin agrupar solo compara varios totales", model.call_args.args[0])
         _, model = self.suggest(["A", "B"])
         self.assertNotIn("siempre agrupa por una columna", model.call_args.args[0])
 

@@ -188,6 +188,9 @@ def capabilities_text(widget) -> str:
             parts.append(f"columnas de {low} a {high}")
         if caps.get("columns_numeric"):
             parts.append("solo columnas numéricas")
+    if caps.get("ungrouped_min_metrics"):
+        parts.append(f"sin dimensión: al menos {caps['ungrouped_min_metrics']} métricas "
+                     "(una barra por total)")
     for key, label in (("dimensions", "dimensiones"), ("pivots", "pivotes"), ("metrics", "métricas")):
         rng = caps.get(key)
         if not rng:
@@ -935,8 +938,21 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
                                   metric.get("agg"))
             if error:
                 errors.append(error)
+            elif not dimensions and not pivots:
+                errors.append(f"metrics[{i}].window: sin agrupar hay un solo valor por métrica y no "
+                              "hay con qué compararlo; quítalo o agrupa por una columna.")
         if isinstance(metric, dict) and metric.get("alias"):
             aliases.append(metric["alias"])
+
+    # Sin agrupar, un widget que lo admite (barras) compara totales: una barra por métrica.
+    ungrouped_min = caps.get("ungrouped_min_metrics")
+    if ungrouped_min and not dimensions:
+        if len(metrics) < ungrouped_min:
+            errors.append(f"fields.metrics: sin dimensión el gráfico compara totales: elige al menos "
+                          f"{ungrouped_min} métricas o agrupa por una columna.")
+        if pivots:
+            errors.append("fields.pivots: sin dimensión no hay grupos que cruzar; agrega una "
+                          "dimensión o quita el pivote.")
 
     if resolved in {"bar", "line"} and pivots and len(aliases) > 1:
         errors.append("fields: con pivotes los gráficos admiten UNA métrica; quita las demás "

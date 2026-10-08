@@ -54,10 +54,16 @@ def _sheet_preview(df: pd.DataFrame) -> str:
 def _capability_rules(widget) -> str:
     """Reglas que salen de lo que el widget exige (ej. un gráfico siempre agrupa por una
     columna: «ventas del último mes» a secas no se puede dibujar como barras)."""
-    dimensions = (widget.capabilities or {}).get("dimensions") or [0, 0]
+    caps = widget.capabilities or {}
+    dimensions = caps.get("dimensions") or [0, 0]
     if dimensions[0] >= 1:
         return ("- Este widget siempre agrupa por una columna: cada pedido dice por cuál (ej.\n"
                 "  «ventas por categoría», «… por vendedor: último mes frente al anterior»).\n")
+    if caps.get("ungrouped_min_metrics"):
+        # Barras: sin agrupar solo compara totales de varias métricas; lo habitual es agrupar.
+        return ("- Este widget agrupa por una columna: cada pedido dice por cuál (ej. «ventas por\n"
+                "  categoría»). Sin agrupar solo compara varios totales entre sí (ej. «presupuesto\n"
+                "  frente a gasto real»), nunca un total solo.\n")
     return ""
 
 

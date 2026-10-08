@@ -147,6 +147,13 @@
           ...valueRange,
         }
       };
+      // Sin dimensión (una barra por métrica, una sola serie): cada barra con su color y sin
+      // leyenda, el nombre de la métrica ya va en el eje.
+      if (payload.ungrouped) {
+        options.plotOptions.bar.distributed = true;
+        options.colors = categories.map((_, i) => COLOR_PALETTE[i % COLOR_PALETTE.length]);
+        options.legend = { show: false };
+      }
 
       this.renderApexChart(this.getContentContainer(), options).then(() => {
         if (!this._readOnly) this._wireLegendDrag(this.getContentContainer(), series);

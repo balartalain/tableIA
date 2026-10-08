@@ -291,7 +291,7 @@ class ViewsTests(TestCase):
     def test_schema_trae_el_manifiesto_con_las_columnas_de_la_hoja(self, _df):
         manifest = self.client.get(f"/api/sources/{self.source.id}/schema/").json()["widget_manifest"]
         self.assertEqual(manifest["bar"]["capabilities"], {
-            "dimensions": [1, 1], "pivots": [0, 1], "metrics": [1, 5],
+            "dimensions": [0, 1], "ungrouped_min_metrics": 2, "pivots": [0, 1], "metrics": [1, 5],
             "sort": True, "limit": True, "filters": True,
             "windows": ["percent_of_total", "percent_of_row", "running_total", "pct_change"],
         })

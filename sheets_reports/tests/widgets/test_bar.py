@@ -17,6 +17,24 @@ class BarCompileTests(SimpleTestCase):
         self.assertFalse(out["stacked"])
         self.assertEqual(out["percent"], [])
 
+    def test_sin_dimension_una_barra_por_metrica(self):
+        out = compiled("bar", fields(dimensions=[], metrics=[
+            agg("total_ventas"), {"agg": "count", "alias": "cantidad", "label": "Ventas registradas"},
+        ]))
+        self.assertEqual(out["categories"], ["Suma Ventas", "Ventas registradas"])
+        self.assertEqual(out["series"], [{"name": "Total", "data": [755.0, 6.0]}])
+        self.assertTrue(out["ungrouped"])
+        self.assertEqual(out["percent"], [])
+
+    def test_sin_dimension_porcentaje_solo_si_todas_lo_son(self):
+        share = {"agg": "sum", "field": "ventas", "alias": "p", "format": "percent"}
+        mixed = compiled("bar", fields(dimensions=[], metrics=[share, agg()]))
+        both = compiled("bar", fields(dimensions=[], metrics=[share, {**share, "alias": "q"}]))
+        self.assertEqual((mixed["percent"], both["percent"]), ([], ["Total"]))
+
+    def test_con_dimension_no_es_sin_agrupar(self):
+        self.assertNotIn("ungrouped", compiled("bar", fields()))
+
     def test_con_pivote_una_serie_por_valor(self):
         out = compiled("bar", fields(dimensions=["categoria"], pivots=["mes"],
                                      metrics=[agg("total_ventas")]), {"stacked": True})

@@ -17,22 +17,25 @@
 <link rel="apple-touch-icon" sizes="180x180" href="{% static 'sheets_reports/img/apple-touch-icon-180.png' %}">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
+  // Los colores del tema son variables CSS; con color-mix aceptan la transparencia de Tailwind
+  // (`text-ink/50`, `bg-ink/40`): un var() suelto la ignoraría.
+  const themeColor = (name) => `color-mix(in srgb, var(--color-${name}) calc(<alpha-value> * 100%), transparent)`;
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          ink: 'var(--color-ink)',
-          paper: 'var(--color-paper)',
-          header: 'var(--color-header)',
-          line: 'var(--color-line)',
+          ink: themeColor('ink'),
+          paper: themeColor('paper'),
+          header: themeColor('header'),
+          line: themeColor('line'),
           moss: {
-            50: 'var(--color-moss-50)', 100: 'var(--color-moss-100)', 300: 'var(--color-moss-300)',
-            500: 'var(--color-moss-500)', 600: 'var(--color-moss-600)', 700: 'var(--color-moss-700)',
-            tint: 'var(--color-moss-tint)',
+            50: themeColor('moss-50'), 100: themeColor('moss-100'), 300: themeColor('moss-300'),
+            500: themeColor('moss-500'), 600: themeColor('moss-600'), 700: themeColor('moss-700'),
+            tint: themeColor('moss-tint'),
           },
           clay: {
-            50: 'var(--color-clay-50)', 300: 'var(--color-clay-300)',
-            500: 'var(--color-clay-500)', 600: 'var(--color-clay-600)',
+            50: themeColor('clay-50'), 300: themeColor('clay-300'),
+            500: themeColor('clay-500'), 600: themeColor('clay-600'),
           },
         }
       }

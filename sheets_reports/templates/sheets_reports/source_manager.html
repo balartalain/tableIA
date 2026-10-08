@@ -1,9 +1,9 @@
-{% comment %} Fuentes de datos del tablero (cuerpo del bottom sheet): tabla + selector para agregar
-o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {% endcomment %}
+{% comment %} Fuentes de datos del tablero (cuerpo del bottom sheet): tabla (estado y acciones por
+fuente) + selector para agregar o editar una fuente. {% endcomment %}
 <div x-data="sourceManager()" class="h-full flex flex-col">
 
   <div x-show="view === 'list'" class="flex-1 min-h-0 flex flex-col gap-4">
-    <div class="flex items-center justify-between gap-3">      
+    <div class="flex items-center justify-between gap-3">
       <button type="button" x-on:click="add()"
               class="shrink-0 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-md px-4 py-2 transition cursor-pointer inline-flex items-center gap-1.5">
         <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar fuente
@@ -12,12 +12,14 @@ o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {
 
     <p x-show="error" x-text="error" role="alert" class="text-sm text-red-600"></p>
 
-    <!-- Confirmación de borrado: los widgets que se quedan sin fuente. -->
+    <!-- Confirmación al eliminar: los widgets que se quedan sin datos. -->
     <div x-show="pendingDelete" x-cloak role="alertdialog" aria-label="Confirmar eliminación"
          class="rounded border border-red-200 bg-red-50 p-3 space-y-2">
       <p class="text-sm font-semibold text-red-900">
         ¿Eliminar la fuente «<span x-text="pendingDelete && pendingDelete.source.label"></span>»?
-        <span x-show="pendingDelete && pendingDelete.impact.length" class="font-normal">Estos widgets se quedarán sin datos:</span>
+        <span x-show="pendingDelete && pendingDelete.impact.length" class="font-normal"
+              x-text="pendingDelete && (pendingDelete.impact.length === 1 ? 'Un widget se quedará sin datos:' : `${pendingDelete.impact.length} widgets se quedarán sin datos:`)"></span>
+        <span x-show="pendingDelete && !pendingDelete.impact.length" class="font-normal">Ningún widget la usa.</span>
       </p>
       <ul x-show="pendingDelete && pendingDelete.impact.length" class="text-xs text-red-900/80 space-y-0.5 max-h-28 overflow-y-auto">
         <template x-for="w in (pendingDelete && pendingDelete.impact) || []" :key="w.id">
@@ -46,36 +48,66 @@ o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {
         <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
           <tr>
             <th class="px-3 py-2 font-semibold">Fuente</th>
-            <th class="px-3 py-2 w-32 font-semibold">Columnas</th>
-            <th class="px-3 py-2 w-24 font-semibold text-right">Widgets</th>
-            <th class="px-3 py-2 w-24"><span class="sr-only">Acciones</span></th>
+            <th class="px-3 py-2 w-44 font-semibold">Columnas en uso</th>
+            <th class="px-3 py-2 w-28 font-semibold text-right">Widgets</th>
+            <th class="px-3 py-2 w-px font-semibold text-right">Acciones</th>
           </tr>
         </thead>
         <tbody>
           <template x-for="s in sources" :key="s.id">
-            <tr class="border-t border-line">
-              <td class="px-3 py-2">
-                <span class="flex items-center gap-2 min-w-0">
-                  <i class="ti ti-brand-google text-base text-ink/40 shrink-0" aria-hidden="true"></i>
-                  <span class="min-w-0">
-                    <span class="block font-medium truncate" x-text="s.label"></span>
+            <tr class="border-t border-line align-top">
+              <td class="px-3 py-2.5">
+                <span class="flex items-start gap-2.5 min-w-0">
+                  <span class="mt-0.5">{% include "sheets_reports/_icon_google_sheets.html" %}</span>
+                  <span class="min-w-0 space-y-0.5">
+                    <span class="flex flex-wrap items-center gap-2">
+                      <span class="font-medium truncate" x-text="s.label"></span>
+                      <!-- Estado: solo cuando hay un problema. -->
+                      <span x-show="statusInfo(s)" x-cloak x-bind:title="statusInfo(s) && statusInfo(s).title"
+                            class="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full bg-red-50 text-red-700 border border-red-200 px-2 py-0.5">
+                        <i class="ti ti-alert-triangle text-xs" aria-hidden="true"></i>
+                        <span x-text="statusInfo(s) && statusInfo(s).label"></span>
+                      </span>
+                    </span>
                     <!-- Con nombre propio, el original («Documento · Pestaña») debajo. -->
                     <span x-show="s.name" class="block text-xs text-ink/50 truncate" x-text="s.original_label"></span>
-                    <span x-show="s.refreshed_at" class="block text-[11px] text-ink/40" x-text="refreshedLabel(s)"></span>
+                    <span class="block text-[11px] text-ink/50" x-text="refreshing[s.id] ? 'Actualizando…' : refreshedLabel(s)"></span>
+                    <span x-show="refreshErrors[s.id]" x-text="refreshErrors[s.id]" role="alert" class="block text-[11px] text-red-600"></span>
                   </span>
                 </span>
               </td>
-              <td class="px-3 py-2 text-ink/60" x-text="columnsLabel(s)"></td>
-              <td class="px-3 py-2 text-ink/60 text-right" x-text="s.widgets"></td>
-              <td class="px-3 py-1">
-                <div class="flex justify-end gap-0.5">
-                  <button type="button" x-on:click="edit(s)" title="Editar columnas" x-bind:aria-label="`Editar ${s.label}`"
-                          class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper cursor-pointer">
-                    <i class="ti ti-pencil text-base" aria-hidden="true"></i>
+              <td class="px-3 py-2.5 text-ink/70" x-text="columnsLabel(s)"></td>
+              <td class="px-3 py-2.5 text-right" x-bind:class="s.widgets ? 'text-ink/70' : 'text-ink/40'"
+                  x-text="s.widgets ? s.widgets : 'Sin usar'"></td>
+              <td class="px-3 py-1.5">
+                <div class="flex justify-end gap-0.5 whitespace-nowrap text-xs font-medium">
+                  <button type="button" x-on:click="refresh(s)" x-bind:disabled="refreshing[s.id]"
+                          title="Volver a leer la hoja de Google" x-bind:aria-label="`Actualizar ${s.label}`"
+                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+                    <i class="ti ti-refresh text-base" x-bind:class="refreshing[s.id] ? 'animate-spin' : ''" aria-hidden="true"></i>
+                    Actualizar
                   </button>
-                  <button type="button" x-on:click="remove(s)" title="Eliminar" x-bind:aria-label="`Eliminar ${s.label}`"
-                          class="p-1.5 rounded-md text-ink/40 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+                  <button type="button" x-on:click="changeSheet(s)" title="Elegir otra hoja o pestaña"
+                          x-bind:aria-label="`Cambiar fuente de ${s.label}`"
+                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-ink hover:bg-paper cursor-pointer">
+                    <i class="ti ti-replace text-base" aria-hidden="true"></i>
+                    Cambiar fuente
+                  </button>
+                  <a x-bind:href="sheetUrl(s)" target="_blank" rel="noopener" title="Abrir la hoja en Google Sheets"
+                     x-bind:aria-label="`Abrir origen de ${s.label}`"
+                     class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-ink hover:bg-paper">
+                    <i class="ti ti-external-link text-base" aria-hidden="true"></i>
+                    Abrir origen
+                  </a>
+                  <button type="button" x-on:click="edit(s)" title="Editar columnas y campos calculados" x-bind:aria-label="`Editar ${s.label}`"
+                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-ink hover:bg-paper cursor-pointer">
+                    <i class="ti ti-pencil text-base" aria-hidden="true"></i>
+                    Editar
+                  </button>
+                  <button type="button" x-on:click="remove(s)" title="Eliminar la fuente" x-bind:aria-label="`Eliminar ${s.label}`"
+                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-red-600 hover:bg-red-50 cursor-pointer">
                     <i class="ti ti-trash text-base" aria-hidden="true"></i>
+                    Eliminar
                   </button>
                 </div>
               </td>

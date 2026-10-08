@@ -32,7 +32,9 @@ Un archivo por widget en `tests/widgets/test_<tipo>.py`: `test_bar`, `test_line`
 - `test_styles_chema.py`: el `style_schema` como contrato del estilo.
 
 ### Panel en el navegador (`tests/e2e/test_panel.py`, solo con `E2E=1`)
-El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de la fuente llega a todas las columnas de la tabla dinámica; «Mostrar como» desaparece al pasar a Promedio; la dimensión obligatoria no se puede quitar; sobre una columna de texto solo se cuenta; la tabla dinámica llena el ancho y el total queda pegado a las filas; un porcentaje de un campo calculado sale con 2 decimales; el formateador común de números (`formatNumber`).
+El servidor de pruebas atiende las peticiones de a una (`SerialLiveServerThread`): con SQLite en memoria todos los hilos comparten una conexión, y las peticiones simultáneas de la página daban errores 500 al azar.
+
+El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de la fuente llega a todas las columnas de la tabla dinámica; «Mostrar como» desaparece al pasar a Promedio; la dimensión obligatoria no se puede quitar; sobre una columna de texto solo se cuenta; la tabla dinámica llena el ancho y el total queda pegado a las filas; un porcentaje de un campo calculado sale con 2 decimales; la tabla de fuentes («Sin usar», columnas incluidas, estado, confirmación al eliminar); el formateador común de números (`formatNumber`).
 
 `FormulaBuilderTests`, el constructor de fórmulas por bloques: armar un SI solo con clics y guardarlo; arrastrar de verdad (mouse) un operador que envuelve un bloque, un valor a un hueco y un bloque al panel para quitarlo; «Generar con IA» (IA simulada) reemplaza el lienzo o muestra el motivo si no pudo.
 

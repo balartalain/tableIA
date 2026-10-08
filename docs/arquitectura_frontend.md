@@ -362,10 +362,17 @@ Cada tablero tiene una o varias fuentes (una pestaña de una hoja de Google); ca
 elige la suya en su panel. Se gestionan en el bottom sheet «Fuentes de datos».
 
 **Gestor** (`source-manager.js`, `source_manager.html`): tabla de fuentes con su nombre (el
-propio, con «Documento · Pestaña» debajo, o el original), columnas incluidas, widgets que la
-usan y «Actualizado hace X» (`timeAgoLabel`). Acciones por fuente:
+propio, con «Documento · Pestaña» debajo, o el original), columnas incluidas («7 de 9
+incluidas»), widgets que la usan («Sin usar» si ninguno) y «Actualizado hace X»
+(`timeAgoLabel`).
+Al cargar, pide el **estado** de cada fuente (`GET …/status/`, en paralelo) y marca las que
+tienen problema («Sin acceso», «Pestaña no encontrada»). Acciones por fuente:
 
-- **Editar columnas** → selector en modo `edit`.
+- **Actualizar** → `POST …/refresh/` (como «Actualizar datos» del selector, sin abrirlo).
+- **Cambiar fuente** → selector en `edit` con `changeSheet` (pasa a `replace` cuando
+  cargan las columnas guardadas).
+- **Abrir origen** → la hoja de Google en la pestaña de la fuente (`#gid=`), en otra pestaña.
+- **Editar** → selector en modo `edit` (columnas y campos calculados).
 - **Eliminar** → `DELETE ?dry_run=1` lista los widgets que se quedan sin datos y pide
   confirmación.
 

@@ -780,6 +780,8 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 | `DELETE /api/sources/{id}/` | Borra la fuente (sus widgets quedan sin fuente). `?dry_run=1` → `{impact}` con todos sus widgets |
 | `GET /api/sources/{id}/columns/?headers=&refresh=` | Columnas actuales de la hoja con lo guardado de cada una. `refresh=1` («Actualizar datos») la relee de Google y pisa el caché; no guarda nada |
 | `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget; `aggregated_fields` lista los campos agregados (`{name, format}`) |
+| `POST /api/sources/{id}/refresh/` | «Actualizar» de la tabla de fuentes: relee la hoja de Google (pisa el caché) → la fuente serializada y su `status`, o `{error, status}` |
+| `GET /api/sources/{id}/status/` | Si la cuenta de servicio todavía llega a la pestaña (`google_drive.tab_status`, sin caché): `ok`, `no_access` (403/404), `tab_missing` (la hoja abre pero el gid ya no está) o `null` si no se pudo saber |
 | `POST /api/sources/{id}/formula/` | Vista previa de una fórmula (`formula` o `tree`, el árbol del constructor) con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{formula, kind, values}` o `{error}` |
 | `POST /api/sources/{id}/formula/ai/` | «Generar con IA» del constructor: `{prompt}` + lo mismo que la vista previa → `{formula, tree, name, kind}` o `{error}` con el motivo si la IA no pudo (`services/ai_formula.py`) |
 

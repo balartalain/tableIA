@@ -82,3 +82,25 @@ def list_tabs(spreadsheet_id: str) -> dict:
     }
     cache.set(key, result, CACHE_TTL_SECONDS)
     return result
+
+
+def tab_status(spreadsheet_id: str, gid: str) -> str | None:
+    """Si la cuenta de servicio todavía llega a la pestaña de una fuente, sin caché (lo que vale
+    es el estado de ahora): "ok", "no_access" (no la puede abrir: se dejó de compartir o se
+    borró), "tab_missing" (la abre, pero la pestaña ya no está) o None si no se pudo saber (sin
+    credenciales, red)."""
+    try:
+        response = _service("sheets", "v4").spreadsheets().get(
+            spreadsheetId=spreadsheet_id, fields="sheets.properties.sheetId",
+        ).execute()
+    except SheetError:
+        return None
+    except Exception as e:  # noqa: BLE001
+        status = getattr(getattr(e, "resp", None), "status", None)
+        if status in (403, 404):
+            return "no_access"
+        logger.warning("Sheets spreadsheets.get (estado): %s", e)
+        return None
+    gids = {str(s.get("properties", {}).get("sheetId", 0)) for s in response.get("sheets", [])}
+    return "ok" if str(gid) in gids else "tab_missing"
+

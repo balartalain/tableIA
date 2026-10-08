@@ -17,6 +17,8 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.core.servers.basehttp import WSGIServer
+from django.test.testcases import LiveServerThread
 
 from sheets_reports.models import Widget
 from sheets_reports.tests.fixtures import agg, fields, make_board, sales_df
@@ -29,8 +31,25 @@ COLUMNS = [{"name": "categoria", "type": "text", "include": True},
            {"name": "ventas", "type": "number", "include": True, "format": "currency"}]
 
 
+class SerialWSGIServer(WSGIServer):
+    """Atiende las peticiones de a una, en el hilo del servidor de pruebas."""
+
+    def __init__(self, *args, connections_override=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class SerialLiveServerThread(LiveServerThread):
+    """El servidor de pruebas sin hilos por petición. Con SQLite en memoria todos los hilos
+    comparten una conexión, y las peticiones simultáneas de la página (schema, render,
+    sugerencias…) corrompían la caché de sentencias de sqlite3: `KeyError` con el SQL y
+    errores 500 al azar."""
+    server_class = SerialWSGIServer
+
+
 @unittest.skipUnless(E2E, "Pruebas en el navegador: correr con E2E=1 (requirements-dev.txt + Chromium)")
 class PanelTests(StaticLiveServerTestCase):
+    server_thread_class = SerialLiveServerThread
+
     @classmethod
     def setUpClass(cls):
         # Playwright (sync) deja un event loop en el hilo principal: el ORM lo tomaría por
@@ -163,6 +182,24 @@ class PanelTests(StaticLiveServerTestCase):
         for args, expected in cases:
             with self.subTest(args=args):
                 self.assertEqual(self.page.evaluate("args => formatNumber(...args)", args), expected)
+
+    def test_la_tabla_de_fuentes(self):
+        """«Sin usar», columnas incluidas, estado de la fuente y la confirmación al eliminar."""
+        with mock.patch("sheets_reports.services.google_drive.tab_status", return_value="no_access"):
+            self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
+            self.page.locator("#sources-btn").click()
+            self.page.get_by_text("Sin acceso").wait_for()
+        self.assertTrue(self.page.get_by_role("cell", name="Sin usar").is_visible())
+        self.assertTrue(self.page.get_by_text("4 de 4 incluidas").is_visible())
+        self.assertTrue(self.page.get_by_role("button", name=f"Actualizar {self.source.label}").is_visible())
+        link = self.page.get_by_role("link", name=f"Abrir origen de {self.source.label}")
+        self.assertEqual(link.get_attribute("href"), "https://docs.google.com/spreadsheets/d/abc/edit#gid=0")
+        self.page.get_by_role("button", name=f"Eliminar {self.source.label}").click()
+        self.page.get_by_text("Ningún widget la usa.").wait_for()
+        self.page.get_by_role("alertdialog").get_by_role("button", name="Cancelar").click()
+        # «Cambiar hoja» va directo a elegir otra hoja.
+        self.page.get_by_role("button", name=f"Cambiar fuente de {self.source.label}").click()
+        self.page.get_by_role("button", name="Hoja de Google").wait_for()
 
 @unittest.skipUnless(E2E, "Pruebas en el navegador: correr con E2E=1 (requirements-dev.txt + Chromium)")
 class FormulaBuilderTests(PanelTests):

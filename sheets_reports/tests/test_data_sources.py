@@ -223,6 +223,68 @@ class SourceChangesTests(TestCase):
         self.assertEqual(_df.call_args.kwargs, {"headers": False})
 
 
+
+@mock.patch(SHEET, side_effect=by_sheet)
+class SourceRefreshAndStatusTests(TestCase):
+    """La tabla de fuentes: «Actualizar» relee la hoja y cada fuente dice si todavía se llega a
+    su pestaña."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(self.user)
+        self.dashboard, self.source = make_board(self.user)
+
+    def test_actualizar_relee_la_hoja(self, _df):
+        with mock.patch("sheets_reports.services.sheets.refresh_sheet", return_value=sales_df()) as refresh, \
+             mock.patch("sheets_reports.services.google_drive.tab_status", return_value="ok"):
+            r = self.client.post(f"/api/sources/{self.source.id}/refresh/")
+        self.assertEqual(r.status_code, 200, r.content)
+        refresh.assert_called_once_with("abc", "0", headers=True)
+        self.assertEqual((r.json()["id"], r.json()["status"]), (self.source.id, "ok"))
+        with mock.patch("sheets_reports.services.sheets.refresh_sheet", side_effect=SheetError("No se pudo leer la hoja.")), \
+             mock.patch("sheets_reports.services.google_drive.tab_status", return_value="no_access"):
+            r = self.client.post(f"/api/sources/{self.source.id}/refresh/")
+        self.assertEqual(r.status_code, 502)
+        self.assertEqual(r.json(), {"error": "No se pudo leer la hoja.", "status": "no_access"})
+
+    def test_estado_de_la_pestana(self, _df):
+        url = f"/api/sources/{self.source.id}/status/"
+        for status in ("ok", "no_access", "tab_missing", None):
+            with self.subTest(status=status), \
+                 mock.patch("sheets_reports.services.google_drive.tab_status", return_value=status) as check:
+                self.assertEqual(self.client.get(url).json(), {"status": status})
+                check.assert_called_once_with("abc", "0")
+
+
+class TabStatusTests(SimpleTestCase):
+    """`tab_status` contra la API de Sheets (simulada)."""
+
+    def status(self, response=None, error=None, gid="0"):
+        from sheets_reports.services import google_drive
+        get = mock.Mock()
+        if error:
+            get.return_value.execute.side_effect = error
+        else:
+            get.return_value.execute.return_value = response
+        service = mock.Mock()
+        service.spreadsheets.return_value.get = get
+        with mock.patch.object(google_drive, "_service", return_value=service):
+            return google_drive.tab_status("abc", gid)
+
+    def test_casos(self):
+        tabs = {"sheets": [{"properties": {"sheetId": 0}}, {"properties": {"sheetId": 42}}]}
+        self.assertEqual(self.status(tabs, gid="42"), "ok")
+        self.assertEqual(self.status(tabs, gid="7"), "tab_missing")
+        denied = Exception("403")
+        denied.resp = mock.Mock(status=403)
+        self.assertEqual(self.status(error=denied), "no_access")
+        self.assertIsNone(self.status(error=TimeoutError("red")))
+
+    def test_sin_credenciales_no_se_sabe(self):
+        from sheets_reports.services import google_drive
+        with mock.patch.object(google_drive, "service_account_credentials", return_value=None):
+            self.assertIsNone(google_drive.tab_status("abc", "0"))
+
 SHARE = {"id": "s", "name": "Participación", "formula": "SUM(ventas) / SUM(anio) * 100", "format": "percent"}
 
 

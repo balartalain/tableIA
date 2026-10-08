@@ -128,7 +128,8 @@ function sourcePicker({ mode = 'create' } = {}) {
       return `${this.spreadsheet ? this.spreadsheet.name.trim() : ''} · ${this.tab ? this.tab.title : ''}`;
     },
 
-    start({ mode, source = null }) {
+    // `changeSheet`: al editar, pasa directo a elegir otra hoja («Cambiar hoja» de la tabla de fuentes).
+    start({ mode, source = null, changeSheet = false }) {
       Object.assign(this, {
         mode, editing: source, step: 'source', source: null, query: '', spreadsheets: [],
         spreadsheet: null, tabs: [], tab: null, columns: [], rows: 0, name: '',
@@ -145,7 +146,8 @@ function sourcePicker({ mode = 'create' } = {}) {
         sheetsError: '', tabsError: '', columnsError: '', createError: '', saving: false,
       });
       this.selectedId = this.calculated.length ? this.calculated[0].id : null;
-      if (mode === 'edit') this.loadSavedColumns();
+      // Cambiar de hoja parte de las columnas guardadas: se espera a tenerlas.
+      if (mode === 'edit') this.loadSavedColumns().then(() => { if (changeSheet) this.changeSheet(); });
       FormulaBlocks.setupDrag();
     },
 

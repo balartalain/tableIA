@@ -1,7 +1,15 @@
 // Gestor de las fuentes de datos del tablero (bottom sheet «Fuentes de datos»): la tabla de
-// fuentes, y el selector (source-picker.js) para agregar una o editarla («Actualizar datos» y
-// «Cambiar hoja» están en la edición: el tablero no relee las hojas por su cuenta). Eliminar
-// avisa qué widgets se quedan sin datos.
+// fuentes, y el selector (source-picker.js) para agregar una o editarla. Cada fila tiene su estado
+// (si la cuenta de servicio todavía llega a la pestaña) y sus acciones: actualizar (relee la hoja
+// de Google: el tablero no lo hace por su cuenta), cambiar hoja, abrir en Google Sheets, editar
+// columnas y eliminar (avisa qué widgets se quedan sin datos).
+const SOURCE_STATUS = {
+  no_access: { label: 'Sin acceso',
+    title: 'La cuenta de servicio ya no puede abrir la hoja (se dejó de compartir o se borró). El tablero muestra los últimos datos leídos.' },
+  tab_missing: { label: 'Pestaña no encontrada',
+    title: 'La pestaña se borró o se reemplazó: usa «Cambiar hoja o pestaña». El tablero muestra los últimos datos leídos.' },
+};
+
 function sourceManager() {
   return {
     view: 'list',
@@ -10,6 +18,11 @@ function sourceManager() {
     error: '',
     // Fuente por eliminar, con los widgets que la usan: {source, impact}.
     pendingDelete: null,
+    // Por fuente: su estado ({id: "ok" | "no_access" | "tab_missing" | null}), si se está
+    // actualizando y el error del último «Actualizar».
+    statuses: {},
+    refreshing: {},
+    refreshErrors: {},
 
     init() {
       window.addEventListener('sources:open', () => this.open());
@@ -30,6 +43,7 @@ function sourceManager() {
         const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${window.DASHBOARD_ID}/sources/`));
         if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
         this.sources = data.sources || [];
+        this.sources.forEach(s => this.checkStatus(s));
       } catch (e) {
         this.error = e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message;
       } finally {
@@ -38,16 +52,45 @@ function sourceManager() {
     },
 
     columnsLabel(s) {
-      return s.columns_total == null ? 'Todas' : `${s.columns_included} de ${s.columns_total}`;
+      return s.columns_total == null ? 'Todas' : `${s.columns_included} de ${s.columns_total} incluidas`;
     },
 
     refreshedLabel(s) {
-      return timeAgoLabel(s.refreshed_at);
+      return s.refreshed_at ? timeAgoLabel(s.refreshed_at) : 'Sin leer todavía';
     },
 
-    add() {
+    statusInfo(s) {
+      return SOURCE_STATUS[this.statuses[s.id]] || null;
+    },
+
+    // Si la cuenta de servicio todavía llega a la pestaña (sin bloquear la tabla).
+    async checkStatus(s) {
+      const { r, data } = await fetchJsonSafe(apiUrl(`/api/sources/${s.id}/status/`));
+      if (r.ok && data) this.statuses = { ...this.statuses, [s.id]: data.status };
+    },
+
+    // «Actualizar»: relee la hoja de Google y recalcula el tablero.
+    async refresh(s) {
+      if (this.refreshing[s.id]) return;
+      this.refreshing = { ...this.refreshing, [s.id]: true };
+      this.refreshErrors = { ...this.refreshErrors, [s.id]: '' };
+      const { r, data } = await fetchJsonSafe(apiUrl(`/api/sources/${s.id}/refresh/`), { method: 'POST' });
+      if (data && 'status' in data) this.statuses = { ...this.statuses, [s.id]: data.status };
+      this.refreshing = { ...this.refreshing, [s.id]: false };
+      if (!r.ok || !data || data.error) {
+        this.refreshErrors = { ...this.refreshErrors, [s.id]: (data && data.error) || 'No se pudo actualizar.' };
+        return;
+      }
+      await this.afterChange();
+    },
+
+    sheetUrl(s) {
+      return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(s.sheet_id)}/edit#gid=${encodeURIComponent(s.gid)}`;
+    },
+
+    changeSheet(source) {
       this.view = 'picker';
-      window.dispatchEvent(new CustomEvent('source-picker:start', { detail: { mode: 'add' } }));
+      window.dispatchEvent(new CustomEvent('source-picker:start', { detail: { mode: 'edit', source, changeSheet: true } }));
     },
 
     edit(source) {

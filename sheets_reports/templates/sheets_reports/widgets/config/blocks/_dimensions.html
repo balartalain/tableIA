@@ -8,8 +8,8 @@
       <!-- En el widget de filtros estas son las columnas del filtro: la ayuda no aplica. -->
       <button type="button" x-on:click="dimensionsHelp = true" aria-label="Ayuda de dimensiones" title="¿Qué son las dimensiones?"
               x-show="!$store.dashboard.drawerCapabilities.dimensions_label"
-              class="p-0.5 rounded-md text-ink/40 hover:text-moss-700 hover:bg-paper cursor-pointer">
-        <i class="ti ti-help-circle text-sm leading-none" aria-hidden="true"></i>
+              class="p-0.5 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+        <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
       </button>
     </div>
     <button type="button" x-on:click="$store.dashboard.addDimension()"

@@ -718,6 +718,32 @@ def source_formula_ai(request, source_id):
         return JsonResponse({"error": str(e)})
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def source_refresh(request, source_id):
+    """«Actualizar» en la tabla de fuentes: relee la hoja de Google (pisa el caché) → la fuente
+    serializada (con su `refreshed_at` nuevo) y su `status`, o {error, status} si no se pudo."""
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    status = google_drive.tab_status(source.sheet_id, source.gid)
+    try:
+        sheets.refresh_sheet(source.sheet_id, source.gid, headers=source.first_row_headers)
+    except SheetError as e:
+        return JsonResponse({"error": str(e), "status": status}, status=502)
+    return JsonResponse({**_serialize_source(source), "status": status})
+
+
+@require_http_methods(["GET"])
+def source_status(request, source_id):
+    """Si la cuenta de servicio todavía llega a la pestaña de la fuente: {status: "ok" |
+    "no_access" | "tab_missing" | null}. Lo pide la tabla de fuentes al abrirse."""
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    return JsonResponse({"status": google_drive.tab_status(source.sheet_id, source.gid)})
+
+
 @require_http_methods(["GET"])
 def source_schema(request, source_id):
     """Columnas de la fuente para el panel de un widget (agrupables, numéricas, de tiempo y

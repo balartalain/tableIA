@@ -42,7 +42,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <button type="button" x-on:click="selectSource('google')"
                   x-bind:class="source === 'google' ? 'bg-moss-50 text-moss-700 border-moss-100' : 'border-transparent hover:bg-paper text-ink/80'"
                   class="w-full flex items-center gap-2.5 px-3 py-2 rounded-md border text-sm text-left transition cursor-pointer">
-            <i class="ti ti-brand-google text-base" aria-hidden="true"></i>
+            {% include "sheets_reports/_icon_google_sheets.html" %}
             <span class="flex-1">Hoja de Google</span>
             <i class="ti ti-chevron-right text-xs text-ink/30" aria-hidden="true"></i>
           </button>
@@ -272,18 +272,14 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
          x-on:formula:drop.window="onFormulaDrop($event.detail)">
       <div class="flex items-center gap-2">
         <p class="text-xs text-ink/60">Fórmulas sobre las columnas de esta fuente, para usar en todos los widgets.</p>
-        <!-- Ayuda: qué son, los dos tipos con ejemplos y cómo se arman. -->
-        <div class="relative" x-on:keydown.escape.window="helpOpen = false">
-          <button type="button" x-on:click="helpOpen = !helpOpen" x-bind:aria-expanded="helpOpen ? 'true' : 'false'"
-                  aria-label="Ayuda de campos calculados" title="¿Cómo funcionan?"
-                  class="p-1 rounded-md text-ink/40 hover:text-moss-700 hover:bg-paper cursor-pointer">
-            <i class="ti ti-help-circle text-base" aria-hidden="true"></i>
-          </button>
-          <div x-show="helpOpen" x-cloak x-on:click.outside="helpOpen = false" role="dialog" aria-label="Ayuda de campos calculados"
-               class="absolute left-0 top-full mt-1 z-40 w-[30rem] max-w-[calc(100vw-2rem)] max-h-[65vh] overflow-y-auto rounded border border-line bg-white p-4 shadow-lg">
-            {% include "sheets_reports/source_formula_help.html" %}
-          </div>
-        </div>
+        <!-- Ayuda: qué son, los dos tipos con ejemplos y cómo se arman (la misma ventana que las
+             ayudas del panel de widgets). -->
+        <button type="button" x-on:click="helpOpen = true"
+                aria-label="Ayuda de campos calculados" title="¿Cómo funcionan?"
+                class="p-1 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+          <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
+        </button>
+        {% include "sheets_reports/widgets/config/blocks/_help_modal.html" with flag="helpOpen" title="Campos calculados" icon="ti-math-function" body="sheets_reports/source_formula_help.html" %}
       </div>
 
       <div x-show="!calculated.length"

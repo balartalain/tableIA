@@ -1,4 +1,7 @@
 (function () {
+    // Hasta 2 decimales: un campo calculado llega sin redondear (96,87500000…).
+    const twoDecimals = (value) => Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
     // Formateadores de Tabulator por formato (el de cada columna lo decide su métrica o la fuente).
     const FORMATTERS = {
       "text": { hozAlign: "left", formatter: "plaintext" },
@@ -7,13 +10,16 @@
           formatter: (cell) => {
             const value = cell.getValue();
             if (value == null || value === '') return "-";
-            return typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value;
+            return typeof value === 'number' ? twoDecimals(value) : value;
           }
       },
       "currency": { hozAlign: "right", formatter: "money", formatterParams: { symbol: "$", precision: 2, thousand: "," } },
       "percent": {
           hozAlign: "right",
-          formatter: (cell) => cell.getValue() != null ? Number(cell.getValue()) + "%" : "-"
+          formatter: (cell) => {
+            const value = cell.getValue();
+            return value == null || value === '' ? "-" : twoDecimals(value) + "%";
+          }
       },
       "progress": {
           formatter: "progress",
@@ -21,7 +27,7 @@
           formatterParams: {
             min: 0, max: 100,
             color: ["#ef4444", "#f59e0b", "#10b981"],
-            legend: function(value) { return Number(value) + "%"; }
+            legend: function(value) { return twoDecimals(value) + "%"; }
           }
       }
     };

@@ -122,11 +122,12 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
 
   <!-- Paso 2: columnas y tipos -->
   <div x-show="step === 'columns'" x-cloak class="flex-1 min-h-0 flex flex-col gap-4">
-    <!-- Barra superior: atrás, nombre, acciones sobre la hoja y guardar. -->
+    <!-- Barra superior: atrás, nombre, acciones sobre la hoja y guardar; todos de h-10 para que
+         queden a la misma altura. -->
     <div class="flex flex-wrap items-end gap-4">
       <button type="button" x-on:click="back()"
               x-bind:title="impact ? 'Volver' : 'Atrás'" x-bind:aria-label="impact ? 'Volver' : 'Atrás'"
-              class="shrink-0 p-2 rounded-lg text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
+              class="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-lg text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
         <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
       </button>
       <label x-show="mode === 'create'" class="block flex-1 min-w-[16rem] -ml-2 text-xs font-semibold text-ink/70">Nombre del tablero
@@ -138,17 +139,17 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <input type="text" x-show="mode === 'edit' || mode === 'replace'" x-model="sourceName"
              x-bind:placeholder="originalLabel" maxlength="255"
              aria-label="Nombre de la fuente (opcional)" title="Nombre de la fuente (opcional)"
-             class="w-72 max-w-full -ml-2 text-sm text-ink border border-line rounded-lg px-3 py-2 focus:outline-none focus:border-moss-500">
+             class="w-72 max-w-full h-10 -ml-2 text-sm text-ink border border-line rounded-lg px-3 focus:outline-none focus:border-moss-500">
       <!-- Cambiar hoja (al editar) y Actualizar datos: relee la hoja de Google y muestra su
            estructura actual. -->
       <div class="flex items-center gap-2 -ml-2">
         <button type="button" x-show="mode === 'edit'" x-on:click="changeSheet()" x-bind:disabled="refreshing || loadingColumns"
-                class="inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-lg px-3 py-2 transition cursor-pointer disabled:opacity-50">
+                class="inline-flex items-center gap-1.5 h-10 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-lg px-3 transition cursor-pointer disabled:opacity-50">
           <i class="ti ti-replace text-base" aria-hidden="true"></i>
           Cambiar hoja
         </button>
         <button type="button" x-on:click="refreshColumns()" x-bind:disabled="refreshing || loadingColumns"
-                class="inline-flex items-center gap-1.5 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-lg px-3 py-2 transition cursor-pointer disabled:opacity-50 disabled:cursor-wait">
+                class="inline-flex items-center gap-1.5 h-10 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-lg px-3 transition cursor-pointer disabled:opacity-50 disabled:cursor-wait">
           <i class="ti ti-refresh text-base" x-bind:class="refreshing ? 'animate-spin' : ''" aria-hidden="true"></i>
           Actualizar datos
         </button>
@@ -159,10 +160,10 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <div class="flex items-center gap-3">
         <p x-show="createError" x-text="createError" role="alert" class="text-xs text-red-600"></p>
         <button type="button" x-show="!impact" x-on:click="submit()" x-bind:disabled="!canSubmit || saving || loadingColumns"
-                class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
+                class="inline-flex items-center h-10 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 transition cursor-pointer"
                 x-text="submitLabel"></button>
         <button type="button" x-show="impact" x-on:click="submit({ confirmed: true })" x-bind:disabled="saving"
-                class="text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-40 rounded-lg px-5 py-2 transition cursor-pointer"
+                class="inline-flex items-center h-10 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-40 rounded-lg px-5 transition cursor-pointer"
                 x-text="saving ? 'Guardando…' : 'Guardar igual'"></button>
       </div>
     </div>

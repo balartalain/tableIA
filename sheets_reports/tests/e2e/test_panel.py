@@ -140,6 +140,15 @@ class PanelTests(StaticLiveServerTestCase):
         self.assertLessEqual(abs(sizes["gap"]), 2, sizes)
 
 
+    def test_un_porcentaje_calculado_sale_con_dos_decimales(self):
+        """Un campo calculado llega sin redondear (Feb: 50 / 330 = 15,1515…): la tabla muestra 2 decimales."""
+        self.source.calculated_fields = [{"id": "h", "name": "% Hogar", "format": "percent",
+                                          "formula": 'SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100'}]
+        self.source.save()
+        card = self.open_editor(self.widget(fields(dimensions=["mes"], metrics=[{"field": "% Hogar", "agg": "auto", "alias": "hogar"}])))
+        cells = card.locator(".tabulator-row .tb-num").all_inner_texts()
+        self.assertIn("15.15%", cells)
+
 @unittest.skipUnless(E2E, "Pruebas en el navegador: correr con E2E=1 (requirements-dev.txt + Chromium)")
 class FormulaBuilderTests(PanelTests):
     """El constructor de fórmulas por bloques (pestaña «Campos calculados» al editar la fuente)."""

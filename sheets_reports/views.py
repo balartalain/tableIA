@@ -894,6 +894,50 @@ def _require_source(dashboard, raw_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def board_ai_plan(request, dashboard_id):
+    """
+    POST {prompt, source?} → {items: [{widget_type, title, description, request, width}], note}
+    «Generar con IA»: los widgets que la IA propone para el tablero descrito. NO crea nada:
+    el editor muestra la lista y, por cada widget aceptado, pide su configuración al asistente
+    (`table-assistant` con su `request`) y lo crea.
+    """
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return _error("Describe el tablero que quieres")
+
+    source, error = _require_source(dashboard, data.get("source"))
+    if error:
+        return error
+    try:
+        df = sheets.load_source(source)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    try:
+        from sheets_reports.engine.context import SheetContext
+        from sheets_reports.services.ai_board import propose_board
+        from sheets_reports.services.ai_spec import SpecGenerationError
+        ctx = SheetContext.from_dataframe(df, source.gid, samples=get_field_samples(df))
+        existing = list(dashboard.widgets.values_list("type", flat=True))
+        plan = propose_board(prompt, ctx, existing_types=existing)
+    except SpecGenerationError as e:
+        return _error(str(e), status=422)
+    except Exception:
+        logger.exception("Falló el plan de tablero con IA")
+        return _error("La IA no respondió correctamente. Intenta de nuevo.", status=502)
+    return JsonResponse(plan)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def table_assistant(request, dashboard_id):
     """
     POST {prompt, source?, widget_type?, current?, history?}

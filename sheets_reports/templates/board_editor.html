@@ -207,6 +207,23 @@
       <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start flex-1 p-4">
       </div>
     </div>
+    {% if dashboard %}
+    <!-- Lienzo vacío: arrastrar un widget o generar el tablero con IA. No tapa el soltar del
+         arrastre (pointer-events solo en la tarjeta). -->
+    <div x-data x-show="$store.dashboard.boardLoaded && !$store.dashboard.widgets.length" x-cloak
+         class="absolute inset-0 flex items-center justify-center p-6 pointer-events-none">
+      <div class="pointer-events-auto max-w-sm text-center bg-white/90 border border-dashed border-line rounded px-6 py-6">
+        <i class="ti ti-layout-dashboard text-3xl text-ink/30" aria-hidden="true"></i>
+        <p class="mt-2 text-sm font-semibold text-ink">Tu tablero está vacío</p>
+        <p class="mt-1 text-xs text-ink/55">Arrastra un widget desde el panel de la izquierda o describe el tablero que quieres y deja que la IA lo arme.</p>
+        <button type="button" x-on:click="window.dispatchEvent(new CustomEvent('ai-board:open'))"
+                x-bind:disabled="!$store.dashboard.sources.length"
+                class="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer">
+          <i class="ti ti-sparkles text-base" aria-hidden="true"></i> Generar con IA
+        </button>
+      </div>
+    </div>
+    {% endif %}
   </main>
 
   <aside id="edit-drawer" x-data
@@ -279,7 +296,7 @@
     <div class="px-5 py-4 border-t border-line">
       <p x-show="$store.dashboard.drawerSaveError" x-text="$store.dashboard.drawerSaveError" class="mb-3 text-xs text-red-600"></p>
       <div class="flex space-x-2">
-        <button x-on:click="$store.dashboard.closeDrawer()" class="flex-1 text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-md py-2 transition cursor-pointer">Cancelar</button>
+        <button x-on:click="$store.dashboard.closeDrawer()" class="flex-1 text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-md py-2 transition cursor-pointer">Cerrar</button>
         <button x-on:click="$store.dashboard.saveDrawer()" x-bind:disabled="$store.dashboard.drawerSaving"
                 class="flex-1 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md py-2 transition cursor-pointer"
                 x-text="$store.dashboard.drawerSaving ? 'Guardando…' : 'Guardar'"></button>
@@ -316,6 +333,8 @@
 
 </div>
 
+{% if dashboard %}{% include "sheets_reports/ai_board.html" %}{% endif %}
+
 {{ widget_manifest|json_script:"widget-manifest" }}
 {{ formula_catalog|json_script:"formula-catalog" }}
 <script>
@@ -351,6 +370,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/table-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/filter-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/ranking-widget.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/ai-board.js' %}"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>

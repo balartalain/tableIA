@@ -452,7 +452,7 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
     de widgets (capabilities + style_schema) y el motor (agregaciones y ventanas disponibles).
     Las columnas van como texto libre, no como enum: con muchas columnas o nombres largos
     (preguntas de un formulario) el enum repetido en cada campo supera el límite de estados
-    de Gemini. Los nombres exactos van en el mensaje (`_columns_context`) y `form_errors`
+    de Gemini. Los nombres exactos van en el mensaje (`columns_context`) y `form_errors`
     rechaza los que no existen, con reintento."""
     widgets = [w for w in _widgets_for(widget_type) if w]
     metric_properties = {
@@ -590,7 +590,7 @@ def _tools(ctx: SheetContext, widget_type: str | None) -> list[types.Tool]:
 FORMAT_LABELS = {"percent": "porcentaje", "currency": "moneda", "progress": "porcentaje"}
 
 
-def _columns_context(ctx: SheetContext) -> str:
+def columns_context(ctx: SheetContext) -> str:
     """Las columnas con su tipo y ejemplos, y los campos calculados con su fórmula: así la IA
     sabe qué calcula cada uno aunque su nombre no lo diga."""
     lines = []
@@ -630,7 +630,7 @@ def _history_text(history: list[dict] | None) -> str:
 
 def _user_message(prompt: str, widget_type: str | None, ctx: SheetContext,
                   current: dict | None = None, history: list[dict] | None = None) -> str:
-    parts = [_columns_context(ctx)]
+    parts = [columns_context(ctx)]
     if widget_type:
         parts.append(f"El tipo de widget está fijado en: {widget_type}.")
     if current:

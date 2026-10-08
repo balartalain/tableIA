@@ -1,0 +1,131 @@
+{% comment %}«Generar con IA» (ai-board.js): ventana emergente en tres pasos — el pedido, la lista de
+widgets que propone la IA y la creación, con el estado de cada uno. Se abre con el evento
+`ai-board:open` (el botón del estado vacío del lienzo).{% endcomment %}
+<div x-data="aiBoard()" x-on:ai-board:open.window="show()">
+  <template x-teleport="body">
+    <div x-show="open" x-cloak x-on:keydown.escape.window="open && close()"
+         class="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="ai-board-title"
+           class="bg-white rounded w-full max-w-2xl max-h-[85vh] flex flex-col border border-line shadow-xl">
+        <div class="flex items-center gap-2.5 px-5 py-3 border-b border-line">
+          <i class="ti ti-sparkles text-base text-moss-600" aria-hidden="true"></i>
+          <h2 id="ai-board-title" class="flex-1 text-sm font-semibold text-ink">Generar tablero con IA</h2>
+          <button type="button" x-on:click="close()" aria-label="Cerrar"
+                  class="p-1 rounded-md text-ink/50 hover:text-ink hover:bg-paper cursor-pointer">
+            <i class="ti ti-x text-base leading-none" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <!-- Paso 1: el pedido -->
+        <div x-show="step === 'prompt'" class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
+          <div>
+            <label for="ai-board-prompt" class="block text-xs font-semibold text-ink/70 mb-1">¿Qué tablero quieres?</label>
+            <textarea id="ai-board-prompt" x-ref="prompt" x-model="prompt" rows="5" maxlength="2000"
+                      x-on:keydown.meta.enter.prevent="propose()" x-on:keydown.ctrl.enter.prevent="propose()"
+                      placeholder="Describe qué quieres ver: los números clave, las comparaciones, la evolución en el tiempo…"
+                      class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500 resize-y"></textarea>
+          </div>
+          <div>
+            <p class="text-[11px] font-semibold text-ink/50 mb-1.5">Ejemplos</p>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="example in examples" :key="example.label">
+                <button type="button" x-on:click="useExample(example)" x-bind:title="example.text"
+                        class="inline-flex items-center gap-1 text-xs text-ink/70 border border-line rounded-full px-3 py-1 hover:bg-paper hover:text-ink cursor-pointer">
+                  <i class="ti ti-bulb text-sm text-ink/40" aria-hidden="true"></i>
+                  <span x-text="example.label"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+          <div x-show="sources.length > 1">
+            <label for="ai-board-source" class="block text-xs font-semibold text-ink/70 mb-1">Fuente de datos</label>
+            <select id="ai-board-source" x-model.number="source"
+                    class="w-full text-sm border border-line rounded-md px-3 py-2 bg-white focus:outline-none focus:border-moss-500">
+              <template x-for="s in sources" :key="s.id">
+                <option x-bind:value="s.id" x-text="s.label" x-bind:selected="s.id === source"></option>
+              </template>
+            </select>
+          </div>
+          <p x-show="error" x-text="error" role="alert" class="text-xs text-red-600"></p>
+        </div>
+
+        <!-- Pasos 2 y 3: la lista propuesta y, al crear, el estado de cada widget -->
+        <div x-show="step !== 'prompt'" class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-3">
+          <p x-show="step === 'plan'" class="text-xs text-ink/60">
+            Estos son los widgets que propone la IA. Desmarca los que no quieras y cambia los títulos si hace falta.
+          </p>
+          <p x-show="note" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <i class="ti ti-info-circle text-sm mt-px" aria-hidden="true"></i><span x-text="note"></span>
+          </p>
+          <ul class="space-y-2">
+            <template x-for="(item, index) in items" :key="index">
+              <li class="flex items-start gap-3 rounded border border-line px-3 py-2.5"
+                  x-bind:class="step === 'plan' && !item.include ? 'opacity-50' : ''">
+                <input type="checkbox" x-show="step === 'plan'" x-model="item.include"
+                       x-bind:aria-label="`Incluir ${item.title}`"
+                       class="mt-1 h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500 cursor-pointer">
+                <span x-show="step === 'build'" class="mt-0.5 w-4 shrink-0 text-center" aria-hidden="true">
+                  <i x-show="item.status === 'pending'" class="ti ti-clock text-sm text-ink/30"></i>
+                  <i x-show="item.status === 'working'" class="ti ti-loader-2 text-sm text-moss-600 animate-spin"></i>
+                  <i x-show="item.status === 'done'" class="ti ti-circle-check text-sm text-moss-600"></i>
+                  <i x-show="item.status === 'failed'" class="ti ti-alert-circle text-sm text-red-600"></i>
+                </span>
+                <i class="ti text-lg text-ink/50 mt-px shrink-0" x-bind:class="icon(item.widget_type)"
+                   x-bind:title="typeLabel(item.widget_type)" aria-hidden="true"></i>
+                <div class="min-w-0 flex-1 space-y-0.5">
+                  <input type="text" x-model="item.title" x-bind:disabled="step !== 'plan'" maxlength="80"
+                         aria-label="Título del widget"
+                         class="w-full text-sm font-medium text-ink bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded px-1 -mx-1 disabled:hover:border-transparent">
+                  <p class="text-xs text-ink/60" x-text="item.description"></p>
+                  <p class="text-[11px] text-ink/40" x-text="typeLabel(item.widget_type)"></p>
+                  <p x-show="item.error" x-text="item.error" role="alert" class="text-xs text-red-600"></p>
+                </div>
+              </li>
+            </template>
+          </ul>
+        </div>
+
+        <div class="flex items-center gap-2 px-5 py-3 border-t border-line">
+          <template x-if="step === 'prompt'">
+            <div class="flex w-full items-center justify-end gap-2">
+              <span class="mr-auto text-[11px] text-ink/40">Ctrl + Enter para enviar</span>
+              <button type="button" x-on:click="close()"
+                      class="text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-md px-4 py-2 cursor-pointer">Cerrar</button>
+              <button type="button" x-on:click="propose()" x-bind:disabled="!prompt.trim() || loading"
+                      class="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer">
+                <i class="ti text-base" x-bind:class="loading ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
+                <span x-text="loading ? 'Pensando el tablero…' : 'Proponer tablero'"></span>
+              </button>
+            </div>
+          </template>
+          <template x-if="step === 'plan'">
+            <div class="flex w-full items-center justify-end gap-2">
+              <button type="button" x-on:click="back()"
+                      class="mr-auto inline-flex items-center gap-1 text-sm font-medium text-ink/60 hover:text-ink rounded-md px-2 py-2 cursor-pointer">
+                <i class="ti ti-arrow-left text-base" aria-hidden="true"></i> Cambiar pedido
+              </button>
+              <button type="button" x-on:click="build()" x-bind:disabled="!selected.length"
+                      class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer"
+                      x-text="selected.length === 1 ? 'Crear 1 widget' : `Crear ${selected.length} widgets`"></button>
+            </div>
+          </template>
+          <template x-if="step === 'build'">
+            <div class="flex w-full items-center justify-end gap-2">
+              <span class="mr-auto text-xs text-ink/50"
+                    x-text="building ? `Creando… ${doneCount} de ${items.length} listos. Puedes cerrar: sigue en segundo plano.`
+                                     : `${doneCount} de ${items.length} widgets creados.`"></span>
+              <button type="button" x-show="finished && failed.length" x-on:click="build({ onlyFailed: true })"
+                      class="text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md px-4 py-2 cursor-pointer">
+                Reintentar los que fallaron
+              </button>
+              <button type="button" x-on:click="close()"
+                      class="text-sm font-medium rounded-md px-4 py-2 cursor-pointer"
+                      x-bind:class="finished ? 'text-white bg-moss-500 hover:bg-moss-600' : 'text-ink/60 bg-paper hover:bg-line'"
+                      x-text="finished ? 'Listo' : 'Cerrar'"></button>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>

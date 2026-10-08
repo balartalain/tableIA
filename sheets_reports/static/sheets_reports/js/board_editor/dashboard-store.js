@@ -144,6 +144,8 @@ function conditionFromPayload(c) {
 document.addEventListener('alpine:init', () => {
   Alpine.store('dashboard', {
     widgets: [],
+    // El tablero ya se pidió al servidor: hasta entonces el lienzo vacío no es «vacío».
+    boardLoaded: false,
     editingId: null,
     editingType: null,
     dashboardId: window.DASHBOARD_ID,
@@ -242,6 +244,7 @@ document.addEventListener('alpine:init', () => {
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))
         .filter(Boolean)
         .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+      this.boardLoaded = true;
       return Object.fromEntries(data.widgets.map(w => [w.id, w]));
     },
 
@@ -287,6 +290,34 @@ document.addEventListener('alpine:init', () => {
       });
       this.widgets.push(widget);
       return widget;
+    },
+
+    // «Generar con IA»: crea en el servidor un widget ya configurado (la propuesta del
+    // asistente) al final del tablero y lo monta. → {ok, error?}
+    async createWidgetFromProposal({ type, source, title, width, fields, style }) {
+      const WidgetClass = WidgetRegistry.get(type);
+      const manifest = this.widgetManifest[type] || {};
+      const widget = WidgetRegistry.create(type, {
+        id: this._nextId--,
+        source_id: source,
+        position: { x: 0, y: this.widgets.length, w: width || 6, h: WidgetClass.defaults.height || 300 },
+        title: title || manifest.label || 'Nuevo Widget',
+        fields: { ...EMPTY_FIELDS(), ...(fields || {}) },
+        style: { ...(manifest.style_defaults || {}), ...(style || {}) },
+        _dirty: true,
+      });
+      // Se ve enseguida (con su indicador de carga); al guardarse toma su id real y sus datos.
+      this.widgets.push(widget);
+      containerFor(WidgetClass).appendChild(widget.mount());
+      widget.setLoading(true);
+      const result = await this._saveWidget(widget);
+      if (!result.ok) {
+        if (widget.el) widget.el.remove();
+        this.widgets = this.widgets.filter(w => w !== widget);
+        return result;
+      }
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+      return result;
     },
 
     // Crea o guarda según el id: un widget con id local todavía no existe en el servidor.
@@ -1167,21 +1198,27 @@ document.addEventListener('alpine:init', () => {
       const source = this.drawerDraft.source;
       this.drawerSaveError = '';
       try {
-        const r = await fetch(apiUrl(`/api/sources/${source}/calculated-fields/`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields }),
-        });
-        const data = await r.json().catch(() => null);
-        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+        await this.addCalculatedFields(source, fields);
       } catch (e) {
         this.drawerSaveError = `No se pudo crear el campo calculado: ${e.message}`;
         return false;
       }
-      // El schema cacheado no tiene los campos nuevos.
-      delete this.schemas[source];
       await this.loadSchema(source);
       return true;
+    },
+
+    // Crea en la fuente los campos calculados que propone la IA (los que ya existen con la
+    // misma fórmula se dejan). Lanza con el mensaje del servidor si falla.
+    async addCalculatedFields(source, fields) {
+      const r = await fetch(apiUrl(`/api/sources/${source}/calculated-fields/`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+      // El schema cacheado no tiene los campos nuevos.
+      delete this.schemas[source];
     },
 
     // Vuelve al estado previo a la última propuesta aplicada y lo guarda.

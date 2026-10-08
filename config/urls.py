@@ -16,6 +16,7 @@ urlpatterns = [
     path('api/dashboard/<int:dashboard_id>/render/', views.dashboard_render, name='dashboard_render'),
     path('api/dashboard/<int:dashboard_id>/widgets/', views.create_widget, name='create_widget'),
     path('api/dashboard/<int:dashboard_id>/table-assistant/', views.table_assistant, name='table_assistant'),
+    path('api/dashboard/<int:dashboard_id>/board-plan/', views.board_ai_plan, name='board_ai_plan'),
     path('api/dashboard/<int:dashboard_id>/widget-suggestions/', views.widget_suggestions, name='widget_suggestions'),
     path('api/sources/google/spreadsheets/', views.source_spreadsheets, name='source_spreadsheets'),
     path('api/sources/google/spreadsheets/<str:spreadsheet_id>/tabs/', views.source_tabs, name='source_tabs'),

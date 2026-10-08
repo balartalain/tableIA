@@ -389,6 +389,36 @@ class ViewsTests(TestCase):
                              json.dumps({"prompt": " "}), content_type="application/json")
         self.assertEqual(r.status_code, 400)
 
+    # ------------------------------------------------------ generar con IA
+    def test_plan_de_tablero(self, _df):
+        plan = {"items": [{"widget_type": "kpi", "title": "Ventas", "description": "Total",
+                           "request": "suma de ventas", "width": 4}], "note": ""}
+        with mock.patch("sheets_reports.services.ai_board.propose_board", return_value=plan) as propose:
+            r = self.client.post(f"/api/dashboard/{self.dashboard.id}/board-plan/",
+                                 json.dumps({"prompt": "tablero de ventas"}), content_type="application/json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json(), plan)
+        prompt, ctx = propose.call_args.args
+        self.assertEqual(prompt, "tablero de ventas")
+        self.assertIn("categoria", ctx.fields)
+        # Lo que ya tiene el tablero (los tipos únicos no se repiten).
+        self.assertEqual(propose.call_args.kwargs["existing_types"], ["bar"])
+        # No crea widgets: eso lo hace el editor con cada widget aceptado.
+        self.assertEqual(self.dashboard.widgets.count(), 1)
+
+    def test_plan_de_tablero_errores(self, _df):
+        with mock.patch("sheets_reports.services.ai_board.propose_board",
+                        side_effect=SpecGenerationError("La IA no propuso widgets.")) as propose:
+            empty = self.client.post(f"/api/dashboard/{self.dashboard.id}/board-plan/",
+                                     json.dumps({"prompt": " "}), content_type="application/json")
+            other = self.client.post("/api/dashboard/9999/board-plan/",
+                                     json.dumps({"prompt": "ventas"}), content_type="application/json")
+            failed = self.client.post(f"/api/dashboard/{self.dashboard.id}/board-plan/",
+                                      json.dumps({"prompt": "ventas"}), content_type="application/json")
+        self.assertEqual((empty.status_code, other.status_code, failed.status_code), (400, 404, 422))
+        self.assertEqual(failed.json()["error"], "La IA no propuso widgets.")
+        self.assertEqual(propose.call_count, 1)
+
     # -------------------------------------------------------------- páginas
     def test_paginas_renderizan(self, _df):
         for url in ("/", f"/tableros/{self.dashboard.id}/edit/", f"/tableros/{self.dashboard.id}/shared/"):

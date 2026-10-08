@@ -7,6 +7,9 @@ Solo corren con E2E=1 (necesitan Playwright, Chromium y los CDN de Alpine, Tabul
     venv/bin/pip install -r requirements-dev.txt       # una vez
     venv/bin/python -m playwright install chromium     # una vez
     E2E=1 venv/bin/python manage.py test sheets_reports.tests.e2e
+
+Para verlas: `HEADED=1 SLOWMO=300` antes del comando abre Chromium con ventana y pausa entre
+acciones; `PWDEBUG=1` abre además el Inspector de Playwright para ir paso a paso.
 """
 import os
 import unittest
@@ -39,7 +42,9 @@ class PanelTests(StaticLiveServerTestCase):
         cls._sheet = mock.patch(SHEET, side_effect=lambda *a, **k: sales_df())
         cls._sheet.start()
         cls._playwright = sync_playwright().start()
-        cls.browser = cls._playwright.chromium.launch()
+        # HEADED=1: con ventana; SLOWMO=300: 300 ms entre acciones, para seguirlas con la vista.
+        cls.browser = cls._playwright.chromium.launch(
+            headless=os.environ.get("HEADED") != "1", slow_mo=int(os.environ.get("SLOWMO") or 0))
 
     @classmethod
     def tearDownClass(cls):

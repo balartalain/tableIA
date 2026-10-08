@@ -8,6 +8,8 @@ venv/bin/python manage.py test sheets_reports.tests.test_config_matrix
 #   venv/bin/pip install -r requirements-dev.txt
 #   venv/bin/python -m playwright install chromium
 E2E=1 venv/bin/python manage.py test sheets_reports.tests.e2e
+# Para verlas: con ventana y 300 ms entre acciones; PWDEBUG=1 en vez, paso a paso con el Inspector.
+HEADED=1 SLOWMO=300 E2E=1 venv/bin/python manage.py test sheets_reports.tests.e2e
 
 # Cobertura (pip install -r requirements-dev.txt)
 venv/bin/coverage run --branch --source=sheets_reports manage.py test sheets_reports

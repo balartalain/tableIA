@@ -314,6 +314,7 @@
 </div>
 
 {{ widget_manifest|json_script:"widget-manifest" }}
+{{ formula_catalog|json_script:"formula-catalog" }}
 <script>
   window.WIDGET_MANIFEST = JSON.parse(document.getElementById('widget-manifest').textContent);
   window.HOME_URL = "{% url 'home' %}";

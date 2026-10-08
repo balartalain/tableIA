@@ -324,6 +324,113 @@ def formula_tree(text: str) -> dict | None:
     return as_dict(tree)
 
 
+_COMPARISONS = ("=", "!=", ">", ">=", "<", "<=")
+_ARITHMETIC_OPS = ("+", "-", "*", "/")
+_LOGIC_OPS = ("AND", "OR")
+
+
+def _precedence(node: dict) -> int:
+    """La del parser (_Parser), de menor a mayor: OR, AND, NOT, comparación, + -, * /, unario."""
+    kind, value = node["kind"], node.get("value")
+    if kind == "bin":
+        if value == "OR":
+            return 1
+        if value == "AND":
+            return 2
+        if value in _COMPARISONS:
+            return 4
+        return 5 if value in ("+", "-") else 6
+    return {"not": 3, "neg": 7}.get(kind, 8)
+
+
+def formula_text(tree: dict | None) -> str:
+    """La fórmula escrita a partir de su árbol ({kind, value, args}, el de `formula_tree`; un
+    hueco es None): lo que arma el constructor de bloques. Pone paréntesis solo donde hacen falta
+    para que `formula_tree` devuelva el mismo árbol. Lanza FormulaError si el árbol no vale."""
+    if tree is None:
+        raise FormulaError("Completa los huecos de la fórmula.")
+    if not isinstance(tree, dict):
+        raise FormulaError("La fórmula no tiene la forma esperada.")
+    kind, value = tree.get("kind"), tree.get("value")
+    args = tree.get("args") or []
+    if not isinstance(args, list):
+        raise FormulaError("La fórmula no tiene la forma esperada.")
+
+    def arity(n: int) -> None:
+        if len(args) != n:
+            raise FormulaError("La fórmula no tiene la forma esperada.")
+
+    def operand(child, wrap: bool) -> str:
+        text = formula_text(child)
+        return f"({text})" if wrap else text
+
+    if kind == "num":
+        arity(0)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0 or not np.isfinite(value):
+            raise FormulaError("Un número de la fórmula no vale.")
+        # Sin notación científica: el tokenizador solo lee dígitos y punto decimal.
+        return np.format_float_positional(float(value), trim="-")
+    if kind == "str":
+        arity(0)
+        text = str(value if value is not None else "")
+        if '"' in text and "'" in text:
+            raise FormulaError("Un texto no puede llevar comillas dobles y simples a la vez.")
+        return f"'{text}'" if '"' in text else f'"{text}"'
+    if kind == "col":
+        arity(0)
+        name = str(value or "").strip()
+        if not name or "]" in name:
+            raise FormulaError(f"No se puede usar la columna «{name}» en una fórmula.")
+        return f"[{name}]"
+    if kind in ("neg", "not"):
+        arity(1)
+        child = args[0]
+        if kind == "neg":
+            return "-" + operand(child, child is not None and _precedence(child) < 7)
+        return "NOT " + operand(child, child is not None and _precedence(child) < 3)
+    if kind == "func":
+        if value not in AGGREGATE_FUNCTIONS and value not in ROW_FUNCTIONS:
+            raise FormulaError(f"La función {value} no existe.")
+        arity(3 if value == "IF" else 1)
+        return f"{value}({', '.join(formula_text(a) for a in args)})"
+    if kind == "bin":
+        if value not in (*_COMPARISONS, *_ARITHMETIC_OPS, *_LOGIC_OPS):
+            raise FormulaError(f"El operador «{value}» no existe.")
+        arity(2)
+        left, right = args
+        level = _precedence(tree)
+        # La comparación no se encadena; a la derecha, la misma precedencia va entre paréntesis
+        # para que el árbol vuelva igual.
+        wrap_left = left is not None and (_precedence(left) < level or (level == 4 and _precedence(left) == 4))
+        wrap_right = right is not None and _precedence(right) <= level
+        return f"{operand(left, wrap_left)} {value} {operand(right, wrap_right)}"
+    raise FormulaError("La fórmula no tiene la forma esperada.")
+
+
+# Las piezas del constructor de bloques (editor de la fuente), con sus textos: el mismo lugar
+# que el parser y `formula_text`, así una función nueva se agrega una sola vez.
+_FUNCTION_TITLES = {
+    "IF": "SI(condición, valor si se cumple, valor si no): fila a fila",
+    "SUM": "Suma", "AVG": "Promedio", "COUNT": "Conteo (valores no vacíos)",
+    "COUNT_DISTINCT": "Valores distintos", "MIN": "Mínimo", "MAX": "Máximo",
+}
+BUILDER_CATALOG = {
+    "functions": [
+        {"name": "IF", "label": "SI", "title": _FUNCTION_TITLES["IF"],
+         "slots": ["condición", "si se cumple", "si no"]},
+        *({"name": name, "label": name, "title": _FUNCTION_TITLES.get(name, name), "slots": [""]}
+          for name in AGGREGATE_FUNCTIONS),
+    ],
+    "compare": [{"op": op, "symbol": {"!=": "≠", ">=": "≥", "<=": "≤"}.get(op, op), "title": "Comparación"}
+                for op in _COMPARISONS],
+    "arithmetic": [{"op": "+", "symbol": "+", "title": "Sumar"}, {"op": "-", "symbol": "−", "title": "Restar"},
+                   {"op": "*", "symbol": "×", "title": "Multiplicar"}, {"op": "/", "symbol": "÷", "title": "Dividir"}],
+    "logic": [{"op": "AND", "symbol": "Y", "title": "Se cumplen las dos"},
+              {"op": "OR", "symbol": "O", "title": "Se cumple alguna"},
+              {"op": "NOT", "symbol": "NO", "title": "No se cumple"}],
+}
+
+
 def _resolve(node: Node, names: dict) -> Node:
     if node.kind == "col":
         return Node("col", names.get(node.value, node.value))

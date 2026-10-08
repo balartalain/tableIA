@@ -213,21 +213,3 @@ class FormulaBuilderTests(PanelTests):
         self.drag(canvas.locator("[data-fb-drag='1']"), panel.get_by_text("Condición"))
         canvas.get_by_text("suelta aquí").wait_for()
         self.page.get_by_text("Completa los huecos").wait_for()
-
-    def test_el_texto_vuelve_al_mismo_arbol(self):
-        """Ida y vuelta: árbol del servidor → texto del constructor → el mismo árbol."""
-        from sheets_reports.engine.formulas import formula_tree
-
-        formulas = [
-            'SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100',
-            'AVG([Respuesta] = "Sí") * 100',
-            'IF([grado] = "a" OR [grado] = "b", "X", IF([grado] = "c" OR [grado] = "d", "Y", "Z"))',
-            "[a] - ([b] - [c])", "([a] + [b]) * [c]", "-([a] + 1)", "NOT ([a] = 1 OR [b] = 2)",
-            "[a] / [b] / [c]", "[a] / ([b] / [c])", "COUNT(1)", "-1.5 * [x]", "IF([t] = 'dice \"sí\"', 1, 0)",
-        ]
-        self.open_calculated()
-        for formula in formulas:
-            with self.subTest(formula=formula):
-                tree = formula_tree(formula)
-                text = self.page.evaluate("tree => FormulaBlocks.text(tree)", tree)
-                self.assertEqual(formula_tree(text), tree, text)

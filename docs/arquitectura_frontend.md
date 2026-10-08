@@ -366,10 +366,29 @@ de columnas:
   `source_formula_help.html`: los dos tipos con ejemplos, cuál elegir, cómo calcula cada
   función y cómo se arma.
 
+- En `edit` y `replace`, nombre opcional de la fuente (vacío = el original).
+- **Actualizar datos**, junto al nombre (`refreshColumns()`): relee la pestaña de Google
+  (`?refresh=1`, pisa el caché del servidor) y muestra su estructura actual sin perder los
+  cambios todavía sin guardar (`_keepEdits`, por encabezado). Las columnas nuevas entran
+  incluidas; las que ya no están desaparecen y, al guardar, el aviso de impacto lista los
+  widgets que las usaban. Si se sale sin guardar tras actualizar, el tablero igual se recalcula
+  (`sources:changed`).
+- **Cambiar hoja**, junto a «Actualizar datos» en `edit` (`changeSheet()`): pasa a modo
+  `replace` (documento → pestaña → columnas). Las columnas con el mismo encabezado conservan lo
+  elegido en la edición, aunque no estuviera guardado; «Cancelar» vuelve a la edición tal
+  como estaba (`_backToEdit`).
+- Antes de guardar en `edit` o `replace` se pide `dry_run`: si algún widget usa columnas que
+  se quitan o cambian de tipo, se listan con «Guardar igual» / «Volver».
+- El email de la cuenta de servicio (con quien compartir las hojas) se muestra con botón
+  copiar.
+
 #### Constructor de fórmulas (`formula-builder.js`)
 
 La fórmula es un árbol `{kind, value, args}` — el mismo del parser del servidor; la fuente lo
-trae en `calculated_fields[].tree` (`formula_tree`) — donde un hueco es `null`.
+trae en `calculated_fields[].tree` (`formula_tree`) — donde un hueco es `null`. La gramática vive
+solo en el servidor: el JS no escribe ni lee texto de fórmulas. Las piezas (funciones con sus
+huecos y rótulos, operadores con su símbolo y título) vienen de `BUILDER_CATALOG`
+(`engine/formulas.py`), publicado en la página como `#formula-catalog` (`FormulaBlocks.catalog`).
 
 - **Panel izquierdo** (`aside[data-fb-trash]`): *Columnas* (`builderColumns`: las incluidas con
   su nombre a mostrar y los campos por fila anteriores, con buscador) y su subpanel *Valores*
@@ -387,28 +406,15 @@ trae en `calculated_fields[].tree` (`formula_tree`) — donde un hueco es `null`
 - **Arrastre**: interact.js con selectores delegados (`[data-fb-piece]` del panel, JSON de la
   pieza; `[data-fb-drag]` de los bloques, su ruta). El destino es el `[data-fb-drop]` más
   interno bajo el puntero; al soltar se emite `formula:drop` y `onFormulaDrop` aplica el cambio.
-- **Texto**: `FormulaBlocks.text` escribe el árbol con la precedencia del parser (paréntesis solo
-  donde hacen falta para que vuelva el mismo árbol); con huecos devuelve `null`, la vista previa
-  no se pide y guardar avisa «Completa los huecos». Se guarda el texto (`formula`), como siempre.
+- **Al servidor va el árbol**: la vista previa (`POST …/formula/` con `tree`) responde también
+  con el texto (`formula_text`), que queda en `field.formula`; al guardar, cada campo manda su
+  `tree` y el servidor guarda el texto. Una fórmula guardada ilegible que no se tocó va como
+  `formula`. Con huecos (`hasHoles`) no se pide vista previa y guardar avisa «Completa los
+  huecos». `field._rev` descarta respuestas de vistas previas viejas.
 - Renombres: al abrir la pestaña (y al guardar) `syncColumnNames` lleva a los árboles los nombres
   a mostrar cambiados en *Columnas*; renombrar un campo (`renameField`) actualiza las fórmulas
   que lo usan. Una fórmula guardada que no se puede leer (`tree: null`) se avisa con «Empezar de
   nuevo».
-- En `edit` y `replace`, nombre opcional de la fuente (vacío = el original).
-- **Actualizar datos**, junto al nombre (`refreshColumns()`): relee la pestaña de Google
-  (`?refresh=1`, pisa el caché del servidor) y muestra su estructura actual sin perder los
-  cambios todavía sin guardar (`_keepEdits`, por encabezado). Las columnas nuevas entran
-  incluidas; las que ya no están desaparecen y, al guardar, el aviso de impacto lista los
-  widgets que las usaban. Si se sale sin guardar tras actualizar, el tablero igual se recalcula
-  (`sources:changed`).
-- **Cambiar hoja**, junto a «Actualizar datos» en `edit` (`changeSheet()`): pasa a modo
-  `replace` (documento → pestaña → columnas). Las columnas con el mismo encabezado conservan lo
-  elegido en la edición, aunque no estuviera guardado; «Cancelar» vuelve a la edición tal
-  como estaba (`_backToEdit`).
-- Antes de guardar en `edit` o `replace` se pide `dry_run`: si algún widget usa columnas que
-  se quitan o cambian de tipo, se listan con «Guardar igual» / «Volver».
-- El email de la cuenta de servicio (con quien compartir las hojas) se muestra con botón
-  copiar.
 
 Tras guardar, `afterChange()` recarga las fuentes, vacía los schemas cacheados del store,
 recalcula el tablero y reabre el panel abierto. `refreshData()` toma `fields`/`style` del

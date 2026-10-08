@@ -5,10 +5,14 @@ from django.test import SimpleTestCase
 
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.engine.formulas import (
+    AGGREGATE_FUNCTIONS,
+    BUILDER_CATALOG,
+    ROW_FUNCTIONS,
     FormulaError,
     aggregated_fields,
     apply_calculated_fields,
     compile_formula,
+    formula_text,
     formula_tree,
     rename_columns,
 )
@@ -95,6 +99,51 @@ class FormulaLanguageTests(SimpleTestCase):
                  node("str", "X"), node("neg", None, node("num", 1.5))))
         self.assertEqual(formula_tree("AVG([Gasto Real])"), node("func", "AVG", node("col", "Gasto Real")))
         self.assertIsNone(formula_tree("SUM("))
+
+    def test_el_texto_vuelve_al_mismo_arbol(self):
+        """Ida y vuelta del constructor: árbol → `formula_text` → el mismo árbol."""
+        formulas = [
+            'SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100',
+            'AVG([Respuesta] = "Sí") * 100', "SUM([Gasto_Real]) / COUNT([ID_Registro])",
+            'IF([grado] = "a" OR [grado] = "b", "X", IF([grado] = "c" OR [grado] = "d", "Y", "Z"))',
+            'SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100',
+            "[a] - ([b] - [c])", "[a] - [b] - [c]", "([a] + [b]) * [c]", "[a] + [b] * [c]",
+            "[a] / [b] / [c]", "[a] / ([b] / [c])", "-([a] + 1)", "--[a]", "-1.5 * [x]", "0.0000001",
+            "NOT ([a] = 1 OR [b] = 2)", "NOT [a] = 1 AND [b] = 2", "[a] = 1 OR [b] = 2 AND [c] = 3",
+            "([a] = 1 OR [b] = 2) AND [c] = 3", "([a] = 1) = ([b] = 2)", "([a] > 1) * 100",
+            "COUNT(1)", "IF([t] = 'dice \"sí\"', 1, 0)", "COUNT_DISTINCT([Campus]) - MIN([x]) + MAX([y])",
+        ]
+        for formula in formulas:
+            with self.subTest(formula=formula):
+                tree = formula_tree(formula)
+                self.assertIsNotNone(tree)
+                self.assertEqual(formula_tree(formula_text(tree)), tree, formula_text(tree))
+        # Sin paréntesis de más.
+        self.assertEqual(formula_text(formula_tree("(([a]) + ([b] * 2))")), "[a] + [b] * 2")
+
+    def test_arbol_que_no_vale(self):
+        def node(kind, value=None, *args):
+            return {"kind": kind, "value": value, "args": list(args)}
+        col = node("col", "a")
+        cases = {
+            "huecos": node("bin", "+", col, None),
+            "no existe": node("func", "ROUND", col),
+            "forma": node("func", "IF", col, col),
+            "operador": node("bin", "^", col, col),
+            "comillas": node("str", "a\"b'c"),
+            "columna": node("col", "a]b"),
+            "número": node("num", float("nan")),
+        }
+        for message, tree in cases.items():
+            with self.subTest(message=message), self.assertRaisesMessage(FormulaError, message):
+                formula_text(tree)
+        self.assertRaisesRegex(FormulaError, "huecos", formula_text, None)
+
+    def test_el_catalogo_trae_todas_las_funciones(self):
+        self.assertEqual({f["name"] for f in BUILDER_CATALOG["functions"]}, set(AGGREGATE_FUNCTIONS) | ROW_FUNCTIONS)
+        self.assertEqual(next(f for f in BUILDER_CATALOG["functions"] if f["name"] == "IF")["slots"],
+                         ["condición", "si se cumple", "si no"])
+        self.assertEqual({o["op"] for o in BUILDER_CATALOG["arithmetic"]}, {"+", "-", "*", "/"})
 
     def test_division_entre_cero_queda_vacia(self):
         df = budget_df()

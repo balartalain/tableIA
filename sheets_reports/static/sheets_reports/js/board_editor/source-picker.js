@@ -78,8 +78,9 @@ function sourcePicker({ mode = 'create' } = {}) {
     // Pestaña del paso de columnas al editar: 'columns' | 'calculated'.
     columnsTab: 'columns',
     // Campos calculados: {id, name, formula, format} + su árbol de bloques (_tree; _unreadable
-    // si la fórmula guardada no se pudo leer) y el estado de la vista previa (_kind
-    // 'row'|'aggregated', _values, _error, _checking).
+    // si la fórmula guardada no se pudo leer; _rev cuenta sus cambios) y el estado de la vista
+    // previa (_kind 'row'|'aggregated', _values, _error, _checking). Al servidor va el árbol
+    // (él lo escribe como texto); `formula` es el último texto que devolvió.
     calculated: [],
     helpOpen: false,
     _previewTimers: {},
@@ -89,21 +90,20 @@ function sourcePicker({ mode = 'create' } = {}) {
     valueType: 'number',
     valueInput: '',
     columnQuery: '',
-    // Piezas del panel del constructor y la barra de operadores.
+    // Piezas del panel del constructor y la barra de operadores, del catálogo del servidor.
     CONDITION_PIECES: [
-      { label: '[ ] = [ ]', title: 'Comparación: =, ≠, >, ≥, <, ≤', piece: FormulaBlocks.pieces.compare() },
-      { label: '[ ] Y [ ]', title: 'Se cumplen las dos', piece: FormulaBlocks.pieces.logic('AND') },
-      { label: '[ ] O [ ]', title: 'Se cumple alguna', piece: FormulaBlocks.pieces.logic('OR') },
-      { label: 'NO [ ]', title: 'No se cumple', piece: FormulaBlocks.pieces.not() },
+      ...FormulaBlocks.catalog.compare.slice(0, 1).map(({ op, symbol }) => ({
+        label: `[ ] ${symbol} [ ]`, piece: FormulaBlocks.pieces.operator(op),
+        title: `Comparación: ${FormulaBlocks.catalog.compare.map(o => o.symbol).join(' ')}`,
+      })),
+      ...FormulaBlocks.catalog.logic.map(({ op, symbol, title }) => ({
+        label: op === 'NOT' ? `${symbol} [ ]` : `[ ] ${symbol} [ ]`, title, piece: FormulaBlocks.pieces.operator(op),
+      })),
     ],
-    FUNCTION_PIECES: [
-      { label: 'SI', title: 'SI(condición, valor si se cumple, valor si no): fila a fila', piece: FormulaBlocks.pieces.func('IF') },
-      ...Object.entries(FormulaBlocks.AGGREGATES).map(([name, title]) =>
-        ({ label: name, title, piece: FormulaBlocks.pieces.func(name) })),
-    ],
-    OPERATOR_PIECES: FormulaBlocks.ARITHMETIC.map(op =>
-      ({ label: FormulaBlocks.SYMBOL[op] || op, title: { '+': 'Sumar', '-': 'Restar', '*': 'Multiplicar', '/': 'Dividir' }[op],
-         piece: FormulaBlocks.pieces.arithmetic(op) })),
+    FUNCTION_PIECES: FormulaBlocks.catalog.functions.map(({ name, label, title }) =>
+      ({ label, title, piece: FormulaBlocks.pieces.func(name) })),
+    OPERATOR_PIECES: FormulaBlocks.catalog.arithmetic.map(({ op, symbol, title }) =>
+      ({ label: symbol, title, piece: FormulaBlocks.pieces.operator(op) })),
     // Nombre a mostrar de cada columna la última vez que se miraron las fórmulas (para renombrar).
     _columnNames: {},
 
@@ -136,7 +136,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         refreshing: false, dataRefreshed: false, refreshedAt: source ? source.refreshed_at : null,
         columnsTab: 'columns', helpOpen: false,
         calculated: ((source && source.calculated_fields) || []).map(({ tree, ...f }) => ({
-          ...f, _tree: tree || null, _unreadable: !tree && !!(f.formula || '').trim(),
+          ...f, _tree: tree || null, _unreadable: !tree && !!(f.formula || '').trim(), _rev: 0,
           _kind: null, _values: null, _error: '', _checking: false,
         })),
         fbSelected: null, valueInput: '', columnQuery: '',
@@ -352,7 +352,7 @@ function sourcePicker({ mode = 'create' } = {}) {
 
     addCalculated() {
       const id = `cf_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-      this.calculated.push({ id, name: '', formula: '', format: 'number', _tree: null, _unreadable: false,
+      this.calculated.push({ id, name: '', formula: '', format: 'number', _tree: null, _unreadable: false, _rev: 0,
                              _kind: null, _values: null, _error: '', _checking: false });
       this.selectField(id);
     },
@@ -458,26 +458,27 @@ function sourcePicker({ mode = 'create' } = {}) {
       this.treeChanged(field);
     },
 
-    // La fórmula como texto (vacía si quedan huecos) y su vista previa.
+    // Cambió el árbol: su vista previa (que trae el texto que escribe el servidor).
     treeChanged(field) {
-      const text = FormulaBlocks.text(field._tree);
-      field.formula = text || '';
-      if (text == null) {
-        clearTimeout(this._previewTimers[field.id]);
-        Object.assign(field, { _kind: null, _values: null, _error: '', _checking: false });
-        return;
-      }
+      field._rev += 1;
       this.previewCalculated(field);
     },
 
     isIncomplete(field) {
-      return !!field._tree && FormulaBlocks.text(field._tree) == null;
+      return !!field._tree && FormulaBlocks.hasHoles(field._tree);
     },
 
-    // Vista previa (con pausa mientras se escribe): tipo del campo, primeros valores o error.
+    // Lo que se manda de un campo: su árbol o, si es una fórmula guardada ilegible que no se tocó,
+    // su texto. Null si no hay nada que calcular (vacío o con huecos).
+    _formulaBody(field) {
+      if (field._unreadable) return { formula: field.formula };
+      return FormulaBlocks.hasHoles(field._tree) ? null : { tree: field._tree };
+    },
+
+    // Vista previa (con pausa mientras se arma): tipo del campo, primeros valores o error.
     previewCalculated(field, { now = false } = {}) {
       clearTimeout(this._previewTimers[field.id]);
-      if (!field.formula.trim()) {
+      if (!this._formulaBody(field)) {
         Object.assign(field, { _kind: null, _values: null, _error: '', _checking: false });
         return;
       }
@@ -486,22 +487,25 @@ function sourcePicker({ mode = 'create' } = {}) {
     },
 
     async _runPreview(field) {
-      const formula = field.formula;
+      const rev = field._rev;
+      const body = this._formulaBody(field);
+      if (!body) return;
       const index = this.calculated.indexOf(field);
       const previous = this.calculated.slice(0, Math.max(index, 0))
-        .filter(f => f.name.trim() && f.formula.trim())
-        .map(({ id, name, formula: text, format }) => ({ id, name: name.trim(), formula: text, format }));
+        .filter(f => f.name.trim() && this._formulaBody(f))
+        .map(f => ({ id: f.id, name: f.name.trim(), format: f.format, ...this._formulaBody(f) }));
       try {
         const data = await this._send('POST', `/api/sources/${this.editing.id}/formula/`, {
-          formula, first_row_headers: this.headers, calculated_fields: previous,
+          ...body, first_row_headers: this.headers, calculated_fields: previous,
           columns: this.columns.map(({ name, type, include, label }) => ({ name, type, include, label: (label || '').trim() })),
         });
-        if (field.formula !== formula) return;   // se siguió escribiendo: manda la próxima
+        if (field._rev !== rev) return;   // se siguió armando: manda la próxima
+        if (data.formula) field.formula = data.formula;
         Object.assign(field, { _kind: data.kind || null, _values: data.values || null, _error: data.error || '' });
       } catch (e) {
-        if (field.formula === formula) field._error = e.message;
+        if (field._rev === rev) field._error = e.message;
       } finally {
-        if (field.formula === formula) field._checking = false;
+        if (field._rev === rev) field._checking = false;
       }
     },
 
@@ -551,10 +555,12 @@ function sourcePicker({ mode = 'create' } = {}) {
       }
       if (this.mode === 'edit' || this.mode === 'replace') {
         body.name = this.sourceName.trim();
+        // Va el árbol (el servidor escribe la fórmula); una fórmula ilegible sin tocar, su texto.
         body.calculated_fields = this.calculated
-          .filter(f => f.name.trim() || f.formula.trim())
-          .map(({ id, name, formula, format }) => ({
-            id, name: name.trim(), formula: formula.trim(), format: format || 'number',
+          .filter(f => f.name.trim() || f._tree || f._unreadable)
+          .map(f => ({
+            id: f.id, name: f.name.trim(), format: f.format || 'number',
+            ...(f._unreadable ? { formula: f.formula.trim() } : { tree: f._tree }),
           }));
       }
       return body;

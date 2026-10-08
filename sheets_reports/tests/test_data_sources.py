@@ -9,6 +9,7 @@ from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
+from sheets_reports.engine.formulas import formula_tree
 from sheets_reports.models import DataSource, Widget
 from sheets_reports.services.sheets import SheetError
 from sheets_reports.tests.fixtures import fields, make_board, sales_df
@@ -308,9 +309,9 @@ class CalculatedFieldsTests(TestCase):
     def test_vista_previa_de_la_formula(self, _df):
         url = f"/api/sources/{self.source.id}/formula/"
         row = json_body(self.client, "post", url, {"formula": "ventas * 2"}).json()
-        self.assertEqual(row, {"kind": "row", "values": [200.0, 600.0, 100.0, 160.0, 400.0]})
+        self.assertEqual(row, {"formula": "ventas * 2", "kind": "row", "values": [200.0, 600.0, 100.0, 160.0, 400.0]})
         total = json_body(self.client, "post", url, {"formula": "SUM(ventas)"}).json()
-        self.assertEqual(total, {"kind": "aggregated", "values": [755.0]})
+        self.assertEqual(total, {"formula": "SUM(ventas)", "kind": "aggregated", "values": [755.0]})
         # Con lo que hay en el editor sin guardar: una columna renombrada y un campo anterior.
         draft = json_body(self.client, "post", url, {
             "formula": "[Doble] + [Monto]", "columns": with_column("ventas", label="Monto"),
@@ -318,6 +319,22 @@ class CalculatedFieldsTests(TestCase):
         self.assertEqual(draft["values"][0], 300.0)
         error = json_body(self.client, "post", url, {"formula": "SUM(ventas) / anio"}).json()
         self.assertIn("mezcla", error["error"])
+
+    def test_el_constructor_manda_el_arbol(self, _df):
+        """El constructor de bloques manda `tree`: el servidor lo escribe como texto."""
+        url = f"/api/sources/{self.source.id}/formula/"
+        total = json_body(self.client, "post", url, {"tree": formula_tree("SUM([ventas]) * 2")}).json()
+        self.assertEqual(total, {"formula": "SUM([ventas]) * 2", "kind": "aggregated", "values": [1510.0]})
+        hole = {"kind": "bin", "value": "+", "args": [{"kind": "col", "value": "ventas", "args": []}, None]}
+        self.assertIn("huecos", json_body(self.client, "post", url, {"tree": hole}).json()["error"])
+        # Al guardar, el árbol se guarda como texto; con huecos, 400 con el nombre del campo.
+        r = self.put({"calculated_fields": [{"id": "s", "name": "Doble", "tree": formula_tree("[ventas] * 2")}]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.calculated_fields[0]["formula"], "[ventas] * 2")
+        r = self.put({"calculated_fields": [{"id": "s", "name": "Doble", "tree": hole}]})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("«Doble»", r.json()["error"])
 
 
 @mock.patch(SHEET, side_effect=by_sheet)

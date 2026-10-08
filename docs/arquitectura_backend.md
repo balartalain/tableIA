@@ -776,11 +776,11 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 | `GET …/spreadsheets/{id}/tabs/` | Pestañas de una hoja |
 | `GET …/tabs/{gid}/columns/?headers=0\|1&refresh=` | Columnas con tipo inferido y ejemplos (`refresh=1` relee la hoja) |
 | `GET/POST /api/dashboard/{id}/sources/` | Fuentes del tablero / agregar una |
-| `PUT /api/sources/{id}/` | Columnas (tipo, incluir, nombre a mostrar), `name`, `first_row_headers` y, con `sheet_id`, otra hoja (los widgets siguen en la fuente). Reescribe los widgets por los renombres. `dry_run` → solo `{impact}` |
+| `PUT /api/sources/{id}/` | Columnas (tipo, incluir, nombre a mostrar), `name`, `first_row_headers`, `calculated_fields` (cada uno con `formula` o `tree`; el árbol se guarda como texto) y, con `sheet_id`, otra hoja (los widgets siguen en la fuente). Reescribe los widgets por los renombres. `dry_run` → solo `{impact}` |
 | `DELETE /api/sources/{id}/` | Borra la fuente (sus widgets quedan sin fuente). `?dry_run=1` → `{impact}` con todos sus widgets |
 | `GET /api/sources/{id}/columns/?headers=&refresh=` | Columnas actuales de la hoja con lo guardado de cada una. `refresh=1` («Actualizar datos») la relee de Google y pisa el caché; no guarda nada |
 | `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget; `aggregated_fields` lista los campos agregados (`{name, format}`) |
-| `POST /api/sources/{id}/formula/` | Vista previa de una fórmula con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{kind, values}` o `{error}` |
+| `POST /api/sources/{id}/formula/` | Vista previa de una fórmula (`formula` o `tree`, el árbol del constructor) con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{formula, kind, values}` o `{error}` |
 
 ### 10.4 Campos calculados (`engine/formulas.py`)
 
@@ -803,9 +803,15 @@ Sintaxis: columnas por nombre o entre corchetes (`[Gasto Real]`), textos entre c
 `+ - * /`, comparaciones, `AND OR NOT`, `IF(c, sí, no)`. Errores legibles: columnas que no
 existen, sintaxis, agregaciones anidadas y **mezclar** agregados con columnas sueltas
 (`SUM(a) / b`). `rename_columns` reescribe una fórmula cuando se renombran columnas.
-`formula_tree` devuelve el árbol tal como está escrito (`{kind, value, args}`, sin resolver
-columnas; `None` si no se entiende): las fuentes lo entregan en `calculated_fields[].tree` y
-el editor arma con él los bloques (no se guarda).
+El constructor de bloques del editor trabaja con árboles; la gramática está solo aquí:
+- `formula_tree(texto)`: el árbol tal como está escrito (`{kind, value, args}`, sin resolver
+  columnas; `None` si no se entiende). Las fuentes lo entregan en `calculated_fields[].tree`.
+- `formula_text(árbol)`: el inverso; paréntesis solo donde hacen falta para que vuelva el mismo
+  árbol, números sin notación científica. Valida la forma (huecos, funciones, operadores,
+  aridad, comillas) con `FormulaError`. La vista previa y el `PUT` aceptan `tree` y lo escriben.
+- `BUILDER_CATALOG`: las piezas del constructor (funciones con sus huecos y rótulos, operadores
+  con símbolo y título), publicado en la página del editor. Una función nueva se agrega al
+  parser, a `formula_text` y al catálogo, todo en este archivo.
 
 Al guardar la fuente (`PUT`), los campos se validan contra la hoja (`strict`); se siguen por su
 `id` (`_column_change` los trata como columnas `calc:<id>`): renombrar uno reescribe sus

@@ -25,11 +25,13 @@ from sheets_reports.services.sheets import (
     source_key,
 )
 from sheets_reports.engine.formulas import (
+    BUILDER_CATALOG,
     FORMATS as FORMULA_FORMATS,
     FormulaError,
     aggregated_fields,
     apply_calculated_fields,
     compile_formula,
+    formula_text,
     formula_tree,
     rename_columns,
 )
@@ -66,7 +68,7 @@ def board_editor(request, dashboard_id):
     Dashboard.objects.filter(id=dashboard.id).update(last_opened_at=now())
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "widget_manifest": _widget_manifest(),
-        "service_account_email": sheets.service_account_email(),
+        "service_account_email": sheets.service_account_email(), "formula_catalog": BUILDER_CATALOG,
     })
 
 
@@ -75,7 +77,7 @@ def board_new(request):
     tablero y redirige a su editor."""
     return render(request, "board_editor.html", {
         "dashboard": None, "widget_manifest": _widget_manifest(),
-        "service_account_email": sheets.service_account_email(),
+        "service_account_email": sheets.service_account_email(), "formula_catalog": BUILDER_CATALOG,
     })
 
 
@@ -438,8 +440,9 @@ def _column_change(source, new_columns: list[dict],
 
 
 def _calculated_errors(fields) -> str | None:
-    """La forma de `calculated_fields`: [{id, name, formula, format}]. Las fórmulas se validan
-    contra la hoja aparte (`_check_calculated`)."""
+    """La forma de `calculated_fields`: [{id, name, formula | tree, format}] (`tree`: el árbol del
+    constructor de bloques; se escribe como `formula`). Las fórmulas se validan contra la hoja
+    aparte (`_check_calculated`)."""
     if not isinstance(fields, list):
         return "'calculated_fields' debe ser una lista"
     ids, names = set(), set()
@@ -455,14 +458,21 @@ def _calculated_errors(fields) -> str | None:
             return f"Formato no válido para «{name}»: usa {', '.join(FORMULA_FORMATS)}"
         if f["id"] in ids or name in names:
             return f"Hay dos campos calculados llamados «{name}»"
+        if "tree" in f:
+            try:
+                formula_text(f["tree"])
+            except FormulaError as e:
+                return f"«{name}»: {e}"
         ids.add(f["id"])
         names.add(name)
     return None
 
 
 def _clean_calculated(fields: list[dict]) -> list[dict]:
+    """Ya validados (`_calculated_errors`): con `tree`, la fórmula es su texto."""
     return [{"id": str(f["id"]).strip(), "name": str(f["name"]).strip()[:120],
-             "formula": str(f.get("formula") or "").strip(), "format": f.get("format") or "number"}
+             "formula": formula_text(f["tree"]) if "tree" in f else str(f.get("formula") or "").strip(),
+             "format": f.get("format") or "number"}
             for f in fields]
 
 
@@ -633,10 +643,11 @@ FORMULA_PREVIEW_ROWS = 5
 @require_http_methods(["POST"])
 def source_formula(request, source_id):
     """
-    Vista previa de un campo calculado mientras se escribe: POST {formula, columns?,
+    Vista previa de un campo calculado mientras se arma: POST {formula | tree, columns?,
     first_row_headers?, calculated_fields?} (lo que hay en el editor, sin guardar; los campos
-    calculados son los anteriores a este) → {kind: "row"|"aggregated", values: [...]} con los
-    primeros valores (por fila) o el total de la hoja (agregado), o {error} si la fórmula no vale.
+    calculados son los anteriores a este) → {formula, kind: "row"|"aggregated", values: [...]}
+    con la fórmula escrita y los primeros valores (por fila) o el total de la hoja (agregado), o
+    {error} si la fórmula no vale. `tree` es el árbol del constructor de bloques.
     """
     source = _owned_source(request, source_id)
     if not source:
@@ -657,14 +668,16 @@ def source_formula(request, source_id):
     if _calculated_errors(previous) is None:
         df = apply_calculated_fields(df, _clean_calculated(previous))
     try:
-        formula = compile_formula(str(data.get("formula") or ""), df.columns, aggregated_fields(df))
+        text = formula_text(data["tree"]) if "tree" in data else str(data.get("formula") or "")
+        formula = compile_formula(text, df.columns, aggregated_fields(df))
         if formula.aggregated:
             values = [to_python(formula.aggregate(df))]
         else:
             values = [to_python(v) for v in formula.evaluate_rows(df).head(FORMULA_PREVIEW_ROWS)]
     except FormulaError as e:
         return JsonResponse({"error": str(e)})
-    return JsonResponse({"kind": "aggregated" if formula.aggregated else "row", "values": values})
+    return JsonResponse({"formula": formula.text, "kind": "aggregated" if formula.aggregated else "row",
+                         "values": values})
 
 
 @require_http_methods(["GET"])

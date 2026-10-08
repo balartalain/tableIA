@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import pandas as pd
 
-from sheets_reports.engine.formulas import aggregated_fields
+from sheets_reports.engine.formulas import aggregated_fields, row_fields
 from sheets_reports.utils.data import time_fields
 
 
@@ -15,6 +15,8 @@ class SheetContext:
     `samples` son valores de ejemplo por columna, solo para el contexto de la IA.
     `aggregated_fields` son los campos calculados agregados de la fuente: no son columnas
     (no agrupan ni filtran), solo métricas con agregación «auto».
+    `calculated` son todos los campos calculados de la fuente con lo que calculan
+    ({nombre: {formula, kind: "row"|"aggregated", format}}), para el contexto de la IA.
     """
     source: str
     fields: tuple[str, ...]
@@ -22,6 +24,7 @@ class SheetContext:
     samples: dict = field(default_factory=dict, compare=False)
     time_fields: frozenset[str] = frozenset()
     aggregated_fields: frozenset[str] = frozenset()
+    calculated: dict = field(default_factory=dict, compare=False)
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame, source: str, samples: dict | None = None) -> "SheetContext":
@@ -32,6 +35,12 @@ class SheetContext:
             samples=samples or {},
             time_fields=frozenset(time_fields(df)),
             aggregated_fields=frozenset(aggregated_fields(df)),
+            calculated={
+                **{name: {"formula": text, "kind": "row", "format": "number"}
+                   for name, text in row_fields(df).items()},
+                **{name: {"formula": f.formula.text, "kind": "aggregated", "format": f.format}
+                   for name, f in aggregated_fields(df).items()},
+            },
         )
 
     def is_aggregated(self, name) -> bool:
@@ -49,5 +58,4 @@ class SheetContext:
         return [f for f in self.fields if f in self.numeric_fields]
 
     def with_samples(self, samples: dict) -> "SheetContext":
-        return SheetContext(self.source, self.fields, self.numeric_fields, samples, self.time_fields,
-                            self.aggregated_fields)
+        return replace(self, samples=samples)

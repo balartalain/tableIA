@@ -15,6 +15,7 @@ from sheets_reports.engine.formulas import (
     formula_text,
     formula_tree,
     rename_columns,
+    row_fields,
 )
 from sheets_reports.tests.fixtures import compiled, errors_for, execute, fields
 
@@ -183,6 +184,9 @@ class ApplyCalculatedFieldsTests(SimpleTestCase):
         self.assertEqual(df["Excedido"].tolist(), [0, 1, 0, 0, 0])   # usa el campo anterior
         self.assertEqual(list(aggregated_fields(df)), ["% Ejecución"])
         self.assertTrue(aggregated_fields(df)["% Ejecución"].percent)
+        # Las fórmulas de los por fila también quedan (para el contexto de la IA).
+        self.assertEqual(row_fields(df), {"Diferencia": "Gasto_Real - Presupuesto_Asignado",
+                                          "Excedido": "IF(Diferencia > 0, 1, 0)"})
 
     def test_un_campo_roto_se_omite_y_en_estricto_falla(self):
         broken = {"id": "x", "name": "Roto", "formula": "[Ya_No_Esta] + 1"}

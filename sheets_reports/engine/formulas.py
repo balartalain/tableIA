@@ -607,10 +607,12 @@ class AggregatedField:
 def apply_calculated_fields(df: pd.DataFrame, definitions: list[dict] | None,
                             strict: bool = False) -> pd.DataFrame:
     """Agrega a `df` los campos por fila (en orden: uno puede usar a los anteriores) y deja los
-    agregados en `df.attrs["aggregated_fields"]` ({nombre: AggregatedField}). Un campo cuya
+    agregados en `df.attrs["aggregated_fields"]` ({nombre: AggregatedField}); las fórmulas de
+    los por fila quedan en `df.attrs["row_fields"]` ({nombre: texto}). Un campo cuya
     fórmula ya no vale (ej. se quitó una columna) se omite; con `strict` lanza FormulaError
     con el nombre del campo."""
     aggregated: dict[str, AggregatedField] = {}
+    rows: dict[str, str] = {}
     if definitions:
         df = df.copy()
         for definition in definitions:
@@ -625,12 +627,19 @@ def apply_calculated_fields(df: pd.DataFrame, definitions: list[dict] | None,
                     aggregated[name] = AggregatedField(name, formula, definition.get("format") or "number")
                 else:
                     df[name] = formula.evaluate_rows(df)
+                    rows[name] = formula.text
             except FormulaError as e:
                 if strict:
                     raise FormulaError(f"«{name or 'Campo sin nombre'}»: {e}") from e
     df.attrs["aggregated_fields"] = aggregated
+    df.attrs["row_fields"] = rows
     return df
 
 
 def aggregated_fields(df: pd.DataFrame) -> dict[str, AggregatedField]:
     return df.attrs.get("aggregated_fields") or {}
+
+
+def row_fields(df: pd.DataFrame) -> dict[str, str]:
+    """Los campos calculados por fila de `df` (ya son columnas): {nombre: fórmula}."""
+    return df.attrs.get("row_fields") or {}

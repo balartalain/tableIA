@@ -823,8 +823,14 @@ Al guardar la fuente (`PUT`), los campos se validan contra la hoja (`strict`); s
 `id` (`_column_change` los trata como columnas `calc:<id>`): renombrar uno reescribe sus
 widgets y las fórmulas que lo usan; quitarlo aparece en el aviso de impacto. Al leer la fuente
 (`load_source`), un campo cuya fórmula ya no vale se omite y sus widgets muestran el error.
-`SheetContext.aggregated_fields` permite validar `agg: "auto"` y la IA los recibe en el mensaje
-como «campos calculados agregados».
+`SheetContext.aggregated_fields` permite validar `agg: "auto"`. La IA ve **qué calcula** cada
+campo, no solo su nombre: `SheetContext.calculated` ({nombre: {formula, kind, format}}, armado
+desde `df.attrs["row_fields"]` y `df.attrs["aggregated_fields"]`) y `_columns_context` lo pone en
+el mensaje — un campo por fila lleva «campo calculado por fila: <fórmula>» en la lista de
+columnas, y los agregados se listan con su formato y su fórmula. El prompt le pide reusar un
+campo que ya calcule lo pedido, y `_calculated_fields_errors` rechaza una propuesta con la misma
+fórmula que uno existente (mismo árbol, aunque esté escrita distinto): el reintento le dice cuál
+usar.
 
 Los cálculos entre totales (diferencias, cocientes, porcentajes, participación) son siempre
 campos calculados: los widgets no tienen métricas de fórmula. Cuando un pedido necesita uno

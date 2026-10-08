@@ -7,6 +7,7 @@ import pandas as pd
 from django.test import SimpleTestCase
 
 from sheets_reports.engine.context import SheetContext
+from sheets_reports.engine.formulas import apply_calculated_fields
 from sheets_reports.services import ai_spec
 from sheets_reports.services.ai_spec import (
     SpecGenerationError,
@@ -14,7 +15,7 @@ from sheets_reports.services.ai_spec import (
     build_tool_parameters,
     generate_widget_form,
 )
-from sheets_reports.tests.fixtures import agg, examples_ctx, sales_ctx
+from sheets_reports.tests.fixtures import agg, examples_ctx, sales_ctx, sales_df
 from sheets_reports.widgets import WIDGETS
 
 VALID_ARGS = {
@@ -36,6 +37,16 @@ INVALID_ARGS = {
     "fields": {**VALID_ARGS["fields"], "metrics": [agg("total_ventas", field="ventaz")]},
 }
 
+
+HOGAR = 'SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100'
+
+
+def calculated_ctx() -> SheetContext:
+    """La hoja de ventas con un campo por fila y uno agregado de nombre poco claro."""
+    df = apply_calculated_fields(sales_df(), [
+        {"name": "Doble", "formula": "[ventas] * 2"},
+        {"name": "KPI 1", "formula": HOGAR, "format": "percent"}])
+    return SheetContext.from_dataframe(df, "0")
 
 @mock.patch.object(ai_spec, "_audit")
 class GenerateWidgetFormTests(SimpleTestCase):
@@ -135,6 +146,28 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertEqual(result["calculated_fields"],
                          [{"name": "Doble", "formula": "SUM(ventas) * 2", "format": "number"}])
         self.assertEqual(result["fields"]["metrics"][0]["agg"], "auto")
+
+    def test_la_ia_ve_la_formula_de_los_campos_calculados(self, _audit):
+        """Aunque el nombre no lo diga («KPI 1»), la IA sabe qué calcula cada campo."""
+        message = ai_spec._user_message("algo", None, calculated_ctx())
+        self.assertIn('"Doble" (numérica) — campo calculado por fila: [ventas] * 2', message)
+        self.assertIn('"KPI 1" (porcentaje): ' + HOGAR, message)
+
+    def test_no_acepta_un_campo_igual_a_uno_que_ya_existe(self, _audit):
+        """La misma fórmula escrita distinto que «KPI 1»: error, y el reintento usa el existente."""
+        duplicate = {"widget_type": "bar", "calculated_fields": [
+            {"name": "Participación", "format": "percent",
+             "formula": 'SUM(IF(categoria = "Hogar", ventas, 0)) / SUM(ventas) * 100'}],
+            "fields": {"dimensions": ["mes"], "metrics": [{"field": "Participación", "agg": "auto", "alias": "p"}]},
+            "style": {}}
+        reuse = {**duplicate, "calculated_fields": [],
+                 "fields": {"dimensions": ["mes"], "metrics": [{"field": "KPI 1", "agg": "auto", "alias": "p"}]}}
+        with mock.patch.object(ai_spec, "_call_model", side_effect=[("create_widget", duplicate),
+                                                                   ("create_widget", reuse)]) as call:
+            result = generate_widget_form("participación de Hogar por mes", None, calculated_ctx())
+        self.assertEqual(call.call_count, 2)
+        self.assertIn("ya existe el campo 'KPI 1' con esa fórmula", call.call_args_list[1].args[0])
+        self.assertEqual(result["fields"]["metrics"][0]["field"], "KPI 1")
 
     def test_dos_propuestas_invalidas_dan_error_legible(self, _audit):
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", INVALID_ARGS)) as call:

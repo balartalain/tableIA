@@ -17,7 +17,7 @@ from google.genai import types
 
 from sheets_reports.engine.steps.filter import condition_errors
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula
+from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula, formula_tree
 from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
@@ -114,6 +114,9 @@ Cuando el pedido necesita un cálculo entre totales (una diferencia, un cociente
 margen, una participación, un promedio de una condición) y no hay un campo calculado que ya lo
 haga, propón el campo en `calculated_fields` y úsalo como métrica con agg "auto" y `field` igual
 a su `name`. Se crea en la fuente al aplicar la propuesta y queda para todo el tablero.
+- Antes de proponer uno, revisa las fórmulas de los campos calculados que ya existen (el mensaje
+  las muestra): si alguno calcula lo pedido, aunque su nombre no lo diga, úsalo (agg "auto" si
+  es agregado; como una columna más si es por fila). No propongas uno con la misma fórmula.
 - {"name", "formula", "format"}: `name` corto y claro (ej. "% Ejecución", "Ganancia"), distinto
   de las columnas; `format` "percent" si el resultado es un porcentaje (la fórmula multiplica
   por 100), si no "number".
@@ -584,19 +587,31 @@ def _tools(ctx: SheetContext, widget_type: str | None) -> list[types.Tool]:
     ])]
 
 
+FORMAT_LABELS = {"percent": "porcentaje", "currency": "moneda", "progress": "porcentaje"}
+
+
 def _columns_context(ctx: SheetContext) -> str:
+    """Las columnas con su tipo y ejemplos, y los campos calculados con su fórmula: así la IA
+    sabe qué calcula cada uno aunque su nombre no lo diga."""
     lines = []
     for field in ctx.fields:
         kind = "numérica" if ctx.is_numeric(field) else "texto"
         line = f"- {json.dumps(field, ensure_ascii=False)} ({kind})"
+        calculated = ctx.calculated.get(field)
+        if calculated and calculated["kind"] == "row":
+            line += f" — campo calculado por fila: {calculated['formula']}"
         if ctx.samples.get(field):
             line += f" — valores de ejemplo: {json.dumps(ctx.samples[field], ensure_ascii=False)}"
         lines.append(line)
     text = "Columnas de la hoja:\n" + "\n".join(lines)
     if ctx.aggregated_fields:
-        text += ("\n\nCampos calculados agregados (solo como métrica, con agg \"auto\"):\n"
-                 + "\n".join(f"- {json.dumps(name, ensure_ascii=False)}"
-                              for name in sorted(ctx.aggregated_fields)))
+        def describe(name):
+            info = ctx.calculated.get(name) or {}
+            fmt = FORMAT_LABELS.get(info.get("format"))
+            line = f"- {json.dumps(name, ensure_ascii=False)}{f' ({fmt})' if fmt else ''}"
+            return f"{line}: {info['formula']}" if info.get("formula") else line
+        text += ("\n\nCampos calculados agregados (solo como métrica, con agg \"auto\"), con su fórmula:\n"
+                 + "\n".join(describe(name) for name in sorted(ctx.aggregated_fields)))
     return text
 
 
@@ -759,6 +774,16 @@ def _column_errors(column, index: int, ctx, seen_columns) -> list[str]:
     return errors
 
 
+def _same_formula(text: str, ctx: SheetContext) -> str | None:
+    """El campo calculado de la fuente con la misma fórmula (mismo árbol: da igual cómo esté
+    escrita), o None."""
+    tree = formula_tree(text)
+    for name, info in ctx.calculated.items():
+        if tree is not None and formula_tree(info["formula"]) == tree:
+            return name
+    return None
+
+
 def _calculated_fields_errors(items, ctx: SheetContext) -> tuple[list[str], list[str]]:
     """Los `calculated_fields` de una propuesta: [{name, formula, format}], siempre agregados.
     → (nombres válidos, errores)."""
@@ -791,6 +816,11 @@ def _calculated_fields_errors(items, ctx: SheetContext) -> tuple[list[str], list
         if not formula.aggregated:
             errors.append(f"{path}: la fórmula debe ser agregada (cada columna dentro de SUM, AVG, "
                           f"COUNT, COUNT_DISTINCT, MIN o MAX).")
+            continue
+        same = _same_formula(formula.text, ctx)
+        if same:
+            errors.append(f"{path}: ya existe el campo '{same}' con esa fórmula: no lo propongas, "
+                          f"úsalo con agg 'auto' y field '{same}'.")
             continue
         names.append(name)
     return names, errors

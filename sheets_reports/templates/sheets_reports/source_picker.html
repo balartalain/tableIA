@@ -33,7 +33,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-5 py-2 transition cursor-pointer"
               x-text="loadingColumns ? 'Leyendo la pestaña…' : 'Aceptar'"></button>
     </div>
-    <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[14rem_minmax(0,1fr)_16rem] gap-4">
+    <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[14rem_minmax(0,1fr)_16rem] lg:grid-cols-[20rem_minmax(0,1fr)_24rem] gap-4">
 
       <!-- Fuentes -->
       <div class="min-h-0 flex flex-col border border-line rounded-xl overflow-hidden">
@@ -316,7 +316,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <div class="flex flex-wrap items-center gap-2">
             <input type="text" x-model="f.name" placeholder="Nombre del campo" maxlength="120"
                    x-on:focus="f._nameBefore = f.name" x-on:change="renameField(f)" aria-label="Nombre del campo"
-                   class="w-64 max-w-full text-sm font-medium border border-line rounded-lg px-3 py-1.5 focus:outline-none focus:border-moss-500">
+                   class="w-full sm:w-80 max-w-full text-sm font-medium border border-line rounded-lg px-3 py-1.5 focus:outline-none focus:border-moss-500">
             <!-- El tipo lo decide la fórmula: con SUM, AVG… es agregado. -->
             <span x-show="f._kind === 'row'" title="Se calcula en cada fila; se usa como una columna más"
                   class="text-[11px] font-semibold rounded-full bg-moss-50 text-moss-700 border border-moss-100 px-2 py-0.5">Por fila</span>
@@ -335,7 +335,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             </button>
           </div>
 
-          <div class="sm:flex-1 sm:min-h-0 grid grid-cols-1 sm:grid-cols-[15rem_minmax(0,1fr)] gap-3">
+          <div class="sm:flex-1 sm:min-h-0 grid grid-cols-1 sm:grid-cols-[20rem_minmax(0,1fr)] gap-3">
             <!-- Panel de piezas: se arrastran al canvas o, con un lugar elegido, se colocan con
                  un clic. Soltar aquí un bloque del canvas lo quita. -->
             <aside data-fb-trash aria-label="Piezas de la fórmula"

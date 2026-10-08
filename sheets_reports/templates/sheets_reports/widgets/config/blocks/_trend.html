@@ -3,7 +3,7 @@
   <label class="block text-xs font-semibold text-ink/70">Tendencia por</label>
   <template x-if="$store.dashboard.trendOptions.length">
     <select x-model="$store.dashboard.drawerDraft.fields.trend_by"
-            class="w-full text-sm border border-line rounded-lg px-2 py-2 focus:outline-none focus:border-moss-500">
+            class="w-full text-sm border border-line rounded-md px-2 py-2 focus:outline-none focus:border-moss-500">
       <option value="" x-text="'Sin tendencia'"></option>
       <template x-for="f in $store.dashboard.trendOptions" :key="f">
         <option x-bind:value="f" x-text="f" x-bind:selected="$store.dashboard.drawerDraft.fields.trend_by === f"></option>

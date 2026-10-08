@@ -2,7 +2,7 @@
 Una condición {field, op, valor} dentro de un `x-for="(c, ci) in …"`. `list` es la expresión
 Alpine de la lista que la contiene (filtros del widget o de una métrica).
 {% endcomment %}
-<div class="flex flex-wrap items-center gap-1 rounded-lg bg-paper/70 border border-line/60 p-1">
+<div class="flex flex-wrap items-center gap-1 rounded bg-paper/70 border border-line/60 p-1">
   <select x-model="c.field" x-on:change="$store.dashboard.onFilterFieldChange(c)" aria-label="Columna"
           class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
     <template x-for="f in $store.dashboard.schema.all_fields || []" :key="f">

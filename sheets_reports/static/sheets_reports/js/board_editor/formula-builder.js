@@ -108,7 +108,7 @@ const FormulaBlocks = (() => {
     const key = pathKey(path);
     const isSelected = selected != null && pathKey(selected) === key;
     if (n == null) {
-      const slot = el('span', 'fb-slot inline-flex items-center justify-center min-w-[5.5rem] h-7 px-2 rounded-md border border-dashed text-[11px] cursor-pointer select-none '
+      const slot = el('span', 'fb-slot inline-flex items-center justify-center min-w-[5.5rem] h-7 px-2 rounded-lg border border-dashed text-[11px] cursor-pointer select-none '
         + (isSelected ? 'border-moss-500 bg-moss-50 text-moss-700' : 'border-ink/25 text-ink/35 hover:border-moss-500'),
         'suelta aquí');
       slot.dataset.fbDrop = key;
@@ -124,7 +124,7 @@ const FormulaBlocks = (() => {
         col: 'bg-moss-50 border-moss-300 text-moss-700 font-medium',
         str: 'bg-amber-50 border-amber-200 text-amber-900 font-mono',
       };
-      block = el('span', `fb-block inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-md border text-xs ${styles[n.kind] || 'bg-sky-50 border-sky-200 text-sky-900 font-mono'}${ring}`);
+      block = el('span', `fb-block inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg border text-xs ${styles[n.kind] || 'bg-sky-50 border-sky-200 text-sky-900 font-mono'}${ring}`);
       block.append(el('span', 'truncate max-w-[14rem]', leafLabel(n)));
     } else if (n.kind === 'func' && n.args.length > 1) {
       // Una función de varios huecos (SI): vertical, cada hueco con su rótulo del catálogo.
@@ -182,7 +182,7 @@ const FormulaBlocks = (() => {
   // El operador de un bloque se cambia sin rearmarlo (solo dentro de su familia).
   function opSelect(n, path, actions) {
     const family = families.find(ops => ops.some(o => o.op === n.value)) || [{ op: n.value, symbol: n.value }];
-    const select = el('select', 'text-xs font-semibold rounded border border-line bg-paper px-1 py-0.5 cursor-pointer focus:outline-none focus:border-moss-500');
+    const select = el('select', 'text-xs font-semibold rounded-md border border-line bg-paper px-1 py-0.5 cursor-pointer focus:outline-none focus:border-moss-500');
     select.setAttribute('aria-label', 'Operador');
     family.forEach(({ op, symbol }) => {
       const option = el('option', '', symbol);
@@ -241,7 +241,7 @@ const FormulaBlocks = (() => {
       listeners: {
         start(event) {
           const label = (event.target.querySelector('.truncate') || event.target).textContent.trim();
-          ghost = el('div', 'fixed z-[100] pointer-events-none rounded-md border border-moss-300 bg-white/95 px-2 py-1 text-xs font-medium text-ink shadow-lg max-w-[16rem] truncate',
+          ghost = el('div', 'fixed z-[100] pointer-events-none rounded-lg border border-moss-300 bg-white/95 px-2 py-1 text-xs font-medium text-ink shadow-lg max-w-[16rem] truncate',
                      label.slice(0, 60));
           document.body.append(ghost);
           event.target.classList.add('opacity-40');

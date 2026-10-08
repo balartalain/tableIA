@@ -275,7 +275,7 @@
     }
 
     loaderOverlayHTML() {
-      return `<div class="widget-loader absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl z-30 hidden">
+      return `<div class="widget-loader absolute inset-0 bg-white/80 flex items-center justify-center rounded z-30 hidden">
         <svg class="animate-spin h-5 w-5 text-moss-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -285,7 +285,7 @@
 
     buildStandardCardElement() {
       const el = document.createElement('div');
-      el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded-xl shadow-sm p-4 flex flex-col justify-between relative group`;
+      el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative group`;
       el.style.height = this.height + 'px';
       el.style.setProperty('--ghost-span', this._ghostSpanFromWidth());
       el.dataset.widgetId = this.id;
@@ -330,7 +330,7 @@
 
     buildReadOnlyElement() {
       const el = document.createElement('div');
-      el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded-xl shadow-sm p-4 flex flex-col justify-between relative`;
+      el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative`;
       el.style.height = this.height + 'px';
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
@@ -420,7 +420,7 @@
       container.innerHTML = `
         <div class="h-full w-full flex flex-col items-center justify-center text-center gap-2 px-3">
           <span class="text-xs text-red-600">${BaseWidget.escapeHTML(message || 'Error al cargar los datos')}</span>
-          ${retryable ? `<button type="button" class="retry-widget-btn text-xs font-medium text-moss-700 border border-moss-300 hover:bg-moss-tint rounded-lg px-3 py-1 transition cursor-pointer">Reintentar</button>` : ''}
+          ${retryable ? `<button type="button" class="retry-widget-btn text-xs font-medium text-moss-700 border border-moss-300 hover:bg-moss-tint rounded-md px-3 py-1 transition cursor-pointer">Reintentar</button>` : ''}
         </div>
       `;
       if (retryable) {

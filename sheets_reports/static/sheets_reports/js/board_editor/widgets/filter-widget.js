@@ -32,7 +32,10 @@
 
     _buildBar(editable) {
       const el = document.createElement('div');
-      el.className = `relative ${editable ? 'group' : ''} bg-white border border-line rounded-xl shadow-sm px-4 py-3`;
+      // En la vista del tablero el contenedor no se ve: solo quedan los filtros.
+      el.className = editable
+        ? 'relative group bg-white border border-line rounded shadow-sm px-4 py-3'
+        : 'relative bg-transparent border-0 p-0';
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       el.innerHTML = `

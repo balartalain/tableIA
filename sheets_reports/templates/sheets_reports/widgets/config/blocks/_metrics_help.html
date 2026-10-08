@@ -9,7 +9,7 @@ calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget
     <p>Es un número que el widget calcula <b>resumiendo filas</b> de la hoja: «Suma de Gasto_Real»,
       «Conteo», «% Ejecución Presupuestaria». Se calcula una vez por cada <b>grupo</b> que arman las
       dimensiones y pivotes del widget; sin agrupación, sobre todas las filas (un solo número).</p>
-    <div class="rounded-lg border border-line bg-paper/60 p-2.5">
+    <div class="rounded border border-line bg-paper/60 p-2.5">
       <p>Ej. métrica <span class="font-mono">Suma de Gasto_Real</span> con dimensión
         <span class="font-mono">Departamento</span> → un total de gasto por departamento.
         Sin dimensión → el gasto total de toda la hoja.</p>
@@ -69,12 +69,12 @@ calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget
     <h3 class="text-sm font-semibold text-ink">Campos calculados</h3>
     <p>Se definen en la fuente de datos (editar fuente → «Campos calculados») o los propone el
       asistente de IA, y sirven en todos los widgets del tablero. Hay dos tipos:</p>
-    <div class="rounded-lg border border-moss-100 bg-moss-50/60 p-2.5 space-y-1">
+    <div class="rounded border border-moss-100 bg-moss-50/60 p-2.5 space-y-1">
       <p><span class="font-semibold text-moss-700">Por fila</span> — se calcula en cada fila y queda
         como una columna más: se elige en «Columna» con cualquier agregación.</p>
       <p class="font-mono text-[11px] text-ink/70">[Presupuesto_Asignado] - [Gasto_Real]</p>
     </div>
-    <div class="rounded-lg border border-sky-100 bg-sky-50/60 p-2.5 space-y-1">
+    <div class="rounded border border-sky-100 bg-sky-50/60 p-2.5 space-y-1">
       <p><span class="font-semibold text-sky-700">Agregado</span> — usa SUM, AVG, COUNT… y se calcula
         por cada grupo del widget. Aparece en «Campos calculados agregados» y su agregación es
         «Automática». Es la forma de calcular cocientes, porcentajes y márgenes entre totales.</p>

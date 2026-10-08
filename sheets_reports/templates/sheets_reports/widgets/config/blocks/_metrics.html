@@ -82,7 +82,7 @@
             <!-- Condiciones propias: la métrica resume solo esas filas (ej. ventas de Electrónica
                  junto al total). Plegable; abierto si ya trae condiciones. -->
             <template x-if="$store.dashboard.hasMetricFilters">
-              <div x-data="{ open: (metric.filters || []).length > 0 }" class="rounded-md border border-line/60 bg-white/70">
+              <div x-data="{ open: (metric.filters || []).length > 0 }" class="rounded border border-line/60 bg-white/70">
                 <button type="button" x-on:click="open = !open" x-bind:aria-expanded="open ? 'true' : 'false'"
                         class="w-full flex items-center gap-1.5 px-2 py-1 text-left cursor-pointer select-none">
                   <i class="ti ti-chevron-right text-xs text-ink/50 transition-transform" x-bind:class="open ? 'rotate-90' : ''" aria-hidden="true"></i>

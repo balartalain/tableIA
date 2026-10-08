@@ -4,7 +4,7 @@
   <select id="drawer-source"
           x-bind:value="$store.dashboard.drawerDraft.source ?? ''"
           x-on:change="$store.dashboard.changeDrawerSource($event.target.value)"
-          class="w-full text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500">
+          class="w-full text-sm border border-line rounded-md px-3 py-2 bg-white focus:outline-none focus:border-moss-500">
     <option value="" x-bind:selected="!$store.dashboard.drawerDraft.source">— elegir —</option>
     <template x-for="s in $store.dashboard.sources" :key="s.id">
       <option x-bind:value="s.id" x-text="s.label" x-bind:selected="$store.dashboard.drawerDraft.source === s.id"></option>

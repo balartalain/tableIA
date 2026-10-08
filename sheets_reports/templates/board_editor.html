@@ -5,7 +5,7 @@
 
 {% block header_leading %}
 <a href="{% url 'home' %}" aria-label="Salir del editor" title="Salir del editor"
-   class="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-ink/50 hover:text-ink hover:bg-paper transition">
+   class="shrink-0 w-8 h-8 rounded-md flex items-center justify-center text-ink/50 hover:text-ink hover:bg-paper transition">
   <i class="ti ti-arrow-left text-lg" aria-hidden="true"></i>
 </a>
 {% endblock %}
@@ -19,7 +19,7 @@
        class="board-title min-w-[8ch] max-w-full truncate bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded-md px-2 py-1 font-sans font-semibold text-sm text-ink transition">
 <button id="sources-btn" type="button" aria-label="Gestionar fuente de datos" title="Gestionar fuente de datos"
         x-data x-on:click="$store.bottomSheet.open({ title: 'Gestionar fuente de datos' }); window.dispatchEvent(new CustomEvent('sources:open'))"
-        class="shrink-0 ml-1 bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-lg font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+        class="shrink-0 ml-1 bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
   <i class="ti ti-database text-base" aria-hidden="true"></i>
   <span class="hidden sm:inline">Gestionar fuente de datos</span>
 </button>
@@ -32,12 +32,12 @@
 {% if dashboard %}
 <!-- Abre la vista real (la que recibe quien tiene el enlace) en otra pestaña. -->
 <button id="preview-btn" type="button" aria-label="Vista previa" title="Vista previa"
-        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-lg font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
   <i class="ti ti-eye text-base" aria-hidden="true"></i>
   <span class="hidden sm:inline">Vista previa</span>
 </button>
 <button id="share-btn" type="button" aria-label="Compartir" title="Compartir"
-        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-lg font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
   <i class="ti ti-share text-base" aria-hidden="true"></i>
   <span class="hidden sm:inline">Compartir</span>
 </button>
@@ -81,7 +81,7 @@
   .metric-ghost-preview {
     background-color: #f1f5f9 !important;
     opacity: 0.6;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
   }
   .grid-ghost-preview {
     background-color: #f1f5f9 !important;
@@ -90,7 +90,7 @@
     border-color: transparent !important;
     outline: 2px dashed #cbd5e1;
     outline-offset: -2px;
-    border-radius: 0.75rem;
+    border-radius: 0.25rem;
     opacity: 0.5;
     min-height: 10px !important;
     grid-column: span var(--ghost-span, 6) / span var(--ghost-span, 6) !important;
@@ -173,7 +173,7 @@
         <span class="sr-only">Buscar módulo</span>
         <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink/40" aria-hidden="true"></i>
         <input id="rail-search" type="search" placeholder="Buscar módulo…" autocomplete="off"
-               class="w-full text-sm border border-line rounded-lg pl-8 pr-2 py-1.5 focus:outline-none focus:border-moss-500">
+               class="w-full text-sm border border-line rounded-md pl-8 pr-2 py-1.5 focus:outline-none focus:border-moss-500">
       </label>
 
       <div id="sidebar-components"></div>
@@ -236,7 +236,7 @@
     <div class="flex-1 min-h-0 overflow-y-auto p-5">
 
       <div x-show="$store.dashboard.schemaError" x-cloak role="alert"
-           class="mb-5 flex items-start gap-2 rounded-lg border border-clay-300 bg-clay-50 px-3 py-2 text-xs text-clay-600">
+           class="mb-5 flex items-start gap-2 rounded border border-clay-300 bg-clay-50 px-3 py-2 text-xs text-clay-600">
         <i class="ti ti-alert-triangle text-sm mt-px" aria-hidden="true"></i>
         <span x-text="$store.dashboard.schemaError"></span>
       </div>
@@ -276,9 +276,9 @@
     <div class="px-5 py-4 border-t border-line">
       <p x-show="$store.dashboard.drawerSaveError" x-text="$store.dashboard.drawerSaveError" class="mb-3 text-xs text-red-600"></p>
       <div class="flex space-x-2">
-        <button x-on:click="$store.dashboard.closeDrawer()" class="flex-1 text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-lg py-2 transition cursor-pointer">Cancelar</button>
+        <button x-on:click="$store.dashboard.closeDrawer()" class="flex-1 text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-md py-2 transition cursor-pointer">Cancelar</button>
         <button x-on:click="$store.dashboard.saveDrawer()" x-bind:disabled="$store.dashboard.drawerSaving"
-                class="flex-1 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-lg py-2 transition cursor-pointer"
+                class="flex-1 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md py-2 transition cursor-pointer"
                 x-text="$store.dashboard.drawerSaving ? 'Guardando…' : 'Guardar'"></button>
       </div>
     </div>
@@ -295,7 +295,7 @@
            x-transition:leave-start="translate-y-0"
            x-transition:leave-end="translate-y-full"
            x-bind:style="`height: ${$store.bottomSheet.heightPct}%`"
-           class="absolute inset-x-0 bottom-0 z-30 flex flex-col bg-white border-t border-line rounded-t-2xl shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
+           class="absolute inset-x-0 bottom-0 z-30 flex flex-col bg-white border-t border-line rounded-t shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
     <div class="bottom-sheet-handle h-5 shrink-0 flex items-center justify-center cursor-ns-resize"
          role="separator" aria-orientation="horizontal" aria-label="Ajustar altura"
          x-on:pointerdown.prevent="$store.bottomSheet.startDrag($event)">

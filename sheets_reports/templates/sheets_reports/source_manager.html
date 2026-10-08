@@ -5,7 +5,7 @@ o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {
   <div x-show="view === 'list'" class="flex-1 min-h-0 flex flex-col gap-4">
     <div class="flex items-center justify-between gap-3">      
       <button type="button" x-on:click="add()"
-              class="shrink-0 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-lg px-4 py-2 transition cursor-pointer inline-flex items-center gap-1.5">
+              class="shrink-0 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-md px-4 py-2 transition cursor-pointer inline-flex items-center gap-1.5">
         <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar fuente
       </button>
     </div>
@@ -14,7 +14,7 @@ o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {
 
     <!-- Confirmación de borrado: los widgets que se quedan sin fuente. -->
     <div x-show="pendingDelete" x-cloak role="alertdialog" aria-label="Confirmar eliminación"
-         class="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
+         class="rounded border border-red-200 bg-red-50 p-3 space-y-2">
       <p class="text-sm font-semibold text-red-900">
         ¿Eliminar la fuente «<span x-text="pendingDelete && pendingDelete.source.label"></span>»?
         <span x-show="pendingDelete && pendingDelete.impact.length" class="font-normal">Estos widgets se quedarán sin datos:</span>
@@ -26,9 +26,9 @@ o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {
       </ul>
       <div class="flex justify-end gap-2">
         <button type="button" x-on:click="pendingDelete = null"
-                class="text-sm font-medium text-ink/60 bg-white hover:bg-paper rounded-lg px-3 py-1.5 transition cursor-pointer">Cancelar</button>
+                class="text-sm font-medium text-ink/60 bg-white hover:bg-paper rounded-md px-3 py-1.5 transition cursor-pointer">Cancelar</button>
         <button type="button" x-on:click="confirmRemove()"
-                class="text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg px-3 py-1.5 transition cursor-pointer">Eliminar</button>
+                class="text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md px-3 py-1.5 transition cursor-pointer">Eliminar</button>
       </div>
     </div>
     <p x-show="loading" class="text-xs text-ink/50">
@@ -36,12 +36,12 @@ o editar una fuente (en la edición: «Actualizar datos» y «Cambiar hoja»). {
     </p>
 
     <div x-show="!loading && !error && !sources.length"
-         class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-xl py-10">
+         class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded py-10">
       <i class="ti ti-database-off text-2xl text-ink/30" aria-hidden="true"></i>
       <p class="text-sm text-ink/60">Este tablero no tiene fuentes de datos.</p>
     </div>
 
-    <div x-show="sources.length" class="flex-1 min-h-0 overflow-auto border border-line rounded-xl">
+    <div x-show="sources.length" class="flex-1 min-h-0 overflow-auto border border-line rounded">
       <table class="w-full text-sm">
         <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
           <tr>

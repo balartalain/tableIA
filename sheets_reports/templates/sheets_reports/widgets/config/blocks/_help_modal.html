@@ -5,12 +5,12 @@ Parámetros: `flag` (variable Alpine que la abre), `title`, `icon` (clase de Tab
   <div x-show="{{ flag }}" x-cloak x-on:keydown.escape.window="{{ flag }} = false"
        class="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-4">
     <div x-on:click.outside="{{ flag }} = false" role="dialog" aria-modal="true" aria-labelledby="{{ flag }}-title"
-         class="bg-white rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col border border-line shadow-xl">
+         class="bg-white rounded w-full max-w-3xl max-h-[85vh] flex flex-col border border-line shadow-xl">
       <div class="flex items-center gap-3 px-5 py-4 border-b border-line">
         <i class="ti {{ icon }} text-lg text-moss-600" aria-hidden="true"></i>
         <h2 id="{{ flag }}-title" class="flex-1 text-base font-semibold text-ink">{{ title }}</h2>
         <button type="button" x-on:click="{{ flag }} = false" aria-label="Cerrar"
-                class="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-paper cursor-pointer">
+                class="p-1.5 rounded-md text-ink/50 hover:text-ink hover:bg-paper cursor-pointer">
           <i class="ti ti-x text-lg leading-none" aria-hidden="true"></i>
         </button>
       </div>

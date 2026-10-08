@@ -149,7 +149,7 @@ function showToast(message) {
   }
 
   const toast = document.createElement('div');
-  toast.className = 'bg-ink text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg opacity-0 transition-opacity duration-200';
+  toast.className = 'bg-ink text-white text-sm font-medium px-4 py-2.5 rounded shadow-lg opacity-0 transition-opacity duration-200';
   toast.textContent = message;
   container.appendChild(toast);
 

@@ -21,7 +21,7 @@
   <!-- Menú lateral -->
   <aside class="w-60 shrink-0 bg-white border-r border-line px-4 py-6 flex flex-col gap-6">
     <a :href="URLS.boardNew"
-       class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg inline-flex items-center justify-center gap-2 transition">
+       class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-md inline-flex items-center justify-center gap-2 transition">
       <i class="ti ti-plus text-base" aria-hidden="true"></i>Crear tablero
     </a>
 
@@ -30,7 +30,7 @@
         <a :href="'#' + item.id"
            :aria-current="section === item.id ? 'page' : null"
            :class="section === item.id ? 'bg-moss-50 text-moss-700 font-semibold' : 'text-ink/70 hover:bg-paper hover:text-ink'"
-           class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition">
+           class="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition">
           <i class="ti text-base" :class="item.icon" aria-hidden="true"></i>
           <span x-text="item.label"></span>
         </a>
@@ -51,26 +51,26 @@
           <span class="sr-only">Buscar tablero</span>
           <i class="ti ti-search text-ink/30 absolute left-3 top-1/2 -translate-y-1/2 text-base" aria-hidden="true"></i>
           <input x-model="search" @input="applySearch()" type="search" placeholder="Buscar tablero…"
-                 class="w-64 border border-line rounded-lg pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
+                 class="w-64 border border-line rounded-md pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
         </label>
       </div>
 
-      <div x-show="loadError" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3" x-text="loadError"></div>
+      <div x-show="loadError" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3" x-text="loadError"></div>
 
-      <div x-show="loaded && dashboards.length === 0 && !loadError" x-cloak class="text-center py-20 bg-white border border-line rounded-xl">
-        <div class="w-14 h-14 rounded-2xl bg-moss-50 flex items-center justify-center mx-auto mb-4">
+      <div x-show="loaded && dashboards.length === 0 && !loadError" x-cloak class="text-center py-20 bg-white border border-line rounded">
+        <div class="w-14 h-14 rounded-md bg-moss-50 flex items-center justify-center mx-auto mb-4">
           <i class="ti ti-layout-dashboard text-moss-600 text-2xl" aria-hidden="true"></i>
         </div>
         <h2 class="font-sans text-lg font-semibold mb-1">Crea tu primer tablero</h2>
         <p class="text-sm text-ink/50 mb-5 max-w-xs mx-auto">Conecta una hoja de Google Sheets y arma tu primer reporte en minutos.</p>
         <a :href="URLS.boardNew"
-           class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg inline-flex items-center gap-2 transition">
+           class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-md inline-flex items-center gap-2 transition">
           <i class="ti ti-plus text-base" aria-hidden="true"></i>Crear tablero
         </a>
       </div>
 
       <!-- Visible desde el inicio: Tabulator mide su contenedor al construirse (oculto mediría 0). -->
-      <div x-show="!(loaded && dashboards.length === 0)" class="bg-white border border-line rounded-xl overflow-hidden">
+      <div x-show="!(loaded && dashboards.length === 0)" class="bg-white border border-line rounded overflow-hidden">
         <div x-ref="table"></div>
       </div>
     </section>
@@ -78,8 +78,8 @@
     <!-- Plantillas -->
     <section x-show="section === 'plantillas'" x-cloak>
       <h1 class="font-sans text-2xl font-semibold mb-5">Plantillas</h1>
-      <div class="text-center py-20 bg-white border border-line rounded-xl">
-        <div class="w-14 h-14 rounded-2xl bg-moss-50 flex items-center justify-center mx-auto mb-4">
+      <div class="text-center py-20 bg-white border border-line rounded">
+        <div class="w-14 h-14 rounded-md bg-moss-50 flex items-center justify-center mx-auto mb-4">
           <i class="ti ti-template text-moss-600 text-2xl" aria-hidden="true"></i>
         </div>
         <h2 class="font-sans text-lg font-semibold mb-1">Próximamente</h2>
@@ -93,7 +93,7 @@
   <div x-show="editingDashboard" x-cloak
        class="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40">
     <div @click.outside="editingDashboard = null" @keydown.escape.window="editingDashboard = null"
-         class="bg-white rounded-2xl w-full max-w-md border border-line shadow-xl">
+         class="bg-white rounded w-full max-w-md border border-line shadow-xl">
       <div class="px-6 pt-6 pb-4 border-b border-line">
         <h2 class="font-sans text-lg font-semibold">Renombrar tablero</h2>
       </div>
@@ -101,17 +101,17 @@
         <form @submit.prevent="saveEdit()" class="px-6 py-5 space-y-3">
           <label class="block text-xs font-medium text-ink/60">Nombre del tablero
             <input x-model="editingDashboard.nombre" type="text" x-init="$nextTick(() => $el.select())"
-                   class="mt-1.5 w-full border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
+                   class="mt-1.5 w-full border border-line rounded-md px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
           </label>
           <p x-show="formError" x-text="formError" class="text-xs text-red-600"></p>
         </form>
       </template>
       <div class="px-6 py-4 border-t border-line flex justify-end gap-2">
         <button @click="editingDashboard = null"
-                class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-lg transition">Cancelar</button>
+                class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-md transition">Cancelar</button>
         <button @click="saveEdit()"
                 :disabled="!editingDashboard || !editingDashboard.nombre.trim()"
-                class="px-4 py-2 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition">
+                class="px-4 py-2 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition">
           Guardar
         </button>
       </div>

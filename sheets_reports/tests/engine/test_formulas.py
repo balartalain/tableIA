@@ -61,6 +61,28 @@ class FormulaLanguageTests(SimpleTestCase):
         self.assertEqual(compile_formula("COUNT([Respuesta])", df.columns).aggregate(df), 4)
         self.assertEqual(compile_formula("COUNT_DISTINCT(Campus)", df.columns).aggregate(df), 3)
 
+    def test_agregacion_evalua_por_fila_y_resume_el_grupo(self):
+        """Lo que explica la ayuda: lo de adentro es el valor de cada fila, no un total."""
+        df = budget_df()
+        ti = df[df["Departamento"] == "TI"]
+
+        def value(formula, rows=df):
+            return compile_formula(formula, df.columns).aggregate(rows)
+
+        self.assertAlmostEqual(value("AVG([Gasto_Real] - [Presupuesto_Asignado])", ti), -500 / 3)
+        self.assertEqual(value("SUM([Gasto_Real]) - SUM([Presupuesto_Asignado])", ti), -500)
+        # COUNT cuenta valores no vacíos (el 0 también): para contar los que cumplen, SUM(IF(…, 1, 0)).
+        self.assertEqual(value('COUNT(IF([Respuesta] = "Sí", 1, 0))'), 5)
+        self.assertEqual(value('SUM(IF([Respuesta] = "Sí", 1, 0))'), 3)
+        self.assertEqual(value("COUNT([Respuesta])"), 4)   # sin la vacía
+        self.assertEqual(value("COUNT(1)"), 5)             # todas las filas
+        # Una comparación vale 1 o 0.
+        self.assertAlmostEqual(value('AVG([Respuesta] = "Sí") * 100'), 60.0)   # la vacía cuenta como 0
+        self.assertAlmostEqual(value('SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100'), 75.0)
+        # Las agregaciones numéricas ignoran el texto: sin números, vacío.
+        self.assertIsNone(value("AVG([Respuesta])"))
+        self.assertEqual(value("MAX([Gasto_Real] - [Presupuesto_Asignado])", ti), 500)
+
     def test_division_entre_cero_queda_vacia(self):
         df = budget_df()
         self.assertTrue(compile_formula("Gasto_Real / 0", df.columns).evaluate_rows(df).isna().all())

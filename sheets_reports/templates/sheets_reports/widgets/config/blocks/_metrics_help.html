@@ -86,6 +86,11 @@ calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget
     </div>
     <p>Un porcentaje entre totales va <b>agregado</b>: en cada grupo divide el total del gasto entre
       el total del presupuesto. Calcularlo por fila y promediarlo da otro número.</p>
+    <p>Dentro de SUM, AVG… las columnas son los valores <b>de cada fila</b> del grupo, no totales:
+      <span class="font-mono">AVG([Gasto_Real] - [Presupuesto_Asignado])</span> es la diferencia
+      promedio por fila; <span class="font-mono">SUM([Gasto_Real]) - SUM([Presupuesto_Asignado])</span>,
+      la diferencia entre los totales. El detalle de cada función está en la ayuda de «Campos
+      calculados» del editor de la fuente.</p>
   </section>
 
   <!-- Condiciones por métrica -->

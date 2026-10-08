@@ -52,6 +52,39 @@ tipos con ejemplos, cuál elegir y la sintaxis de las fórmulas (engine/formulas
     <p>Para contar o recodificar fila a fila («Sí» → 1, rangos, categorías) usa <b>por fila</b>.</p>
   </div>
 
+  <div class="space-y-1.5">
+    <p class="font-semibold text-ink">Cómo calcula cada función</p>
+    <p>Una agregación hace dos pasos: primero calcula lo de adentro <b>en cada fila</b>
+      (<span class="font-mono">[Gasto_Real]</span> es el valor de esa fila, no un total) y después
+      resume esos valores con las filas del grupo.</p>
+    <table class="w-full text-[11px]">
+      <tbody class="divide-y divide-line/60">
+        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">SUM</td><td>Suma los valores.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">AVG</td><td>Los promedia.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">MIN / MAX</td><td>El menor / el mayor.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">COUNT</td><td>Cuántos valores <b>no vacíos</b> hay (un 0 también cuenta). <span class="font-mono">COUNT(1)</span> cuenta todas las filas, incluidas las vacías.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">COUNT_DISTINCT</td><td>Cuántos valores distintos, sin contar los vacíos.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">IF</td><td>Dentro de una agregación decide fila a fila; fuera, sobre los resultados ya agregados.</td></tr>
+      </tbody>
+    </table>
+    <p>SUM, AVG, MIN y MAX trabajan con números: el texto y los vacíos no cuentan. Con las tres
+      filas de arriba:</p>
+    <ul class="font-mono text-[11px] text-ink/70 space-y-0.5 pl-2">
+      <li>AVG([Gasto_Real] - [Presupuesto_Asignado]) <span class="font-sans text-ink/50">— promedio de −800, 500 y −200 = <b>−166,7</b></span></li>
+      <li>SUM([Gasto_Real]) - SUM([Presupuesto_Asignado]) <span class="font-sans text-ink/50">— 15 500 − 16 000 = <b>−500</b></span></li>
+    </ul>
+    <ul class="list-disc pl-4 space-y-0.5">
+      <li>Para contar las filas que cumplen algo usa <span class="font-mono">SUM(IF(condición, 1, 0))</span>;
+        <span class="font-mono">COUNT(IF(condición, 1, 0))</span> cuenta todas, porque el 0 no es vacío.</li>
+      <li>Una comparación vale 1 o 0: <span class="font-mono">AVG([Respuesta] = "Sí") * 100</span> es el % de «Sí».
+        Las respuestas vacías cuentan como 0 (están en el total). Para el % solo entre quienes
+        respondieron: <span class="font-mono">SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100</span>;
+        sobre todos los registros, dividiendo entre <span class="font-mono">COUNT(1)</span>.</li>
+      <li>Si una columna de la fila está vacía, la operación de esa fila queda vacía y no entra.</li>
+      <li>No se pone una agregación dentro de otra: <span class="font-mono">AVG(SUM([Gasto_Real]))</span> no vale.</li>
+    </ul>
+  </div>
+
   <div class="space-y-1">
     <p class="font-semibold text-ink">No se mezclan</p>
     <p><span class="font-mono">SUM([Gasto_Real]) / [Presupuesto_Asignado]</span> no vale: compara un
@@ -66,7 +99,7 @@ tipos con ejemplos, cuál elegir y la sintaxis de las fórmulas (engine/formulas
       <li>Texto entre comillas: <span class="font-mono">"Sí"</span>. Números con punto decimal: <span class="font-mono">1.5</span>.</li>
       <li>Operaciones <span class="font-mono">+ - * /</span> y paréntesis. Comparaciones <span class="font-mono">= != &gt; &gt;= &lt; &lt;=</span>, y <span class="font-mono">AND OR NOT</span>.</li>
       <li><span class="font-mono">IF(condición, valor si se cumple, valor si no)</span>.</li>
-      <li>Agregaciones: <span class="font-mono">SUM AVG COUNT COUNT_DISTINCT MIN MAX</span>, cada una sobre una columna o una expresión por fila.</li>
+      <li>Agregaciones: <span class="font-mono">SUM AVG COUNT COUNT_DISTINCT MIN MAX</span>, cada una con un solo argumento: una columna o una expresión por fila (ver arriba).</li>
       <li><b>Formato porcentaje</b> (solo en agregados) muestra el valor con «%»: la fórmula ya debe multiplicar por 100.</li>
     </ul>
   </div>

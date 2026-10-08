@@ -123,6 +123,8 @@ a su `name`. Se crea en la fuente al aplicar la propuesta y queda para todo el t
   Ej.: SUM([Ventas]) - SUM([Costo]); SUM([Gasto]) / SUM([Presupuesto]) * 100;
   AVG(IF([Respuesta] = "Sí", 1, 0)) * 100; SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100.
 - No combines columnas sueltas con agregaciones (SUM([a]) / [b] no vale).
+- Dentro de una agregación cada columna es el valor de la fila, no un total. Para contar filas
+  que cumplen una condición usa SUM(IF(condición, 1, 0)): COUNT cuenta valores no vacíos (el 0 también).
 - limit: máximo de filas/grupos a mostrar ("top 5" → 5). Null si no aplica.
 
 ## style (la apariencia)

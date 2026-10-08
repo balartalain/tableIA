@@ -78,6 +78,35 @@ Ejemplos:
 Al agrupar, el valor de cada grupo es el cociente **de los totales del grupo**, no el promedio
 de los cocientes fila por fila.
 
+#### Cómo operan las funciones
+
+Cada agregación tiene un solo argumento (una columna o una expresión por fila) y se evalúa en
+dos pasos (`_eval_aggregate` en `engine/formulas.py`): primero la expresión **en cada fila** del
+grupo (`[Gasto_Real]` es el valor de esa fila, no un total) y después la agregación sobre esos
+valores.
+
+| Función | Qué hace con los valores de cada fila |
+|---|---|
+| `SUM` | Los suma. |
+| `AVG` | Los promedia. |
+| `MIN` / `MAX` | El menor / el mayor. |
+| `COUNT` | Cuántos **no vacíos** hay (un 0 cuenta). `COUNT(1)` cuenta todas las filas, incluidas las vacías. |
+| `COUNT_DISTINCT` | Cuántos distintos, sin vacíos. |
+| `IF` | Dentro de una agregación, fila a fila; fuera, sobre los resultados ya agregados. |
+
+- `SUM`, `AVG`, `MIN` y `MAX` son numéricas: el texto y los vacíos se ignoran; si no queda
+  ningún número, el resultado sale vacío.
+- `AVG([Gasto_Real] - [Presupuesto_Asignado])` es la diferencia **promedio por fila**;
+  `SUM([Gasto_Real]) - SUM([Presupuesto_Asignado])`, la diferencia **entre totales**.
+- Para contar las filas que cumplen algo: `SUM(IF(condición, 1, 0))`. `COUNT(IF(condición, 1, 0))`
+  cuenta todas, porque el 0 no es vacío.
+- Una comparación vale 1 o 0: `AVG([Respuesta] = "Sí") * 100` es el % de «Sí». Las respuestas
+  vacías cuentan como 0 (entran al total); para el % solo entre quienes respondieron:
+  `SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100`; sobre todos los registros,
+  dividiendo entre `COUNT(1)`.
+- Si un operando de la fila está vacío, la operación de esa fila queda vacía y no entra.
+- No se anidan agregaciones (`AVG(SUM(...))`) ni se usa un campo agregado dentro de otra fórmula.
+
 ## Condiciones por métrica
 
 `filters` dentro de una métrica: solo esas filas entran a esa métrica (el resto del widget no

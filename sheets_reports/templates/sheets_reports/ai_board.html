@@ -77,7 +77,6 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
                          aria-label="Título del widget"
                          class="w-full text-sm font-medium text-ink bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded px-1 -mx-1 disabled:hover:border-transparent">
                   <p class="text-xs text-ink/60" x-text="item.description"></p>
-                  <p class="text-[11px] text-ink/40" x-text="typeLabel(item.widget_type)"></p>
                   <p x-show="item.error" x-text="item.error" role="alert" class="text-xs text-red-600"></p>
                 </div>
               </li>
@@ -94,7 +93,7 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
               <button type="button" x-on:click="propose()" x-bind:disabled="!prompt.trim() || loading"
                       class="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer">
                 <i class="ti text-base" x-bind:class="loading ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
-                <span x-text="loading ? 'Pensando el tablero…' : 'Proponer tablero'"></span>
+                <span x-text="loading ? 'Pensando el tablero…' : 'Generar'"></span>
               </button>
             </div>
           </template>

@@ -7,7 +7,7 @@ const SOURCE_STATUS = {
   no_access: { label: 'Sin acceso',
     title: 'La cuenta de servicio ya no puede abrir la hoja (se dejó de compartir o se borró). El tablero muestra los últimos datos leídos.' },
   tab_missing: { label: 'Pestaña no encontrada',
-    title: 'La pestaña se borró o se reemplazó: usa «Cambiar hoja o pestaña». El tablero muestra los últimos datos leídos.' },
+    title: 'La pestaña se borró o se reemplazó: usa «Cambiar fuente». El tablero muestra los últimos datos leídos.' },
 };
 
 function sourceManager() {
@@ -56,7 +56,9 @@ function sourceManager() {
     },
 
     refreshedLabel(s) {
-      return s.refreshed_at ? timeAgoLabel(s.refreshed_at) : 'Sin leer todavía';
+      if (!s.refreshed_at) return 'Sin leer todavía';
+      const ago = timeAgo(s.refreshed_at);
+      return ago[0].toUpperCase() + ago.slice(1);
     },
 
     statusInfo(s) {
@@ -86,6 +88,11 @@ function sourceManager() {
 
     sheetUrl(s) {
       return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(s.sheet_id)}/edit#gid=${encodeURIComponent(s.gid)}`;
+    },
+
+    add() {
+      this.view = 'picker';
+      window.dispatchEvent(new CustomEvent('source-picker:start', { detail: { mode: 'add' } }));
     },
 
     changeSheet(source) {

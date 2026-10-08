@@ -140,13 +140,13 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
              x-bind:placeholder="originalLabel" maxlength="255"
              aria-label="Nombre de la fuente (opcional)" title="Nombre de la fuente (opcional)"
              class="w-72 max-w-full h-10 -ml-2 text-sm text-ink border border-line rounded-md px-3 focus:outline-none focus:border-moss-500">
-      <!-- Cambiar hoja (al editar) y Actualizar datos: relee la hoja de Google y muestra su
+      <!-- Cambiar fuente (al editar) y Actualizar datos: relee la hoja de Google y muestra su
            estructura actual. -->
       <div class="flex items-center gap-2 -ml-2">
         <button type="button" x-show="mode === 'edit'" x-on:click="changeSheet()" x-bind:disabled="refreshing || loadingColumns"
                 class="inline-flex items-center gap-1.5 h-10 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md px-3 transition cursor-pointer disabled:opacity-50">
           <i class="ti ti-replace text-base" aria-hidden="true"></i>
-          Cambiar hoja
+          Cambiar fuente
         </button>
         <button type="button" x-on:click="refreshColumns()" x-bind:disabled="refreshing || loadingColumns"
                 class="inline-flex items-center gap-1.5 h-10 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md px-3 transition cursor-pointer disabled:opacity-50 disabled:cursor-wait">

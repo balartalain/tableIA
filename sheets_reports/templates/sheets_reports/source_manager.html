@@ -49,6 +49,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
           <tr>
             <th class="px-3 py-2 font-semibold">Fuente</th>
             <th class="px-3 py-2 w-44 font-semibold">Columnas en uso</th>
+            <th class="px-3 py-2 w-40 font-semibold">Última actualización</th>
             <th class="px-3 py-2 w-28 font-semibold text-right">Widgets</th>
             <th class="px-3 py-2 w-px font-semibold text-right">Acciones</th>
           </tr>
@@ -71,12 +72,14 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                     </span>
                     <!-- Con nombre propio, el original («Documento · Pestaña») debajo. -->
                     <span x-show="s.name" class="block text-xs text-ink/50 truncate" x-text="s.original_label"></span>
-                    <span class="block text-[11px] text-ink/50" x-text="refreshing[s.id] ? 'Actualizando…' : refreshedLabel(s)"></span>
                     <span x-show="refreshErrors[s.id]" x-text="refreshErrors[s.id]" role="alert" class="block text-[11px] text-red-600"></span>
                   </span>
                 </span>
               </td>
               <td class="px-3 py-2.5 text-ink/70" x-text="columnsLabel(s)"></td>
+              <td class="px-3 py-2.5 whitespace-nowrap" x-bind:title="s.refreshed_at && new Date(s.refreshed_at).toLocaleString()"
+                  x-bind:class="s.refreshed_at || refreshing[s.id] ? 'text-ink/70' : 'text-ink/40'"
+                  x-text="refreshing[s.id] ? 'Actualizando…' : refreshedLabel(s)"></td>
               <td class="px-3 py-2.5 text-right" x-bind:class="s.widgets ? 'text-ink/70' : 'text-ink/40'"
                   x-text="s.widgets ? s.widgets : 'Sin usar'"></td>
               <td class="px-3 py-1.5">

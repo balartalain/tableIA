@@ -16,16 +16,21 @@
 // El gestor de fuentes lo arranca con el evento `source-picker:start` ({mode, source}) y
 // recibe `sources:changed` al guardar (o al volver tras actualizar datos) y `sources:back`.
 
-// «Actualizado hace 5 min»; sin fecha, vacío. Lo usan el selector y el gestor de fuentes.
-function timeAgoLabel(iso) {
+// «hace 5 min»; sin fecha, vacío. Lo usan el selector y el gestor de fuentes.
+function timeAgo(iso) {
   if (!iso) return '';
   const minutes = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000));
-  if (minutes < 1) return 'Actualizado ahora';
-  if (minutes < 60) return `Actualizado hace ${minutes} min`;
+  if (minutes < 1) return 'ahora';
+  if (minutes < 60) return `hace ${minutes} min`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Actualizado hace ${hours} h`;
+  if (hours < 24) return `hace ${hours} h`;
   const days = Math.round(hours / 24);
-  return `Actualizado hace ${days} ${days === 1 ? 'día' : 'días'}`;
+  return `hace ${days} ${days === 1 ? 'día' : 'días'}`;
+}
+
+// «Actualizado hace 5 min»; sin fecha, vacío.
+function timeAgoLabel(iso) {
+  return iso ? `Actualizado ${timeAgo(iso)}` : '';
 }
 
 function sourcePicker({ mode = 'create' } = {}) {
@@ -84,6 +89,8 @@ function sourcePicker({ mode = 'create' } = {}) {
     // _aiPrompt, _aiLoading, _aiError (por campo).
     calculated: [],
     helpOpen: false,
+    // Si el reemplazo de hoja empezó en la tabla de fuentes («Cambiar fuente») y no en la edición.
+    replaceFromList: false,
     _previewTimers: {},
     // Constructor: el campo abierto, el lugar del árbol elegido con clic y el valor que se escribe.
     selectedId: null,
@@ -136,7 +143,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         sourceName: source ? source.name || '' : '',
         headers: source ? source.first_row_headers !== false : true, impact: null,
         refreshing: false, dataRefreshed: false, refreshedAt: source ? source.refreshed_at : null,
-        columnsTab: 'columns', helpOpen: false,
+        columnsTab: 'columns', helpOpen: false, replaceFromList: changeSheet,
         calculated: ((source && source.calculated_fields) || []).map(({ tree, ...f }) => ({
           ...f, _tree: tree || null, _unreadable: !tree && !!(f.formula || '').trim(), _rev: 0,
           _aiPrompt: '', _aiLoading: false, _aiError: '',
@@ -151,12 +158,13 @@ function sourcePicker({ mode = 'create' } = {}) {
       FormulaBlocks.setupDrag();
     },
 
-    // Atrás: del paso de columnas a la elección de hoja; desde la hoja, al cambiarla, vuelve a
-    // la edición; al editar (o desde la hoja, al agregar) vuelve a la tabla de fuentes.
+    // Atrás: del paso de columnas a la elección de hoja; desde la hoja, al cambiarla dentro de la
+    // edición, vuelve a la edición; al editar, al agregar o al cambiar la hoja desde la tabla de
+    // fuentes («Cambiar fuente»), vuelve a la tabla.
     back() {
       if (this.impact) this.impact = null;
       else if (this.step === 'columns' && this.mode !== 'edit') this.step = 'source';
-      else if (this.mode === 'replace') this._backToEdit();
+      else if (this.mode === 'replace' && !this.replaceFromList) this._backToEdit();
       else window.dispatchEvent(new CustomEvent(this.dataRefreshed ? 'sources:changed' : 'sources:back'));
     },
 

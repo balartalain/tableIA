@@ -30,7 +30,6 @@
     constructor(raw) {
       super(raw);
       this._seriesColors = new Map();
-      this.seriesOrder = Array.isArray(this.style.seriesOrder) ? this.style.seriesOrder : null;
     }
 
     _colorsFor(series) {
@@ -78,7 +77,7 @@
       }
 
       if (data) this._colorsFor(series);
-      series = applySeriesOrder(series, this.seriesOrder);
+      series = applySeriesOrder(series, Array.isArray(this.style.seriesOrder) ? this.style.seriesOrder : null);
 
       const horizontal = this.style.horizontal ?? false;
       const allPercent = BaseWidget.allSeriesPercent(payload, series);

@@ -327,7 +327,7 @@ Renderiza: número grande + etiqueta + badge de comparación + barra de progreso
 
 Renderiza: gráfico de barras con apilado, modo horizontal, data labels, líneas de referencia y leyenda arrastrable.
 
-- `_wireLegendDrag()`: SortableJS en la leyenda. Al reordenar, guarda `style.seriesOrder`.
+- `_wireLegendDrag()`: SortableJS en la leyenda. Al reordenar, guarda `style.seriesOrder` (lista de nombres de serie) y `draw()` ordena las series desde `style`.
 - Colores estables por serie (`_seriesColors` Map).
 
 ### LineWidget

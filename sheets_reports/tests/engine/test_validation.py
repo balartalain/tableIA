@@ -200,9 +200,11 @@ class StyleSchemaErrorsTests(SimpleTestCase):
         self.assertIn("style.showPagination", errors_for("table", table_fields(["mes"]),
                                                         {"showPagination": 1})[0])
         self.assertIn("style.title", errors_for("table", table_fields(["mes"]), {"title": 7})[0])
+        self.assertIn("style.seriesOrder", errors_for("bar", fields(), {"seriesOrder": "A,B"})[0])
 
     def test_estilo_valido_no_da_errores(self):
         self.assertEqual(errors_for("bar", fields(), {"stacked": True, "showGrid": False}), [])
+        self.assertEqual(errors_for("bar", fields(), {"seriesOrder": ["B", "A"]}), [])
         self.assertEqual(errors_for("table", table_fields(["mes"]), {"pageSize": 25}), [])
 
 

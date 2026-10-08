@@ -433,6 +433,9 @@ def _style_schema(style_schema: list[dict]) -> tuple[dict, list[str]]:
             properties[control["key"]] = {"type": "number", "description": control.get("label", control["key"])}
         elif kind == "boolean":
             properties[control["key"]] = {"type": "boolean", "description": control.get("label", control["key"])}
+        elif kind == "list":
+            properties[control["key"]] = {"type": "array", "items": {"type": "string"},
+                                          "description": control.get("label", control["key"])}
         else:
             properties[control["key"]] = {"type": "string", "description": control.get("label", control["key"])}
     return properties, []
@@ -1002,6 +1005,9 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
             errors.append(f"style.{key}: debe ser true o false.")
         elif control.get("type") == "string" and not isinstance(value, str):
             errors.append(f"style.{key}: debe ser un texto.")
+        elif control.get("type") == "list" and not (
+                isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            errors.append(f"style.{key}: debe ser una lista de textos.")
 
     if style.get("statusBasis") == "target_pct" and not _has_target(style, aliases):
         errors.append("style.statusBasis: «% de la meta» necesita una meta (target o targetMetric).")

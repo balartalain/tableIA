@@ -1176,6 +1176,8 @@ document.addEventListener('alpine:init', () => {
       let shown = value;
       if (control.type === 'boolean') {
         shown = value ? 'sí' : 'no';
+      } else if (control.type === 'list') {
+        shown = value.join(', ');
       } else if (control.type === 'choice') {
         const option = (control.options || []).find(o => o.value === value);
         const metric = control.options_from === 'metrics' ? metrics.find(m => m.alias === value) : null;

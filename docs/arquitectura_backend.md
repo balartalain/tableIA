@@ -417,7 +417,7 @@ son **obligatorias** y deben ser válidas: `test_capacidades_planas_y_validas`.
 |---|---|---|
 | `key` | str | Clave en `style` (única por widget) |
 | `label` | str | Nombre de la clave para la IA y los mensajes de error (obligatoria) |
-| `type` | str | `string`, `number`, `boolean` o `choice`; `form_errors` valida el valor contra él |
+| `type` | str | `string`, `number`, `boolean`, `choice` o `list` (lista de textos); `form_errors` valida el valor contra él |
 | `options` | list | Solo en `choice`: `[{"value", "label"}, ...]` |
 | `options_from` | `"metrics"` | `choice` cuyo valor es además un **alias de métrica** del propio widget (roles del KPI) |
 | `default` | any | Default; debe coincidir con el `type`. `style_defaults()` completa el form con ellos |
@@ -491,7 +491,7 @@ Todos los tipos tienen `ai_enabled = True`.
 | Tipo | Controles |
 |---|---|
 | `kpi` | `title`, `decimals`, `abbreviate`, `prefix`, `suffix`, `primary`, `compare`, `compareMode`, `target`, `targetMetric`, `targetLabel`, `statusBasis`, `status_good`, `status_warn`, `higher_is_better` |
-| `bar` | `title`, `horizontal`, `stacked`, `color_scheme`, `yAxisWidth`, `barWidth`, `dataLabelFormatter`, `chartWidth`, `showGrid` |
+| `bar` | `title`, `horizontal`, `stacked`, `color_scheme`, `yAxisWidth`, `barWidth`, `dataLabelFormatter`, `chartWidth`, `showGrid`, `seriesOrder` |
 | `line` | `title`, `color_scheme`, `curve`, `showGrid`, `showMarkers` |
 | `donut` | `title`, `labelMode`, `donutSize`, `showLegend` |
 | `table` | `title`, `pageSize`, `showPagination` |

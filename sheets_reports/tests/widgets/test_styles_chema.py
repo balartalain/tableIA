@@ -5,7 +5,7 @@ from django.test import SimpleTestCase
 from sheets_reports.services.widget_service import WidgetService
 from sheets_reports.widgets import WIDGETS
 
-TYPES = {"string", "number", "boolean", "choice"}
+TYPES = {"string", "number", "boolean", "choice", "list"}
 DATA_KEYS = {"key", "label", "type", "options", "options_from", "default"}
 
 
@@ -60,6 +60,8 @@ class StyleSchemaTests(SimpleTestCase):
                         self.assertNotIsInstance(value, bool)
                     elif control["type"] == "string":
                         self.assertIsInstance(value, str)
+                    elif control["type"] == "list":
+                        self.assertIsInstance(value, list)
                     else:
                         self.assertIn(value, [o["value"] for o in control["options"]])
 
@@ -78,6 +80,10 @@ class StyleSchemaTests(SimpleTestCase):
 
     def test_estilos_fuera_del_schema_no_llegan_al_form(self):
         self.assertEqual(clean_style("bar", {"stacked": True, "etiqueta": "x"}), {"stacked": True})
+
+    def test_el_orden_de_la_leyenda_llega_al_form(self):
+        self.assertEqual(clean_style("bar", {"seriesOrder": ["B", "A"], "etiqueta": "x"}),
+                         {"seriesOrder": ["B", "A"]})
 
 
 class CapabilitiesTests(SimpleTestCase):

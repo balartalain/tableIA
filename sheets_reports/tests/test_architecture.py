@@ -18,7 +18,7 @@ from sheets_reports.widgets import WIDGETS
 PACKAGE = Path(__file__).resolve().parents[1]
 
 CAPABILITY_KEYS = {"dimensions", "pivots", "metrics", "sort", "limit", "filters", "windows"}
-STYLE_TYPES = {"string", "number", "boolean", "choice"}
+STYLE_TYPES = {"string", "number", "boolean", "choice", "list"}
 # Lo único que declara un control: datos. El layout del panel vive en el partial del widget.
 STYLE_KEYS = {"key", "label", "type", "options", "options_from", "default"}
 TEMPLATES = PACKAGE / "templates"
@@ -160,6 +160,8 @@ class WidgetContractTests(SimpleTestCase):
             assert isinstance(default, (int, float)) and not isinstance(default, bool), control
         elif kind == "string":
             assert isinstance(default, str), control
+        elif kind == "list":
+            assert isinstance(default, list) and all(isinstance(v, str) for v in default), control
         else:
             assert default in [o["value"] for o in control.get("options", [])], control
 

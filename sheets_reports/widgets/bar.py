@@ -86,6 +86,8 @@ class BarChartWidget(BaseWidget):
         {"key": "dataLabelFormatter", "label": "Formato de etiquetas. Ej. {value} %", "type": "string"},
         {"key": "chartWidth", "label": "Forzar ancho de gráfico (px)", "type": "number"},
         {"key": "showGrid", "label": "Mostrar cuadrícula", "type": "boolean", "default": True},
+        # Lo edita la leyenda arrastrable, no el panel.
+        {"key": "seriesOrder", "label": "Orden de las series", "type": "list"},
     ]
 
     def compile(

@@ -1,0 +1,22 @@
+{# Panel del editor del gráfico de dispersión: en «Configurar», los dos ejes (columnas
+   numéricas, X y luego Y), la columna opcional que da color a los puntos y la condición; en
+   «Personalizar», cómo se ve. #}
+{% with B="sheets_reports/widgets/config/blocks/" %}
+<div>
+  <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
+    {% include B|add:"_source.html" %}
+    {% include B|add:"_title.html" %}
+    {% include B|add:"_assistant.html" %}
+    {% include B|add:"_columns.html" %}
+    {% include B|add:"_dimensions.html" %}
+    {% include B|add:"_filters.html" with label="Condición" %}
+    {% include B|add:"_json.html" %}
+  </div>
+
+  <div x-show="$store.dashboard.drawerTab === 'style'" class="space-y-4">
+    {% include B|add:"_style_checkbox.html" with key="showTrend" label="Línea de tendencia" %}
+    {% include B|add:"_style_checkbox.html" with key="showGrid" label="Mostrar cuadrícula" %}
+    {% include B|add:"_style_number.html" with key="markerSize" label="Tamaño de los puntos (px)" min=2 max=12 %}
+  </div>
+</div>
+{% endwith %}

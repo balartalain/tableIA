@@ -112,12 +112,14 @@ def _metric_configs(caps: dict):
 
 
 def _column_configs(caps: dict):
-    """La tabla: columnas a mostrar × orden × filtro."""
-    for columns, sort_by, filters in itertools.product(
+    """Widgets de columnas sueltas: columnas × orden × filtro × (si la admiten) dimensión."""
+    dimension_options = ([], ["categoria"]) if caps.get("dimensions", (0, 0))[1] else ([],)
+    for columns, sort_by, filters, dimensions in itertools.product(
             (["categoria"], ["categoria", "ventas"], ["ventas", "mes", "anio"], ["ventas", "anio"]),
             (None, "-ventas"),
-            ([], [{"field": "anio", "op": "eq", "value": 2026}])):
-        yield {"dimensions": [], "pivots": [], "metrics": [], "filters": filters,
+            ([], [{"field": "anio", "op": "eq", "value": 2026}]),
+            dimension_options):
+        yield {"dimensions": dimensions, "pivots": [], "metrics": [], "filters": filters,
                "columns": [{"field": c} for c in columns],
                "sort_by": sort_by if sort_by and sort_by.lstrip("-") in columns else None,
                "limit": None}
@@ -300,6 +302,29 @@ def _correlation(data, fields) -> list[str]:
     return problems
 
 
+def _scatter(data, fields) -> list[str]:
+    from sheets_reports.widgets.scatter import MAX_GROUPS
+
+    problems = []
+    if [data["x"]["field"], data["y"]["field"]] != [c["field"] for c in fields["columns"]]:
+        problems.append("los ejes no siguen el orden de las columnas")
+    points = [p for g in data["groups"] for p in g["points"]]
+    if len(points) != data["shown"] or data["shown"] > data["rows"]:
+        problems.append(f"{len(points)} puntos, shown={data['shown']}, rows={data['rows']}")
+    if sum(g["rows"] for g in data["groups"]) != data["rows"]:
+        problems.append("las filas de los grupos no suman el total")
+    if len(data["groups"]) > MAX_GROUPS:
+        problems.append(f"{len(data['groups'])} grupos (máx. {MAX_GROUPS})")
+    if bool(fields.get("dimensions")) != bool(data["color"]):
+        problems.append("color sin dimensión o dimensión sin color")
+    if any(len(p) != 2 for p in points):
+        problems.append("un punto no es [x, y]")
+    for trend in [data["trend"]] + [g["trend"] for g in data["groups"]]:
+        if trend and trend["r"] is not None and not -1 <= trend["r"] <= 1:
+            problems.append(f"r fuera de [-1, 1]: {trend['r']}")
+    return problems
+
+
 INVARIANTS = {
     "bar": _chart,
     "line": _chart,
@@ -310,6 +335,7 @@ INVARIANTS = {
     "filter": _filter,
     "ranking": _ranking,
     "correlation": _correlation,
+    "scatter": _scatter,
 }
 
 

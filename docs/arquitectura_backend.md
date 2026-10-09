@@ -400,6 +400,7 @@ class BaseWidget(ABC):
 | `dimensions` | `[min, max]` | Rango de dimensiones. `[0,0]` = no admite |
 | `pivots` | `[min, max]` | Rango de pivotes |
 | `metrics` | `[min, max]` | Rango de métricas. Con `max > 1` cada métrica admite además sus propias condiciones (`metric.filters`); con una sola métrica equivaldrían a `filters` y se rechazan |
+| `pivot_max_metrics` | int? | Máximo de métricas cuando hay pivote (barras y líneas: 1, porque cada serie es un valor del pivote); ausente = sin tope extra (tabla dinámica) |
 | `columns` | `[min, max]` | Rango de columnas (solo «Tabla»); ausente = no admite |
 | `sort` | bool | Admite `sort_by` |
 | `limit` | bool | Admite `limit` |
@@ -434,12 +435,13 @@ tipo. Por ejemplo, el partial del KPI vacía `target` cuando la meta deja de ser
 ```python
 # widgets/__init__.py
 from sheets_reports.widgets.base import WIDGETS, BaseWidget
-from sheets_reports.widgets import kpi, bar, line, donut, dynamic_table, table, filter, ranking, correlation
+from sheets_reports.widgets import kpi, bar, line, donut, dynamic_table, table, filter, ranking, correlation, scatter
 ```
 
-Importar el paquete registra los 9 tipos (`ranking`: el top N de los grupos de una columna,
+Importar el paquete registra los 10 tipos (`ranking`: el top N de los grupos de una columna,
 los mejores o los peores, ver `widgets/ranking.py`; `correlation`: la matriz de correlación de
-varias columnas numéricas, ver `widgets/correlation.py`). Un widget que calcula con columnas
+varias columnas numéricas, ver `widgets/correlation.py`; `scatter`: el gráfico de dispersión de
+dos columnas numéricas, ver `widgets/scatter.py`). Un widget que calcula con columnas
 sueltas declara `columns_numeric: True` en sus capacidades: `form_errors` rechaza las de texto
 y el panel solo ofrece las numéricas. Un widget nuevo son dos piezas:
 1. un módulo en `widgets/` con su subclase decorada con `@WIDGETS.register`, importado en
@@ -480,9 +482,12 @@ y el panel solo ofrece las numéricas. Un widget nuevo son dos piezas:
 | `table` | `TableWidget` | Tabla | [0,0] | [0,0] | [0,0] | [1,50] | ✓ | ✗ | ✓ | ✗ | — | — | ✓ |
 | `dynamic_table` | `DynamicTableWidget` | Tabla Dinámica | [0,3] | [0,2] | [1,5] | — | ✓ | ✗ | ✓ | ✗ | total, fila | — | ✓ |
 | `ranking` | `RankingWidget` | Ranking | [1,1] | [0,0] | [1,1] | — | ✓ | ✓³ | ✓ | ✗ | — | — | ✓ |
+| `scatter` | `ScatterWidget` | Gráfico de dispersión | [0,1]⁵ | [0,0] | [0,0] | [2,2]⁴ | ✗ | ✗ | ✓ | ✗ | — | — | ✓ |
 | `filter` | `FilterWidget` | Filtros | [0,50]¹ | [0,0] | [0,0] | — | ✗ | ✗ | ✗ | ✗ | — | **1** | **✗** |
 
 ¹ En «Filtros», `dimensions` son las **columnas expuestas como controles** (vacío = todas).
+⁴ Solo numéricas (`columns_numeric`), en orden: eje X, eje Y.
+⁵ En la dispersión `dimensions` no agrupa: es la columna de categorías que reparte los puntos en grupos de color («Agrupar por»).
 ³ Solo el ranking recorta filas: `limit` es su N. El resto trabaja siempre con toda la data.
 ² `percent_of_total` (total), `percent_of_row` (fila), `running_total` (acum.), `pct_change`
 (var.). La dona no lleva ventanas: ya muestra el porcentaje de cada parte.
@@ -498,6 +503,7 @@ Todos los tipos tienen `ai_enabled = True`.
 | `donut` | `title`, `labelMode`, `donutSize`, `showLegend` |
 | `table` | `title`, `pageSize`, `showPagination` |
 | `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels` |
+| `scatter` | `title`, `showTrend`, `markerSize`, `showGrid` |
 | `filter` | `title`, `layout` (`horizontal`/`vertical`) |
 
 ### 7.2 Detalle por widget
@@ -539,6 +545,21 @@ Los tres usan `chart_series()` para `(categories, pairs)` y `percent_aliases()`.
 - **`line`**: `curve`, `showMarkers`, `showGrid`, `color_scheme`; si no hay `sort_by`,
   reordena el eje con `chronological()` (best-effort).
 - **`donut`**: una sola serie (`pairs[0]`); `labelMode`, `donutSize`, `showLegend` (front).
+
+#### `scatter` — `widgets/scatter.py`
+
+- **`process_query`**: los pasos por defecto **sin dimensiones** (solo filtros: no agrupa) y
+  recorta el frame a las dos columnas de `fields.columns` más la de color (`fields.dimensions[0]`).
+- **`compile`**: un punto `[x, y]` por fila con los dos valores numéricos (las demás se
+  descartan), repartidos en `groups: [{name, points, rows, trend}]`. Sin color hay un solo
+  grupo `name: ""`; con color, uno por categoría ordenados por frecuencia: más de
+  `MAX_GROUPS = 8` → las 7 más frecuentes y «Otros»; vacío → «(Sin valor)» (ambos al final).
+  Con más de `MAX_POINTS = 2000` filas, una muestra fija de todas (`random_state=0`, en el orden
+  de la hoja, proporcional en cada grupo); `rows` = filas válidas, `shown` = puntos dibujados.
+  `trend` (global) y el de cada grupo: recta de mínimos cuadrados con **todas** sus filas
+  (`slope`, `intercept`, `from`/`to` = rango de X) y su `r` de Pearson; `None` si X no varía,
+  `r = None` si Y no varía. Salida `type: "scatter"` con `x`/`y` = `{field, label}` y
+  `color` = `{field, label}` o `None`.
 
 #### `table` — `widgets/table.py`
 

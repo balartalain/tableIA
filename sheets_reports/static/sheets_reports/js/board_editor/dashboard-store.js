@@ -448,6 +448,18 @@ document.addEventListener('alpine:init', () => {
     get columnsLabel() { return this.drawerCapabilities.columns_label || 'Columnas a mostrar'; },
     get hasMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1] > 0; },
     get maxMetrics() { return (this.drawerCapabilities.metrics || [0, 0])[1]; },
+    // Gráficos (`pivot_max_metrics`): con pivote cada serie es un valor del pivote, así que
+    // pivote y varias métricas se excluyen. La tabla dinámica no lo declara.
+    get pivotMetricsCap() { return this.drawerCapabilities.pivot_max_metrics || 0; },
+    get metricsLimitedByPivot() {
+      return !!this.pivotMetricsCap && (this.drawerDraft.fields.pivots || []).some(Boolean);
+    },
+    get metricsLimit() {
+      return this.metricsLimitedByPivot ? Math.min(this.maxMetrics, this.pivotMetricsCap) : this.maxMetrics;
+    },
+    get pivotsBlocked() {
+      return !!this.pivotMetricsCap && (this.drawerDraft.fields.metrics || []).length > this.pivotMetricsCap;
+    },
     // Condiciones propias de una métrica: solo sirven junto a otras métricas (Electrónica vs
     // total); con una sola equivalen a los filtros del widget.
     get hasMetricFilters() { return this.maxMetrics > 1; },
@@ -1122,7 +1134,12 @@ document.addEventListener('alpine:init', () => {
       }
       const columns = (f.columns || []).map(c => (typeof c === 'string' ? c : c.label ? `${c.field} («${c.label}»)` : c.field));
       if (columns.length) steps.push({ title: this.columnsLabel, detail: `Muestra, en este orden: ${list(columns)}` });
-      if ((f.dimensions || []).length) steps.push({ title: this.drawerCapabilities.dimensions_label || 'Dimensiones', detail: `Agrupa, en este orden: ${list(f.dimensions)}` });
+      if ((f.dimensions || []).length) {
+        // Un widget que da otro sentido a `dimensions` (dispersión, filtros, ranking) lo nombra
+        // en su etiqueta: el detalle es solo la lista, sin «Agrupa».
+        const label = this.drawerCapabilities.dimensions_label;
+        steps.push({ title: label || 'Dimensiones', detail: label ? list(f.dimensions) : `Agrupa, en este orden: ${list(f.dimensions)}` });
+      }
       if ((f.pivots || []).length) steps.push({ title: 'Pivotes', detail: `Desagrega por: ${list(f.pivots)}` });
       if ((f.filters || []).length) {
         steps.push({ title: 'Filtros', details: f.filters.map(c => this._describeCondition(c)) });

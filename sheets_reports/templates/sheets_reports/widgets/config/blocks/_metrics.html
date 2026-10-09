@@ -9,7 +9,8 @@
       </button>
     </div>
     <button type="button" x-on:click="$store.dashboard.addMetric()"
-            x-bind:disabled="$store.dashboard.drawerDraft.fields.metrics.length >= $store.dashboard.maxMetrics"
+            x-bind:disabled="$store.dashboard.drawerDraft.fields.metrics.length >= $store.dashboard.metricsLimit"
+            x-bind:title="$store.dashboard.metricsLimitedByPivot ? 'Con pivote, una sola métrica' : ''"
             class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
       <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
     </button>

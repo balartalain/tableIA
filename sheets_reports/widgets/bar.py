@@ -63,6 +63,8 @@ class BarChartWidget(BaseWidget):
         "ungrouped_min_metrics": 2,
         "pivots": [0, 1],
         "metrics": [1, 5],
+        # Con pivote cada serie es un valor del pivote: una sola métrica.
+        "pivot_max_metrics": 1,
         "sort": True,
         "limit": False,
         "filters": True,

@@ -10,7 +10,8 @@
       </button>
     </div>
     <button type="button" x-on:click="$store.dashboard.addPivot()"
-            x-bind:disabled="$store.dashboard.drawerDraft.fields.pivots.length >= $store.dashboard.maxPivots"
+            x-bind:disabled="$store.dashboard.drawerDraft.fields.pivots.length >= $store.dashboard.maxPivots || $store.dashboard.pivotsBlocked"
+            x-bind:title="$store.dashboard.pivotsBlocked ? 'Con varias métricas no se puede pivotar: deja una' : ''"
             class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
       <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
     </button>

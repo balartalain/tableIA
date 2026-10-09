@@ -191,6 +191,8 @@ def capabilities_text(widget) -> str:
     if caps.get("ungrouped_min_metrics"):
         parts.append(f"sin dimensión: al menos {caps['ungrouped_min_metrics']} métricas "
                      "(una barra por total)")
+    if caps.get("pivot_max_metrics"):
+        parts.append(f"con pivotes: {caps['pivot_max_metrics']} métrica como máximo")
     for key, label in (("dimensions", "dimensiones"), ("pivots", "pivotes"), ("metrics", "métricas")):
         rng = caps.get(key)
         if not rng:
@@ -957,8 +959,11 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
             errors.append("fields.pivots: sin dimensión no hay grupos que cruzar; agrega una "
                           "dimensión o quita el pivote.")
 
-    if resolved in {"bar", "line"} and pivots and len(aliases) > 1:
-        errors.append("fields: con pivotes los gráficos admiten UNA métrica; quita las demás "
+    # Gráficos: con pivote cada serie es un valor del pivote, así que solo cabe una métrica.
+    pivot_max = caps.get("pivot_max_metrics")
+    if pivot_max and pivots and len(aliases) > pivot_max:
+        count = "UNA métrica" if pivot_max == 1 else f"{pivot_max} métricas"
+        errors.append(f"fields: con pivotes este gráfico admite {count}; quita las demás "
                       "o quita los pivotes.")
 
     if fields.get("filters"):

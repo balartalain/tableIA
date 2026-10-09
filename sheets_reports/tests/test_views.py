@@ -302,6 +302,7 @@ class ViewsTests(TestCase):
         manifest = self.client.get(f"/api/sources/{self.source.id}/schema/").json()["widget_manifest"]
         self.assertEqual(manifest["bar"]["capabilities"], {
             "dimensions": [0, 1], "ungrouped_min_metrics": 2, "pivots": [0, 1], "metrics": [1, 5],
+            "pivot_max_metrics": 1,
             "sort": True, "limit": False, "filters": True,
             "windows": ["percent_of_total", "percent_of_row", "running_total", "pct_change"],
         })

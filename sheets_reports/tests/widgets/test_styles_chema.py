@@ -102,10 +102,11 @@ class CapabilitiesTests(SimpleTestCase):
                 if name in caps:
                     self.assertIsInstance(caps[name], bool, f"{key}.{name}")
             self.assertNotIn("window", caps, f"{key}: la ventana va dentro de la métrica")
-            # Columnas sueltas (tabla, correlación) o agrupar con dimensions/metrics: nunca ambos.
+            # Columnas sueltas (tabla, correlación, dispersión) no agregan: sin métricas ni
+            # pivotes. Una dimensión ahí no agrupa (en la dispersión, colorea los puntos).
             if "columns" in caps:
-                self.assertEqual((caps["dimensions"], caps["metrics"]), ([0, 0], [0, 0]),
-                                 f"{key}: con columns no agrupa")
+                self.assertEqual((caps["pivots"], caps["metrics"]), ([0, 0], [0, 0]),
+                                 f"{key}: con columns no agrega")
 
     def test_los_widgets_que_no_agrupan_no_admiten_pivotes(self):
         for key in ("kpi", "donut", "table", "filter"):

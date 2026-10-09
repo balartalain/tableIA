@@ -293,6 +293,9 @@
       <template x-if="$store.dashboard.editingType === 'correlation'">
         {% include "sheets_reports/widgets/config/_correlation_config.html" %}
       </template>
+      <template x-if="$store.dashboard.editingType === 'scatter'">
+        {% include "sheets_reports/widgets/config/_scatter_config.html" %}
+      </template>
 
     </div>
 
@@ -374,6 +377,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/filter-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/ranking-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/correlation-widget.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/widgets/scatter-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/ai-board.js' %}"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>

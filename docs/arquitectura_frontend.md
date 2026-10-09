@@ -166,6 +166,8 @@ Límites y opciones que usan los bloques (qué bloques muestra cada tipo lo deci
 ```javascript
 get hasColumns()      // capabilities.columns[1] > 0 (auto-pick al abrir)
 get maxColumns() / maxDimensions() / maxPivots() / maxMetrics()   // tope de cada lista
+get metricsLimit()        // maxMetrics, o pivot_max_metrics si hay un pivote elegido (barras, líneas)
+get pivotsBlocked()       // pivot_max_metrics y más métricas que ese tope: «Agregar» pivote deshabilitado
 get hasMetricFilters()    // maxMetrics > 1: cada métrica admite sus propias condiciones
 get metricWindowOptions() // «Mostrar como»: capabilities.windows válidas con los pivotes del borrador
 get trendOptions()    // dimension_fields (fallback: all_fields)
@@ -191,7 +193,7 @@ La respuesta (`{widget_type, calculated_fields, fields, style}`; `title` va vac�
 pone el usuario, la IA no lo genera) se agrega al hilo y **no** toca el borrador.
 `adviceSteps(proposal, baseStyle)` la convierte en pasos legibles en el orden del panel
 y con el nombre de cada bloque (los campos calculados que propone crear, `columnsLabel`,
-«Dimensiones» o `dimensions_label`,
+«Dimensiones» o `dimensions_label` (con etiqueta propia, el detalle es solo la lista de columnas, sin «Agrupa»),
 «Pivotes», «Filtros», «Métricas», tendencia, orden y límite). Del
 `style` solo lista lo que **cambia** respecto a `baseStyle` (el estilo del panel al pedir,
 guardado en el mensaje: la IA devuelve el estilo completo), con las etiquetas del
@@ -333,6 +335,12 @@ Renderiza: gráfico de barras con apilado, modo horizontal, data labels, líneas
 ### LineWidget
 
 Renderiza: gráfico de líneas con curva suave, markers, data labels y líneas de referencia.
+
+### ScatterWidget
+
+Renderiza: gráfico de dispersión (ApexCharts mixto): una serie `scatter` por grupo de `payload.groups` (color `CHART_COLORS[i]`) y, con `style.showTrend`, una serie `line` discontinua con la recta de cada grupo en su mismo color (sin color por categoría, la recta va en el color de las referencias). Sin animación (ApexCharts deja a medias el trazo discontinuo). Ejes numéricos con el nombre de cada columna; tooltip con el grupo, su `r` y los dos valores. Pie con las filas dibujadas («Muestra de N de M filas» si el backend muestreó) y la `r` global.
+
+- Leyenda solo con color y solo con los grupos (`customLegendItems`); `_wireLegend()` oculta o muestra a la vez los puntos y la recta del grupo pulsado (listener delegado en el contenedor: ApexCharts rehace la leyenda en cada `toggleSeries`).
 
 ### DonutWidget
 

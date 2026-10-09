@@ -124,8 +124,14 @@ class FormErrorsTests(SimpleTestCase):
         self.assertIn("no puede estar también en las dimensiones", errors[0])
 
     def test_un_pivote_con_varias_metricas_en_los_graficos(self):
-        errors = errors_for("bar", fields(pivots=["mes"], metrics=[agg("a"), {"agg": "count", "alias": "b"}]))
-        self.assertIn("con pivotes los gráficos admiten UNA métrica", errors[0])
+        two = [agg("a"), {"agg": "count", "alias": "b"}]
+        for widget_type in ("bar", "line"):
+            with self.subTest(widget=widget_type):
+                errors = errors_for(widget_type, fields(pivots=["mes"], metrics=two))
+                self.assertIn("con pivotes este gráfico admite UNA métrica", errors[0])
+        # La tabla dinámica cruza varias métricas por pivote.
+        errors = errors_for("dynamic_table", fields(pivots=["mes"], metrics=two))
+        self.assertFalse(any("admite UNA métrica" in e for e in errors), errors)
 
     def test_agregacion_inexistente_y_alias(self):
         self.assertIn("agg 'promediar' no existe", errors_for("bar",

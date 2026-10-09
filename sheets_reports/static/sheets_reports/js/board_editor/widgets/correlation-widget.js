@@ -105,8 +105,11 @@
         return;
       }
       // ApexCharts mide el 100 % de alto contra el padre del elemento donde se monta: la caja
-      // flex-1 (lo que deja el pie), no el contenedor entero de la tarjeta.
-      container.innerHTML = `<div class="flex-1 min-h-0 relative"><div class="correlation-chart absolute inset-0"></div></div>${this._topHTML(payload.top)}`;
+      // flex-1 (lo que deja el pie), no el contenedor entero de la tarjeta. Las medidas van en
+      // línea: el CDN de Tailwind genera las clases nuevas tras un tick y en la vista compartida
+      // (donde `h-full` no sale en el HTML) ApexCharts mediría 0 px de alto.
+      container.style.height = '100%';
+      container.innerHTML = `<div class="flex-1 min-h-0 relative" style="flex:1 1 0%;min-height:0;position:relative"><div class="correlation-chart absolute inset-0" style="position:absolute;inset:0"></div></div>${this._topHTML(payload.top)}`;
 
       // ApexCharts dibuja la primera serie abajo: en orden inverso, la primera variable queda arriba.
       const series = variables.map((_, k) => {

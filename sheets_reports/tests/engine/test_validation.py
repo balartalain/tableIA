@@ -179,7 +179,11 @@ class FormErrorsTests(SimpleTestCase):
         self.assertIn("'nada' no es una columna ni un alias",
                       errors_for("dynamic_table", fields(sort_by="nada"))[0])
         self.assertIn("debe ser un número entre 1",
-                      errors_for("dynamic_table", fields(limit=99999))[0])
+                      errors_for("ranking", fields(limit=99999))[0])
+        for widget_type in ("bar", "line", "donut", "dynamic_table"):
+            with self.subTest(widget=widget_type):
+                self.assertIn("fields.limit: este widget no admite límite.",
+                              errors_for(widget_type, fields(limit=5)))
 
     def test_filtros_propios(self):
         self.assertEqual(errors_for("bar", fields(

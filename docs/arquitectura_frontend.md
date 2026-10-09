@@ -130,7 +130,7 @@ con su `{% include %}`. Cada partial tiene un único elemento raíz con dos `<di
 |---|---|---|
 | `_title`, `_assistant`, `_json` | título, asistente de IA, visor JSON | — |
 | `_columns`, `_dimensions`, `_pivots`, `_metrics` | listas de `fields` (arrastrables) | `_dimensions` / `_pivots`: `with totals=True` pinta «Mostrar totales» por nivel (tabla dinámica) |
-| `_trend`, `_filters`, `_sort`, `_limit` | resto de `fields` | — |
+| `_trend`, `_filters`, `_sort` | resto de `fields` (el N del ranking es un input propio de su partial) | — |
 | `_metrics` · campos agregados | `metric.field` + `metric.agg` | el select de columna suma un grupo «Campos calculados agregados» (`schema.aggregated_fields`); al elegir uno, `onMetricFieldChange` pone `agg: 'auto'` y el select de agregación muestra solo «Automática» (deshabilitado). `metricName` usa el nombre del campo |
 | `_metrics` · «Mostrar como» | `metric.window` de cada métrica de agregación | select con `metricWindowOptions` (`WINDOW_OPTIONS`: «% del total de la columna», «% del total de la fila», «Acumulado», «Variación vs anterior», más «Valor» = sin ventana), mostradas con el prefijo «Mostrar: …» (ej. «Mostrar: valor») para que se lea junto a la agregación. Solo las de `capabilities.windows`; con pivotes, solo los dos porcentajes (`PIVOT_WINDOWS`, se calculan por celda), y «% del total de la fila» solo con pivotes (mismas reglas que `form_errors`). Si la ventana guardada deja de valer, avisa «se quitará al guardar» |
 | `_condition_row` | una condición `{field, op, valor}` dentro de un `x-for="(c, ci) in …"` | `with list="…"`: la lista que la contiene. La usan `_filters` (filtros del widget) y `_metrics` (condiciones propias de cada métrica de agregación, plegables en «Solo filas donde…», solo si `hasMetricFilters`: el widget admite más de una métrica) |
@@ -156,7 +156,7 @@ meta y borra `style.target` cuando la meta deja de ser «Valor fijo».
 2. Mapea filtros a formato backend (`conditionToPayload`), también los de cada métrica; una
    métrica sin condiciones no lleva la clave `filters`. Quita el `window` de las métricas
    cuya ventana ya no vale (`metricWindowInvalid`), así guardar no choca con `form_errors`.
-3. Normaliza `trend_by`, `sort_by`, `limit`.
+3. Normaliza `trend_by`, `sort_by`, `limit`; `limit` solo se envía si el tipo lo admite (`capabilities.limit`, solo el ranking).
 4. `_saveWidget(w)`: `style` va tal cual lo dejó el panel.
 
 ### Getters de capacidades

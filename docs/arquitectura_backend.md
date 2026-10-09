@@ -474,14 +474,16 @@ y el panel solo ofrece las numéricas. Un widget nuevo son dos piezas:
 | `key` | Clase | `label` | dimensions | pivots | metrics | columns | sort | limit | filters | trend | windows² | `max_per_dashboard` | `board_filtered` |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `kpi` | `KpiWidget` | Tarjeta KPI | [0,0] | [0,0] | [1,4] | — | ✗ | ✗ | ✓ | ✓ | — | — | ✓ |
-| `bar` | `BarChartWidget` | Gráfico de Barras | [1,1] | [0,1] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | total, acum., var. | — | ✓ |
-| `line` | `LineWidget` | Gráfico de Líneas | [1,1] | [0,1] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | total, acum., var. | — | ✓ |
-| `donut` | `DonutWidget` | Gráfico de Dona | [1,1] | [0,0] | [1,1] | — | ✓ | ✓ | ✓ | ✗ | — | — | ✓ |
-| `table` | `TableWidget` | Tabla | [0,0] | [0,0] | [0,0] | [1,50] | ✓ | ✓ | ✓ | ✗ | — | — | ✓ |
-| `dynamic_table` | `DynamicTableWidget` | Tabla Dinámica | [0,3] | [0,2] | [1,5] | — | ✓ | ✓ | ✓ | ✗ | total, fila | — | ✓ |
+| `bar` | `BarChartWidget` | Gráfico de Barras | [0,1] | [0,1] | [1,5] | — | ✓ | ✗ | ✓ | ✗ | total, acum., var. | — | ✓ |
+| `line` | `LineWidget` | Gráfico de Líneas | [1,1] | [0,1] | [1,5] | — | ✓ | ✗ | ✓ | ✗ | total, acum., var. | — | ✓ |
+| `donut` | `DonutWidget` | Gráfico de Dona | [1,1] | [0,0] | [1,1] | — | ✓ | ✗ | ✓ | ✗ | — | — | ✓ |
+| `table` | `TableWidget` | Tabla | [0,0] | [0,0] | [0,0] | [1,50] | ✓ | ✗ | ✓ | ✗ | — | — | ✓ |
+| `dynamic_table` | `DynamicTableWidget` | Tabla Dinámica | [0,3] | [0,2] | [1,5] | — | ✓ | ✗ | ✓ | ✗ | total, fila | — | ✓ |
+| `ranking` | `RankingWidget` | Ranking | [1,1] | [0,0] | [1,1] | — | ✓ | ✓³ | ✓ | ✗ | — | — | ✓ |
 | `filter` | `FilterWidget` | Filtros | [0,50]¹ | [0,0] | [0,0] | — | ✗ | ✗ | ✗ | ✗ | — | **1** | **✗** |
 
 ¹ En «Filtros», `dimensions` son las **columnas expuestas como controles** (vacío = todas).
+³ Solo el ranking recorta filas: `limit` es su N. El resto trabaja siempre con toda la data.
 ² `percent_of_total` (total), `percent_of_row` (fila), `running_total` (acum.), `pct_change`
 (var.). La dona no lleva ventanas: ya muestra el porcentaje de cada parte.
 Todos los tipos tienen `ai_enabled = True`.

@@ -31,7 +31,7 @@ class LineWidget(BaseWidget):
         "pivots": [0, 1],
         "metrics": [1, 5],
         "sort": True,
-        "limit": True,
+        "limit": False,
         "filters": True,
         "windows": ["percent_of_total", "running_total", "pct_change"],
     }

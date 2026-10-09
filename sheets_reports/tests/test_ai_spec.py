@@ -302,9 +302,10 @@ class ToolSchemaTests(SimpleTestCase):
             return set(build_tool_parameters(sales_ctx(), widget_type)
                        ["properties"]["fields"]["properties"])
 
-        self.assertEqual(fields_of("donut"), {"dimensions", "metrics", "filters", "sort_by", "limit"})
+        self.assertEqual(fields_of("donut"), {"dimensions", "metrics", "filters", "sort_by"})
         self.assertEqual(fields_of("kpi"), {"metrics", "filters", "trend_by"})
-        self.assertEqual(fields_of("table"), {"columns", "filters", "sort_by", "limit"})
+        self.assertEqual(fields_of("table"), {"columns", "filters", "sort_by"})
+        self.assertIn("limit", fields_of("ranking"))
         self.assertIn("trend_by", fields_of(None))   # sin tipo fijado se ofrece todo
 
     def test_condiciones_por_metrica_solo_si_admite_varias_metricas(self):
@@ -412,5 +413,5 @@ class PromptTests(SimpleTestCase):
                          "sin dimensiones, sin pivotes, métricas de 1 a 4, sin orden, sin límite, "
                          "filtros, tendencia, condiciones por métrica, sin ventanas")
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("donut")),
-                         "dimensiones 1, sin pivotes, métricas 1, orden, límite, filtros, sin ventanas")
+                         "dimensiones 1, sin pivotes, métricas 1, orden, sin límite, filtros, sin ventanas")
         self.assertNotIn("ventanas", ai_spec.capabilities_text(WIDGETS.get("table")))

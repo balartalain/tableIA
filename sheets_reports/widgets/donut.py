@@ -31,7 +31,7 @@ class DonutWidget(BaseWidget):
         "pivots": [0, 0],
         "metrics": [1, 1],
         "sort": True,
-        "limit": True,
+        "limit": False,
         "filters": True,
         "windows": [],
     }

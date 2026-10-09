@@ -35,7 +35,7 @@ class TableWidget(BaseWidget):
         "pivots": [0, 0],
         "metrics": [0, 0],
         "sort": True,
-        "limit": True,
+        "limit": False,
         "filters": True,
         "windows": [],
     }

@@ -117,16 +117,26 @@ class ViewsTests(TestCase):
         self.assertEqual(data["target"]["pct"], 67.5)
         self.assertEqual(data["status"], "warn")
 
-    def test_crear_barras_con_orden_y_limite(self, _df):
+    def test_crear_barras_con_orden(self, _df):
+        r = self.client.post(
+            f"/api/dashboard/{self.dashboard.id}/widgets/",
+            json.dumps(payload(fields_data=fields(sort_by="-total_ventas"))),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 201, r.content)
+        data = r.json()["data"]
+        self.assertEqual(data["categories"][0], "Electrónica")
+        self.assertEqual(data["series"][0]["data"][0], 500.0)
+
+    def test_las_barras_no_admiten_limite(self, _df):
+        """Solo el ranking recorta filas; el resto trabaja con toda la data."""
         r = self.client.post(
             f"/api/dashboard/{self.dashboard.id}/widgets/",
             json.dumps(payload(fields_data=fields(sort_by="-total_ventas", limit=1))),
             content_type="application/json",
         )
-        self.assertEqual(r.status_code, 201, r.content)
-        data = r.json()["data"]
-        self.assertEqual(data["categories"], ["Electrónica"])
-        self.assertEqual(data["series"][0]["data"], [500.0])
+        self.assertEqual(r.status_code, 422, r.content)
+        self.assertIn("no admite límite", r.json()["error"])
 
     def test_crear_widget_desde_builder_sin_ia(self, _df):
         with mock.patch("sheets_reports.services.ai_spec.generate_widget_form") as ai:
@@ -292,7 +302,7 @@ class ViewsTests(TestCase):
         manifest = self.client.get(f"/api/sources/{self.source.id}/schema/").json()["widget_manifest"]
         self.assertEqual(manifest["bar"]["capabilities"], {
             "dimensions": [0, 1], "ungrouped_min_metrics": 2, "pivots": [0, 1], "metrics": [1, 5],
-            "sort": True, "limit": True, "filters": True,
+            "sort": True, "limit": False, "filters": True,
             "windows": ["percent_of_total", "percent_of_row", "running_total", "pct_change"],
         })
         self.assertEqual(manifest["bar"]["max_per_dashboard"], None)

@@ -25,8 +25,7 @@ class BarChartWidget(BaseWidget):
                               'metrics': [   {   'agg': 'sum',
                                                  'field': 'ventas',
                                                  'alias': 'total_ventas'}],
-                              'sort_by': '-total_ventas',
-                              'limit': 5},
+                              'sort_by': '-total_ventas'},
                 'style': {'stacked': False}}),
         (   'ventas por mes separadas por categoría',
             {   'widget_type': 'bar',
@@ -65,7 +64,7 @@ class BarChartWidget(BaseWidget):
         "pivots": [0, 1],
         "metrics": [1, 5],
         "sort": True,
-        "limit": True,
+        "limit": False,
         "filters": True,
         "windows": ["percent_of_total", "percent_of_row", "running_total", "pct_change"],
     }

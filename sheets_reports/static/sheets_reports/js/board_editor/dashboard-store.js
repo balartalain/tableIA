@@ -949,7 +949,9 @@ document.addEventListener('alpine:init', () => {
       // Tendencia: sin columna elegida, «sin tendencia» (null, no "").
       fields.trend_by = String(fields.trend_by || '').trim() || null;
       if (!fields.sort_by) fields.sort_by = null;
-      if (fields.limit === '' || fields.limit == null || Number.isNaN(Number(fields.limit))) fields.limit = null;
+      // Solo el ranking recorta filas: en el resto un `limit` guardado no se envía.
+      if (!this.drawerCapabilities.limit || fields.limit === '' || fields.limit == null
+          || Number.isNaN(Number(fields.limit))) fields.limit = null;
       else fields.limit = Number(fields.limit);
 
       const style = JSON.parse(JSON.stringify(draft.style || {}));

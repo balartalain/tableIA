@@ -112,15 +112,15 @@ def _metric_configs(caps: dict):
 
 
 def _column_configs(caps: dict):
-    """La tabla: columnas a mostrar × orden × límite × filtro."""
-    for columns, sort_by, limit, filters in itertools.product(
+    """La tabla: columnas a mostrar × orden × filtro."""
+    for columns, sort_by, filters in itertools.product(
             (["categoria"], ["categoria", "ventas"], ["ventas", "mes", "anio"], ["ventas", "anio"]),
-            (None, "-ventas"), (None, 2),
+            (None, "-ventas"),
             ([], [{"field": "anio", "op": "eq", "value": 2026}])):
         yield {"dimensions": [], "pivots": [], "metrics": [], "filters": filters,
                "columns": [{"field": c} for c in columns],
                "sort_by": sort_by if sort_by and sort_by.lstrip("-") in columns else None,
-               "limit": limit}
+               "limit": None}
 
 
 def _dimension_configs(caps: dict):

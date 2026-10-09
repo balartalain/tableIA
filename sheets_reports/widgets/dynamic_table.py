@@ -111,7 +111,7 @@ class DynamicTableWidget(BaseWidget):
         "pivots": [0, 2],
         "metrics": [1, 5],
         "sort": True,
-        "limit": True,
+        "limit": False,
         "filters": True,
         "windows": ["percent_of_total", "percent_of_row"],
     }

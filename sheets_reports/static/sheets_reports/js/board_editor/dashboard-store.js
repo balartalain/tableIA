@@ -763,14 +763,19 @@ document.addEventListener('alpine:init', () => {
       if (this.metricWindowInvalid(metric)) delete metric.window;
     },
 
-    // Los controles que eligen una métrica (`options_from: 'metrics'`) apuntan al alias: si
-    // cambia, siguen.
+    // Los controles que eligen una métrica (`options_from: 'metrics'`) y el orden apuntan al
+    // alias: si cambia, siguen (el orden, con la misma dirección); si la métrica se quita, se
+    // vacían.
     _rebindAlias(oldAlias, newAlias) {
       if (!oldAlias) return;
       const style = this.drawerDraft.style || {};
       (this.drawerManifest.style_schema || [])
         .filter(c => c.options_from === 'metrics')
         .forEach(c => { if (style[c.key] === oldAlias) style[c.key] = newAlias || ''; });
+      const fields = this.drawerDraft.fields;
+      if (this.sortValue === oldAlias) {
+        fields.sort_by = newAlias ? (this.sortDirection === 'desc' ? `-${newAlias}` : newAlias) : null;
+      }
     },
 
     // Nombre visible de la métrica: «Nombre a mostrar» o, si está vacío, el agg en español
@@ -948,7 +953,9 @@ document.addEventListener('alpine:init', () => {
       fields.filters = (fields.filters || []).map(c => conditionToPayload(c, this.schema.numeric_fields || []));
       // Tendencia: sin columna elegida, «sin tendencia» (null, no "").
       fields.trend_by = String(fields.trend_by || '').trim() || null;
-      if (!fields.sort_by) fields.sort_by = null;
+      // Un orden que ya no está entre las opciones (columna, dimensión o métrica quitada) no se
+      // envía: el select ya muestra «Sin orden».
+      if (!fields.sort_by || !this.sortOptions.some(o => o.value === this.sortValue)) fields.sort_by = null;
       // Solo el ranking recorta filas: en el resto un `limit` guardado no se envía.
       if (!this.drawerCapabilities.limit || fields.limit === '' || fields.limit == null
           || Number.isNaN(Number(fields.limit))) fields.limit = null;

@@ -82,7 +82,7 @@ class SourcesCrudTests(TestCase):
         self.source.save()
         r = self.client.get(f"/api/sources/{self.source.id}/columns/").json()
         by_name = {c["name"]: c for c in r["columns"]}
-        self.assertEqual(list(by_name), ["categoria", "mes", "anio", "ventas"])  # orden de la hoja
+        self.assertEqual(list(by_name), ["ID", "categoria", "mes", "anio", "ventas"])  # orden de la hoja
         self.assertEqual((by_name["anio"]["type"], by_name["anio"]["include"]), ("text", True))
         self.assertFalse(by_name["categoria"]["include"])
         self.assertEqual((by_name["ventas"]["type"], by_name["ventas"]["include"]), ("number", True))
@@ -191,7 +191,7 @@ class SourceChangesTests(TestCase):
         refresh.assert_called_once_with("abc", "0", headers=True)
         # La estructura actual de la hoja, con lo guardado de las columnas que siguen.
         columns = r.json()["columns"]
-        self.assertEqual([c["name"] for c in columns], ["categoria", "mes", "anio", "ventas"])
+        self.assertEqual([c["name"] for c in columns], ["ID", "categoria", "mes", "anio", "ventas"])
         self.assertEqual(columns[3]["label"], "Monto")
         # Nada se guarda hasta «Guardar cambios».
         self.source.refresh_from_db()

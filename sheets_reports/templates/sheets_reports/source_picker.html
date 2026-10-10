@@ -216,7 +216,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             <th class="px-3 py-2 w-20 font-semibold">
               <label class="inline-flex items-center gap-1.5 cursor-pointer">
                 <input type="checkbox" class="accent-moss-500" x-bind:checked="includedCount === columns.length"
-                       x-on:change="columns.forEach(c => c.include = $event.target.checked)">
+                       x-on:change="columns.forEach(c => { if (!c.readonly) c.include = $event.target.checked })">
                 Incluir
               </label>
             </th>
@@ -231,17 +231,19 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <template x-for="c in columns" :key="c.name">
             <tr class="border-t border-line" x-bind:class="c.include ? '' : 'text-ink/40'">
               <td class="px-3 py-2">
+                <!-- ID: columna de sistema, de solo lectura (siempre incluida). -->
                 <input type="checkbox" x-model="c.include" class="accent-moss-500"
-                       x-bind:aria-label="`Incluir ${c.name}`">
+                       x-bind:disabled="c.readonly" x-bind:aria-label="`Incluir ${c.name}`">
               </td>
               <td class="px-3 py-2 font-medium max-w-[18rem] truncate" x-text="c.name" x-bind:title="c.name"></td>
               <td class="px-3 py-2">
-                <input type="text" x-model="c.label" x-bind:placeholder="c.name" x-bind:disabled="!c.include"
+                <input type="text" x-model="c.label" x-bind:placeholder="c.name"
+                       x-bind:disabled="!c.include || c.readonly"
                        x-bind:aria-label="`Nombre a mostrar de ${c.name}`" maxlength="120"
                        class="w-full min-w-[10rem] text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
               </td>
               <td class="px-3 py-2">
-                <select x-model="c.type" x-bind:disabled="!c.include" x-bind:aria-label="`Tipo de ${c.name}`"
+                <select x-model="c.type" x-bind:disabled="!c.include || c.readonly" x-bind:aria-label="`Tipo de ${c.name}`"
                         class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
                   <template x-for="t in TYPES" :key="t.value">
                     <option x-bind:value="t.value" x-text="t.label" x-bind:selected="c.type === t.value"></option>
@@ -250,7 +252,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               </td>
               <td class="px-3 py-2">
                 <!-- Solo las numéricas: todas las métricas que las suman, promedian… lo heredan. -->
-                <select x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include"
+                <select x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include || c.readonly"
                         x-bind:aria-label="`Formato de ${c.name}`"
                         class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
                   <template x-for="f in FORMATS" :key="f.value">
@@ -451,4 +453,44 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       </template>
     </div>
   </div>
+
+  <!-- Popup: ¿la pestaña proviene de un Google Forms? Se pregunta al
+       confirmar la pestaña (crear, agregar o cambiar fuente): con «sí»
+       la fuente se marca como respuestas de formulario y el servidor la
+       sirve en modelo tidy (una fila por opción seleccionada); con «no»
+       se lee como hoja normal, sin transformación. -->
+  <template x-teleport="body">
+    <div x-show="formPopup" x-cloak x-on:keydown.escape.window="formPopup = false"
+         class="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="form-origin-title"
+           class="bg-white rounded w-full max-w-md border border-line shadow-xl">
+        <div class="flex items-center gap-2.5 px-5 py-2.5 border-b border-line">
+          <i class="ti ti-file-text text-base text-moss-600" aria-hidden="true"></i>
+          <h2 id="form-origin-title" class="flex-1 text-sm font-semibold text-ink">Origen de la hoja</h2>
+        </div>
+        <div class="px-5 py-4 space-y-3">
+          <p class="text-sm text-ink/80">
+            ¿La pestaña <span class="font-medium" x-text="tab ? tab.title.trim() : ''"></span>
+            proviene de un <span class="font-medium">Google Forms</span>?
+          </p>
+          <p class="text-xs text-ink/50 leading-relaxed">
+            Si es así, la leemos como respuestas de formulario: cada opción elegida
+            en casillas y cuadrículas queda en su propia fila («Pregunta | Aspecto |
+            Respuesta»), con el identificador de cada respuesta para contarlas
+            sin repetir. En una hoja normal esto no aplica.
+          </p>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-line">
+          <button type="button" x-on:click="answerFormOrigin(false)"
+                  class="inline-flex items-center h-9 px-4 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md transition cursor-pointer">
+            No, es una hoja normal
+          </button>
+          <button type="button" x-on:click="answerFormOrigin(true)"
+                  class="inline-flex items-center h-9 px-4 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-md transition cursor-pointer">
+            Sí, es de Google Forms
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
 </div>

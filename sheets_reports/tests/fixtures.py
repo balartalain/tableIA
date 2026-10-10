@@ -9,7 +9,10 @@ from sheets_reports.widgets.schemas import WidgetFields, WidgetForm
 
 
 def sales_df() -> pd.DataFrame:
+    """La hoja de ventas: con su columna de sistema ID (el sistema la crea
+    al cargar la hoja, una por fila)."""
     return pd.DataFrame({
+        "ID": range(1, 7),
         "categoria": ["Hogar", "Electrónica", "Hogar", "Ropa", "Electrónica", "Hogar"],
         "mes": ["Ene", "Ene", "Feb", "Feb", "Feb", "Mar"],
         "anio": [2026, 2026, 2026, 2025, 2026, 2026],
@@ -28,6 +31,7 @@ def sales_int_df() -> pd.DataFrame:
 def sellers_df() -> pd.DataFrame:
     """Ventas y plan por vendedor: Ana y Luis no llegan al plan, Eva sí."""
     return pd.DataFrame({
+        "ID": range(1, 7),
         "vendedor": ["Ana", "Ana", "Luis", "Eva", "Eva", "Luis"],
         "categoria": ["Hogar", "Ropa", "Hogar", "Ropa", "Hogar", "Ropa"],
         "anio": [2025, 2026, 2026, 2026, 2025, 2025],

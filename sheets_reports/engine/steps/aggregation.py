@@ -14,7 +14,12 @@ import pandas as pd
 
 from sheets_reports.engine.formulas import aggregated_fields
 from sheets_reports.engine.steps.filter import parse_conditions
-from sheets_reports.utils.data import column_formats, is_number, to_python
+from sheets_reports.utils.data import (
+    column_formats,
+    is_number,
+    require_id_column,
+    to_python,
+)
 
 MAX_PIVOT_CELLS = 50_000
 
@@ -135,11 +140,14 @@ def _metric_rows(df: pd.DataFrame, metric: dict) -> pd.DataFrame:
 def _metric_columns(df: pd.DataFrame, metrics: list) -> Tuple[pd.DataFrame, List[Tuple[str, str, str]]]:
     """
     Una columna intermedia por métrica: dos métricas sobre el mismo campo (suma y promedio)
-    no colisionan, y `count` (sin campo) se resuelve con unos. Devuelve
+    no colisionan, y el «Conteo» (sin campo o sobre uno) se resuelve como
+    filas distintas (ID): la intermedia es la columna ID con `nunique`,
+    dejando NaN las filas que quedan fuera (su columna vacía o sus
+    condiciones propias). Devuelve
     (frame, [(columna, agregación pandas, alias), ...]).
 
-    Las condiciones propias de la métrica enmascaran sus filas como NaN: todas las
-    agregaciones aceptadas (sum, avg, count, nunique...) ignoran los NaN, así que cada
+    Las condiciones propias de la métrica enmascaran sus filas como NaN: todas
+    las agregaciones aceptadas (sum, avg, count, nunique...) ignoran los NaN, así que cada
     métrica resume solo sus filas dentro del mismo groupby/pivote.
     """
     df = df.copy()
@@ -153,10 +161,20 @@ def _metric_columns(df: pd.DataFrame, metrics: list) -> Tuple[pd.DataFrame, List
             # Campo agregado: la columna solo marca las filas; su agregador evalúa la fórmula.
             df[column] = 1.0
             func = _calculated_aggregator(df, calculated[field_name])
+        elif field_name and agg == "count":
+            # Conteo sobre una columna: filas distintas (ID) con la
+            # columna no vacía (las vacías quedan como NaN).
+            id_column = require_id_column(df)
+            df[column] = df[id_column]
+            df.loc[df[field_name].isna(), column] = float("nan")
+            func = "nunique"
         elif field_name:
             df[column] = df[field_name]
         elif agg == "count":
-            df[column] = 1
+            # Conteo sin columna: filas distintas (ID).
+            id_column = require_id_column(df)
+            df[column] = df[id_column]
+            func = "nunique"
         else:
             continue
         if metric.get("filters"):
@@ -281,10 +299,16 @@ def _scalar(df, metrics, metadata) -> pd.DataFrame:
         field_name, agg, alias = metric_field(m), m.get("agg"), metric_alias(m)
         if field_name in calculated:
             values[alias] = calculated[field_name].formula.aggregate(rows)
+        elif field_name and agg == "count":
+            # Conteo sobre una columna: las filas distintas (ID) con
+            # esa columna no vacía.
+            id_column = require_id_column(rows)
+            values[alias] = rows.loc[rows[field_name].notna(), id_column].nunique()
         elif field_name:
             values[alias] = aggregate(rows[field_name], agg)
         elif agg == "count":
-            values[alias] = len(rows)
+            # Conteo sin columna: filas distintas (ID).
+            values[alias] = rows[require_id_column(rows)].nunique()
         else:
             values[alias] = None
     metadata["scalar_result"] = {"values": values}

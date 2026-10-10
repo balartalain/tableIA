@@ -266,7 +266,7 @@ class WidgetFields:
 | Clave | Tipo | Descripción |
 |---|---|---|
 | `agg` | str | `sum`, `avg`, `median`, `min`, `max`, `std`, `count`, `count_distinct` (y `mean` como alias de `avg` en `AGGREGATIONS`); `auto` solo con un campo calculado agregado (§10.4) |
-| `field` | str | Columna a agregar o campo calculado agregado. Obligatorio salvo en `count` sin campo (cuenta filas) |
+| `field` | str | Columna a agregar o campo calculado agregado. Obligatorio salvo en `count` sin campo (cuenta filas distintas sobre `ID`) |
 | `alias` | str | Nombre técnico de la columna resultante, **snake_case** (`^[a-z][a-z0-9_]{0,40}$` en la validación de IA) |
 | `label` | str? | Nombre a mostrar (hasta 80 chars). Sin él se usa `metric_label()` |
 | `filters` | list? | Condiciones **solo de esta métrica** (p. ej. «ventas 2026» y «ventas 2025» en el mismo widget) |
@@ -661,13 +661,18 @@ Despacha según `(widget_type, dimensions, pivots)`:
 Detalles importantes:
 
 - **`_metric_columns(df, metrics)`**: crea `__metric_{i}` por métrica (evita colisiones entre
-  dos aggs del mismo campo); `count` sin campo usa columnas de `1`; las `filters` propias de la
-  métrica enmascaran sus filas como `NaN` (todas las aggs las ignoran → cada métrica resume
-  solo sus filas dentro del mismo groupby).
+  dos aggs del mismo campo); el «Conteo» (sin campo o sobre uno) se
+  resuelve como filas distintas: la intermedia es la columna `ID` con
+  `nunique` (el sistema la crea al cargar la hoja; si falta, el
+  motor lanza error); las `filters`
+  propias de la métrica enmascaran sus filas como `NaN` (todas las
+  aggs las ignoran → cada métrica resume solo sus filas dentro del
+  mismo groupby).
 - **`_grouped`**: preserva el orden de aparición de la primera dimensión (`pd.Categorical`
   ordenado) y renombra `__metric_{i}` → `alias`.
 - **`_scalar`**: por métrica aplica sus filtros propios (`_metric_rows`) y luego la agg;
-  `count` sin campo = número de filas.
+  `count` sin campo = filas distintas (`nunique` sobre `ID`); `count`
+  sobre una columna = filas distintas con esa columna no vacía.
 - **`_nested`**: `row_leaf`/`col_leaf` (`_ordered_keys`, sin nulos, orden de aparición) →
   `hierarchy()` construye el árbol de claves con subtotales por nivel (como las tablas
   dinámicas de una hoja). Un groupby por pareja (nivel de fila, nivel de columna) en `tables`;

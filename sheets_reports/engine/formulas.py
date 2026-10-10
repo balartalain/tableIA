@@ -22,6 +22,8 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from sheets_reports.utils.data import require_id_column
+
 AGGREGATE_FUNCTIONS = {
     "SUM": "sum",
     "AVG": "mean",
@@ -411,7 +413,7 @@ def formula_text(tree: dict | None) -> str:
 # que el parser y `formula_text`, así una función nueva se agrega una sola vez.
 _FUNCTION_TITLES = {
     "IF": "SI(condición, valor si se cumple, valor si no): fila a fila",
-    "SUM": "Suma", "AVG": "Promedio", "COUNT": "Conteo (valores no vacíos)",
+    "SUM": "Suma", "AVG": "Promedio", "COUNT": "Conteo (filas distintas)",
     "COUNT_DISTINCT": "Valores distintos", "MIN": "Mínimo", "MAX": "Máximo",
 }
 BUILDER_CATALOG = {
@@ -566,8 +568,12 @@ def _eval_aggregate(node: Node, rows: pd.DataFrame):
         if not isinstance(values, pd.Series):
             values = pd.Series([values] * len(rows), index=rows.index)
         func = AGGREGATE_FUNCTIONS[node.value]
-        if func in ("count", "nunique"):
-            return float(getattr(values.dropna(), func)())
+        if func == "count":
+            # Conteo: filas distintas (ID) con la columna no vacía.
+            id_column = require_id_column(rows)
+            return float(rows.loc[values.dropna().index, id_column].nunique())
+        if func == "nunique":
+            return float(values.dropna().nunique())
         numbers = _numeric(values)
         return numbers.agg(func) if numbers.notna().any() else np.nan
     if kind == "num" or kind == "str":

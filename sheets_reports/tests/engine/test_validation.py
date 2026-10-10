@@ -297,7 +297,7 @@ class ConditionTests(SimpleTestCase):
 class SheetContextTests(SimpleTestCase):
     def test_columnas_numericas_y_muestras(self):
         ctx = sales_ctx()
-        self.assertEqual(list(ctx.fields), ["categoria", "mes", "anio", "ventas"])
+        self.assertEqual(list(ctx.fields), ["ID", "categoria", "mes", "anio", "ventas"])
         self.assertTrue(ctx.is_numeric("ventas"))
         self.assertFalse(ctx.is_numeric("categoria"))
 

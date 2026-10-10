@@ -23,6 +23,7 @@ from sheets_reports.tests.fixtures import compiled, errors_for, execute, fields
 def budget_df() -> pd.DataFrame:
     """Los gastos del tablero de ejemplo: Tecnología ejecuta 15 500 de 16 000."""
     return pd.DataFrame({
+        "ID": range(1, 6),
         "Departamento": ["TI", "TI", "TI", "RH", "RH"],
         "Campus": ["Santiago", "Santo Domingo", "Nagua", "Nagua", "Santiago"],
         "Presupuesto_Asignado": [5000.0, 8000.0, 3000.0, 2000.0, 1500.0],

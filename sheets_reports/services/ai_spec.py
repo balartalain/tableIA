@@ -19,6 +19,7 @@ from sheets_reports.engine.steps.filter import condition_errors
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula, formula_tree
 from sheets_reports.services.source_columns import map_columns
+from sheets_reports.utils.data import is_id_column
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
 from sheets_reports.engine.steps.aggregation import METRIC_FORMATS
@@ -80,12 +81,19 @@ consulta.
 - trend_by: columna de TIEMPO (año, mes, fecha) de la mini tendencia (sparkline) bajo el
   número del KPI (ej. "mes"); nunca una categoría. Solo en widgets con tendencia. Omitir si no
   aplica.
+- La hoja siempre tiene una columna ID (una por fila, de solo lectura): NO la uses como
+  dimensión, pivote, columna ni field de una métrica. El Conteo (agg "count" sin field) ya
+  cuenta las filas distintas; para contar filas en una fórmula de campo calculado agregado
+  usa COUNT([ID]) (o COUNT([columna]) para las filas con esa columna no vacía).
 - metrics: lista de métricas, en orden. Cada una lleva un `alias` único en snake_case que es el
   nombre de la columna con la que se calcula (ej. "total_ventas") y, si hace falta un texto más
   claro para la persona que mira el widget, un `label` (nombre a mostrar, ej. "Costos totales";
   sin label se muestra el agg en español con la columna, ej. «Promedio Ventas»):
   - {"agg", "field", "alias"}: resume una columna.
-    - agg "count": "cuántos", "cantidad de". Cuenta filas y NO lleva field.
+    - agg "count": "cuántos", "cantidad de". Cuenta FILAS DISTINTAS (sobre la
+      columna de sistema ID): sin field, todas las filas; con field, las filas
+      distintas con esa columna no vacía. En respuestas de formulario, sin
+      field son respuestas únicas.
     - agg "count_distinct": "cuántos distintos" de una columna (cualquier tipo).
     - agg "sum"/"avg"/"median"/"min"/"max"/"std": SOLO sobre columnas numéricas.
     - agg "auto": SOLO con un campo calculado agregado: uno de los que lista el mensaje o uno
@@ -127,7 +135,8 @@ a su `name`. Se crea en la fuente al aplicar la propuesta y queda para todo el t
   AVG(IF([Respuesta] = "Sí", 1, 0)) * 100; SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100.
 - No combines columnas sueltas con agregaciones (SUM([a]) / [b] no vale).
 - Dentro de una agregación cada columna es el valor de la fila, no un total. Para contar filas
-  que cumplen una condición usa SUM(IF(condición, 1, 0)): COUNT cuenta valores no vacíos (el 0 también).
+  que cumplen una condición usa SUM(IF(condición, 1, 0)): COUNT cuenta filas distintas (ID),
+  no selecciones.
 - limit: máximo de filas/grupos a mostrar ("top 5" → 5). Null si no aplica.
 
 ## style (la apariencia)
@@ -607,6 +616,8 @@ def columns_context(ctx: SheetContext) -> str:
     for field in ctx.fields:
         kind = "numérica" if ctx.is_numeric(field) else "texto"
         line = f"- {json.dumps(field, ensure_ascii=False)} ({kind})"
+        if is_id_column(field):
+            line += " — columna de sistema: una por fila, de solo lectura"
         calculated = ctx.calculated.get(field)
         if calculated and calculated["kind"] == "row":
             line += f" — campo calculado por fila: {calculated['formula']}"
@@ -722,7 +733,11 @@ def _metric_errors(metric, index: int, ctx, seen_aliases) -> list[str]:
             allowed = ", ".join(sorted(set(AGGREGATIONS) - {"auto"}))
             errors.append(f"{path}: agg '{agg}' no existe; usa uno de {allowed}.")
         if agg == "count" and not metric.get("field"):
-            pass  # count sin campo: cuenta filas
+            pass  # count sin campo: filas distintas (ID)
+        elif is_id_column(metric.get("field")):
+            errors.append(f"{path}: «ID» es la columna de sistema (una por fila, de solo "
+                          f"lectura): el Conteo sin columna cuenta las filas; para contarlas "
+                          f"en una fórmula usa COUNT([ID]).")
         elif not metric.get("field"):
             errors.append(f"{path}: falta 'field'.")
         elif metric["field"] not in ctx.fields:

@@ -50,7 +50,8 @@ Gramática:
 - Sin agregaciones la fórmula es por fila (una columna nueva, ej. una categoría o una resta).
   Con agregaciones es un cálculo entre totales: cada columna va dentro de una agregación
   (SUM([a]) / [b] no vale) y una agregación no va dentro de otra.
-- COUNT cuenta valores no vacíos (un 0 también): para contar las filas que cumplen algo usa
+- COUNT cuenta filas distintas (ID) con la columna no vacía; COUNT(1) cuenta
+  todas las filas distintas: para contar las filas que cumplen algo usa
   SUM(IF(condición, 1, 0)). Un porcentaje se multiplica por 100.
 
 Ejemplos:

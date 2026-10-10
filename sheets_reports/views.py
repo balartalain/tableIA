@@ -37,7 +37,13 @@ from sheets_reports.engine.formulas import (
 )
 from sheets_reports.services.ai_spec import panel_options
 from sheets_reports.services.source_columns import impact, rename_in_widgets
-from sheets_reports.utils.data import time_fields, to_key, to_python
+from sheets_reports.utils.data import (
+    find_id_column,
+    is_id_column,
+    time_fields,
+    to_key,
+    to_python,
+)
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
 from sheets_reports.utils.validation import SpecValidationError
 from sheets_reports.services.widget_service import WidgetService
@@ -131,6 +137,8 @@ def _source_fields(data: dict) -> tuple[dict, str | None]:
         "tab_name": str(data.get("tab_name") or "").strip()[:255],
         "name": str(data.get("name") or "").strip()[:255],
         "first_row_headers": bool(data.get("first_row_headers", True)),
+        # ¿La pestaña es una hoja de respuestas de Google Forms?
+        "is_form_response": bool(data.get("is_form_response", False)),
         "columns": _clean_columns(columns),
     }, None
 
@@ -138,6 +146,10 @@ def _source_fields(data: dict) -> tuple[dict, str | None]:
 def _clean_columns(columns: list) -> list[dict]:
     out = []
     for c in columns:
+        # La columna de sistema ID es de solo lectura: siempre
+        # está incluida y su configuración no se guarda.
+        if is_id_column(c.get("name")):
+            continue
         column = {"name": c["name"], "type": c["type"], "include": bool(c.get("include", True))}
         label = str(c.get("label") or "").strip()
         if label and label != c["name"]:
@@ -220,6 +232,7 @@ def dashboard_duplicate(request, dashboard_id):
             dashboard=new_dashboard, kind=source.kind, sheet_id=source.sheet_id, gid=source.gid,
             sheet_name=source.sheet_name, tab_name=source.tab_name, name=source.name,
             first_row_headers=source.first_row_headers, columns=source.columns,
+            is_form_response=source.is_form_response,
         )
     for widget in dashboard.widgets.all():
         Widget.objects.create(
@@ -318,6 +331,7 @@ def _serialize_source(source):
         "sheet_name": source.sheet_name,
         "tab_name": source.tab_name,
         "first_row_headers": source.first_row_headers,
+        "is_form_response": source.is_form_response,
         "refreshed_at": refreshed.isoformat() if refreshed else None,
         # Sin configuración (fuentes anteriores al selector) se usan todas: no se sabe cuántas.
         "columns_included": len(included) if source.columns else None,
@@ -351,13 +365,17 @@ SOURCE_SAMPLES = 3
 
 
 def _sheet_columns(df) -> list[dict]:
-    """Columnas de la hoja tal cual: tipo inferido y algunos valores de ejemplo."""
+    """Columnas de la hoja tal cual: tipo inferido y algunos valores de
+    ejemplo. La columna de sistema ID se marca de solo lectura."""
     types = infer_column_types(df)
     columns = []
     for col in df.columns:
         # to_key: 5000.0 → «5000», como se ve en la hoja.
         values = [v for v in dict.fromkeys(str(to_key(x)).strip() for x in df[col].dropna()) if v]
-        columns.append({"name": col, "type": types[col], "samples": values[:SOURCE_SAMPLES]})
+        column = {"name": col, "type": types[col], "samples": values[:SOURCE_SAMPLES]}
+        if is_id_column(col):
+            column["readonly"] = True
+        columns.append(column)
     return columns
 
 
@@ -375,9 +393,15 @@ def _read_sheet(request, sheet_id: str, gid: str, headers: bool):
 
 @require_http_methods(["GET"])
 def source_columns(request, spreadsheet_id, gid):
-    """Columnas de la pestaña con el tipo que se infiere y algunos valores de ejemplo."""
+    """Columnas de la pestaña con el tipo que se infiere y algunos valores de
+    ejemplo. `?form=1`: la pestaña es de respuestas de Google Forms y se
+    sirven las columnas de su modelo tidy (ver services/form_tidy.py):
+    `ID`, `marca_tiempo`, el contexto y `Pregunta | Aspecto | Respuesta`."""
     try:
-        df = _read_sheet(request, spreadsheet_id, gid, _headers_param(request))
+        headers = _headers_param(request)
+        df = _read_sheet(request, spreadsheet_id, gid, headers)
+        if request.GET.get("form"):
+            df = sheets.get_tidy_dataframe(spreadsheet_id, gid, headers=headers)
     except SheetError as e:
         return _error(str(e), status=502)
     return JsonResponse({"columns": _sheet_columns(df), "rows": len(df)})
@@ -484,7 +508,12 @@ def _check_calculated(source, updates: dict) -> str | None:
     gid = updates.get("gid", source.gid)
     headers = updates.get("first_row_headers", source.first_row_headers)
     try:
-        df = sheets.get_sheet_dataframe(sheet_id, gid, headers=headers)
+        # Respuestas de formulario: los campos calculados se arman
+        # sobre el modelo tidy (ver services/form_tidy.py).
+        if updates.get("is_form_response", source.is_form_response):
+            df = sheets.get_tidy_dataframe(sheet_id, gid, headers=headers)
+        else:
+            df = sheets.get_sheet_dataframe(sheet_id, gid, headers=headers)
     except SheetError as e:
         return str(e)
     df = sheets.apply_column_config(df, updates.get("columns", source.columns))
@@ -537,6 +566,8 @@ def source_detail(request, source_id):
             updates["name"] = str(data.get("name") or "").strip()[:255]
         if "first_row_headers" in data:
             updates["first_row_headers"] = bool(data["first_row_headers"])
+        if "is_form_response" in data:
+            updates["is_form_response"] = bool(data["is_form_response"])
     if "calculated_fields" in data:
         error = _calculated_errors(data["calculated_fields"])
         if error:
@@ -563,30 +594,36 @@ def source_detail(request, source_id):
 
 @require_http_methods(["GET"])
 def source_saved_columns(request, source_id):
-    """Las columnas de la hoja de la fuente para editarla: lo guardado (tipo, incluir, nombre a
-    mostrar) manda; las columnas nuevas de la hoja entran incluidas y las que ya no están se
-    descartan. `?headers=0|1` lee la pestaña con otra opción de encabezados; `?refresh=1`
-    («Actualizar datos») la relee de Google. No guarda nada: los cambios de estructura se
-    guardan con el PUT de la fuente."""
+    """Las columnas de la fuente para editarla: lo guardado (tipo, incluir, nombre a
+    mostrar) manda; las columnas nuevas de la hoja entran incluidas y las que ya no
+    están se descartan. `?headers=0|1` lee la pestaña con otra opción de encabezados;
+    `?refresh=1` («Actualizar datos») la relee de Google. En una fuente de
+    respuestas de Google Forms las columnas son las del modelo tidy: se editan
+    `ID`, el contexto y `Pregunta | Aspecto | Respuesta` como cualquier columna.
+    No guarda nada: los cambios de estructura se guardan con el PUT de la fuente."""
     source = _owned_source(request, source_id)
     if not source:
         return _error("Fuente no encontrada", status=404)
     headers = _headers_param(request, source.first_row_headers)
     try:
         df = _read_sheet(request, source.sheet_id, source.gid, headers)
+        if source.is_form_response:
+            df = sheets.get_tidy_dataframe(source.sheet_id, source.gid, headers=headers)
     except SheetError as e:
         return _error(str(e), status=502)
-    return JsonResponse({"columns": _merge_saved_columns(_sheet_columns(df), source.columns),
-                         "rows": len(df), "first_row_headers": headers,
+    columns = _merge_saved_columns(_sheet_columns(df), source.columns)
+    return JsonResponse({"columns": columns, "rows": len(df), "first_row_headers": headers,
                          "source": _serialize_source(source)})
 
 
 def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[dict]:
-    """Las columnas actuales de la hoja con lo guardado de cada una (por encabezado)."""
+    """Las columnas actuales de la hoja con lo guardado de cada una (por encabezado).
+    La columna de sistema ID ignora lo guardado: es de solo lectura (siempre
+    incluida)."""
     by_name = {c["name"]: c for c in saved}
     out = []
     for column in sheet_columns:
-        stored = by_name.get(column["name"])
+        stored = None if is_id_column(column["name"]) else by_name.get(column["name"])
         out.append({**column,
                     "type": stored["type"] if stored else column["type"],
                     "include": stored.get("include", True) if stored else True,
@@ -642,9 +679,13 @@ FORMULA_PREVIEW_ROWS = 5
 def _draft_frame(source, data: dict):
     """La hoja de la fuente como está en el editor, sin guardar: `first_row_headers`, `columns`
     (tipos y nombres a mostrar) y `calculated_fields` (los campos anteriores al que se arma).
+    Una fuente de respuestas de Google Forms se ve sobre su modelo tidy.
     Lanza SheetError si no se puede leer."""
     headers = bool(data.get("first_row_headers", source.first_row_headers))
-    df = sheets.get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
+    if source.is_form_response:
+        df = sheets.get_tidy_dataframe(source.sheet_id, source.gid, headers=headers)
+    else:
+        df = sheets.get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
     columns = data.get("columns")
     valid_columns = isinstance(columns, list) and columns and not _columns_errors(columns)
     df = sheets.apply_column_config(df, _clean_columns(columns) if valid_columns else source.columns)
@@ -755,13 +796,19 @@ def source_schema(request, source_id):
         df = sheets.load_source(source)
     except SheetError as e:
         return _error(str(e), status=502)
-    schema = {**get_sheet_schema(df), "dimension_fields": get_dimension_fields(df),
-              "time_fields": time_fields(df),
+    # La columna de sistema ID (de solo lectura) no es opción de métrica,
+    # filtro, dimensión, pivote ni columna: se sirve aparte (`row_id`).
+    # En una fórmula, COUNT([ID]) cuenta todas las filas.
+    row_id = find_id_column(df.columns)
+    frame = df.drop(columns=[row_id]) if row_id else df
+    schema = {**get_sheet_schema(frame), "dimension_fields": get_dimension_fields(frame),
+              "time_fields": time_fields(frame),
               # Solo métricas, con agregación «auto»: no son columnas de la hoja.
               "aggregated_fields": [{"name": f.name, "format": f.format}
                                     for f in aggregated_fields(df).values()]}
     return JsonResponse({
-        **schema, "sample_values": get_field_samples(df),
+        **schema, "sample_values": get_field_samples(frame),
+        "row_id": row_id,
         "widget_manifest": _widget_manifest(),
     })
 

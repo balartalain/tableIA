@@ -47,12 +47,18 @@ class DataSource(models.Model):
                             help_text="Nombre opcional de la fuente; vacío = «Documento · Pestaña».")
     first_row_headers = models.BooleanField(
         default=True, help_text="La primera fila de la pestaña son los encabezados de las columnas.")
+    is_form_response = models.BooleanField(
+        default=False,
+        help_text="La pestaña es una hoja de respuestas de Google Forms: se lee en "
+                  "modelo tidy (una fila por opción seleccionada, con «Pregunta | "
+                  "Aspecto | Respuesta»). Ver services/form_tidy.py.")
     columns = models.JSONField(
         default=list, blank=True,
         help_text='Columnas elegidas al conectar la hoja: [{"name", "label"?, "type": '
-                  '"text"|"number"|"date", "include"}]. `name` es el encabezado de la hoja y '
-                  '`label`, el nombre a mostrar que lo reemplaza en todo el tablero. Vacío = '
-                  'todas, con el tipo que trae la hoja.',
+                  '"text"|"number"|"date", "include"}]. `name` es el encabezado '
+                  '(o columna del modelo tidy, en respuestas de formulario), '
+                  '`label` el nombre a mostrar que lo reemplaza en todo el '
+                  'tablero. Vacío = todas, con el tipo que trae la hoja.',
     )
     calculated_fields = models.JSONField(
         default=list, blank=True,

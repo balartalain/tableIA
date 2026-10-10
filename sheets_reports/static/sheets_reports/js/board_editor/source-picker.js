@@ -60,6 +60,12 @@ function sourcePicker({ mode = 'create' } = {}) {
     name: '',
     sourceName: '',
     headers: true,
+    // ¿La pestaña elegida proviene de un Google Forms? (null = aún sin
+    // preguntar; el popup lo pregunta al confirmar la pestaña). Con «sí»
+    // la fuente se marca como respuestas de formulario y el servidor la
+    // sirve en modelo tidy: una fila por opción seleccionada.
+    formQuestion: null,
+    formPopup: false,
     impact: null,
     emailCopied: false,
     refreshing: false,
@@ -144,6 +150,10 @@ function sourcePicker({ mode = 'create' } = {}) {
         headers: source ? source.first_row_headers !== false : true, impact: null,
         refreshing: false, dataRefreshed: false, refreshedAt: source ? source.refreshed_at : null,
         columnsTab: 'columns', helpOpen: false, replaceFromList: changeSheet,
+        // Al editar no se elige la hoja: el flag guardado es el que se
+        // conserva (y se reenvía al guardar). Al cambiarla se vuelve a preguntar.
+        formQuestion: source && mode === 'edit' ? !!source.is_form_response : null,
+        formPopup: false,
         calculated: ((source && source.calculated_fields) || []).map(({ tree, ...f }) => ({
           ...f, _tree: tree || null, _unreadable: !tree && !!(f.formula || '').trim(), _rev: 0,
           _aiPrompt: '', _aiLoading: false, _aiError: '',
@@ -214,9 +224,10 @@ function sourcePicker({ mode = 'create' } = {}) {
 
     // «Cambiar hoja»: elige otra hoja para la fuente, partiendo de lo que hay en la edición.
     changeSheet() {
-      this._editSnapshot = { columns: this.columns, rows: this.rows, headers: this.headers };
+      this._editSnapshot = { columns: this.columns, rows: this.rows, headers: this.headers,
+                              formQuestion: this.formQuestion };
       Object.assign(this, { mode: 'replace', step: 'source', impact: null, createError: '', columnsTab: 'columns',
-                            spreadsheet: null, tabs: [], tab: null });
+                            spreadsheet: null, tabs: [], tab: null, formQuestion: null });
       if (!this.source) this.selectSource('google');
     },
 
@@ -224,7 +235,8 @@ function sourcePicker({ mode = 'create' } = {}) {
       const snapshot = this._editSnapshot || {};
       Object.assign(this, { mode: 'edit', step: 'columns', impact: null, createError: '',
                             columns: snapshot.columns || [], rows: snapshot.rows || 0,
-                            headers: snapshot.headers ?? this.headers });
+                            headers: snapshot.headers ?? this.headers,
+                            formQuestion: snapshot.formQuestion ?? null });
     },
 
     // «Usar la primera fila como encabezado»: otra lectura de la pestaña, otras columnas.
@@ -266,6 +278,8 @@ function sourcePicker({ mode = 'create' } = {}) {
     async selectSpreadsheet(s) {
       if (this.spreadsheet && this.spreadsheet.id === s.id) return;
       const request = ++this._tabsRequest;
+      // Otra hoja: se vuelve a preguntar si proviene de un Google Forms.
+      this.formQuestion = null;
       this.spreadsheet = s;
       this.tabs = [];
       this.tab = null;
@@ -287,6 +301,13 @@ function sourcePicker({ mode = 'create' } = {}) {
 
     async loadColumns({ refresh = false } = {}) {
       if (!this.spreadsheet || !this.tab) return;
+      // Antes de procesar la hoja: ¿proviene de un Google Forms? Se
+      // pregunta una vez por selección («Actualizar datos» y los
+      // encabezados no vuelven a preguntar).
+      if (this.formQuestion === null && !refresh) {
+        this.formPopup = true;
+        return;
+      }
       const request = ++this._columnsRequest;
       this.loadingColumns = true;
       this.columnsError = '';
@@ -294,7 +315,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         const id = encodeURIComponent(this.spreadsheet.id);
         const gid = encodeURIComponent(this.tab.gid);
         const data = await this._get(`/api/sources/google/spreadsheets/${id}/tabs/${gid}/columns/`
-          + `?headers=${this.headers ? 1 : 0}${refresh ? '&refresh=1' : ''}`);
+          + `?headers=${this.headers ? 1 : 0}${this.formQuestion ? '&form=1' : ''}${refresh ? '&refresh=1' : ''}`);
         if (request !== this._columnsRequest) return;
         // Al actualizar se conserva lo que ya está en la tabla; al cambiar de hoja, lo que había
         // en la edición (las columnas de igual encabezado).
@@ -313,6 +334,15 @@ function sourcePicker({ mode = 'create' } = {}) {
       } finally {
         if (request === this._columnsRequest) this.loadingColumns = false;
       }
+    },
+
+    // Popup «¿Proviene de un Google Forms?»: con «sí» la fuente se marca
+    // como respuestas de formulario (transformación tidy en el servidor);
+    // con «no» se lee como hoja normal, sin transformación.
+    answerFormOrigin(isForm) {
+      this.formQuestion = isForm;
+      this.formPopup = false;
+      this.loadColumns();
     },
 
     formatDate(iso) {
@@ -586,6 +616,9 @@ function sourcePicker({ mode = 'create' } = {}) {
       const columns = this.columns.map(({ name, type, include, label, format }) =>
         ({ name, type, include, label: (label || '').trim(), format: type === 'number' ? (format || '') : '' }));
       const body = { columns, first_row_headers: this.headers };
+      // ¿Respuestas de Google Forms? (null en edición directa no debería
+      // pasar: arranca con el valor guardado de la fuente).
+      if (this.formQuestion !== null) body.is_form_response = this.formQuestion;
       if (this.mode !== 'edit') {
         Object.assign(body, {
           sheet_id: this.spreadsheet.id,

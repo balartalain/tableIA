@@ -14,7 +14,8 @@ from django.core.cache import caches
 from django.utils.timezone import now
 
 from sheets_reports.engine.formulas import apply_calculated_fields
-from sheets_reports.utils.data import time_order, to_key
+from sheets_reports.services import form_tidy
+from sheets_reports.utils.data import find_id_column, time_order, to_key
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +88,14 @@ def column_letter(index: int) -> str:
     return letters
 
 
-def fetch_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+def fetch_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True,
+                          coerce: bool = True) -> pd.DataFrame:
     """Lee la pestaña sin caché. Preferir get_sheet_dataframe. Con `headers=False` la primera
-    fila también es un dato y las columnas se llaman por su letra («Columna A»)."""
+    fila también es un dato y las columnas se llaman por su letra («Columna A»).
+    Con `coerce=False` devuelve las celdas tal cual, sin convertir a número
+    las columnas de texto numérico: lo usan la detección y el tidy de
+    respuestas de formulario, que deben ver el crudo (p. ej. «1, 2» de una
+    casilla son dos opciones, no el número 12)."""
     request_headers = {}
     token = _access_token()
     if token:
@@ -120,7 +126,7 @@ def fetch_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.D
     # Columnas totalmente vacías sin encabezado (la exportación incluye las de relleno).
     unnamed = (lambda col: col.startswith("Unnamed:")) if headers else (lambda col: True)
     df = df.loc[:, [not (unnamed(col) and df[col].isna().all()) for col in df.columns]]
-    return _coerce_numeric_columns(df)
+    return _coerce_numeric_columns(df) if coerce else df
 
 
 def _cache_key(sheet_id: str, gid: str, headers: bool) -> str:
@@ -142,9 +148,60 @@ def refresh_sheet(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame
 
 
 def _store(sheet_id: str, gid: str, headers: bool) -> dict:
-    entry = {"df": fetch_sheet_dataframe(sheet_id, gid, headers), "fetched_at": now()}
+    raw = _with_row_id(fetch_sheet_dataframe(sheet_id, gid, headers, coerce=False))
+    entry = {"raw_df": raw, "df": _coerce_numeric_columns(raw.copy()),
+             "fetched_at": now()}
     caches["sheets"].set(_cache_key(sheet_id, gid, headers), entry, None)
     return entry
+
+
+def _with_row_id(df: pd.DataFrame) -> pd.DataFrame:
+    """El frame con la columna de sistema ID: la «id» de la hoja
+    (sin mayúsculas) si existe, o una generada `1..n`. Es de solo
+    lectura —el editor la muestra pero no se puede cambiar ni excluir—
+    y el «Conteo» cuenta filas distintas sobre ella (ver
+    utils/data.find_id_column)."""
+    if find_id_column(df.columns) is not None:
+        return df
+    df = df.copy()
+    df["ID"] = range(1, len(df) + 1)
+    return df
+
+
+def get_raw_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+    """La pestaña cruda (sin coerción numérica) desde el caché: para la
+    detección y el tidy de respuestas de formulario."""
+    entry = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
+    if entry is None or "raw_df" not in entry:  # entradas de antes del crudo
+        entry = _store(sheet_id, gid, headers)
+    return entry["raw_df"].copy()
+
+
+def _tidy_cache_key(sheet_id: str, gid: str, headers: bool) -> str:
+    return f"sheet_df:{sheet_id}:{gid}:{int(bool(headers))}:tidy"
+
+
+def get_tidy_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+    """El frame tidy de una pestaña de respuestas de formulario
+    (ver services/form_tidy.py). En caché aparte — la clasificación
+    es automática y los ajustes de columnas (incluir, tipo, nombre a
+    mostrar) se aplican fuera, con `apply_column_config` — y la
+    coherencia con los datos va por `base_fetched_at`: al «Actualizar
+    datos» (`_store`/`refresh_sheet`) la fecha base cambia y el tidy
+    se recalcula solo."""
+    raw = get_raw_sheet_dataframe(sheet_id, gid, headers=headers)
+    base = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
+    key = _tidy_cache_key(sheet_id, gid, headers)
+    entry = caches["sheets"].get(key)
+    if entry is not None and base is not None \
+            and entry.get("base_fetched_at") == base.get("fetched_at"):
+        return entry["df"].copy()
+    tidy = form_tidy.to_tidy(raw)
+    caches["sheets"].set(key, {
+        "df": tidy, "fetched_at": now(),
+        "base_fetched_at": base["fetched_at"] if base else now(),
+    }, None)
+    return tidy.copy()
 
 
 def fetched_at(source):
@@ -154,11 +211,20 @@ def fetched_at(source):
 
 
 def load_source(source) -> pd.DataFrame:
-    """La hoja de una fuente del tablero, con las columnas, los tipos y los nombres elegidos, y
-    sus campos calculados: los por fila como columnas; los agregados en
-    `df.attrs["aggregated_fields"]` para el motor."""
-    df = get_sheet_dataframe(source.sheet_id, source.gid, headers=source.first_row_headers)
-    return apply_calculated_fields(apply_column_config(df, source.columns), source.calculated_fields)
+    """La hoja de una fuente del tablero, con las columnas, los tipos y los nombres
+    elegidos, y sus campos calculados: los por fila como columnas; los agregados en
+    `df.attrs["aggregated_fields"]` para el motor. Una fuente de
+    respuestas de Google Forms (`is_form_response`) parte del frame
+    tidy de `services/form_tidy.py` (una fila por opción seleccionada)
+    y sobre él se aplica la misma configuración de columnas que a
+    cualquier hoja."""
+    headers = source.first_row_headers
+    if source.is_form_response:
+        df = get_tidy_dataframe(source.sheet_id, source.gid, headers=headers)
+    else:
+        df = get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
+    return apply_calculated_fields(apply_column_config(df, source.columns),
+                                   source.calculated_fields)
 
 
 def source_key(source) -> str:

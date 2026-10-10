@@ -42,6 +42,38 @@ def column_formats(df: pd.DataFrame) -> dict[str, str]:
     return df.attrs.get("column_formats") or {}
 
 
+# ---------- columna de sistema ----------
+
+# Identifica la fila («id», sin mayúsculas): la de la hoja o una generada
+# 1..n. Es de solo lectura —el editor la muestra pero no se puede cambiar ni
+# excluir— y el «Conteo» cuenta filas distintas sobre ella.
+ID_ALIASES = ("id",)
+
+
+def is_id_column(name) -> bool:
+    """¿El nombre es el de la columna de sistema ID?"""
+    return str(name or "").strip().lower() in ID_ALIASES
+
+
+def find_id_column(columns) -> str | None:
+    """La columna de sistema ID del frame, si existe (con su nombre tal cual)."""
+    for column in columns:
+        if is_id_column(column):
+            return str(column)
+    return None
+
+
+def require_id_column(df: pd.DataFrame) -> str:
+    """La columna de sistema ID del frame: el sistema la crea al cargar la hoja,
+    así que siempre debe existir (el «Conteo» cuenta filas distintas sobre ella)."""
+    id_column = find_id_column(df.columns)
+    if id_column is None:
+        raise ValueError(
+            "Falta la columna de sistema ID (una por fila): el sistema la crea al "
+            "cargar la hoja. Refresca la fuente.")
+    return id_column
+
+
 def sort_key(value):
     # Números antes que textos, para no comparar tipos distintos.
     return (0, value, "") if isinstance(value, (int, float)) else (1, 0, str(value))

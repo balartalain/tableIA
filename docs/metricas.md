@@ -43,9 +43,30 @@ editor (`AGG_OPTIONS` en `dashboard-store.js`).
 | `min` | Mínimo | Valor más bajo. | Numéricas |
 | `max` | Máximo | Valor más alto. | Numéricas |
 | `std` | Desviación estándar | Cuánto se dispersan los valores respecto al promedio. | Numéricas |
-| `count` | Conteo | Cantidad de filas. No lleva `field`. | — |
+| `count` | Conteo | Cantidad de **filas distintas** (sobre la columna de sistema `ID`). Sin `field`, todas las filas; con `field`, las filas distintas con esa columna no vacía. | — |
 | `count_distinct` | Valores distintos | Cantidad de valores distintos de la columna. | Cualquiera |
 | `auto` | Automática | Usa un **campo calculado agregado**: la agregación ya está en su fórmula. | Solo campos calculados agregados |
+
+### La columna ID (de sistema)
+
+Toda hoja —normal o de respuestas de Google Forms— tiene una columna
+`ID`: una por fila (la «id» de la hoja si existe, o una generada
+`1..n`). Es de **solo lectura**: el editor de la fuente la muestra,
+pero no se puede cambiar ni excluir, y no aparece como opción de
+métrica, filtro, dimensión, pivote ni columna de tabla.
+
+- El **Conteo** (sin `field`) cuenta filas distintas sobre ella: en
+  una hoja normal es el número de filas; en respuestas de formulario,
+  respuestas únicas (un respondente ocupa varias filas en el modelo
+  tidy).
+- `count` **sobre una columna** cuenta las filas distintas con esa
+  columna no vacía (en una hoja normal, es lo de siempre: cuántas
+  no están vacías).
+- `COUNT(1)` (o el Conteo sin `field`) cuenta **todas las filas
+  distintas por `ID`**: en una hoja normal, todas las filas; en
+  respuestas de formulario, los **respondentes**. Para contar
+  **selecciones** (las filas del modelo tidy) usa un campo
+  calculado agregado `SUM(IF(condición, 1, 0))`.
 
 ### Campos calculados
 
@@ -90,7 +111,7 @@ valores.
 | `SUM` | Los suma. |
 | `AVG` | Los promedia. |
 | `MIN` / `MAX` | El menor / el mayor. |
-| `COUNT` | Cuántos **no vacíos** hay (un 0 cuenta). `COUNT(1)` cuenta todas las filas, incluidas las vacías. |
+| `COUNT` | Cuántas **filas distintas** (`ID`) hay con la columna no vacía (un 0 cuenta). `COUNT(1)` cuenta todas las filas, incluidas las vacías. |
 | `COUNT_DISTINCT` | Cuántos distintos, sin vacíos. |
 | `IF` | Dentro de una agregación, fila a fila; fuera, sobre los resultados ya agregados. |
 

@@ -7,7 +7,7 @@ import pandas as pd
 
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
 from sheets_reports.engine.steps.filter import distinct_values
-from sheets_reports.utils.data import to_python
+from sheets_reports.utils.data import is_id_column, to_python
 from sheets_reports.widgets.presentation import humanize
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
@@ -56,7 +56,7 @@ class FilterWidget(BaseWidget):
     def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:
         # Las columnas elegidas en `fields.dimensions` (vacío = todas) definen los controles.
         chosen = [c for c in (fields.dimensions or []) if c in df.columns]
-        columns = chosen or list(df.columns)
+        columns = chosen or [c for c in df.columns if not is_id_column(c)]
         return WidgetResult(
             data={"columns": columns},
             metadata={"fields": fields, "dimensions": columns},
@@ -74,7 +74,7 @@ class FilterWidget(BaseWidget):
     ) -> dict:
         style_dict = style.to_dict()
         frame = result.rows
-        columns = metadata.get("dimensions") or list(frame.columns)
+        columns = metadata.get("dimensions") or [c for c in frame.columns if not is_id_column(c)]
 
         filters: List[Dict[str, Any]] = []
         for col in columns:

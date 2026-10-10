@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 class WidgetFields:
     """Parámetros de consulta (data layer) - reemplaza DataSpec."""
     dimensions: List[str] = field(default_factory=list)
-    metrics: List[Dict[str, Any]] = field(default_factory=list)  # [{"field": "monto", "agg": "sum", "alias": "total"}]
+    metrics: List[Dict[str, Any]] = field(default_factory=lambda: [{"field": "monto", "agg": "count", "alias": "total"}])
     filters: List[Dict[str, Any]] = field(default_factory=list)
     pivots: List[str] = field(default_factory=list)
     columns: List[Dict[str, Any]] = field(default_factory=list)  # [{"field": "ventas", "label": "Monto"}]

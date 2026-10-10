@@ -55,7 +55,7 @@ def form_with_id_df() -> pd.DataFrame:
     """Respuestas con columna `ID` propia, celdas vacías en las preguntas
     complejas y una respondente (R4) que solo contestó las de contexto."""
     return pd.DataFrame({
-        "ID": ["R1", "R2", "R3", "R4"],
+        "_ID": ["R1", "R2", "R3", "R4"],
         "Marca de tiempo": [f"2026-10-01 1{i}:00" for i in range(4)],
         "Nombre": ["Ana", "Luis", "Eva", "Pablo"],
         "Sabores favoritos": ["Chocolate, Vainilla", "Chocolate, Vainilla",
@@ -103,7 +103,7 @@ class AnalyzeTests(SimpleTestCase):
     def test_id_y_marca_de_tiempo_quedan_fuera(self):
         report = {a["name"] for a in analyze(form_df())}
         self.assertNotIn("Marca de tiempo", report)
-        self.assertNotIn("ID", report)
+        self.assertNotIn("_ID", report)
 
     def test_separador_personalizado(self):
         df = pd.DataFrame({"N": ["a", "b"],
@@ -120,55 +120,55 @@ class ToTidyTests(SimpleTestCase):
     def test_orden_y_columnas_del_modelo(self):
         tidy = to_tidy(form_df())
         self.assertEqual(list(tidy.columns),
-                         ["ID", "marca_tiempo", "Nombre", "Edad",
-                          "Comentarios", "Pregunta", "Aspecto", "Respuesta"])
+                         ["_ID", "marca_tiempo", "Nombre", "Edad",
+                          "Comentarios", "_form_bloque", "_form_pregunta", "_form_respuesta"])
 
     def test_id_generado_se_repite_por_fila_explosionada(self):
         tidy = to_tidy(form_df())
-        self.assertEqual(sorted(tidy["ID"].unique()), [1, 2, 3, 4, 5, 6])
+        self.assertEqual(sorted(tidy["_ID"].unique()), [1, 2, 3, 4, 5, 6])
         # Cada respondente aparece en varias filas (sus selecciones).
-        self.assertGreater(len(tidy), tidy["ID"].nunique())
+        self.assertGreater(len(tidy), tidy["_ID"].nunique())
 
     def test_id_existente_se_reutiliza(self):
         tidy = to_tidy(form_with_id_df())
-        self.assertEqual(sorted(tidy["ID"].unique()), ["R1", "R2", "R3"])
+        self.assertEqual(sorted(tidy["_ID"].unique()), ["R1", "R2", "R3"])
         # Se repite por fila explosionada: R1 tiene 2 sabores + 1 evaluación.
-        self.assertEqual(len(tidy[tidy["ID"] == "R1"]), 3)
+        self.assertEqual(len(tidy[tidy["_ID"] == "R1"]), 3)
 
     def test_cuenta_distinct_id_son_los_respondentes(self):
-        self.assertEqual(to_tidy(form_df())["ID"].nunique(), 6)
+        self.assertEqual(to_tidy(form_df())["_ID"].nunique(), 6)
         # R4 no contestó ninguna pregunta compleja: desaparece.
-        self.assertEqual(to_tidy(form_with_id_df())["ID"].nunique(), 3)
+        self.assertEqual(to_tidy(form_with_id_df())["_ID"].nunique(), 3)
 
     def test_opciones_numericas_no_se_convierten_en_numero(self):
         tidy = to_tidy(form_df())
-        puntuacion = tidy[tidy["Pregunta"] == "Puntuación"]["Respuesta"]
+        puntuacion = tidy[tidy["_form_pregunta"] == "Puntuación"]["_form_respuesta"]
         self.assertEqual(sorted(puntuacion.unique()), ["1", "2", "3"])
         self.assertNotIn("12", puntuacion.unique())
         self.assertTrue((puntuacion.astype(str) == puntuacion).all())
 
     def test_despivote_de_grid(self):
         tidy = to_tidy(form_df())
-        evaluacion = tidy[tidy["Pregunta"] == "Evaluación"]
-        self.assertEqual(sorted(evaluacion["Aspecto"].unique()), ["Limpieza", "Precio"])
+        evaluacion = tidy[tidy["_form_bloque"] == "Evaluación"]
+        self.assertEqual(sorted(evaluacion["_form_pregunta"].unique()), ["Limpieza", "Precio"])
         # Limpieza: 6 respuestas; Precio: 6 + 6 (el «.1» duplicado).
-        self.assertEqual(len(evaluacion[evaluacion["Aspecto"] == "Limpieza"]), 6)
-        self.assertEqual(len(evaluacion[evaluacion["Aspecto"] == "Precio"]), 12)
-        self.assertEqual(evaluacion["Respuesta"].tolist()[:6],
+        self.assertEqual(len(evaluacion[evaluacion["_form_pregunta"] == "Limpieza"]), 6)
+        self.assertEqual(len(evaluacion[evaluacion["_form_pregunta"] == "Precio"]), 12)
+        self.assertEqual(evaluacion["_form_respuesta"].tolist()[:6],
                          ["Buena", "Excelente", "Regular", "Buena", "Excelente", "Regular"])
 
     def test_despivote_de_grid_de_casillas(self):
         tidy = to_tidy(form_df())
-        actividades = tidy[tidy["Pregunta"] == "Actividades"]
-        self.assertEqual(sorted(actividades["Aspecto"].unique()), ["Deporte", "Música"])
+        actividades = tidy[tidy["_form_bloque"] == "Actividades"]
+        self.assertEqual(sorted(actividades["_form_pregunta"].unique()), ["Deporte", "Música"])
         # Deporte: 2+1+1+2+1+1 = 8; Música: 1+2+1+1+2+1 = 8.
-        self.assertEqual(len(actividades[actividades["Aspecto"] == "Deporte"]), 8)
-        self.assertEqual(len(actividades[actividades["Aspecto"] == "Música"]), 8)
+        self.assertEqual(len(actividades[actividades["_form_bloque"] == "Deporte"]), 8)
+        self.assertEqual(len(actividades[actividades["_form_bloque"] == "Música"]), 8)
 
     def test_texto_libre_con_comas_es_contexto(self):
         tidy = to_tidy(form_df())
         self.assertIn("Comentarios", tidy.columns)
-        self.assertNotIn("Me gustó", tidy["Pregunta"].unique())
+        self.assertNotIn("Me gustó", tidy["_form_pregunta"].unique())
 
     def test_marca_de_tiempo_se_conserva(self):
         tidy = to_tidy(form_df())
@@ -177,10 +177,10 @@ class ToTidyTests(SimpleTestCase):
 
     def test_filas_vacias_se_eliminan(self):
         tidy = to_tidy(form_with_id_df())
-        self.assertFalse(tidy["Respuesta"].isna().any())
-        self.assertFalse((tidy["Respuesta"].astype(str).str.strip() == "").any())
+        self.assertFalse(tidy["_form_respuesta"].isna().any())
+        self.assertFalse((tidy["_form_respuesta"].astype(str).str.strip() == "").any())
         # R4 solo contestó contexto: desaparece del todo.
-        self.assertNotIn("R4", tidy["ID"].unique())
+        self.assertNotIn("R4", tidy["_ID"].unique())
 
     def test_reconciliacion_de_filas(self):
         """filas_salida == Σ tokens de casillas + Σ celdas de grids."""
@@ -201,7 +201,7 @@ class ToTidyTests(SimpleTestCase):
         tidy = to_tidy(df)
         self.assertEqual(len(tidy), 0)
         self.assertEqual(list(tidy.columns),
-                         ["ID", "Nombre", "Edad", "Pregunta", "Aspecto", "Respuesta"])
+                         ["_ID", "Nombre", "Edad", "_form_bloque", "_form_pregunta", "_form_respuesta"])
 
 
 def seed_sheet_cache(sheet_id: str, gid: str, raw: pd.DataFrame,
@@ -227,16 +227,16 @@ class TidySourceIntegrationTests(TestCase):
         _, source = make_board(self.user, sheet_id="form1", is_form_response=True)
         df = sheets.load_source(source)
         self.assertEqual(list(df.columns),
-                         ["ID", "marca_tiempo", "Nombre", "Edad",
-                          "Comentarios", "Pregunta", "Aspecto", "Respuesta"])
-        self.assertEqual(df["ID"].nunique(), 6)
+                         ["_ID", "marca_tiempo", "Nombre", "Edad",
+                          "Comentarios", "_form_bloque", "_form_pregunta", "_form_respuesta"])
+        self.assertEqual(df["_ID"].nunique(), 6)
 
     def test_fuente_normal_no_se_transforma(self):
         seed_sheet_cache("form1", "0", form_df())
         _, source = make_board(self.user, sheet_id="form1")
         df = sheets.load_source(source)
         self.assertIn("Sabores favoritos", df.columns)
-        self.assertNotIn("Pregunta", df.columns)
+        self.assertNotIn("_form_pregunta", df.columns)
 
     def test_el_tidy_se_cachea_por_pestaña(self):
         seed_sheet_cache("form1", "0", form_df())
@@ -280,15 +280,15 @@ class TidySourceIntegrationTests(TestCase):
         self.assertNotIn("Comentarios", df.columns)
         self.assertIn("Nombre completo", df.columns)
         self.assertNotIn("Nombre", df.columns)
-        self.assertIn("Pregunta", df.columns)
+        self.assertIn("_form_pregunta", df.columns)
 
     def test_columnas_de_edicion_son_las_del_tidy(self):
         seed_sheet_cache("form1", "0", form_df())
         _, source = make_board(self.user, sheet_id="form1", is_form_response=True)
         data = self.client.get(f"/api/sources/{source.id}/columns/").json()
         self.assertEqual([c["name"] for c in data["columns"]],
-                         ["ID", "marca_tiempo", "Nombre", "Edad",
-                          "Comentarios", "Pregunta", "Aspecto", "Respuesta"])
+                         ["_ID", "marca_tiempo", "Nombre", "Edad",
+                          "Comentarios", "_form_bloque", "_form_pregunta", "_form_respuesta"])
         self.assertEqual(data["rows"], 53)
         for column in data["columns"]:
             self.assertNotIn("question_type", column)
@@ -299,8 +299,8 @@ class TidySourceIntegrationTests(TestCase):
         data = self.client.get(
             "/api/sources/google/spreadsheets/form1/tabs/0/columns/?form=1").json()
         names = [c["name"] for c in data["columns"]]
-        self.assertIn("Pregunta", names)
-        self.assertIn("Respuesta", names)
+        self.assertIn("_form_pregunta", names)
+        self.assertIn("_form_respuesta", names)
         self.assertNotIn("Sabores favoritos", names)  # se explosiona
         # Sin «form» se sirven las columnas de la hoja ancha.
         data = self.client.get(
@@ -312,8 +312,8 @@ class TidySourceIntegrationTests(TestCase):
         seed_sheet_cache("form1", "0", form_df())
         _, source = make_board(self.user, sheet_id="form1", is_form_response=True)
         schema = self.client.get(f"/api/sources/{source.id}/schema/").json()
-        self.assertIn("Pregunta", schema["all_fields"])
-        self.assertIn("Respuesta", schema["all_fields"])
+        self.assertIn("_form_pregunta", schema["all_fields"])
+        self.assertIn("_form_respuesta", schema["all_fields"])
         self.assertIn("Nombre", schema["all_fields"])  # contexto
         self.assertNotIn("Sabores favoritos", schema["all_fields"])  # se explosiona
 
@@ -328,7 +328,7 @@ class TidySourceIntegrationTests(TestCase):
                          "include": True, "label": "Nombre completo"}],
             # Se valida sobre el modelo tidy: «ID» existe allí.
             "calculated_fields": [{"id": "c1", "name": "Respuestas",
-                                   "formula": "COUNT_DISTINCT([ID])",
+                                   "formula": "COUNT_DISTINCT([_ID])",
                                    "format": "number"}]}),
             content_type="application/json")
         self.assertEqual(r.status_code, 200, r.content)
@@ -344,7 +344,7 @@ class TidySourceIntegrationTests(TestCase):
         seed_sheet_cache("form1", "0", form_df())
         _, source = make_board(self.user, sheet_id="form1", is_form_response=True)
         data = self.client.post(f"/api/sources/{source.id}/formula/",
-                                json.dumps({"formula": "COUNT_DISTINCT([ID])"}),
+                                json.dumps({"formula": "COUNT_DISTINCT([_ID])"}),
                                 content_type="application/json").json()
         self.assertEqual(data["kind"], "aggregated")
         self.assertEqual(data["values"], [6])

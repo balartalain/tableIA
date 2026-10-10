@@ -47,7 +47,7 @@ def column_formats(df: pd.DataFrame) -> dict[str, str]:
 # Identifica la fila («id», sin mayúsculas): la de la hoja o una generada
 # 1..n. Es de solo lectura —el editor la muestra pero no se puede cambiar ni
 # excluir— y el «Conteo» cuenta filas distintas sobre ella.
-ID_ALIASES = ("id",)
+ID_ALIASES = ("id", "_id")
 
 
 def is_id_column(name) -> bool:

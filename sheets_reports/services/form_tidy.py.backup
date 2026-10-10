@@ -173,11 +173,11 @@ def _context_frame(df: pd.DataFrame, column: str, question: str,
                    context: list[str]) -> pd.DataFrame:
     """Casilla plana: las opciones de cada celda («A, B») explotan en una fila
     cada una, con la pregunta y `Aspecto` vacío."""
-    frame = df[["_ID"] + context + [column]].copy()
-    frame["_form_resposta"] = frame[column].map(_split_tokens)
-    frame = frame.explode("_form_resposta")
-    frame["_form_bloque"] = ""
-    frame["_form_pregunta"] = question
+    frame = df[["ID"] + context + [column]].copy()
+    frame["Respuesta"] = frame[column].map(_split_tokens)
+    frame = frame.explode("Respuesta")
+    frame["Pregunta"] = question
+    frame["Aspecto"] = ""
     return frame.drop(columns=[column])
 
 
@@ -187,21 +187,21 @@ def _grid_frame(df: pd.DataFrame, items: list[tuple[str, str]], grid_type: str,
     es de casillas, además explota las opciones de cada celda."""
     columns = [column for column, _ in items]
     aspect_of = {column: aspect for column, aspect in items}
-    frame = df.melt(id_vars=["_ID"] + context, value_vars=columns,
-                    var_name="_columna", value_name="_form_resposta")
-    frame["_form_bloque"] = parent
-    frame["_form_pregunta"] = frame["_columna"].map(aspect_of)
+    frame = df.melt(id_vars=["ID"] + context, value_vars=columns,
+                    var_name="_columna", value_name="Respuesta")
+    frame["Pregunta"] = parent
+    frame["Aspecto"] = frame["_columna"].map(aspect_of)
     frame = frame.drop(columns=["_columna"])
     if grid_type == "CHECKBOX_GRID":
-        frame["_form_resposta"] = frame["_form_resposta"].map(_split_tokens)
-        frame = frame.explode("_form_resposta")
+        frame["Respuesta"] = frame["Respuesta"].map(_split_tokens)
+        frame = frame.explode("Respuesta")
     return frame
 
 
 def to_tidy(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd.DataFrame:
-    """El modelo tidy: `_ID` (el de la hoja o `1..n` generado), `marca_tiempo` si
+    """El modelo tidy: `ID` (el de la hoja o `1..n` generado), `marca_tiempo` si
     existe, columnas de contexto (`SCALAR` y `FREE_TEXT_WITH_COMMAS`, con su
-    nombre de encabezado) y `_form_bloque | _form_pregunta | _form_resposta` — una fila por
+    nombre de encabezado) y `Pregunta | Aspecto | Respuesta` — una fila por
     opción seleccionada. La clasificación es automática (`analyze`) y definitiva:
     incluir, excluir, renombrar y tipar las columnas del resultado es tarea de
     la configuración de columnas de la fuente (`apply_column_config`), igual
@@ -211,16 +211,16 @@ def to_tidy(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd.D
     id_name = find_id_column(df.columns)
     timestamp_name = _find_alias(df.columns, TIMESTAMP_ALIASES)
     if id_name is None:
-        df["_ID"] = range(1, len(df) + 1)
+        df["ID"] = range(1, len(df) + 1)
     else:
-        df = df.rename(columns={id_name: "_ID"})
+        df = df.rename(columns={id_name: "ID"})
     context: list[str] = []
     if timestamp_name is not None:
         df = df.rename(columns={timestamp_name: "marca_tiempo"})
         context.append("marca_tiempo")
 
     inferred = {a["name"]: a["inferred_type"] for a in analyze(df, custom_separator)}
-    questions = [c for c in df.columns if c not in ("_ID", "marca_tiempo")]
+    questions = [c for c in df.columns if c not in ("ID", "marca_tiempo")]
     context += [name for name in questions
                 if inferred.get(name, "SCALAR") in ("SCALAR", "FREE_TEXT_WITH_COMMAS")]
 
@@ -242,11 +242,11 @@ def to_tidy(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd.D
                             for column, _ in items) else "GRID")
         frames.append(_grid_frame(df, items, grid_type, parent, context))
 
-    order = (["_ID"] + (["marca_tiempo"] if "marca_tiempo" in context else [])
+    order = (["ID"] + (["marca_tiempo"] if "marca_tiempo" in context else [])
              + [name for name in context if name != "marca_tiempo"]
-             + ["_form_bloque", "_form_pregunta", "_form_resposta"])
+             + ["Pregunta", "Aspecto", "Respuesta"])
     if not frames:
         return pd.DataFrame(columns=order)
     tidy = pd.concat(frames, ignore_index=True)
-    tidy = tidy[tidy["_form_resposta"].notna() & (tidy["_form_resposta"].astype(str).str.strip() != "")]
+    tidy = tidy[tidy["Respuesta"].notna() & (tidy["Respuesta"].astype(str).str.strip() != "")]
     return tidy[order].reset_index(drop=True)

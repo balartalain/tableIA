@@ -751,7 +751,7 @@ document.addEventListener('alpine:init', () => {
       const field = numeric.find(f => !dims.includes(f) && !used(f))
         || numeric.find(f => !used(f))
         || (this.schema.all_fields || [])[0] || '';
-      metrics.push({ field, agg: 'sum', alias: this._autoAlias('sum', field, metrics), filters: [] });
+      metrics.push({ field, agg: 'count', alias: this._autoAlias('count', field, metrics), filters: [] });
     },
 
     removeMetric(index) {
@@ -763,7 +763,7 @@ document.addEventListener('alpine:init', () => {
       // Un campo calculado agregado trae su agregación («Automática»); al dejarlo, se vuelve a
       // una agregación normal.
       if (this.isAggregatedField(metric.field)) metric.agg = 'auto';
-      else if (metric.agg === 'auto') metric.agg = 'sum';
+      else if (metric.agg === 'auto') metric.agg = 'count';
       // Una agregación numérica (Suma, Promedio…) sobre una columna de texto no vale: Conteo.
       if (!this.metricAggOptions(metric).some(o => o.value === metric.agg)) metric.agg = 'count';
       const taken = this.drawerDraft.fields.metrics.filter(m => m !== metric).map(m => m.alias);

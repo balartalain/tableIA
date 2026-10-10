@@ -372,9 +372,7 @@ def _sheet_columns(df) -> list[dict]:
     for col in df.columns:
         # to_key: 5000.0 → «5000», como se ve en la hoja.
         values = [v for v in dict.fromkeys(str(to_key(x)).strip() for x in df[col].dropna()) if v]
-        column = {"name": col, "type": types[col], "samples": values[:SOURCE_SAMPLES]}
-        if is_id_column(col):
-            column["readonly"] = True
+        column = {"name": col, "type": types[col], "samples": values[:SOURCE_SAMPLES], "readonly": is_id_column(col)}
         columns.append(column)
     return columns
 
@@ -628,7 +626,8 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
                     "type": stored["type"] if stored else column["type"],
                     "include": stored.get("include", True) if stored else True,
                     "label": (stored or {}).get("label", ""),
-                    "format": (stored or {}).get("format", "")})
+                    "format": (stored or {}).get("format", ""),
+                    "readonly": is_id_column(column["name"])})
     return out
 
 

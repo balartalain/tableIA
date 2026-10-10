@@ -192,7 +192,7 @@ class SourceChangesTests(TestCase):
         # La estructura actual de la hoja, con lo guardado de las columnas que siguen.
         columns = r.json()["columns"]
         self.assertEqual([c["name"] for c in columns], ["ID", "categoria", "mes", "anio", "ventas"])
-        self.assertEqual(columns[3]["label"], "Monto")
+        self.assertEqual(columns[4]["label"], "Monto")
         # Nada se guarda hasta «Guardar cambios».
         self.source.refresh_from_db()
         self.assertEqual(self.source.columns, saved)

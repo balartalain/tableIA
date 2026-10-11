@@ -47,6 +47,14 @@ class FormulaLanguageTests(SimpleTestCase):
         self.assertEqual(f.columns, ("Gasto_Real", "Presupuesto_Asignado"))   # sin distinguir mayúsculas
         self.assertEqual(f.evaluate_rows(budget_df()).tolist(), [-800, 500, -200, -200, -200])
 
+    def test_columna_con_corchetes_en_el_nombre(self):
+        col = "Nivel de satisfacción [Dominio]"
+        df = pd.DataFrame({"ID": [1, 2], col: [4, 5]})
+        f = compile_formula(f"[{col}] * 2", df.columns)
+        self.assertEqual(f.columns, (col,))
+        self.assertEqual(f.evaluate_rows(df).tolist(), [8, 10])
+        self.assertEqual(formula_text({"kind": "col", "value": col}), f"[{col}]")
+
     def test_if_con_texto_y_condiciones(self):
         df = budget_df()
         self.assertEqual(compile_formula('IF([Respuesta] = "Sí", 1, 0)', df.columns)
@@ -133,7 +141,7 @@ class FormulaLanguageTests(SimpleTestCase):
             "forma": node("func", "IF", col, col),
             "operador": node("bin", "^", col, col),
             "comillas": node("str", "a\"b'c"),
-            "columna": node("col", "a]b"),
+            "columna": node("col", ""),
             "número": node("num", float("nan")),
         }
         for message, tree in cases.items():

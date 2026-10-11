@@ -1071,7 +1071,9 @@ def _normalize(args: dict) -> dict:
 
 def _column_key(name) -> str:
     """Clave para comparar nombres de columna sin importar espacios, mayúsculas, acentos ni puntuación final."""
-    text = str(name).strip().rstrip(".,;:]}")
+    text = str(name).strip()
+    text = re.sub(r"[.,;:!]+\s*\]", "]", text)
+    text = text.rstrip(".,;:}]")
     text = unicodedata.normalize("NFD", text).encode("ASCII", "ignore").decode("ASCII")
     return " ".join(text.split()).casefold()
 

@@ -62,12 +62,55 @@ class Token:
     start: int
 
 
-def tokenize(text: str) -> list[Token]:
+def _extract_bracket_token(text: str, start: int) -> tuple[str, str, int]:
+    """Extrae un token de columna entre corchetes `[...]`, manejando corchetes anidados."""
+    pos = start + 1
+    depth = 1
+    while pos < len(text) and depth > 0:
+        if text[pos] == "[":
+            depth += 1
+        elif text[pos] == "]":
+            depth -= 1
+        pos += 1
+    if depth > 0:
+        raise FormulaError(f"Falta ']' al final del nombre de la columna a partir de «{text[start:start+30]}».")
+    raw = text[start:pos]
+    name = raw[1:-1].strip()
+    if not name:
+        raise FormulaError("Hay un nombre de columna vacío: «[]».")
+    return raw, name, pos
+
+
+def tokenize(text: str, columns=()) -> list[Token]:
     tokens, pos = [], 0
     text = text or ""
+    known_cols = []
+    if columns is not None and len(columns) > 0:
+        known_cols = sorted([str(c) for c in columns if str(c).strip()], key=len, reverse=True)
+
     while pos < len(text):
-        if text[pos:].strip() == "":
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        if pos >= len(text):
             break
+
+        if text[pos] == "[":
+            start = pos
+            matched_known = False
+            for col in known_cols:
+                candidate = f"[{col}]"
+                if text[pos:].casefold().startswith(candidate.casefold()):
+                    raw = text[pos : pos + len(candidate)]
+                    tokens.append(Token("column", col, raw, start))
+                    pos += len(candidate)
+                    matched_known = True
+                    break
+            if not matched_known:
+                raw, name, end_pos = _extract_bracket_token(text, pos)
+                tokens.append(Token("column", name, raw, start))
+                pos = end_pos
+            continue
+
         match = _TOKEN_RE.match(text, pos)
         if not match or match.end() == pos:
             raise FormulaError(f"No se entiende la fórmula a partir de «{text[pos:].strip()[:20]}».")
@@ -79,10 +122,10 @@ def tokenize(text: str) -> list[Token]:
         elif kind == "string":
             tokens.append(Token("string", raw[1:-1], raw, start))
         elif kind == "bracket":
-            name = raw[1:-1].strip()
-            if not name:
-                raise FormulaError("Hay un nombre de columna vacío: «[]».")
+            raw, name, end_pos = _extract_bracket_token(text, start)
             tokens.append(Token("column", name, raw, start))
+            pos = end_pos
+            continue
         elif kind == "op":
             tokens.append(Token("op", raw, raw, start))
         else:
@@ -285,7 +328,7 @@ def compile_formula(text: str, columns, aggregated_names=()) -> Formula:
     text = (text or "").strip()
     if len(text) > MAX_FORMULA_LENGTH:
         raise FormulaError(f"La fórmula es demasiado larga (máximo {MAX_FORMULA_LENGTH} caracteres).")
-    tree = _Parser(tokenize(text)).parse()
+    tree = _Parser(tokenize(text, columns)).parse()
     known = {str(c) for c in columns}
     lowered = {c.casefold(): c for c in known}
     used = []
@@ -381,8 +424,8 @@ def formula_text(tree: dict | None) -> str:
     if kind == "col":
         arity(0)
         name = str(value or "").strip()
-        if not name or "]" in name:
-            raise FormulaError(f"No se puede usar la columna «{name}» en una fórmula.")
+        if not name:
+            raise FormulaError("No se puede usar una columna vacía en una fórmula.")
         return f"[{name}]"
     if kind in ("neg", "not"):
         arity(1)

@@ -46,7 +46,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     .filter(Boolean)
     .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
   const headerEl = document.getElementById('dashboard-filters');
-  store.widgets.forEach(w => (w.constructor.placement === 'header' ? headerEl : canvasEl).appendChild(w.mountReadOnly()));
+  const rowGrids = {};
+  store.widgets.forEach(w => {
+    if (w.constructor.placement === 'header') {
+      headerEl.appendChild(w.mountReadOnly());
+    } else {
+      const rowId = w.position?.row_id || 'row_1';
+      if (!rowGrids[rowId]) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'canvas-row relative';
+        rowEl.dataset.rowId = rowId;
+        const rowBody = document.createElement('div');
+        rowBody.className = 'canvas-row-body grid grid-cols-12 gap-4';
+        rowBody.dataset.rowId = rowId;
+        rowEl.appendChild(rowBody);
+        canvasEl.appendChild(rowEl);
+        rowGrids[rowId] = rowBody;
+      }
+      rowGrids[rowId].appendChild(w.mountReadOnly());
+    }
+  });
   const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
   requestAnimationFrame(() => store.widgets.forEach(w => w.applyRender(byId[w.id])));
 

@@ -5,9 +5,19 @@ const PALETTE_GROUPS = [
   { id: 'controls', label: 'Controles' },
 ];
 
-// Contenedor donde va cada widget: el grid o, si su clase lo pide, la franja fija de arriba.
-function containerFor(WidgetClass) {
-  return document.getElementById(WidgetClass.placement === 'header' ? 'dashboard-filters' : 'dashboard-canvas');
+// Contenedor donde va cada widget: el grid de su fila o la franja fija de arriba.
+function containerFor(widget) {
+  const WidgetClass = typeof widget === 'function' ? widget : (widget.constructor || {});
+  if (WidgetClass.placement === 'header') {
+    return document.getElementById('dashboard-filters');
+  }
+  const rowId = (typeof widget === 'object' && widget.position?.row_id) ? widget.position.row_id : 'row_1';
+  const canvasEl = document.getElementById('dashboard-canvas');
+  let rowBody = canvasEl.querySelector(`.canvas-row-body[data-row-id="${rowId}"]`);
+  if (!rowBody) {
+    rowBody = canvasEl.querySelector('.canvas-row-body');
+  }
+  return rowBody || canvasEl;
 }
 
 const RAIL_STORAGE_KEY = 'tableia:rail-collapsed';
@@ -210,83 +220,155 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {
     canvasEl.insertAdjacentHTML('beforebegin', `<p class="text-sm text-red-600 mb-3">${BaseWidget.escapeHTML(e.message)}</p>`);
   }
-  store.widgets.forEach(w => containerFor(w.constructor).appendChild(w.mount()));
-  // Doble rAF: ApexCharts necesita que el contenedor ya tenga su tamaño final al montar.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    store.widgets.forEach(w => w.applyRender(entries[w.id]));
-  }));
+
+  // Espera al siguiente rAF para que Alpine haya renderizado las filas .canvas-row en el DOM
+  requestAnimationFrame(() => {
+    store.widgets.forEach(w => containerFor(w).appendChild(w.mount()));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      store.widgets.forEach(w => w.applyRender(entries[w.id]));
+    }));
+  });
 
   window.addEventListener('dashboard:filters-changed', () => store.refreshData());
 
-  // Con forceFallback el arrastre son eventos de mouse normales: sin esto, mover el mouse con el
-  // botón presionado va seleccionando el texto de la página. Se corta mientras haya algo agarrado.
   const noTextSelection = {
     onChoose: () => { document.body.style.userSelect = 'none'; },
     onUnchoose: () => { document.body.style.userSelect = ''; },
   };
 
   new Sortable(sidebarEl, {
-    group: { name: 'shared', pull: 'clone', put: false },
+    group: { name: 'canvas-widgets', pull: 'clone', put: false },
     sort: false,
     draggable: '[data-type]',
     animation: 150,
-    // Mismo modo de arrastre que el lienzo: con forceFallback el lienzo no escucha los eventos
-    // nativos (dragover/drop), así que un arrastre nativo desde aquí no podría soltarse en él.
     forceFallback: true,
     fallbackTolerance: 3,
-    // En <body>: dentro de la barra lateral el clon quedaría recortado por su overflow.
     fallbackOnBody: true,
     ...noTextSelection,
   });
 
+  // Sortable para reordenar las filas verticales (.canvas-row)
   new Sortable(canvasEl, {
-    group: 'shared',
     animation: 150,
-    ghostClass: 'grid-ghost-preview',
-    handle: '.drag-handle',
-    // Arrastre de Sortable en vez del nativo: la copia del navegador se dibuja encima del widget
-    // reducida y desvanecida (si es grande) y, al mover despacio, se ve como un flash. La de
-    // Sortable es un clon del mismo tamaño que sigue al cursor.
+    draggable: '.canvas-row',
+    handle: '.row-drag-handle',
     forceFallback: true,
     fallbackTolerance: 3,
-    // El clon va en <body>: dentro del lienzo sería otro hijo del grid con el mismo data-widget-id.
     fallbackOnBody: true,
     ...noTextSelection,
-
-    onAdd: function (evt) {
-      const type = evt.item.getAttribute('data-type');
-      const WidgetClass = WidgetRegistry.get(type);
-      // Widgets únicos (la caja de filtros): si ya hay uno, se abre ese en vez de crear otro.
-      const existing = WidgetClass.singleton && store.widgets.find(w => w.chart_type === type);
-      if (existing) {
-        evt.item.remove();
-        showToast(`El tablero ya tiene un widget «${WidgetClass.palette.label}».`);
-        store.openDrawer(existing.id);
-        return;
-      }
-      const widget = store.addWidget(type);
-      const widgetEl = widget.mount();
-      if (WidgetClass.placement === 'header') {
-        // Siempre arriba y a todo el ancho, sin importar dónde se soltó.
-        evt.item.remove();
-        containerFor(WidgetClass).appendChild(widgetEl);
-      } else {
-        evt.item.replaceWith(widgetEl);
-        store.reorderWidgets();
-        store.fluidStartColOnDrop(widgetEl);
-      }
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new Event('resize'));
-      });
-      // Un widget nuevo no tiene datos todavía: abrir el panel para describirlo.
-      store.openDrawer(widget.id);
-    },
-
-    onEnd: function (evt) {
+    onEnd: function () {
       store.reorderWidgets();
-      store.fluidStartColOnDrop(evt.item);
     },
   });
+
+  function getWidgetWidth(item) {
+    if (!item) return 6;
+    const widgetId = parseInt(item.getAttribute('data-widget-id'), 10);
+    if (widgetId) {
+      const w = store.widgets.find(w => w.id === widgetId);
+      if (w && typeof w.position?.w === 'number') return w.position.w;
+    }
+    const type = item.getAttribute('data-type');
+    if (type) {
+      const WidgetClass = WidgetRegistry.get(type);
+      const wStr = WidgetClass?.defaults?.width || 'md:col-span-6';
+      const match = wStr.match(/col-span-(\d+)/);
+      return match ? parseInt(match[1], 10) : 6;
+    }
+    return 6;
+  }
+
+  let _lastToastTime = 0;
+  function showToastThrottled(msg) {
+    const now = Date.now();
+    if (now - _lastToastTime > 2000) {
+      _lastToastTime = now;
+      showToast(msg);
+    }
+  }
+
+  function initRowBodySortable(rowBodyEl) {
+    if (rowBodyEl._sortable) return;
+    rowBodyEl._sortable = new Sortable(rowBodyEl, {
+      group: {
+        name: 'canvas-widgets',
+        pull: true,
+        put: function (to, from, item) {
+          const toRowId = to.el.getAttribute('data-row-id');
+          const fromRowId = from.el.getAttribute('data-row-id');
+          const widgetId = parseInt(item.getAttribute('data-widget-id'), 10) || null;
+          const wUnits = getWidgetWidth(item);
+
+          // Si el movimiento es dentro de la misma fila, siempre es válido
+          if (toRowId && fromRowId && toRowId === fromRowId) return true;
+
+          // Si viene de otra fila o del sidebar, se valida la capacidad acumulada (<= 12)
+          const fits = store.canAddWidgetToRow(toRowId, wUnits, widgetId);
+          if (!fits) {
+            const currentW = store.getRowWidth(toRowId, widgetId);
+            const avail = 12 - currentW;
+            showToastThrottled(`No hay espacio suficiente en esta fila. Disponible: ${avail} de 12 columnas.`);
+            return false;
+          }
+          return true;
+        },
+      },
+      animation: 150,
+      ghostClass: 'grid-ghost-preview',
+      handle: '.drag-handle',
+      draggable: '[data-widget-id]',
+      forceFallback: true,
+      fallbackTolerance: 3,
+      fallbackOnBody: true,
+      ...noTextSelection,
+
+      onAdd: function (evt) {
+        const toRowId = evt.to.getAttribute('data-row-id');
+        const isNewFromSidebar = !evt.item.hasAttribute('data-widget-id');
+        if (isNewFromSidebar) {
+          const type = evt.item.getAttribute('data-type');
+          if (!type) return;
+          const WidgetClass = WidgetRegistry.get(type);
+          const existing = WidgetClass.singleton && store.widgets.find(w => w.chart_type === type);
+          if (existing) {
+            evt.item.remove();
+            showToast(`El tablero ya tiene un widget «${WidgetClass.palette.label}».`);
+            store.openDrawer(existing.id);
+            return;
+          }
+          const widget = store.addWidget(type, toRowId);
+          const widgetEl = widget.mount();
+          if (WidgetClass.placement === 'header') {
+            evt.item.remove();
+            containerFor(widget).appendChild(widgetEl);
+          } else {
+            evt.item.replaceWith(widgetEl);
+            store.reorderWidgets();
+            store.fluidStartColOnDrop(widgetEl);
+          }
+          requestAnimationFrame(() => {
+            window.dispatchEvent(new Event('resize'));
+          });
+          store.openDrawer(widget.id);
+        } else {
+          store.reorderWidgets();
+        }
+      },
+
+      onEnd: function (evt) {
+        store.reorderWidgets();
+        store.fluidStartColOnDrop(evt.item);
+      },
+    });
+  }
+
+  function syncRowSortables() {
+    canvasEl.querySelectorAll('.canvas-row-body').forEach(el => initRowBodySortable(el));
+  }
+
+  syncRowSortables();
+  const observer = new MutationObserver(() => syncRowSortables());
+  observer.observe(canvasEl, { childList: true, subtree: true });
 
   // El diseño se guarda solo; si al salir queda un cambio sin enviar, se envía con keepalive
   // para que la petición no se corte al cerrar la página.

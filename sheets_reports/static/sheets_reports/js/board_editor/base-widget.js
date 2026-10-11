@@ -214,7 +214,7 @@
       this.source_id = raw.source_id ?? null;
       this.title = raw.title || defaults.title;
       this.chart_type = this.constructor.type;
-      this.position = raw.position || { x: 0, y: 0, w: 6, h: 300 };
+      this.position = raw.position || { x: 0, y: 0, w: 6, h: 300, row_id: 'row_1' };
       this.fields = raw.fields || BaseWidget.emptyFields();
       this.style = raw.style || {};
       this.data = raw.data || null;
@@ -253,7 +253,7 @@
         type: w.type,
         source_id: w.source_id ?? null,
         title: w.title,
-        position: { x: pos.x || 0, y: pos.y || 0, w: pos.w || 6, h: pos.h || 300 },
+        position: { x: pos.x || 0, y: pos.y || 0, w: pos.w || 6, h: pos.h || 300, ...(pos.row_id ? { row_id: pos.row_id } : {}) },
         fields: w.fields || BaseWidget.emptyFields(),
         style: w.style || {},
         data: w.data || null,

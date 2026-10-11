@@ -222,7 +222,7 @@ document.addEventListener('alpine:init', () => {
         type: w.type,
         source_id: w.source_id ?? null,
         title: w.title || 'Nuevo Widget',
-        position: w.position || { x: 0, y: 0, w: 6, h: 300 },
+        position: w.position || { x: 0, y: 0, w: 6, h: 300, row_id: 'row_1' },
         fields: { ...EMPTY_FIELDS(), ...(w.fields || {}) },
         style: w.style || {},
         data: w.data || null,
@@ -244,6 +244,7 @@ document.addEventListener('alpine:init', () => {
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))
         .filter(Boolean)
         .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+      this._initRowsFromWidgets();
       this.boardLoaded = true;
       return Object.fromEntries(data.widgets.map(w => [w.id, w]));
     },
@@ -277,13 +278,106 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    addWidget(type) {
+    rows: [{ id: 'row_1' }],
+    _nextRowSeq: 2,
+
+    getRowWidgets(rowId) {
+      return this.widgets.filter(w => (w.position?.row_id || 'row_1') === rowId && w.constructor?.placement !== 'header');
+    },
+
+    getRowWidth(rowId, excludeWidgetId = null) {
+      return this.getRowWidgets(rowId)
+        .filter(w => w.id !== excludeWidgetId)
+        .reduce((sum, w) => {
+          const wUnits = typeof w.position?.w === 'number' ? w.position.w : 6;
+          return sum + wUnits;
+        }, 0);
+    },
+
+    canAddWidgetToRow(rowId, widgetWidth, excludeWidgetId = null) {
+      const currentWidth = this.getRowWidth(rowId, excludeWidgetId);
+      return (currentWidth + widgetWidth) <= 12;
+    },
+
+    addRowBelow(targetRowId) {
+      const newRowId = `row_${this._nextRowSeq++}`;
+      const index = this.rows.findIndex(r => r.id === targetRowId);
+      if (index >= 0) {
+        this.rows.splice(index + 1, 0, { id: newRowId });
+      } else {
+        this.rows.push({ id: newRowId });
+      }
+      return newRowId;
+    },
+
+    removeRow(rowId) {
+      if (this.rows.length <= 1) return;
+      const widgets = this.getRowWidgets(rowId);
+      if (widgets.length === 0) {
+        this.rows = this.rows.filter(r => r.id !== rowId);
+      }
+    },
+
+    _initRowsFromWidgets() {
+      const canvasWidgets = this.widgets.filter(w => w.constructor?.placement !== 'header');
+      if (!canvasWidgets.length) {
+        this.rows = [{ id: 'row_1' }];
+        return;
+      }
+
+      const existingRowIds = [];
+      canvasWidgets.forEach(w => {
+        if (w.position && w.position.row_id && !existingRowIds.includes(w.position.row_id)) {
+          existingRowIds.push(w.position.row_id);
+        }
+      });
+
+      if (existingRowIds.length > 0) {
+        this.rows = existingRowIds.map(id => ({ id }));
+        this._nextRowSeq = Math.max(...existingRowIds.map(id => parseInt(String(id).replace(/\D/g, ''), 10) || 1)) + 1;
+        return;
+      }
+
+      const rows = [];
+      let currentRowId = 'row_1';
+      let currentSum = 0;
+      rows.push({ id: currentRowId });
+
+      canvasWidgets.forEach(w => {
+        const wUnits = typeof w.position?.w === 'number' ? w.position.w : 6;
+        if (currentSum + wUnits > 12) {
+          currentRowId = `row_${rows.length + 1}`;
+          rows.push({ id: currentRowId });
+          currentSum = 0;
+        }
+        w.position = { ...(w.position || {}), row_id: currentRowId, w: wUnits };
+        currentSum += wUnits;
+      });
+
+      this.rows = rows;
+      this._nextRowSeq = rows.length + 1;
+    },
+
+    addWidget(type, targetRowId = null) {
       const manifest = this.widgetManifest[type] || {};
+      const WidgetClass = WidgetRegistry.get(type);
+      const defaultWStr = WidgetClass?.defaults?.width || 'md:col-span-6';
+      const defaultW = parseInt(defaultWStr.match(/col-span-(\d+)/)?.[1] || '6', 10);
+
+      let destRowId = targetRowId;
+      if (!destRowId) {
+        const availableRow = this.rows.find(r => this.canAddWidgetToRow(r.id, defaultW));
+        if (availableRow) {
+          destRowId = availableRow.id;
+        } else {
+          destRowId = this.addRowBelow(this.rows[this.rows.length - 1].id);
+        }
+      }
+
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
-        // Un widget nuevo usa la primera fuente del tablero; se cambia en su panel.
         source_id: this.sources.length ? this.sources[0].id : null,
-        position: { x: 0, y: this.widgets.length, w: 6, h: 300 },
+        position: { x: 0, y: this.widgets.length, w: defaultW, h: 300, row_id: destRowId },
         title: manifest.label || 'Nuevo Widget',
         style: { ...(manifest.style_defaults || {}) },
         _dirty: false,
@@ -297,10 +391,15 @@ document.addEventListener('alpine:init', () => {
     async createWidgetFromProposal({ type, source, title, width, fields, style }) {
       const WidgetClass = WidgetRegistry.get(type);
       const manifest = this.widgetManifest[type] || {};
+      const defaultW = width || 6;
+      let destRowId = this.rows.find(r => this.canAddWidgetToRow(r.id, defaultW))?.id;
+      if (!destRowId) {
+        destRowId = this.addRowBelow(this.rows[this.rows.length - 1].id);
+      }
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
         source_id: source,
-        position: { x: 0, y: this.widgets.length, w: width || 6, h: WidgetClass.defaults.height || 300 },
+        position: { x: 0, y: this.widgets.length, w: defaultW, h: WidgetClass.defaults.height || 300, row_id: destRowId },
         title: title || manifest.label || 'Nuevo Widget',
         fields: { ...EMPTY_FIELDS(), ...(fields || {}) },
         style: { ...(manifest.style_defaults || {}), ...(style || {}) },
@@ -308,7 +407,7 @@ document.addEventListener('alpine:init', () => {
       });
       // Se ve enseguida (con su indicador de carga); al guardarse toma su id real y sus datos.
       this.widgets.push(widget);
-      containerFor(WidgetClass).appendChild(widget.mount());
+      containerFor(widget).appendChild(widget.mount());
       widget.setLoading(true);
       const result = await this._saveWidget(widget);
       if (!result.ok) {
@@ -356,7 +455,11 @@ document.addEventListener('alpine:init', () => {
           w.rebuildElement();
         }
         w._dirty = false;
+        const localPos = { ...(w.position || {}) };
         w.applyRender(data);
+        if (localPos && localPos.row_id) {
+          w.position = { ...(w.position || {}), ...localPos };
+        }
         return { ok: true, data };
       } catch (e) {
         return { ok: false, error: 'No se pudo conectar con el servidor.' };
@@ -406,16 +509,33 @@ document.addEventListener('alpine:init', () => {
     reorderWidgets() {
       const canvasEl = document.getElementById('dashboard-canvas');
       if (!canvasEl) return;
-      const widgetEls = canvasEl.querySelectorAll('[data-widget-id]');
-      widgetEls.forEach((el, i) => {
-        const id = parseInt(el.dataset.widgetId);
-        const w = this.widgets.find(w => w.id === id);
-        if (w && w.position?.y !== i) {
-          w.position.y = i;
-          w._dirty = true;
-        }
+
+      const rowEls = canvasEl.querySelectorAll('.canvas-row[data-row-id]');
+      if (rowEls.length) {
+        const orderedRowIds = Array.from(rowEls).map(el => el.dataset.rowId);
+        this.rows = orderedRowIds.map(id => ({ id }));
+      }
+
+      let seq = 0;
+      this.rows.forEach(r => {
+        const rowBody = canvasEl.querySelector(`.canvas-row-body[data-row-id="${r.id}"]`);
+        if (!rowBody) return;
+        const widgetEls = rowBody.querySelectorAll('[data-widget-id]');
+        widgetEls.forEach((el, i) => {
+          const id = parseInt(el.dataset.widgetId, 10);
+          const w = this.widgets.find(widget => widget.id === id || widget.el === el);
+          if (w) {
+            if (w.position?.row_id !== r.id || w.position?.y !== seq) {
+              w.position = { ...(w.position || {}), row_id: r.id, y: seq };
+              w._dirty = true;
+            }
+            seq++;
+          }
+        });
       });
-      this.widgets.sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+
+      this.widgets = [...this.widgets];
+      this.rows = [...this.rows];
       this.scheduleLayoutSave();
     },
 

@@ -204,7 +204,47 @@
       </div>
       <!-- Caja de filtros (widgets con placement 'header'): arriba del grid, bajo la regla. -->
       <div id="dashboard-filters" class="px-4 pt-4"></div>
-      <div id="dashboard-canvas" class="grid grid-cols-12 gap-4 content-start flex-1 p-4">
+      <div id="dashboard-canvas" x-data class="flex flex-col gap-4 content-start flex-1 p-4">
+        <template x-for="row in $store.dashboard.rows" :key="row.id">
+          <div class="canvas-row relative group border border-dashed border-line/70 hover:border-moss-400/90 rounded-lg p-1 transition-colors"
+               :class="!$store.dashboard.widgets.length ? 'flex-1 min-h-[280px]' : ''"
+               :data-row-id="row.id">
+
+            <!-- Asa de arrastre en la parte izquierda central -->
+            <div class="row-drag-handle absolute -left-[15px] top-1/2 -translate-y-1/2 z-20 w-[20px] h-8 bg-white border border-line rounded shadow-sm flex items-center justify-center cursor-grab active:cursor-grabbing hover:bg-paper text-ink/40 hover:text-ink transition opacity-80 hover:opacity-100"
+                 title="Mover fila arriba/abajo">
+              <i class="ti ti-grip-vertical text-xs" aria-hidden="true"></i>
+            </div>
+
+            <!-- Botón destacado para eliminar fila si está vacía -->
+            <button type="button" x-show="$store.dashboard.rows.length > 1 && !$store.dashboard.getRowWidgets(row.id).length"
+                    x-on:click="$store.dashboard.removeRow(row.id)"
+                    class="absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md flex items-center justify-center cursor-pointer transition border border-red-600"
+                    title="Eliminar fila vacía">
+              <i class="ti ti-x text-xs font-bold" aria-hidden="true"></i>
+            </button>
+
+            <!-- Grilla de 12 columnas donde se ubican los widgets -->
+            <div class="canvas-row-body grid grid-cols-12 gap-4 h-full min-h-[90px] content-start"
+                 :data-row-id="row.id">
+            </div>
+
+            <!-- Texto indicativo cuando la fila está vacía y el tablero no está vacío -->
+            <div x-show="$store.dashboard.widgets.length > 0 && !$store.dashboard.getRowWidgets(row.id).length"
+                 class="absolute inset-0 flex items-center justify-center pointer-events-none text-xs font-medium text-ink/40">
+              <span>Añadir gráfico</span>
+            </div>
+
+            <!-- Botón "+" en la parte inferior central para agregar una nueva fila -->
+            <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button type="button" x-on:click="$store.dashboard.addRowBelow(row.id)"
+                      title="Agregar fila debajo" aria-label="Agregar fila debajo"
+                      class="w-6 h-6 rounded-full bg-white hover:bg-moss-50 border border-moss-300 text-moss-700 shadow flex items-center justify-center cursor-pointer transition">
+                <i class="ti ti-plus text-xs font-bold" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
     {% if dashboard %}

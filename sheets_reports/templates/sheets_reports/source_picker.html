@@ -478,7 +478,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
   <!-- Popup: ¿la pestaña proviene de un Google Forms? Se pregunta al
        confirmar la pestaña (crear, agregar o cambiar fuente): con «sí»
        la fuente se marca como respuestas de formulario y el servidor la
-       sirve en modelo tidy (una fila por opción seleccionada); con «no»
+       sirve en modelo transformado; con «no»
        se lee como hoja normal, sin transformación. -->
   <template x-teleport="body">
     <div x-show="formPopup" x-cloak x-on:keydown.escape.window="formPopup = false"
@@ -493,12 +493,6 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <p class="text-sm text-ink/80">
             ¿La pestaña <span class="font-medium" x-text="tab ? tab.title.trim() : ''"></span>
             proviene de un <span class="font-medium">Google Forms</span>?
-          </p>
-          <p class="text-xs text-ink/50 leading-relaxed">
-            Si es así, la leemos como respuestas de formulario: cada opción elegida
-            en casillas y cuadrículas queda en su propia fila («Pregunta | Aspecto |
-            Respuesta»), con el identificador de cada respuesta para contarlas
-            sin repetir. En una hoja normal esto no aplica.
           </p>
         </div>
         <div class="flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-line">

@@ -1,8 +1,9 @@
 // Grupos de la barra de módulos, en este orden (palette.category de cada widget).
 const PALETTE_GROUPS = [
-  { id: 'charts', label: 'Gráficos' },
-  { id: 'data', label: 'Datos' },
   { id: 'controls', label: 'Controles' },
+  { id: 'charts', label: 'Gráficos' },
+  { id: 'stats', label: 'Análisis Estadísticos' },
+  { id: 'data', label: 'Datos' },
 ];
 
 // Contenedor donde va cada widget: el grid de su fila o la franja fija de arriba.

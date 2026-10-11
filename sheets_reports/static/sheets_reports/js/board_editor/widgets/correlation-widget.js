@@ -41,7 +41,7 @@
     static type = 'correlation';
     static palette = {
       icon: 'ti-chart-grid-dots',
-      category: 'charts',
+      category: 'stats',
       label: 'Matriz de correlación',
       description: 'Qué tan relacionadas están varias columnas numéricas',
     };

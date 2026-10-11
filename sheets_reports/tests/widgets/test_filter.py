@@ -31,9 +31,9 @@ class CompileTests(SimpleTestCase):
         options = out["filters"][0]["options"]
         self.assertEqual(options, sorted(set(options), key=str))
 
-    def test_sin_columnas_elegidas_expone_todas(self):
+    def test_sin_columnas_elegidas_filtro_vacio(self):
         out = compiled("filter", fields(dimensions=[], metrics=[]))
-        self.assertEqual([f["field"] for f in out["filters"]], ["categoria", "mes", "anio", "ventas"])
+        self.assertEqual(out["filters"], [])
 
     def test_el_estilo_trae_sus_defaults(self):
         out = render("filter", fields(dimensions=["mes"], metrics=[]))
@@ -127,6 +127,6 @@ class FilterCompileTests(SimpleTestCase):
              "options": ["Electrónica", "Hogar", "Ropa"], "truncated": False},
         ])
 
-    def test_sin_columnas_elegidas_expone_tod_las_de_la_hoja(self):
+    def test_sin_columnas_elegidas_filtro_vacio(self):
         out = compiled("filter", fields(dimensions=[], metrics=[]))
-        self.assertEqual([f["field"] for f in out["filters"]], ["categoria", "mes", "anio", "ventas"])
+        self.assertEqual(out["filters"], [])

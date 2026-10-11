@@ -54,12 +54,11 @@ class FilterWidget(BaseWidget):
     ]
 
     def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:
-        # Las columnas elegidas en `fields.dimensions` (vacío = todas) definen los controles.
+        # Las columnas elegidas en `fields.dimensions` definen los controles.
         chosen = [c for c in (fields.dimensions or []) if c in df.columns]
-        columns = chosen or [c for c in df.columns if not is_id_column(c)]
         return WidgetResult(
-            data={"columns": columns},
-            metadata={"fields": fields, "dimensions": columns},
+            data={"columns": chosen},
+            metadata={"fields": fields, "dimensions": chosen},
             fields=fields,
             type="columns",
             frame=df,
@@ -74,7 +73,7 @@ class FilterWidget(BaseWidget):
     ) -> dict:
         style_dict = style.to_dict()
         frame = result.rows
-        columns = metadata.get("dimensions") or [c for c in frame.columns if not is_id_column(c)]
+        columns = metadata.get("dimensions") if metadata and "dimensions" in metadata else []
 
         filters: List[Dict[str, Any]] = []
         for col in columns:

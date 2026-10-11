@@ -299,9 +299,15 @@ document.addEventListener('alpine:init', () => {
       return (currentWidth + widgetWidth) <= 12;
     },
 
+    addRowAtTop() {
+      const newRowId = `row_${this._nextRowSeq++}`;
+      this.rows.unshift({ id: newRowId });
+      return newRowId;
+    },
+
     addRowBelow(targetRowId) {
       const newRowId = `row_${this._nextRowSeq++}`;
-      const index = this.rows.findIndex(r => r.id === targetRowId);
+      const index = targetRowId ? this.rows.findIndex(r => r.id === targetRowId) : -1;
       if (index >= 0) {
         this.rows.splice(index + 1, 0, { id: newRowId });
       } else {
@@ -311,7 +317,6 @@ document.addEventListener('alpine:init', () => {
     },
 
     removeRow(rowId) {
-      if (this.rows.length <= 1) return;
       const widgets = this.getRowWidgets(rowId);
       if (widgets.length === 0) {
         this.rows = this.rows.filter(r => r.id !== rowId);
@@ -321,7 +326,7 @@ document.addEventListener('alpine:init', () => {
     _initRowsFromWidgets() {
       const canvasWidgets = this.widgets.filter(w => w.constructor?.placement !== 'header');
       if (!canvasWidgets.length) {
-        this.rows = [{ id: 'row_1' }];
+        this.rows = [];
         return;
       }
 
@@ -358,6 +363,17 @@ document.addEventListener('alpine:init', () => {
       this._nextRowSeq = rows.length + 1;
     },
 
+    addOrOpenFilter() {
+      const existing = this.widgets.find(w => w.type === 'filter' || w.chart_type === 'filter');
+      if (existing) {
+        this.openDrawer(existing.id);
+        return existing;
+      }
+      const w = this.addWidget('filter');
+      this.openDrawer(w.id);
+      return w;
+    },
+
     addWidget(type, targetRowId = null) {
       const manifest = this.widgetManifest[type] || {};
       const WidgetClass = WidgetRegistry.get(type);
@@ -365,12 +381,13 @@ document.addEventListener('alpine:init', () => {
       const defaultW = parseInt(defaultWStr.match(/col-span-(\d+)/)?.[1] || '6', 10);
 
       let destRowId = targetRowId;
-      if (!destRowId) {
+      if (WidgetClass?.placement !== 'header' && !destRowId) {
         const availableRow = this.rows.find(r => this.canAddWidgetToRow(r.id, defaultW));
         if (availableRow) {
           destRowId = availableRow.id;
         } else {
-          destRowId = this.addRowBelow(this.rows[this.rows.length - 1].id);
+          const lastRow = this.rows.length ? this.rows[this.rows.length - 1].id : null;
+          destRowId = this.addRowBelow(lastRow);
         }
       }
 
@@ -383,6 +400,16 @@ document.addEventListener('alpine:init', () => {
         _dirty: false,
       });
       this.widgets.push(widget);
+      const container = containerFor(widget);
+      if (container) {
+        const chipBtn = container.querySelector('#add-filter-chip-btn');
+        const widgetEl = widget.mount();
+        if (chipBtn) {
+          container.insertBefore(widgetEl, chipBtn);
+        } else {
+          container.appendChild(widgetEl);
+        }
+      }
       return widget;
     },
 
@@ -394,7 +421,8 @@ document.addEventListener('alpine:init', () => {
       const defaultW = width || 6;
       let destRowId = this.rows.find(r => this.canAddWidgetToRow(r.id, defaultW))?.id;
       if (!destRowId) {
-        destRowId = this.addRowBelow(this.rows[this.rows.length - 1].id);
+        const lastRow = this.rows.length ? this.rows[this.rows.length - 1].id : null;
+        destRowId = this.addRowBelow(lastRow);
       }
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
@@ -696,6 +724,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     closeDrawer() {
+      const w = this.editingWidget;
+      if (w && w.id < 0 && (!w.fields || !w.fields.dimensions || !w.fields.dimensions.length)) {
+        if (w.el) w.el.remove();
+        this.widgets = this.widgets.filter(x => x !== w);
+      }
       this.editingId = null;
       this.editingType = null;
       this.drawerAskOpen = false;

@@ -32,20 +32,18 @@
 
     _buildBar(editable) {
       const el = document.createElement('div');
-      // En la vista del tablero el contenedor no se ve: solo quedan los filtros.
-      el.className = editable
-        ? 'relative group bg-white border border-line rounded shadow-sm px-4 py-3'
-        : 'relative bg-transparent border-0 p-0';
+      el.className = 'filter-widget-container flex flex-wrap items-center gap-3';
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       el.innerHTML = `
-        ${editable ? `<div class="flex items-center gap-1.5 mb-2 select-none">
-          <i class="ti ti-filter text-sm text-ink/40" aria-hidden="true"></i>
-          <span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40">${BaseWidget.escapeHTML(this.title)}</span>
-        </div>` : ''}
-        <div id="chart-${this.id}" class="flex flex-wrap items-end gap-3 min-h-[2.25rem]"></div>
-        ${this.loaderOverlayHTML()}
-        ${editable ? BaseWidget.actionButtonsHTML() : ''}`;
+        <div id="chart-${this.id}" class="flex flex-wrap items-center gap-3"></div>
+        ${this.loaderOverlayHTML()}`;
+      if (editable) {
+        el.addEventListener('click', (e) => {
+          if (e.target.closest('.vscomp-ele') || e.target.closest('.vscomp-wrapper')) return;
+          Alpine.store('dashboard').openDrawer(this.id);
+        });
+      }
       return el;
     }
 
@@ -58,9 +56,6 @@
     }
 
     updateChrome() {
-      if (!this.el) return;
-      const titleEl = this.el.querySelector('.title-display');
-      if (titleEl) titleEl.textContent = this.title;
     }
 
     getProperties() {
@@ -71,7 +66,7 @@
       const container = this.getContentContainer();
       if (!container) return;
       this._destroySelects();
-      container.innerHTML = `<span class="text-xs text-ink/50">Agrega filtros desde el panel de edición.</span>`;
+      container.innerHTML = '';
     }
 
     draw(data, style, title) {

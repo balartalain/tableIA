@@ -248,7 +248,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     ...noTextSelection,
   });
 
-  // Sortable para reordenar las filas verticales (.canvas-row)
+  // Sortable para la franja de controles/filtros superiores
+  const filtersEl = document.getElementById('dashboard-filters');
+  if (filtersEl) {
+    new Sortable(filtersEl, {
+      group: {
+        name: 'canvas-widgets',
+        pull: true,
+        put: function (to, from, item) {
+          return item.getAttribute('data-type') === 'filter';
+        },
+      },
+      animation: 150,
+      filter: '#add-filter-chip-btn',
+      draggable: '[data-widget-id], [data-type]',
+      forceFallback: true,
+      fallbackTolerance: 3,
+      fallbackOnBody: true,
+      ...noTextSelection,
+      onAdd: function (evt) {
+        const isNewFromSidebar = !evt.item.hasAttribute('data-widget-id');
+        if (isNewFromSidebar) {
+          const type = evt.item.getAttribute('data-type');
+          if (!type) return;
+          const widget = store.addWidget(type);
+          const widgetEl = widget.mount();
+          evt.item.replaceWith(widgetEl);
+          store.openDrawer(widget.id);
+        }
+      },
+    });
+  }
   new Sortable(canvasEl, {
     animation: 150,
     draggable: '.canvas-row',
@@ -302,6 +332,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           // Si el movimiento es dentro de la misma fila, siempre es válido
           if (toRowId && fromRowId && toRowId === fromRowId) return true;
+
+          // Descartar el filtro en las filas del lienzo
+          if (item.getAttribute('data-type') === 'filter') return false;
 
           // Si viene de otra fila o del sidebar, se valida la capacidad acumulada (<= 12)
           const fits = store.canAddWidgetToRow(toRowId, wUnits, widgetId);

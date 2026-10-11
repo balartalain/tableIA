@@ -330,7 +330,10 @@
     <div class="flex items-center justify-between px-5 pb-3 border-b border-line">
       <h3 class="text-sm font-bold text-ink" x-text="$store.bottomSheet.title"></h3>
       <button x-on:click="$store.bottomSheet.close()" aria-label="Cerrar"
-              class="text-ink/40 hover:text-ink transition cursor-pointer text-sm">✕</button>
+              class="inline-flex items-center gap-1.5 text-xs font-medium text-ink/60 hover:text-ink transition cursor-pointer px-2 py-1 rounded hover:bg-paper">
+        <span>Cerrar</span>
+        <i class="ti ti-x text-sm leading-none" aria-hidden="true"></i>
+      </button>
     </div>
     <div class="flex-1 min-h-0 overflow-auto p-5">
       {% if dashboard %}{% include "sheets_reports/source_manager.html" %}{% else %}{% include "sheets_reports/source_picker.html" with picker_mode="create" %}{% endif %}

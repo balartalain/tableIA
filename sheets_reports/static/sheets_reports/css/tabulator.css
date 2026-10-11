@@ -24,13 +24,13 @@
 
 /* ---------- Encabezado ---------- */
 .tabulator .tabulator-header {
-  background: #fff;
+  background: var(--tb-paper);
   border-bottom: 1px solid var(--tb-line);
   font-weight: 600;
 }
 
 .tabulator .tabulator-header .tabulator-col {
-  background: #fff;
+  background: var(--tb-paper);
   border-right: none;
 }
 

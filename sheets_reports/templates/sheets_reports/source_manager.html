@@ -63,6 +63,11 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                   <span class="min-w-0 space-y-0.5">
                     <span class="flex flex-wrap items-center gap-2">
                       <span class="font-medium truncate" x-text="s.label"></span>
+                      <button type="button" x-on:click="viewData(s)" title="Ver datos transformados de la fuente"
+                              class="inline-flex items-center gap-1 text-[11px] font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 px-2 py-0.5 rounded transition cursor-pointer shrink-0">
+                        <i class="ti ti-eye text-xs" aria-hidden="true"></i>
+                        <span>Ver</span>
+                      </button>
                       <!-- Estado: solo cuando hay un problema. -->
                       <span x-show="statusInfo(s)" x-cloak x-bind:title="statusInfo(s) && statusInfo(s).title"
                             class="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full bg-red-50 text-red-700 border border-red-200 px-2 py-0.5">
@@ -123,5 +128,43 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
 
   <div x-show="view === 'picker'" x-cloak class="flex-1 min-h-0">
     {% include "sheets_reports/source_picker.html" with picker_mode="add" %}
+  </div>
+
+  <!-- Vista de datos transformados (DataFrame con transformaciones) -->
+  <div x-show="view === 'data'" x-cloak class="flex-1 min-h-0 flex flex-col gap-3">
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <button type="button" x-on:click="closeDataView()" title="Volver a la lista de fuentes"
+                class="shrink-0 p-1.5 rounded-md text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
+          <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
+        </button>
+        <div class="min-w-0">
+          <h3 class="text-sm font-bold text-ink truncate" x-text="previewSource ? previewSource.label : ''"></h3>
+          <p x-show="previewSource && previewSource.name" class="text-xs text-ink/50 truncate" x-text="previewSource ? previewSource.original_label : ''"></p>
+        </div>
+      </div>
+      <button type="button" x-on:click="closeDataView()"
+              class="shrink-0 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md px-3 py-1.5 transition cursor-pointer">
+        Atrás
+      </button>
+    </div>
+
+    <div x-show="loadingData" class="flex-1 flex flex-col items-center justify-center text-center gap-2 py-10">
+      <i class="ti ti-loader-2 text-2xl text-moss-600 animate-spin" aria-hidden="true"></i>
+      <p class="text-xs text-ink/60">Cargando datos transformados…</p>
+    </div>
+
+    <div x-show="dataError" role="alert" class="px-3 py-3 rounded border border-red-200 bg-red-50 text-xs text-red-700 space-y-2">
+      <p x-text="dataError"></p>
+      <button type="button" x-on:click="previewSource && viewData(previewSource)"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
+        <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
+        <span>Volver a conectar</span>
+      </button>
+    </div>
+
+    <div x-show="!loadingData && !dataError" class="flex-1 min-h-0 border border-line rounded overflow-hidden">
+      <div x-ref="previewTabulatorHost" class="w-full h-full"></div>
+    </div>
   </div>
 </div>

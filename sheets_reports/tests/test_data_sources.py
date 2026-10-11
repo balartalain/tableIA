@@ -98,6 +98,15 @@ class SourcesCrudTests(TestCase):
         self.assertEqual(self.client.get(f"/api/sources/{inv.id}/schema/").json()["all_fields"],
                          ["producto", "stock"])
 
+    def test_source_rows_devuelve_dataframe_transformado(self, _df):
+        r = self.client.get(f"/api/sources/{self.source.id}/rows/").json()
+        self.assertIn("columns", r)
+        self.assertIn("rows", r)
+        self.assertIn("total_rows", r)
+        self.assertIn("is_form_response", r)
+        self.assertGreater(len(r["rows"]), 0)
+        self.assertIn("ventas", r["columns"])
+
 
 SALES_COLUMNS = [{"name": "categoria", "type": "text", "include": True},
                  {"name": "mes", "type": "text", "include": True},

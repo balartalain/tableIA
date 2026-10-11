@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/sources/<int:source_id>/schema/', views.source_schema, name='source_schema'),
     path('api/sources/<int:source_id>/refresh/', views.source_refresh, name='source_refresh'),
     path('api/sources/<int:source_id>/status/', views.source_status, name='source_status'),
+    path('api/sources/<int:source_id>/rows/', views.source_rows, name='source_rows'),
     path('api/sources/<int:source_id>/formula/', views.source_formula, name='source_formula'),
     path('api/sources/<int:source_id>/formula/ai/', views.source_formula_ai, name='source_formula_ai'),
     path('api/sources/<int:source_id>/calculated-fields/', views.source_add_calculated,

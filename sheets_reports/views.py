@@ -784,6 +784,36 @@ def source_status(request, source_id):
 
 
 @require_http_methods(["GET"])
+def source_rows(request, source_id):
+    """Devuelve las columnas y las filas del DataFrame transformado (sheets.load_source(source)).
+    Acepta opcionalmente ?limit=100 (por defecto 100)."""
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    try:
+        df = sheets.load_source(source)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    limit = request.GET.get("limit")
+    try:
+        limit = min(int(limit), 1000) if limit else 100
+    except ValueError:
+        limit = 100
+
+    preview_df = df.head(limit)
+    records = preview_df.to_dict(orient="records")
+    clean_records = [{k: to_python(v) for k, v in row.items()} for row in records]
+
+    return JsonResponse({
+        "columns": list(df.columns),
+        "rows": clean_records,
+        "total_rows": len(df),
+        "is_form_response": source.is_form_response,
+    })
+
+
+@require_http_methods(["GET"])
 def source_schema(request, source_id):
     """Columnas de la fuente para el panel de un widget (agrupables, numéricas, de tiempo y
     valores de ejemplo) y el manifiesto de widgets."""

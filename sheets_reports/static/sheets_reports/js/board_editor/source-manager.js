@@ -23,6 +23,15 @@ function sourceManager() {
     statuses: {},
     refreshing: {},
     refreshErrors: {},
+    // Vista de datos transformados (view === 'data')
+    previewSource: null,
+    loadingData: false,
+    dataError: '',
+    previewRows: [],
+    previewColumns: [],
+    totalRows: 0,
+    isFormResponse: false,
+    _previewTable: null,
 
     init() {
       window.addEventListener('sources:open', () => this.open());
@@ -31,6 +40,7 @@ function sourceManager() {
     },
 
     open() {
+      this.closeDataView();
       this.view = 'list';
       this.pendingDelete = null;
       this.load();
@@ -126,9 +136,89 @@ function sourceManager() {
       this.afterChange();
     },
 
+    // Ver datos transformados de una fuente en Tabulator dentro del bottom sheet
+    async viewData(source) {
+      this.previewSource = source;
+      this.view = 'data';
+      this.loadingData = true;
+      this.dataError = '';
+      this.previewRows = [];
+      this.previewColumns = [];
+      this.totalRows = 0;
+      this.isFormResponse = false;
+      if (this._previewTable) {
+        this._previewTable.destroy();
+        this._previewTable = null;
+      }
+      try {
+        const { r, data } = await fetchJsonSafe(apiUrl(`/api/sources/${source.id}/rows/`));
+        if (!r.ok || !data || data.error) throw new Error((data && data.error) || 'No se pudieron cargar los datos.');
+        this.previewColumns = data.columns || [];
+        this.previewRows = data.rows || [];
+        this.totalRows = data.total_rows || 0;
+        this.isFormResponse = !!data.is_form_response;
+        this.loadingData = false;
+        Alpine.nextTick(() => {
+          setTimeout(() => this.renderPreviewTabulator(), 50);
+        });
+      } catch (e) {
+        this.dataError = e.message || 'Error al cargar los datos de la fuente.';
+        this.loadingData = false;
+      }
+    },
+
+    renderPreviewTabulator() {
+      const container = this.$refs.previewTabulatorHost;
+      if (!container) return;
+      if (this._previewTable) {
+        this._previewTable.destroy();
+        this._previewTable = null;
+      }
+      container.innerHTML = '';
+      if (!this.previewColumns.length) return;
+
+      const columns = this.previewColumns.map(col => ({
+        title: col,
+        field: col,
+        headerHozAlign: 'left',
+        hozAlign: 'left',
+      }));
+
+      this._previewTable = new Tabulator(container, {
+        data: this.previewRows,
+        nestedFieldSeparator: false,
+        columns,
+        layout: 'fitDataStretch',
+        pagination: 'local',
+        paginationSize: 20,
+        paginationCounter: function(pageSize, currentRow, currentPage, totalRows, totalPages) {
+          if (!totalRows) return 'Sin filas';
+          const start = currentRow;
+          const end = Math.min(currentRow + pageSize - 1, totalRows);
+          return `Mostrando ${start}–${end} de ${totalRows} filas`;
+        },
+        maxHeight: '100%',
+      });
+
+      this._previewTable.on('tableBuilt', () => {
+        setTimeout(() => {
+          if (this._previewTable) this._previewTable.redraw(true);
+        }, 50);
+      });
+    },
+
+    closeDataView() {
+      if (this._previewTable) {
+        this._previewTable.destroy();
+        this._previewTable = null;
+      }
+      this.previewSource = null;
+      this.view = 'list';
+    },
+
     // Otra lista de fuentes y otras columnas: el panel de los widgets y el lienzo se recalculan.
     async afterChange() {
-      this.view = 'list';
+      this.closeDataView();
       await this.load();
       const store = Alpine.store('dashboard');
       store.resetSources(this.sources.map(s => ({ id: s.id, label: s.label })));

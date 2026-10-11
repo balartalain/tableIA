@@ -278,8 +278,8 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    rows: [{ id: 'row_1' }],
-    _nextRowSeq: 2,
+    rows: [],
+    _nextRowSeq: 1,
 
     get canvasWidgets() {
       return this.widgets.filter(w => w.constructor?.placement !== 'header');

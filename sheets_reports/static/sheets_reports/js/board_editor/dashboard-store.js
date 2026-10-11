@@ -814,10 +814,11 @@ document.addEventListener('alpine:init', () => {
     _autoAlias(agg, field, taken) {
       const base = (agg && field) ? `${agg}_${field}` : (field || 'metrica');
       const slug = base.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'metrica';
-      let alias = /^[a-z]/.test(slug) ? slug : `m_${slug}`;
+      const truncated = slug.slice(0, 30).replace(/_+$/g, '') || 'metrica';
+      let alias = /^[a-z]/.test(truncated) ? truncated : `m_${truncated}`;
       let n = 2;
       const used = new Set(taken || []);
-      while (used.has(alias)) alias = `${slug.slice(0, 30)}_${n++}`;
+      while (used.has(alias)) alias = `${truncated.slice(0, 26)}_${n++}`;
       return alias;
     },
 

@@ -47,6 +47,41 @@ function aiBoard() {
       return (this.store.widgetManifest[type] || {}).label || type;
     },
 
+    _organizePlanItems(items) {
+      const TOP_TYPES = new Set(['kpi', 'donut', 'ranking']);
+      const mapped = (items || []).map(i => {
+        const WidgetClass = WidgetRegistry.get(i.widget_type);
+        const isHeader = (WidgetClass && WidgetClass.placement === 'header') || i.widget_type === 'filter';
+        const isTop = TOP_TYPES.has(i.widget_type);
+
+        let category = 3;
+        let width = 6;
+
+        if (isHeader) {
+          category = 1;
+          width = 12;
+        } else if (isTop) {
+          category = 2;
+          width = 4;
+        } else {
+          category = 3;
+          width = 6;
+        }
+
+        return {
+          ...i,
+          width,
+          include: true,
+          status: '',
+          error: '',
+          _category: category,
+        };
+      });
+
+      mapped.sort((a, b) => a._category - b._category);
+      return mapped.map(({ _category, ...item }) => item);
+    },
+
     async propose() {
       if (!this.prompt.trim() || this.loading) return;
       this.loading = true;
@@ -58,7 +93,7 @@ function aiBoard() {
           body: JSON.stringify({ prompt: this.prompt, source: this.source }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
-        this.items = (data.items || []).map(i => ({ ...i, include: true, status: '', error: '' }));
+        this.items = this._organizePlanItems(data.items || []);
         this.note = data.note || '';
         this.step = 'plan';
       } catch (e) {

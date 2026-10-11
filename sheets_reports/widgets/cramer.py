@@ -84,7 +84,6 @@ class CramerWidget(BaseWidget):
         {"key": "title", "label": "Título", "type": "string", "default": "V de Cramér"},
         {"key": "showValues", "label": "Mostrar valores", "type": "boolean", "default": True},
         {"key": "lowerOnly", "label": "Solo la mitad inferior", "type": "boolean", "default": False},
-        {"key": "showTop", "label": "Mostrar lo más asociado", "type": "boolean", "default": True},
     ]
 
     def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:

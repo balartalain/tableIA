@@ -61,17 +61,6 @@
       return { ...super.getProperties() };
     }
 
-    _topHTML(top) {
-      if (this.style.showTop === false || !(top || []).length) return '';
-      const esc = BaseWidget.escapeHTML;
-      const items = top.map(t => `<li class="truncate"><span class="font-medium text-ink/70">${esc(t.a)} y ${esc(t.b)}</span>:
-          ${formatNumber(t.r, { decimals: 2 })} <span class="text-ink/45">(${strength(t.r)})</span></li>`).join('');
-      return `<div class="shrink-0 pt-2 mt-1 border-t border-line text-[11px] text-ink/55">
-          <p class="font-semibold text-ink/60 mb-0.5">Lo más asociado</p>
-          <ul class="space-y-0.5">${items}</ul>
-        </div>`;
-    }
-
     draw(data, style, title) {
       this.style = { ...this.style, ...style };
       if (title) this.title = title;
@@ -97,7 +86,7 @@
       }
 
       container.style.height = '100%';
-      container.innerHTML = `<div class="flex-1 min-h-0 relative" style="flex:1 1 0%;min-height:0;position:relative"><div class="cramer-chart absolute inset-0" style="position:absolute;inset:0"></div></div>${this._topHTML(payload.top)}`;
+      container.innerHTML = `<div class="flex-1 min-h-0 relative" style="flex:1 1 0%;min-height:0;position:relative"><div class="cramer-chart absolute inset-0" style="position:absolute;inset:0"></div></div>`;
 
       const series = variables.map((_, k) => {
         const i = size - 1 - k;

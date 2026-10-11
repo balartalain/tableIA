@@ -15,11 +15,10 @@ from sheets_reports.widgets import WIDGETS
 
 logger = logging.getLogger(__name__)
 
-MAX_ITEMS = 8
+MAX_ITEMS = 15
 MAX_PROMPT_CHARS = 2000
 MAX_TITLE_CHARS = 80
 MAX_TEXT_CHARS = 400
-MIN_WIDTH, MAX_WIDTH, DEFAULT_WIDTH = 3, 12, 6
 
 BOARD_PROMPT = """\
 Eres el asistente de un constructor de tableros sobre una hoja de cálculo. El usuario describe
@@ -41,7 +40,6 @@ Reglas:
 - request: el pedido en lenguaje natural para configurar ese widget, con los nombres exactos de
   las columnas, la agregación, el agrupamiento, el orden, el límite y las condiciones (ej.
   «suma de ventas por categoria, las 5 más altas»). Sin JSON.
-- width: columnas de ancho en una grilla de 12 (KPI 3 o 4, gráficos 6, tablas 12).
 - note: vacío si se pudo todo; si no, qué cambiaste y por qué, en una frase.
 {singletons}
 Pedido del usuario:
@@ -60,9 +58,8 @@ SCHEMA = {
                     "title": {"type": "string"},
                     "description": {"type": "string"},
                     "request": {"type": "string"},
-                    "width": {"type": "integer"},
                 },
-                "required": ["widget_type", "title", "description", "request", "width"],
+                "required": ["widget_type", "title", "description", "request"],
             },
         },
         "note": {"type": "string"},
@@ -83,18 +80,10 @@ def _text(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
-def _width(value) -> int:
-    try:
-        width = int(value)
-    except (TypeError, ValueError):
-        return DEFAULT_WIDTH
-    return max(MIN_WIDTH, min(MAX_WIDTH, width))
-
-
 def clean_plan(raw, existing_types=()) -> dict:
     """Lo que devolvió la IA, solo con lo que el tablero puede crear: tipos registrados con IA,
-    a lo más uno de un tipo único por tablero (ninguno si ya está), título y pedido no vacíos y
-    el ancho dentro de la grilla. Sin widgets → SpecGenerationError."""
+    a lo más uno de un tipo único por tablero (ninguno si ya está), título y pedido no vacíos.
+    Sin widgets → SpecGenerationError."""
     allowed = {w.key: w for w in _widgets()}
     taken = {t for t in existing_types if (allowed.get(t) and allowed[t].max_per_dashboard == 1)}
     if not isinstance(raw, dict):
@@ -117,7 +106,6 @@ def clean_plan(raw, existing_types=()) -> dict:
             "title": title or widget.label,
             "description": _text(item.get("description"), MAX_TEXT_CHARS),
             "request": request,
-            "width": MAX_WIDTH if widget.max_per_dashboard == 1 else _width(item.get("width")),
         })
         if len(items) == MAX_ITEMS:
             break

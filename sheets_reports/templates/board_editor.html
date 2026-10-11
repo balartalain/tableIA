@@ -227,7 +227,6 @@
       <div id="dashboard-canvas" x-data class="flex flex-col gap-4 content-start flex-1 p-4">
         <template x-for="row in $store.dashboard.rows" :key="row.id">
           <div class="canvas-row relative group p-1 transition-colors"
-               :class="!$store.dashboard.widgets.length ? 'flex-1 min-h-[280px]' : ''"
                :data-row-id="row.id">
 
             <!-- Línea divisoria inferior visible al hacer hover en la fila -->
@@ -244,8 +243,8 @@
                  :data-row-id="row.id">
             </div>
 
-            <!-- Texto indicativo cuando la fila está vacía y el tablero no está vacío -->
-            <div x-show="$store.dashboard.widgets.length > 0 && !$store.dashboard.getRowWidgets(row.id).length"
+            <!-- Texto indicativo cuando la fila está vacía -->
+            <div x-show="!$store.dashboard.getRowWidgets(row.id).length"
                  class="absolute inset-0 flex items-center justify-center pointer-events-none text-xs font-medium text-ink/40">
               <span>Añadir gráfico</span>
             </div>
@@ -274,7 +273,7 @@
     {% if dashboard %}
     <!-- Lienzo vacío: arrastrar un widget o generar el tablero con IA. No tapa el soltar del
          arrastre (pointer-events solo en la tarjeta). -->
-    <div x-data x-show="$store.dashboard.boardLoaded && !$store.dashboard.widgets.length" x-cloak
+    <div x-data x-show="$store.dashboard.boardLoaded && !$store.dashboard.canvasWidgets.length" x-cloak
          class="absolute inset-0 flex items-center justify-center p-6 pointer-events-none">
       <div class="pointer-events-auto max-w-sm text-center bg-white/90 border border-dashed border-line rounded px-6 py-6">
         <i class="ti ti-layout-dashboard text-3xl text-ink/30" aria-hidden="true"></i>

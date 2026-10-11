@@ -281,6 +281,13 @@ document.addEventListener('alpine:init', () => {
     rows: [{ id: 'row_1' }],
     _nextRowSeq: 2,
 
+    get canvasWidgets() {
+      return this.widgets.filter(w => w.constructor?.placement !== 'header');
+    },
+    get hasCanvasWidgets() {
+      return this.canvasWidgets.length > 0;
+    },
+
     getRowWidgets(rowId) {
       return this.widgets.filter(w => (w.position?.row_id || 'row_1') === rowId && w.constructor?.placement !== 'header');
     },
@@ -370,6 +377,16 @@ document.addEventListener('alpine:init', () => {
         return existing;
       }
       const w = this.addWidget('filter');
+      const container = containerFor(w);
+      if (container) {
+        const chipBtn = container.querySelector('#add-filter-chip-btn');
+        const widgetEl = w.mount();
+        if (chipBtn) {
+          container.insertBefore(widgetEl, chipBtn);
+        } else {
+          container.appendChild(widgetEl);
+        }
+      }
       this.openDrawer(w.id);
       return w;
     },
@@ -400,16 +417,6 @@ document.addEventListener('alpine:init', () => {
         _dirty: false,
       });
       this.widgets.push(widget);
-      const container = containerFor(widget);
-      if (container) {
-        const chipBtn = container.querySelector('#add-filter-chip-btn');
-        const widgetEl = widget.mount();
-        if (chipBtn) {
-          container.insertBefore(widgetEl, chipBtn);
-        } else {
-          container.appendChild(widgetEl);
-        }
-      }
       return widget;
     },
 

@@ -146,10 +146,18 @@
             const r = matrix[i] ? matrix[i][j] : null;
             const n = counts[i] ? counts[i][j] : 0;
             const pair = `${esc(variables[i].label)} × ${esc(variables[j].label)}`;
-            const body = r == null
-              ? `Sin datos suficientes${n < 3 ? ` (${n} ${n === 1 ? 'fila' : 'filas'} con los dos valores)` : ' (columna con una sola categoría)'}`
-              : `<b>V = ${formatNumber(r, { decimals: 2 })}</b> · ${strength(r)} · ${n} filas`;
-            return `<div class="px-2.5 py-1.5 text-xs"><div class="font-semibold">${pair}</div><div>${body}</div></div>`;
+            if (r == null) {
+              const body = `Sin datos suficientes${n < 3 ? ` (${n} ${n === 1 ? 'fila' : 'filas'})` : ' (columna con una sola categoría)'}`;
+              return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug"><div class="font-semibold text-ink/80 mb-0.5">${pair}</div><div class="text-ink/60">${body}</div></div>`;
+            }
+            return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug">
+              <div class="font-semibold text-ink/80 pb-1 mb-1 border-b border-line/60">${pair}</div>
+              <div class="flex items-center gap-2 my-0.5">
+                <span class="font-bold text-sm text-ink">V = ${formatNumber(r, { decimals: 2 })}</span>
+                <span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-paper border border-line text-ink/80">${strength(r)}</span>
+              </div>
+              <div class="text-[11px] text-ink/50">${n} filas analizadas</div>
+            </div>`;
           },
         },
       };

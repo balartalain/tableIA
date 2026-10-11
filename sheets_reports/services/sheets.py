@@ -164,7 +164,7 @@ def _with_row_id(df: pd.DataFrame) -> pd.DataFrame:
     if find_id_column(df.columns) is not None:
         return df
     df = df.copy()
-    df["ID"] = range(1, len(df) + 1)
+    df["_ID"] = range(1, len(df) + 1)
     return df
 
 

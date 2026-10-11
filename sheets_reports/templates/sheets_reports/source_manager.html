@@ -89,12 +89,6 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                   x-text="s.widgets ? s.widgets : 'Sin usar'"></td>
               <td class="px-3 py-1.5">
                 <div class="flex justify-end gap-0.5 whitespace-nowrap text-xs font-medium">
-                  <button type="button" x-on:click="refresh(s)" x-bind:disabled="refreshing[s.id]"
-                          title="Volver a leer la hoja de Google" x-bind:aria-label="`Actualizar ${s.label}`"
-                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
-                    <i class="ti ti-refresh text-base" x-bind:class="refreshing[s.id] ? 'animate-spin' : ''" aria-hidden="true"></i>
-                    Actualizar
-                  </button>
                   <button type="button" x-on:click="changeSheet(s)" title="Elegir otra hoja o pestaña"
                           x-bind:aria-label="`Cambiar fuente de ${s.label}`"
                           class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-ink hover:bg-paper cursor-pointer">
@@ -143,10 +137,6 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
           <p x-show="previewSource && previewSource.name" class="text-xs text-ink/50 truncate" x-text="previewSource ? previewSource.original_label : ''"></p>
         </div>
       </div>
-      <button type="button" x-on:click="closeDataView()"
-              class="shrink-0 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md px-3 py-1.5 transition cursor-pointer">
-        Atrás
-      </button>
     </div>
 
     <div x-show="loadingData" class="flex-1 flex flex-col items-center justify-center text-center gap-2 py-10">

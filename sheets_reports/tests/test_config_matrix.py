@@ -325,6 +325,23 @@ def _scatter(data, fields) -> list[str]:
     return problems
 
 
+def _cramer(data, fields) -> list[str]:
+    problems = []
+    matrix, size = data["matrix"], len(fields["columns"])
+    if len(matrix) != size or any(len(row) != size for row in matrix):
+        return [f"la matriz no es de {size}×{size}"]
+    for i in range(size):
+        if matrix[i][i] not in (1.0, None):
+            problems.append(f"la diagonal {i} vale {matrix[i][i]}")
+        for j in range(size):
+            v = matrix[i][j]
+            if v is not None and not 0 <= v <= 1:
+                problems.append(f"v fuera de [0, 1]: {v}")
+            if v != matrix[j][i]:
+                problems.append(f"no es simétrica en ({i}, {j})")
+    return problems
+
+
 INVARIANTS = {
     "bar": _chart,
     "line": _chart,
@@ -335,6 +352,7 @@ INVARIANTS = {
     "filter": _filter,
     "ranking": _ranking,
     "correlation": _correlation,
+    "cramer": _cramer,
     "scatter": _scatter,
 }
 

@@ -32,11 +32,11 @@
 
     _buildBar(editable) {
       const el = document.createElement('div');
-      el.className = 'filter-widget-container flex flex-wrap items-center gap-3';
+      el.className = 'filter-widget-container contents';
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       el.innerHTML = `
-        <div id="chart-${this.id}" class="flex flex-wrap items-center gap-3"></div>
+        <div id="chart-${this.id}" class="contents"></div>
         ${this.loaderOverlayHTML()}`;
       if (editable) {
         el.addEventListener('click', (e) => {
@@ -87,7 +87,7 @@
       }
       filters.forEach(filter => {
         const wrap = document.createElement('div');
-        wrap.className = 'w-56 max-w-full';
+        wrap.className = 'w-56 max-w-full shrink-0';
         wrap.title = filter.label;
         wrap.innerHTML = `
           <div class="filter-control"></div>

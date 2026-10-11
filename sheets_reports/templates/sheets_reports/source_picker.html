@@ -28,7 +28,14 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       {% else %}
       <span class="mr-auto"></span>
       {% endif %}
-      <p x-show="columnsError" x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
+      <div x-show="columnsError" class="flex items-center gap-2">
+        <p x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
+        <button type="button" x-on:click="loadColumns({ refresh: true })"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
+          <i class="ti ti-refresh text-xs" aria-hidden="true"></i>
+          <span>Volver a conectar</span>
+        </button>
+      </div>
       <button type="button" x-on:click="loadColumns()" x-bind:disabled="!tab || loadingColumns"
               class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-md px-5 py-2 transition cursor-pointer"
               x-text="loadingColumns ? 'Leyendo la pestaña…' : 'Aceptar'"></button>
@@ -72,7 +79,14 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <p x-show="source && loadingSheets" class="px-2 py-6 text-center text-xs text-ink/50">
             <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando documentos…
           </p>
-          <p x-show="sheetsError" x-text="sheetsError" role="alert" class="px-2 py-3 text-xs text-red-600"></p>
+          <div x-show="sheetsError" class="px-2 py-3 space-y-2">
+            <p x-text="sheetsError" role="alert" class="text-xs text-red-600"></p>
+            <button type="button" x-on:click="loadSpreadsheets()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
+              <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
+              <span>Volver a conectar</span>
+            </button>
+          </div>
           <p x-show="source && !loadingSheets && !sheetsError && !spreadsheets.length"
              class="px-2 py-6 text-center text-xs text-ink/50">
             No hay hojas visibles. Comparte la hoja de cálculo con
@@ -102,7 +116,14 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <p x-show="spreadsheet && loadingTabs" class="px-2 py-6 text-center text-xs text-ink/50">
             <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando pestañas…
           </p>
-          <p x-show="tabsError" x-text="tabsError" role="alert" class="px-2 py-3 text-xs text-red-600"></p>
+          <div x-show="tabsError" class="px-2 py-3 space-y-2">
+            <p x-text="tabsError" role="alert" class="text-xs text-red-600"></p>
+            <button type="button" x-on:click="spreadsheet && selectSpreadsheet(spreadsheet)"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
+              <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
+              <span>Volver a conectar</span>
+            </button>
+          </div>
           <fieldset x-show="spreadsheet && !loadingTabs" class="space-y-0.5">
             <legend class="sr-only">Pestaña de la hoja</legend>
             <template x-for="t in tabs" :key="t.gid">

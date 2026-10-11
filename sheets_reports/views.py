@@ -1152,6 +1152,31 @@ def widget_detail(request, widget_id):
     except ValueError as e:
         return _error(str(e))
 
+    # Optimización: si solo cambia la posición (resize/drag), guarda en DB sin re-leer la hoja ni calcular datos.
+    if request.method == "PUT":
+        data_fields = data.get("fields")
+        data_style = data.get("style")
+        data_source = data.get("source")
+        data_title = data.get("title")
+        data_type = data.get("type")
+
+        is_position_only = (
+            "position" in data
+            and (data_fields is None or data_fields == widget.fields)
+            and (data_style is None or data_style == widget.style)
+            and (data_source is None or data_source == widget.source_id)
+            and (data_title is None or data_title == widget.title)
+            and (data_type is None or data_type == widget.type)
+        )
+
+        if is_position_only:
+            widget.position = data["position"]
+            widget.save(update_fields=["position", "updated_at"])
+            return JsonResponse({
+                **_serialize_widget(widget),
+                "position_only": True,
+            })
+
     try:
         source = _dashboard_source(widget.dashboard, data.get("source"), default=widget.source)
     except ValueError as e:

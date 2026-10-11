@@ -247,6 +247,18 @@ class ViewsTests(TestCase):
         table.refresh_from_db()
         self.assertEqual(table.style, style)
 
+    def test_update_position_only_no_recalcula_datos(self, _df):
+        new_pos = {"x": 0, "y": 0, "w": 8, "h": 400}
+        r = self.client.put(
+            f"/api/widget/{self.widget.id}/",
+            json.dumps({"position": new_pos}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(r.json().get("position_only"))
+        self.widget.refresh_from_db()
+        self.assertEqual(self.widget.position, new_pos)
+
     def test_el_editor_incluye_el_panel_de_cada_tipo(self, _df):
         from sheets_reports.widgets import WIDGETS
         r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")

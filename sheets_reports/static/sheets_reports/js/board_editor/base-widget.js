@@ -447,6 +447,10 @@
     applyRender(entry) {
       this.setLoading(false);
       if (!entry) return;
+      if (entry.position_only) {
+        window.dispatchEvent(new Event('resize'));
+        return;
+      }
       this._lastEntry = entry;
       if (entry.error) {
         this.renderError(entry.error);

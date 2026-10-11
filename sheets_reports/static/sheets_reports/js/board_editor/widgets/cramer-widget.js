@@ -94,7 +94,7 @@
           name: variables[i].label,
           data: variables.map((col, j) => {
             const r = matrix[i] ? matrix[i][j] : null;
-            const y = lowerOnly && j > i ? HIDDEN : (r == null ? NO_DATA : r);
+            const y = (lowerOnly && j > i) || r == null ? null : r;
             return { x: col.label, y };
           }),
         };
@@ -114,15 +114,25 @@
           heatmap: {
             enableShades: false,
             radius: 2,
-            colorScale: { ranges: [...RANGES, ...SENTINEL_RANGES] },
+            colorScale: {
+              ranges: RANGES,
+              min: 0,
+              max: 1,
+              gradientLegend: {
+                enabled: true,
+                width: '75%',
+                thickness: 14,
+                showHoverValue: true,
+              },
+            },
           },
         },
         stroke: { width: 1, colors: ['#ffffff'] },
-        legend: { show: false },
+        legend: { show: true, position: 'right' },
         dataLabels: {
           enabled: showValues,
           style: { fontSize: '11px', fontWeight: 500, colors: ['#1f2328'] },
-          formatter: (val) => (val > 1 ? '' : formatNumber(val, { decimals: 2 })),
+          formatter: (val) => (val == null || val > 1 ? '' : formatNumber(val, { decimals: 2 })),
         },
         xaxis: { labels: { rotate: -45, trim: true, style: { fontSize: '10px' } }, tooltip: { enabled: false } },
         yaxis: { labels: { maxWidth: 140, style: { fontSize: '10px' } } },

@@ -365,14 +365,20 @@ SOURCE_SAMPLES = 3
 
 
 def _sheet_columns(df) -> list[dict]:
-    """Columnas de la hoja tal cual: tipo inferido y algunos valores de
+    """Columnas de la hoja tal cual: tipo inferido, alias único y algunos valores de
     ejemplo. La columna de sistema ID se marca de solo lectura."""
     types = infer_column_types(df)
     columns = []
-    for col in df.columns:
+    for i, col in enumerate(df.columns):
         # to_key: 5000.0 → «5000», como se ve en la hoja.
         values = [v for v in dict.fromkeys(str(to_key(x)).strip() for x in df[col].dropna()) if v]
-        column = {"name": col, "type": types[col], "samples": values[:SOURCE_SAMPLES], "readonly": is_id_column(col)}
+        column = {
+            "alias": f"col_{i + 1}",
+            "name": col,
+            "type": types[col],
+            "samples": values[:SOURCE_SAMPLES],
+            "readonly": is_id_column(col),
+        }
         columns.append(column)
     return columns
 

@@ -215,10 +215,11 @@ function sourcePicker({ mode = 'create' } = {}) {
     // Columnas recién leídas con lo que el usuario ya eligió en las que siguen (por encabezado).
     _keepEdits(fresh, previous = this.columns) {
       const current = Object.fromEntries(previous.map(c => [c.name, c]));
-      return fresh.map(c => {
+      return fresh.map((c, i) => {
         const edited = current[c.name];
-        return edited ? { ...c, type: edited.type, include: edited.include, label: edited.label || '', format: edited.format || '' }
-          : { ...c, include: c.include ?? true, label: c.label || '', format: c.format || '' };
+        const alias = (edited && edited.alias) || c.alias || `col_${i + 1}`;
+        return edited ? { ...c, alias, type: edited.type, include: edited.include, label: edited.label || '', format: edited.format || '' }
+          : { ...c, alias, include: c.include ?? true, label: c.label || '', format: c.format || '' };
       });
     },
 

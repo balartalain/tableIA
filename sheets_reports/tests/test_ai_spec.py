@@ -415,3 +415,34 @@ class PromptTests(SimpleTestCase):
         self.assertEqual(ai_spec.capabilities_text(WIDGETS.get("donut")),
                          "dimensiones 1, sin pivotes, métricas 1, orden, sin límite, filtros, sin ventanas")
         self.assertNotIn("ventanas", ai_spec.capabilities_text(WIDGETS.get("table")))
+
+
+class ColumnResolutionTests(SimpleTestCase):
+    def test_resuelve_columnas_largas_con_acentos_y_puntuacion_final(self):
+        col_real = "Indique su nivel de satisfacción con los siguientes aspectos [Dominio de los facilitadores de las asignaturas impartidas.]"
+        df = pd.DataFrame({
+            col_real: ["Excelente", "Bueno"],
+            "ventas": [100, 200],
+        })
+        ctx = SheetContext.from_dataframe(df, "0")
+
+        # La IA propone el nombre sin acento y sin el punto final
+        col_ia = "Indique su nivel de satisfaccion con los siguientes aspectos [Dominio de los facilitadores de las asignaturas impartidas]"
+        form = {
+            "widget_type": "bar",
+            "title": "",
+            "fields": {
+                "dimensions": [col_ia],
+                "pivots": [],
+                "metrics": [{"agg": "count", "field": None, "alias": "conteo"}],
+                "filters": [],
+                "sort_by": "-conteo",
+            },
+            "style": {},
+        }
+
+        errors = ai_spec.form_errors(form, ctx, "bar", require_title=False)
+        self.assertEqual(errors, [])
+        # Verifica que se haya resuelto al nombre real de la hoja
+        self.assertEqual(form["fields"]["dimensions"][0], col_real)
+

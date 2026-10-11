@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from jsonschema import Draft202012Validator
 
 from sheets_reports.engine.context import SheetContext
@@ -28,11 +29,18 @@ def _path(error) -> str:
     return ".".join(parts) or "spec"
 
 
+def _column_key(name) -> str:
+    text = str(name).strip().rstrip(".,;:]}")
+    text = unicodedata.normalize("NFD", text).encode("ASCII", "ignore").decode("ASCII")
+    return " ".join(text.split()).casefold()
+
+
 def _readable(error, ctx: SheetContext) -> str:
     path = _path(error)
     if error.validator == "enum" and path.endswith("field"):
         value = error.instance
-        if value in ctx.fields and not ctx.is_numeric(value):
+        real_field = next((f for f in ctx.fields if _column_key(f) == _column_key(value)), value)
+        if real_field in ctx.fields and not ctx.is_numeric(real_field):
             return (f"{path}: la columna '{value}' no es numérica; solo se puede usar con "
                     f"agg 'count' o en condiciones de igualdad.")
         return f"{path}: la columna '{value}' no existe en la hoja."

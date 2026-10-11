@@ -393,13 +393,12 @@ def _read_sheet(request, sheet_id: str, gid: str, headers: bool):
 def source_columns(request, spreadsheet_id, gid):
     """Columnas de la pestaña con el tipo que se infiere y algunos valores de
     ejemplo. `?form=1`: la pestaña es de respuestas de Google Forms y se
-    sirven las columnas de su modelo tidy (ver services/form_tidy.py):
-    `ID`, `marca_tiempo`, el contexto y `Pregunta | Aspecto | Respuesta`."""
+    sirven las columnas transformadas (ver services/form_transform.py)."""
     try:
         headers = _headers_param(request)
         df = _read_sheet(request, spreadsheet_id, gid, headers)
         if request.GET.get("form"):
-            df = sheets.get_tidy_dataframe(spreadsheet_id, gid, headers=headers)
+            df = sheets.get_transformed_dataframe(spreadsheet_id, gid, headers=headers)
     except SheetError as e:
         return _error(str(e), status=502)
     return JsonResponse({"columns": _sheet_columns(df), "rows": len(df)})
@@ -507,9 +506,9 @@ def _check_calculated(source, updates: dict) -> str | None:
     headers = updates.get("first_row_headers", source.first_row_headers)
     try:
         # Respuestas de formulario: los campos calculados se arman
-        # sobre el modelo tidy (ver services/form_tidy.py).
+        # sobre el modelo transformado (ver services/form_transform.py).
         if updates.get("is_form_response", source.is_form_response):
-            df = sheets.get_tidy_dataframe(sheet_id, gid, headers=headers)
+            df = sheets.get_transformed_dataframe(sheet_id, gid, headers=headers)
         else:
             df = sheets.get_sheet_dataframe(sheet_id, gid, headers=headers)
     except SheetError as e:
@@ -606,7 +605,7 @@ def source_saved_columns(request, source_id):
     try:
         df = _read_sheet(request, source.sheet_id, source.gid, headers)
         if source.is_form_response:
-            df = sheets.get_tidy_dataframe(source.sheet_id, source.gid, headers=headers)
+            df = sheets.get_transformed_dataframe(source.sheet_id, source.gid, headers=headers)
     except SheetError as e:
         return _error(str(e), status=502)
     columns = _merge_saved_columns(_sheet_columns(df), source.columns)
@@ -678,11 +677,11 @@ FORMULA_PREVIEW_ROWS = 5
 def _draft_frame(source, data: dict):
     """La hoja de la fuente como está en el editor, sin guardar: `first_row_headers`, `columns`
     (tipos y nombres a mostrar) y `calculated_fields` (los campos anteriores al que se arma).
-    Una fuente de respuestas de Google Forms se ve sobre su modelo tidy.
+    Una fuente de respuestas de Google Forms se ve sobre su modelo transformado.
     Lanza SheetError si no se puede leer."""
     headers = bool(data.get("first_row_headers", source.first_row_headers))
     if source.is_form_response:
-        df = sheets.get_tidy_dataframe(source.sheet_id, source.gid, headers=headers)
+        df = sheets.get_transformed_dataframe(source.sheet_id, source.gid, headers=headers)
     else:
         df = sheets.get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
     columns = data.get("columns")

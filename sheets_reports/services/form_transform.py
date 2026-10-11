@@ -1,15 +1,12 @@
 """
-Pipeline «tidy» para hojas de respuestas de Google Forms (`DataSource.is_form_response`).
+Pipeline de transformación para hojas de respuestas de Google Forms (`DataSource.is_form_response`).
 
-Una hoja de respuestas guarda cada pregunta en su propia columna y cada aspecto de
-una cuadrícula en «Pregunta [Aspecto]». Este módulo reescribe ese marco ancho en
-uno largo: una fila por opción seleccionada, con «Pregunta | Aspecto | Respuesta»
-y las columnas de contexto (ID de la respuesta, marca de tiempo y el resto de
-preguntas planas) repetidas en cada fila. Con él, un tablero cuenta respuestas
-únicas con el Conteo (o `count_distinct` sobre `ID`) y selecciones de casillas
-con `SUM(IF(condición, 1, 0))` (ver docs/form_tidy.md).
+Una hoja de respuestas guarda cada pregunta en su propia columna. Este módulo mantiene
+el formato ancho (1 fila por respuesta `_ID`), conserva las columnas escalares y de cuadrículas
+simples (`GRID`), y transforma las preguntas de casillas (`CHECKBOX` y `CHECKBOX_GRID`) creando
+una columna binaria por cada valor posible en formato `pregunta_valor` (ver docs/form_transform.md).
 
-La detección (`analyze`) y la transformación (`to_tidy`) corren sobre el frame
+La detección (`analyze`) y la transformación (`transform`) corren sobre el frame
 crudo de la hoja (`dtype=str`), antes de cualquier coerción numérica: así
 «1, 2» de una casilla sigue siendo dos opciones y no el número 12.
 """
@@ -31,13 +28,11 @@ BAND_MAX_VOCAB = 50         # …y el vocabulario es pequeño
 
 QUESTION_TYPES = ("SCALAR", "CHECKBOX", "GRID", "CHECKBOX_GRID", "FREE_TEXT_WITH_COMMAS")
 
-# Columnas que no son preguntas: el identificador de la respuesta y su fecha.
-TIMESTAMP_ALIASES = ("marca de tiempo", "timestamp", "marca_tiempo")
-
+# Columnas que no son preguntas: el identificador de la respuesta.
 SEPARATOR_DEFAULT = " ["   # «Pregunta [Aspecto]»
 _DUPLICATE_SUFFIX = re.compile(r"\.\d+$")  # pandas: «Eval [A].1» ante encabezados duplicados
 
-_EXCLUDED_COLUMNS = {alias.lower() for alias in ID_ALIASES + TIMESTAMP_ALIASES}
+_EXCLUDED_COLUMNS = {alias.lower() for alias in ID_ALIASES}
 
 
 def _split_tokens(value) -> list[str]:
@@ -169,84 +164,69 @@ def _find_alias(columns, aliases) -> str | None:
     return None
 
 
-def _context_frame(df: pd.DataFrame, column: str, question: str,
-                   context: list[str]) -> pd.DataFrame:
-    """Casilla plana: las opciones de cada celda («A, B») explotan en una fila
-    cada una, con la pregunta y `Aspecto` vacío."""
-    frame = df[["_ID"] + context + [column]].copy()
-    frame["_form_resposta"] = frame[column].map(_split_tokens)
-    frame = frame.explode("_form_resposta")
-    frame["_form_bloque"] = ""
-    frame["_form_pregunta"] = question
-    return frame.drop(columns=[column])
+def _expand_checkbox_column(series: pd.Series, col_name: str) -> pd.DataFrame:
+    """Para una columna de casillas (CHECKBOX o CHECKBOX_GRID), obtiene los valores
+    únicos separados por coma y genera una columna `col_name_valor` por cada uno
+    con valor 1 si fue seleccionado y 0 en otro caso."""
+    clean_name = _clean_header(col_name)
+    tokens_per_cell = [
+        _split_tokens(v) if v is not None and not pd.isna(v) else []
+        for v in series
+    ]
+    unique_tokens = []
+    seen = set()
+    for tokens in tokens_per_cell:
+        for token in tokens:
+            if token not in seen:
+                seen.add(token)
+                unique_tokens.append(token)
+
+    if not unique_tokens:
+        return pd.DataFrame(index=series.index)
+
+    cols = {}
+    for token in unique_tokens:
+        cols[f"{clean_name}_{token}"] = [
+            1 if token in tokens else 0
+            for tokens in tokens_per_cell
+        ]
+    return pd.DataFrame(cols, index=series.index)
 
 
-def _grid_frame(df: pd.DataFrame, items: list[tuple[str, str]], grid_type: str,
-                parent: str, context: list[str]) -> pd.DataFrame:
-    """Cuadrícula: `melt` de sus columnas (una fila por aspecto y respuesta); si
-    es de casillas, además explota las opciones de cada celda."""
-    columns = [column for column, _ in items]
-    aspect_of = {column: aspect for column, aspect in items}
-    frame = df.melt(id_vars=["_ID"] + context, value_vars=columns,
-                    var_name="_columna", value_name="_form_resposta")
-    frame["_form_bloque"] = parent
-    frame["_form_pregunta"] = frame["_columna"].map(aspect_of)
-    frame = frame.drop(columns=["_columna"])
-    if grid_type == "CHECKBOX_GRID":
-        frame["_form_resposta"] = frame["_form_resposta"].map(_split_tokens)
-        frame = frame.explode("_form_resposta")
-    return frame
-
-
-def to_tidy(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd.DataFrame:
-    """El modelo tidy: `_ID` (el de la hoja o `1..n` generado), `marca_tiempo` si
-    existe, columnas de contexto (`SCALAR` y `FREE_TEXT_WITH_COMMAS`, con su
-    nombre de encabezado) y `_form_bloque | _form_pregunta | _form_resposta` — una fila por
-    opción seleccionada. La clasificación es automática (`analyze`) y definitiva:
-    incluir, excluir, renombrar y tipar las columnas del resultado es tarea de
-    la configuración de columnas de la fuente (`apply_column_config`), igual
-    que en una hoja normal. Se eliminan filas con `Respuesta` nula o vacía: el
-    respondente que no contestó ninguna pregunta compleja desaparece."""
+def transform(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd.DataFrame:
+    """Transforma las respuestas de formulario: mantiene el formato ancho (1 fila por respuesta `_ID`),
+    conserva las columnas escalares y de cuadrículas simples (`GRID`), y transforma las columnas
+    multi-opción (`CHECKBOX` y `CHECKBOX_GRID`) creando una columna por cada valor posible
+    en formato `pregunta_valor` con valor 1 si fue seleccionado y 0 si no."""
     df = df.copy()
     id_name = find_id_column(df.columns)
-    timestamp_name = _find_alias(df.columns, TIMESTAMP_ALIASES)
     if id_name is None:
         df["_ID"] = range(1, len(df) + 1)
     else:
         df = df.rename(columns={id_name: "_ID"})
-    context: list[str] = []
-    if timestamp_name is not None:
-        df = df.rename(columns={timestamp_name: "marca_tiempo"})
-        context.append("marca_tiempo")
 
     inferred = {a["name"]: a["inferred_type"] for a in analyze(df, custom_separator)}
-    questions = [c for c in df.columns if c not in ("_ID", "marca_tiempo")]
-    context += [name for name in questions
-                if inferred.get(name, "SCALAR") in ("SCALAR", "FREE_TEXT_WITH_COMMAS")]
 
-    # Cuadrículas: por padre (las que no agrupan — clasificadas a mano — quedan
-    # como pregunta plana con su propio nombre).
-    grid_types = [name for name in questions
-                  if inferred.get(name) in ("GRID", "CHECKBOX_GRID")]
-    grids = _grid_structure(grid_types, custom_separator)
-    grouped = {column for items in grids.values() for column, _ in items}
-    for name in grid_types:
-        if name not in grouped:
-            grids.setdefault(name, []).append((name, ""))
+    result_df = pd.DataFrame(index=df.index)
+    if "_ID" in df.columns:
+        result_df["_ID"] = df["_ID"]
 
-    frames = [_context_frame(df, name, name, context)
-              for name in questions if inferred.get(name) == "CHECKBOX"]
-    for parent, items in grids.items():
-        grid_type = ("CHECKBOX_GRID"
-                     if any(inferred.get(column) == "CHECKBOX_GRID"
-                            for column, _ in items) else "GRID")
-        frames.append(_grid_frame(df, items, grid_type, parent, context))
+    for col in df.columns:
+        if col == "_ID":
+            continue
+        kind = inferred.get(col, "SCALAR")
+        if kind in ("CHECKBOX", "CHECKBOX_GRID"):
+            expanded = _expand_checkbox_column(df[col], col)
+            for new_col in expanded.columns:
+                result_df[new_col] = expanded[new_col]
+        else:
+            clean_col = _clean_header(col)
+            if clean_col in result_df.columns:
+                clean_col = col
+            result_df[clean_col] = df[col]
 
-    order = (["_ID"] + (["marca_tiempo"] if "marca_tiempo" in context else [])
-             + [name for name in context if name != "marca_tiempo"]
-             + ["_form_bloque", "_form_pregunta", "_form_resposta"])
-    if not frames:
-        return pd.DataFrame(columns=order)
-    tidy = pd.concat(frames, ignore_index=True)
-    tidy = tidy[tidy["_form_resposta"].notna() & (tidy["_form_resposta"].astype(str).str.strip() != "")]
-    return tidy[order].reset_index(drop=True)
+    return result_df
+
+
+# Alias de compatibilidad
+to_tidy = transform

@@ -14,7 +14,7 @@ from django.core.cache import caches
 from django.utils.timezone import now
 
 from sheets_reports.engine.formulas import apply_calculated_fields
-from sheets_reports.services import form_tidy
+from sheets_reports.services import form_transform
 from sheets_reports.utils.data import find_id_column, time_order, to_key
 
 logger = logging.getLogger(__name__)
@@ -177,31 +177,37 @@ def get_raw_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd
     return entry["raw_df"].copy()
 
 
-def _tidy_cache_key(sheet_id: str, gid: str, headers: bool) -> str:
-    return f"sheet_df:{sheet_id}:{gid}:{int(bool(headers))}:tidy"
+def _transformed_cache_key(sheet_id: str, gid: str, headers: bool) -> str:
+    return f"sheet_df:{sheet_id}:{gid}:{int(bool(headers))}:transformed"
 
 
-def get_tidy_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
-    """El frame tidy de una pestaña de respuestas de formulario
-    (ver services/form_tidy.py). En caché aparte — la clasificación
+_tidy_cache_key = _transformed_cache_key
+
+
+def get_transformed_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+    """El frame transformado de una pestaña de respuestas de formulario
+    (ver services/form_transform.py). En caché aparte — la clasificación
     es automática y los ajustes de columnas (incluir, tipo, nombre a
     mostrar) se aplican fuera, con `apply_column_config` — y la
     coherencia con los datos va por `base_fetched_at`: al «Actualizar
-    datos» (`_store`/`refresh_sheet`) la fecha base cambia y el tidy
+    datos» (`_store`/`refresh_sheet`) la fecha base cambia y el frame
     se recalcula solo."""
     raw = get_raw_sheet_dataframe(sheet_id, gid, headers=headers)
     base = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
-    key = _tidy_cache_key(sheet_id, gid, headers)
+    key = _transformed_cache_key(sheet_id, gid, headers)
     entry = caches["sheets"].get(key)
     if entry is not None and base is not None \
             and entry.get("base_fetched_at") == base.get("fetched_at"):
         return entry["df"].copy()
-    tidy = form_tidy.to_tidy(raw)
+    transformed = form_transform.transform(raw)
     caches["sheets"].set(key, {
-        "df": tidy, "fetched_at": now(),
+        "df": transformed, "fetched_at": now(),
         "base_fetched_at": base["fetched_at"] if base else now(),
     }, None)
-    return tidy.copy()
+    return transformed.copy()
+
+
+get_tidy_dataframe = get_transformed_dataframe
 
 
 def fetched_at(source):
@@ -215,12 +221,12 @@ def load_source(source) -> pd.DataFrame:
     elegidos, y sus campos calculados: los por fila como columnas; los agregados en
     `df.attrs["aggregated_fields"]` para el motor. Una fuente de
     respuestas de Google Forms (`is_form_response`) parte del frame
-    tidy de `services/form_tidy.py` (una fila por opción seleccionada)
+    transformado de `services/form_transform.py` (con casillas expandidas)
     y sobre él se aplica la misma configuración de columnas que a
     cualquier hoja."""
     headers = source.first_row_headers
     if source.is_form_response:
-        df = get_tidy_dataframe(source.sheet_id, source.gid, headers=headers)
+        df = get_transformed_dataframe(source.sheet_id, source.gid, headers=headers)
     else:
         df = get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
     return apply_calculated_fields(apply_column_config(df, source.columns),

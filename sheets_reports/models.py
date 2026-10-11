@@ -49,9 +49,9 @@ class DataSource(models.Model):
         default=True, help_text="La primera fila de la pestaña son los encabezados de las columnas.")
     is_form_response = models.BooleanField(
         default=False,
-        help_text="La pestaña es una hoja de respuestas de Google Forms: se lee en "
-                  "modelo tidy (una fila por opción seleccionada, con «Pregunta | "
-                  "Aspecto | Respuesta»). Ver services/form_tidy.py.")
+        help_text="La pestaña es una hoja de respuestas de Google Forms: las preguntas "
+                  "de casillas se expanden en columnas binarias (pregunta_valor). "
+                  "Ver services/form_transform.py.")
     columns = models.JSONField(
         default=list, blank=True,
         help_text='Columnas elegidas al conectar la hoja: [{"name", "label"?, "type": '

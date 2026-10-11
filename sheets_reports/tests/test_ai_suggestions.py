@@ -36,7 +36,7 @@ class WidgetSuggestionsTests(SimpleTestCase):
         self.assertIn("condiciones por métrica", contents)
         self.assertIn('"categoria" (texto)', contents)
         self.assertIn('"ventas" (numérica)', contents)
-        self.assertIn("categoria,mes,anio,ventas\nHogar,Ene,2026,100.0", contents)
+        self.assertIn("ID,categoria,mes,anio,ventas\n1,Hogar,Ene,2026,100.0", contents)
         self.assertNotIn("Ropa", contents)   # está más abajo de las 3 primeras filas
 
     def test_un_grafico_pide_que_cada_sugerencia_diga_por_que_agrupar(self):

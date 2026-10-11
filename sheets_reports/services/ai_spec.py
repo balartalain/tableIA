@@ -10,6 +10,7 @@ import dataclasses
 import json
 import logging
 import re
+import unicodedata
 
 from django.conf import settings
 from google import genai
@@ -855,6 +856,7 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
                 require_title: bool = True) -> list[str]:
     """Valida un WidgetForm propuesto contra la hoja y las capacidades del widget. La propuesta
     de la IA no trae título (`require_title=False`): lo pone el usuario."""
+    data = _resolve_columns(data, ctx)
     resolved = data.get("widget_type")
     if not resolved or resolved not in WIDGETS:
         allowed = ", ".join(w.key for w in WIDGETS if w.ai_enabled)
@@ -1068,14 +1070,16 @@ def _normalize(args: dict) -> dict:
 
 
 def _column_key(name) -> str:
-    """Clave para comparar nombres de columna sin importar espacios ni mayúsculas."""
-    return " ".join(str(name).split()).casefold()
+    """Clave para comparar nombres de columna sin importar espacios, mayúsculas, acentos ni puntuación final."""
+    text = str(name).strip().rstrip(".,;:]}")
+    text = unicodedata.normalize("NFD", text).encode("ASCII", "ignore").decode("ASCII")
+    return " ".join(text.split()).casefold()
 
 
 def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
     """Cambia las columnas de la propuesta por el nombre real de la hoja cuando solo difieren en
-    espacios o mayúsculas: la IA no copia los encabezados con dobles espacios («recomendaría  la
-    UAPA»). Lo que no coincide queda igual y lo rechaza la validación."""
+    espacios, mayúsculas, acentos o puntuación final: la IA no copia los encabezados exactos.
+    Lo que no coincide queda igual y lo rechaza la validación."""
     known = (*ctx.fields, *sorted(ctx.aggregated_fields))
     matches: dict[str, list[str]] = {}
     for field in known:
@@ -1085,7 +1089,10 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
     def resolve(value: str) -> str:
         return value if value in known else real.get(_column_key(value), value)
 
-    data["fields"], _ = map_columns(data["fields"], {}, resolve)
+    fields, style = map_columns(data.get("fields"), data.get("style"), resolve)
+    data["fields"] = fields
+    if "style" in data:
+        data["style"] = style
     return data
 
 

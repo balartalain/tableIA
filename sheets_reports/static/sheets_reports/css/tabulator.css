@@ -24,14 +24,20 @@
 
 /* ---------- Encabezado ---------- */
 .tabulator .tabulator-header {
-  background: var(--tb-paper);
+  background: #fff;
   border-bottom: 1px solid var(--tb-line);
   font-weight: 600;
 }
 
 .tabulator .tabulator-header .tabulator-col {
-  background: var(--tb-paper);
+  background: #fff;
   border-right: none;
+}
+
+/* Encabezado con bg-paper exclusivo para la vista previa de fuentes */
+.tb-preview .tabulator-header,
+.tb-preview .tabulator-header .tabulator-col {
+  background: var(--tb-paper);
 }
 
 /* El padding va en el contenido, no en la columna: en encabezados anidados cada nivel de

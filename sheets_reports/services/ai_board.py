@@ -160,6 +160,6 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=()) -> dict:
         singletons=(f"- El tablero ya tiene: {', '.join(taken)}. No los propongas.\n" if taken else ""),
         prompt=prompt,
     )
-    raw = generate_json(contents, SCHEMA)
+    raw = generate_json(contents, SCHEMA, call="board_plan")
     logger.info("Plan de tablero con IA: %s", json.dumps(raw, ensure_ascii=False)[:2000])
     return clean_plan(raw, existing_types, ctx=ctx)

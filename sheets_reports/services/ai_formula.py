@@ -115,7 +115,7 @@ def generate_formula(prompt: str, df: pd.DataFrame, aggregated=()) -> dict:
     contents = build_prompt(prompt[:MAX_PROMPT_CHARS], df)
     for attempt in range(ATTEMPTS):
         try:
-            answer = generate_json(contents, RESPONSE_SCHEMA)
+            answer = generate_json(contents, RESPONSE_SCHEMA, call="formula")
         except SpecGenerationError as e:
             raise FormulaAIError(str(e)) from e
         except Exception as e:  # red, cuota, respuesta que no es JSON

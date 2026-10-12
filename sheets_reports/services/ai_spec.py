@@ -10,6 +10,7 @@ import dataclasses
 import json
 import logging
 import re
+import time
 import unicodedata
 
 from django.conf import settings
@@ -390,13 +391,29 @@ def gemini_client(api_key: str) -> genai.Client:
     )
 
 
-def generate_json(contents: str, schema: dict, temperature: float = 0) -> object:
+def _log_usage(call: str, response, started: float) -> None:
+    """Tokens y tiempo de una llamada a la IA, en el log de auditoría: lo que se envió
+    (`prompt`, y cuánto de eso salió de la caché de Gemini), lo que razonó y lo que respondió."""
+    usage = getattr(response, "usage_metadata", None)
+    audit_logger.info(json.dumps({
+        "usage": call,
+        "ms": round((time.monotonic() - started) * 1000),
+        "prompt_tokens": getattr(usage, "prompt_token_count", None),
+        "cached_tokens": getattr(usage, "cached_content_token_count", None),
+        "thinking_tokens": getattr(usage, "thoughts_token_count", None),
+        "output_tokens": getattr(usage, "candidates_token_count", None),
+    }))
+
+
+def generate_json(contents: str, schema: dict, temperature: float = 0, call: str = "json") -> object:
     """Respuesta JSON libre (sin tools) que cumple `schema`: para pedidos auxiliares a la IA,
-    como las sugerencias del chat. Lanza si no hay API key o la respuesta no es JSON."""
+    como las sugerencias del chat (`call` la nombra en el log de consumo). Lanza si no hay API
+    key o la respuesta no es JSON."""
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
     client = gemini_client(api_key)
+    started = time.monotonic()
     response = client.models.generate_content(
         model=settings.GEMINI_MODEL,
         contents=contents,
@@ -406,6 +423,7 @@ def generate_json(contents: str, schema: dict, temperature: float = 0) -> object
             temperature=temperature,
         ),
     )
+    _log_usage(call, response, started)
     return json.loads(response.text or "null")
 
 
@@ -691,6 +709,7 @@ def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tu
         raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
     # Mantener la referencia al cliente: si se recolecta, cierra su conexión HTTP a mitad de la llamada.
     client = gemini_client(api_key)
+    started = time.monotonic()
     response = client.models.generate_content(
         model=settings.GEMINI_MODEL,
         contents=contents,
@@ -704,6 +723,7 @@ def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tu
             temperature=0,
         ),
     )
+    _log_usage(f"widget:{widget_type or 'auto'}", response, started)
     calls = response.function_calls or []
     if not calls:
         raise SpecGenerationError("La IA no devolvió una especificación. Intenta reformular el pedido.")

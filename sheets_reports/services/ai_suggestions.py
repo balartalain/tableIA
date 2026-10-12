@@ -86,7 +86,8 @@ def _cache_key(source: str, widget_type: str, prompt: str, preview: str) -> str:
 
 def _ask_model(contents: str) -> object:
     # Algo de temperatura: que no sean siempre las mismas frases.
-    return generate_json(contents, {"type": "array", "items": {"type": "string"}}, temperature=0.7)
+    return generate_json(contents, {"type": "array", "items": {"type": "string"}}, temperature=0.7,
+                         call="suggestions")
 
 
 def _clean(raw, avoid: list[str] | None = None) -> list[str]:

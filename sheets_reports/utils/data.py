@@ -154,6 +154,29 @@ def time_fields(df: pd.DataFrame) -> list[str]:
             and df[column].notna().any()]
 
 
+def as_dates(series: pd.Series) -> pd.Series | None:
+    """Las fechas de una columna de fechas completas (con o sin hora, ISO o día primero), con su
+    mismo índice y NaT en los vacíos; None si no lo es (números, años o meses sueltos,
+    categorías). De ellas sale el año o el mes para «este año», «el año anterior», «este mes»."""
+    if pd.api.types.is_numeric_dtype(series):
+        return None
+    text = series.astype("string").str.strip()
+    values = [v for v in text.dropna().unique() if v]
+    if not values or all(_plain(v) in MONTH_ORDER for v in values):
+        return None
+    if pd.to_numeric(pd.Series(values, dtype="string"), errors="coerce").notna().all():
+        return None
+    dates = pd.to_datetime(pd.Series(values, dtype="string"), errors="coerce", dayfirst=True, format="mixed")
+    if dates.isna().any():
+        return None
+    return pd.to_datetime(text.map(dict(zip(values, dates))))
+
+
+def date_fields(df: pd.DataFrame) -> list[str]:
+    """Columnas de fechas completas (ver `as_dates`), en el orden de la hoja."""
+    return [column for column in df.columns if as_dates(df[column]) is not None]
+
+
 def chronological(values: list) -> list:
     """De lo más antiguo a lo más reciente (`time_order`); si no son de tiempo, en orden natural."""
     ordered = time_order(values)

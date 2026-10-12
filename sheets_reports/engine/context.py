@@ -3,7 +3,7 @@ from dataclasses import dataclass, field, replace
 import pandas as pd
 
 from sheets_reports.engine.formulas import aggregated_fields, row_fields
-from sheets_reports.utils.data import time_fields
+from sheets_reports.utils.data import date_fields, time_fields
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,8 @@ class SheetContext:
     JSON Schema), cuáles son numéricas, cuáles son de tiempo (años, meses, fechas: admiten
     «el periodo más reciente») y el gid de la pestaña que se está leyendo.
     `samples` son valores de ejemplo por columna, solo para el contexto de la IA.
+    `date_fields` son las columnas de fechas completas: en ellas «este año» o «este mes» comparan
+    el año o el mes de cada fecha.
     `aggregated_fields` son los campos calculados agregados de la fuente: no son columnas
     (no agrupan ni filtran), solo métricas con agregación «auto».
     `calculated` son todos los campos calculados de la fuente con lo que calculan
@@ -23,6 +25,7 @@ class SheetContext:
     numeric_fields: frozenset[str]
     samples: dict = field(default_factory=dict, compare=False)
     time_fields: frozenset[str] = frozenset()
+    date_fields: frozenset[str] = frozenset()
     aggregated_fields: frozenset[str] = frozenset()
     calculated: dict = field(default_factory=dict, compare=False)
     aliases: dict = field(default_factory=dict, compare=False)
@@ -45,6 +48,7 @@ class SheetContext:
             numeric_fields=frozenset(df.select_dtypes(include="number").columns),
             samples=samples or {},
             time_fields=frozenset(time_fields(df)),
+            date_fields=frozenset(date_fields(df)),
             aggregated_fields=frozenset(aggregated_fields(df)),
             calculated={
                 **{name: {"formula": text, "kind": "row", "format": "number"}
@@ -73,6 +77,9 @@ class SheetContext:
 
     def is_time(self, column) -> bool:
         return column in self.time_fields
+
+    def is_date(self, column) -> bool:
+        return column in self.date_fields
 
     @property
     def ordered_numeric_fields(self) -> list[str]:

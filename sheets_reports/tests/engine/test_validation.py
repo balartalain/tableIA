@@ -278,6 +278,20 @@ class ConditionTests(SimpleTestCase):
         self.assertIn("falta 'value'", self.errors({"field": "anio", "op": "eq"})[0])
         self.assertIn("no lleva valor", self.errors({"field": "anio", "op": "is_empty", "value": 1})[0])
 
+    def test_orden_con_anio_del_reloj_sobre_una_fecha(self):
+        import pandas as pd
+        from sheets_reports.services.ai_spec import columns_context
+        ctx = SheetContext.from_dataframe(pd.DataFrame({
+            "Marca temporal": ["12/3/2026 10:22:15", "5/1/2025 8:00:00"], "categoria": ["Hogar", "Ropa"],
+        }), "0")
+        self.assertIn('"Marca temporal" (fecha)', columns_context(ctx))
+        gte = {"op": "gte", "relative": "current_year"}
+        self.assertEqual(condition_errors([{**gte, "field": "Marca temporal"}], ctx), [])
+        self.assertIn("no es numérica", condition_errors([{**gte, "field": "categoria"}], ctx)[0])
+        # Contra un valor fijo una fecha sigue sin compararse como número.
+        self.assertIn("no es numérica", condition_errors(
+            [{"field": "Marca temporal", "op": "gte", "value": 2026}], ctx)[0])
+
     def test_relativo_desconocido(self):
         self.assertIn("relative", self.errors({"field": "anio", "op": "eq", "relative": "el_anteanoche"})[0])
 

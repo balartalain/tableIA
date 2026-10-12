@@ -86,6 +86,42 @@ class FilterStepTests(SimpleTestCase):
             agg("v", filters=[{"field": "categoria", "op": "eq", "relative": "latest"}])]))
         self.assertEqual(out["data"]["values"]["v"], 0)
 
+    def test_este_anio_y_el_anterior_sobre_una_columna_de_fecha(self):
+        import datetime
+        from sheets_reports.engine.steps.filter import apply_filters, parse_conditions
+        today = datetime.date.today()
+        df = pd.DataFrame({
+            # Marca temporal de un formulario (día primero, con hora) y la misma fecha en ISO.
+            "marca": [f"12/3/{today.year} 10:22:15", f"5/{today.month}/{today.year - 1} 8:00:00",
+                      f"20/11/{today.year - 2} 23:59:59", None],
+            "iso": [f"{today.year}-03-12", f"{today.year - 1}-{today.month:02d}-05",
+                    f"{today.year - 2}-11-20", None],
+            "anio": [today.year, today.year - 1, today.year - 2, today.year],
+            "categoria": ["Hogar", "Ropa", "Hogar", "Ropa"],
+        })
+
+        def rows(field, op, relative):
+            conditions = parse_conditions([{"field": field, "op": op, "relative": relative}])
+            return list(apply_filters(df, conditions).index)
+
+        for field in ("marca", "iso"):
+            self.assertEqual(rows(field, "eq", "current_year"), [0])
+            self.assertEqual(rows(field, "eq", "previous_year"), [1])
+            self.assertEqual(rows(field, "gte", "previous_year"), [0, 1])
+            self.assertEqual(rows(field, "eq", "current_month"), [1] if today.month != 3 else [0, 1])
+        # El año suelto se compara tal cual, como antes; una categoría no deja filas.
+        self.assertEqual(rows("anio", "eq", "current_year"), [0, 3])
+        self.assertEqual(rows("categoria", "eq", "current_year"), [])
+
+    def test_columnas_de_fecha(self):
+        from sheets_reports.utils.data import date_fields
+        df = pd.DataFrame({
+            "marca": ["12/3/2026 10:22:15", "5/1/2025 8:00:00"], "iso": ["2026-03-12", None],
+            "anio": [2025, 2026], "anio_texto": ["2025", "2026"], "mes": ["Ene", "Feb"],
+            "categoria": ["Hogar", "Ropa"],
+        })
+        self.assertEqual(date_fields(df), ["marca", "iso"])
+
     def test_kpi_mes_actual_frente_al_anterior(self):
         out = execute(sales_df(), fields(dimensions=[], metrics=[
             agg("ultimo", filters=[{"field": "mes", "op": "eq", "relative": "latest"}]),

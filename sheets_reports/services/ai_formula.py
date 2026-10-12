@@ -19,6 +19,7 @@ from sheets_reports.engine.formulas import (
 )
 from sheets_reports.services.ai_spec import SpecGenerationError, generate_json
 from sheets_reports.services.sheets import get_field_samples
+from sheets_reports.utils.data import date_fields
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +79,13 @@ class FormulaAIError(Exception):
 
 def _columns_text(df: pd.DataFrame) -> str:
     numeric = set(df.select_dtypes(include="number").columns)
+    dates = set(date_fields(df))
     samples = get_field_samples(df)
     attr_aliases = df.attrs.get("column_aliases") or {}
     lines = []
     for i, column in enumerate(df.columns):
         alias = attr_aliases.get(column) or f"col_{i + 1}"
-        line = f"- {alias}: {json.dumps(str(column), ensure_ascii=False)} ({'numérica' if column in numeric else 'texto'})"
+        line = f"- {alias}: {json.dumps(str(column), ensure_ascii=False)} ({'numérica' if column in numeric else 'fecha' if column in dates else 'texto'})"
         if samples.get(column):
             line += f" — ejemplos: {json.dumps(samples[column], ensure_ascii=False, default=str)}"
         lines.append(line)

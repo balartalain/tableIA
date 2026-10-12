@@ -16,7 +16,7 @@ from typing import Any, ClassVar
 import pandas as pd
 
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.utils.data import is_number, sort_key, time_order, to_key
+from sheets_reports.utils.data import as_dates, is_number, sort_key, time_order, to_key
 from sheets_reports.utils.registry import Registry
 from sheets_reports.utils.validation import (
     MAX_FILTERS, MAX_IN_VALUES, SCALAR, enum_of, field_enum, schema_errors, unique,
@@ -41,8 +41,16 @@ class RelativeValue:
 
 
 class _ClockValue(RelativeValue):
+    """Un año o un mes del reloj. En una columna de fechas completas se compara con esa parte
+    (`part`) de cada fecha; en una de años o meses sueltos, con el valor tal cual."""
+    part: ClassVar[str]
+
     def resolve(self, series, today):
         return self.from_today(today)
+
+    def comparable(self, series: pd.Series) -> pd.Series:
+        dates = as_dates(series)
+        return series if dates is None else getattr(dates.dt, self.part)
 
     def from_today(self, today: datetime.date):
         raise NotImplementedError
@@ -51,6 +59,7 @@ class _ClockValue(RelativeValue):
 @RELATIVE_VALUES.register
 class CurrentYear(_ClockValue):
     key = "current_year"
+    part = "year"
 
     def from_today(self, today):
         return today.year
@@ -59,6 +68,7 @@ class CurrentYear(_ClockValue):
 @RELATIVE_VALUES.register
 class PreviousYear(_ClockValue):
     key = "previous_year"
+    part = "year"
 
     def from_today(self, today):
         return today.year - 1
@@ -67,6 +77,7 @@ class PreviousYear(_ClockValue):
 @RELATIVE_VALUES.register
 class CurrentMonth(_ClockValue):
     key = "current_month"
+    part = "month"
 
     def from_today(self, today):
         return today.month
@@ -298,6 +309,10 @@ class _OrderComparison(_Comparison):
         if errors:
             return errors
         field = cond["field"]
+        # «Desde este año»: el año o el mes de una fecha sí se compara como número.
+        relative = RELATIVE_VALUES.get(cond["relative"]) if cond.get("relative") in RELATIVE_VALUES else None
+        if isinstance(relative, _ClockValue) and ctx.is_date(field):
+            return []
         if not ctx.is_numeric(field):
             return [f"{path}: la columna '{field}' no es numérica; '{self.key}' solo compara números."]
         if "value" in cond and not is_number(cond["value"]):
@@ -397,6 +412,8 @@ class Condition:
         raw = df[self.field]
         if self.relative is not None:
             value = self.relative.resolve(raw, datetime.date.today())
+            if isinstance(self.relative, _ClockValue):
+                raw = self.relative.comparable(raw)
         else:
             value = None if self.value is _MISSING else self.value
         return self.op.mask(raw, value)

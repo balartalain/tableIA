@@ -7,6 +7,7 @@ ejecuta tal cual.
 """
 import copy
 import dataclasses
+import functools
 import json
 import logging
 import re
@@ -381,6 +382,13 @@ def build_system_prompt(widgets=None) -> str:
     ]) + "\n"
 
 
+@functools.lru_cache(maxsize=None)
+def system_prompt_for(widget_type: str | None) -> str:
+    """El prompt de sistema de una llamada: con el tipo fijado, solo lo de ese widget (su
+    documentación, sus controles de estilo y sus ejemplos), no lo de todos."""
+    return build_system_prompt([w for w in _widgets_for(widget_type) if w])
+
+
 def gemini_client(api_key: str) -> genai.Client:
     return genai.Client(
         api_key=api_key,
@@ -714,7 +722,7 @@ def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tu
         model=settings.GEMINI_MODEL,
         contents=contents,
         config=types.GenerateContentConfig(
-            system_instruction=build_system_prompt(),
+            system_instruction=system_prompt_for(widget_type),
             tools=_tools(ctx, widget_type),
             tool_config=types.ToolConfig(function_calling_config=types.FunctionCallingConfig(
                 mode=types.FunctionCallingConfigMode.ANY,

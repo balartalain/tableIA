@@ -398,6 +398,15 @@ class ToolSchemaTests(SimpleTestCase):
         self.assertNotIn("- style.title:", prompt)
         self.assertNotIn('"title":', prompt)   # ni en los ejemplos
 
+    def test_con_el_tipo_fijado_el_prompt_solo_trae_ese_widget(self):
+        from sheets_reports.services.ai_spec import system_prompt_for
+        full, kpi = system_prompt_for(None), system_prompt_for("kpi")
+        self.assertEqual(full, build_system_prompt())
+        self.assertLess(len(kpi), len(full) * 0.7)
+        self.assertIn("- kpi:", kpi)
+        self.assertNotIn("- bar:", kpi)
+        self.assertNotIn("- dynamic_table:", kpi)
+
     def test_sin_tipo_el_estilo_es_objeto_abierto(self):
         params = build_tool_parameters(sales_ctx(), widget_type=None)
         self.assertEqual(params["properties"]["widget_type"]["enum"],

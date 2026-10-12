@@ -17,8 +17,8 @@ from sheets_reports.engine.formulas import (
     formula_tree,
     rename_columns,
 )
-from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, SpecGenerationError, generate_json,
-                                             samples_note, shared_samples)
+from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS, SpecGenerationError,
+                                             generate_json, samples_note, shared_samples)
 from sheets_reports.services.sheets import get_field_samples
 from sheets_reports.utils.data import date_fields
 
@@ -116,7 +116,8 @@ def generate_formula(prompt: str, df: pd.DataFrame, aggregated=()) -> dict:
     contents = build_prompt(prompt[:MAX_PROMPT_CHARS], df)
     for attempt in range(ATTEMPTS):
         try:
-            answer = generate_json(contents, RESPONSE_SCHEMA, call="formula")
+            answer = generate_json(contents, RESPONSE_SCHEMA, call="formula",
+                                   thinking_budget=None if attempt else THINKING_BUDGETS["formula"])
         except SpecGenerationError as e:
             raise FormulaAIError(str(e)) from e
         except Exception as e:  # red, cuota, respuesta que no es JSON

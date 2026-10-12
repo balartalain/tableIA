@@ -11,8 +11,8 @@ import logging
 import pandas as pd
 from django.core.cache import cache
 
-from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, capabilities_text, generate_json,
-                                             samples_note, shared_samples)
+from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS, capabilities_text,
+                                             generate_json, samples_note, shared_samples)
 from sheets_reports.services.sheets import get_field_samples
 from sheets_reports.utils.data import date_fields
 
@@ -93,7 +93,7 @@ def _cache_key(source: str, widget_type: str, prompt: str, preview: str) -> str:
 def _ask_model(contents: str) -> object:
     # Algo de temperatura: que no sean siempre las mismas frases.
     return generate_json(contents, {"type": "array", "items": {"type": "string"}}, temperature=0.7,
-                         call="suggestions")
+                         call="suggestions", thinking_budget=THINKING_BUDGETS["suggestions"])
 
 
 def _clean(raw, avoid: list[str] | None = None) -> list[str]:

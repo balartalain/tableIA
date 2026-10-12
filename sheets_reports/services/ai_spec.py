@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("tableia.ai_audit")
 
 GEMINI_TIMEOUT_MS = 120_000
+# Tokens de razonamiento del modelo por tipo de llamada: 0 = responde sin razonar; None = sin
+# límite (lo que decida el modelo). El reintento de una propuesta inválida razona sin límite.
+THINKING_BUDGETS = {"suggestions": 0, "widget": 512, "formula": 512, "board_plan": 1024}
 CREATE_TOOL = "create_widget"
 REJECT_TOOL = "reject_request"
 
@@ -413,10 +416,17 @@ def _log_usage(call: str, response, started: float) -> None:
     }))
 
 
-def generate_json(contents: str, schema: dict, temperature: float = 0, call: str = "json") -> object:
+def _thinking_config(budget: int | None):
+    if budget is None or not settings.GEMINI_LIMIT_THINKING:
+        return None
+    return types.ThinkingConfig(thinking_budget=budget)
+
+
+def generate_json(contents: str, schema: dict, temperature: float = 0, call: str = "json",
+                  thinking_budget: int | None = None) -> object:
     """Respuesta JSON libre (sin tools) que cumple `schema`: para pedidos auxiliares a la IA,
-    como las sugerencias del chat (`call` la nombra en el log de consumo). Lanza si no hay API
-    key o la respuesta no es JSON."""
+    como las sugerencias del chat (`call` la nombra en el log de consumo y `thinking_budget`
+    limita cuánto razona). Lanza si no hay API key o la respuesta no es JSON."""
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
@@ -429,6 +439,7 @@ def generate_json(contents: str, schema: dict, temperature: float = 0, call: str
             response_mime_type="application/json",
             response_json_schema=schema,
             temperature=temperature,
+            thinking_config=_thinking_config(thinking_budget),
         ),
     )
     _log_usage(call, response, started)
@@ -740,7 +751,8 @@ def _user_message(prompt: str, widget_type: str | None, ctx: SheetContext,
     return "\n\n".join(parts)
 
 
-def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tuple[str, dict]:
+def _call_model(contents: str, ctx: SheetContext, widget_type: str | None,
+                thinking_budget: int | None = None) -> tuple[str, dict]:
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
@@ -758,6 +770,7 @@ def _call_model(contents: str, ctx: SheetContext, widget_type: str | None) -> tu
                 allowed_function_names=[CREATE_TOOL, REJECT_TOOL],
             )),
             temperature=0,
+            thinking_config=_thinking_config(thinking_budget),
         ),
     )
     _log_usage(f"widget:{widget_type or 'auto'}", response, started)
@@ -1220,7 +1233,8 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
     contents = _user_message(prompt, widget_type, ctx, current, history)
     errors: list[str] = []
     for attempt in (1, 2):
-        call_name, args = _call_model(contents, ctx, widget_type)
+        call_name, args = _call_model(contents, ctx, widget_type,
+                                      THINKING_BUDGETS["widget"] if attempt == 1 else None)
 
         if call_name == REJECT_TOOL:
             _audit(prompt, widget_type, attempt, call_name, args, [])

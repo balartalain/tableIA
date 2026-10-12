@@ -10,8 +10,8 @@ import logging
 import re
 
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.services.ai_spec import (SpecGenerationError, capabilities_text, columns_context,
-                                             generate_json)
+from sheets_reports.services.ai_spec import (THINKING_BUDGETS, SpecGenerationError, capabilities_text,
+                                             columns_context, generate_json)
 from sheets_reports.utils.data import is_id_column
 from sheets_reports.widgets import WIDGETS
 
@@ -160,6 +160,7 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=()) -> dict:
         singletons=(f"- El tablero ya tiene: {', '.join(taken)}. No los propongas.\n" if taken else ""),
         prompt=prompt,
     )
-    raw = generate_json(contents, SCHEMA, call="board_plan")
+    raw = generate_json(contents, SCHEMA, call="board_plan",
+                        thinking_budget=THINKING_BUDGETS["board_plan"])
     logger.info("Plan de tablero con IA: %s", json.dumps(raw, ensure_ascii=False)[:2000])
     return clean_plan(raw, existing_types, ctx=ctx)

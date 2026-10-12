@@ -173,6 +173,9 @@ GOOGLE_SHEETS_CREDENTIALS_PATH = config("GOOGLE_SHEETS_CREDENTIALS_PATH", defaul
 # Gemini (generación de specs JSON de widgets vía IA; ver services/ai_spec.py)
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
 GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
+# Limitar los tokens de razonamiento de cada llamada (services/ai_spec.THINKING_BUDGETS): es lo
+# que más tarda. Ponerlo en False con un modelo que no admita ese límite.
+GEMINI_LIMIT_THINKING = config("GEMINI_LIMIT_THINKING", default=True, cast=bool)
 
 # Auditoría de cada spec generado por IA junto al prompt que lo originó (logger
 # "tableia.ai_audit"), para revisar y mejorar el system prompt con el tiempo.

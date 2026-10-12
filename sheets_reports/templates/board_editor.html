@@ -259,7 +259,7 @@
                   <i class="ti ti-plus text-xs font-bold" aria-hidden="true"></i>
                 </button>
               </template>
-              <template x-if="!$store.dashboard.getRowWidgets(row.id).length">
+              <template x-if="!$store.dashboard.getRowWidgets(row.id).length && $store.dashboard.rows.length > 1">
                 <button type="button" x-on:click="$store.dashboard.removeRow(row.id)"
                         title="Eliminar fila vacía" aria-label="Eliminar fila vacía"
                         class="w-6 h-6 rounded-full bg-white hover:bg-red-50 border border-red-300 text-red-600 shadow flex items-center justify-center cursor-pointer transition">
@@ -269,25 +269,22 @@
             </div>
           </div>
         </template>
+        {% if dashboard %}
+        <!-- Lienzo vacío: bajo la primera fila, arrastrar un widget o generar el tablero con IA. -->
+        <div x-show="$store.dashboard.boardLoaded && !$store.dashboard.canvasWidgets.length" x-cloak
+             class="mx-auto mt-6 max-w-sm text-center bg-white/90 border border-dashed border-line rounded px-6 py-6">
+          <i class="ti ti-layout-dashboard text-3xl text-ink/30" aria-hidden="true"></i>
+          <p class="mt-2 text-sm font-semibold text-ink">Tu tablero está vacío</p>
+          <p class="mt-1 text-xs text-ink/55">Arrastra un widget desde el panel de la izquierda a la fila o describe el tablero que quieres y deja que la IA lo arme.</p>
+          <button type="button" x-on:click="window.dispatchEvent(new CustomEvent('ai-board:open'))"
+                  x-bind:disabled="!$store.dashboard.sources.length"
+                  class="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer">
+            <i class="ti ti-sparkles text-base" aria-hidden="true"></i> Generar con IA
+          </button>
+        </div>
+        {% endif %}
       </div>
     </div>
-    {% if dashboard %}
-    <!-- Lienzo vacío: arrastrar un widget o generar el tablero con IA. No tapa el soltar del
-         arrastre (pointer-events solo en la tarjeta). -->
-    <div x-data x-show="$store.dashboard.boardLoaded && !$store.dashboard.canvasWidgets.length" x-cloak
-         class="absolute inset-0 flex items-center justify-center p-6 pointer-events-none">
-      <div class="pointer-events-auto max-w-sm text-center bg-white/90 border border-dashed border-line rounded px-6 py-6">
-        <i class="ti ti-layout-dashboard text-3xl text-ink/30" aria-hidden="true"></i>
-        <p class="mt-2 text-sm font-semibold text-ink">Tu tablero está vacío</p>
-        <p class="mt-1 text-xs text-ink/55">Arrastra un widget desde el panel de la izquierda o describe el tablero que quieres y deja que la IA lo arme.</p>
-        <button type="button" x-on:click="window.dispatchEvent(new CustomEvent('ai-board:open'))"
-                x-bind:disabled="!$store.dashboard.sources.length"
-                class="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer">
-          <i class="ti ti-sparkles text-base" aria-hidden="true"></i> Generar con IA
-        </button>
-      </div>
-    </div>
-    {% endif %}
   </main>
 
   <aside id="edit-drawer" x-data

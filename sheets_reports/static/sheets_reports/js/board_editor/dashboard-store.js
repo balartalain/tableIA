@@ -328,15 +328,18 @@ document.addEventListener('alpine:init', () => {
 
     removeRow(rowId) {
       const widgets = this.getRowWidgets(rowId);
-      if (widgets.length === 0) {
+      // La única fila no se quita: el lienzo siempre tiene dónde soltar un widget.
+      if (widgets.length === 0 && this.rows.length > 1) {
         this.rows = this.rows.filter(r => r.id !== rowId);
       }
     },
 
     _initRowsFromWidgets() {
       const canvasWidgets = this.widgets.filter(w => w.constructor?.placement !== 'header');
+      // Tablero vacío: la primera fila ya está a la vista para empezar a añadir widgets.
       if (!canvasWidgets.length) {
-        this.rows = [];
+        this.rows = [{ id: 'row_1' }];
+        this._nextRowSeq = 2;
         return;
       }
 

@@ -1,9 +1,12 @@
 // «Generar con IA»: el usuario describe el tablero, la IA propone la lista de widgets (tipo,
 // título, descripción y el pedido que configura cada uno: POST board-plan/) y, al aceptar, cada
 // widget marcado se configura con el asistente del panel (table-assistant, con su pedido y su
-// tipo fijo), se crean los campos calculados que proponga y se crea en el tablero. De a uno y
-// en orden: un campo calculado creado para un widget ya lo ve el siguiente, y cada widget
-// aparece en el lienzo apenas está listo. Lo abre el evento `ai-board:open`.
+// tipo fijo), se crean los campos calculados que proponga y se crea en el tablero. Varios a la
+// vez (BUILD_CONCURRENCY): cada widget aparece en su lugar del lienzo apenas está listo. Lo
+// abre el evento `ai-board:open`.
+
+// Widgets que se piden a la IA al mismo tiempo al crear el tablero.
+const BUILD_CONCURRENCY = 3;
 
 function aiBoard() {
   return {
@@ -21,6 +24,9 @@ function aiBoard() {
     building: false,
     // Fila del lienzo de cada fila de la tanda que se está creando: {índice: row_id}.
     _rowIds: {},
+    // Campos calculados de la tanda: la cola que los crea de a uno y los nombres ya creados.
+    _calculated: null,
+    _calculatedNames: new Set(),
 
     get store() { return Alpine.store('dashboard'); },
     get sources() { return this.store.sources || []; },
@@ -155,17 +161,31 @@ function aiBoard() {
       this.building = true;
       this._layoutQueue(queue);
       this._rowIds = {};
-      for (const item of queue) {
-        item.status = 'working';
-        try {
-          await this._buildOne(item);
-          item.status = 'done';
-        } catch (e) {
-          item.status = 'failed';
-          item.error = e.name === 'AbortError' ? 'La IA tardó demasiado.'
-            : e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message;
-        }
+      this._calculated = Promise.resolve();
+      this._calculatedNames = new Set();
+      // Las filas y el orden quedan fijados antes de empezar: los widgets terminan en cualquier
+      // orden y cada uno cae en su sitio.
+      const firstOrder = Math.max(-1, ...this.store.widgets.map(w => w.position?.order ?? -1)) + 1;
+      for (const [index, item] of queue.entries()) {
+        item._order = firstOrder + index;
+        item._rowId = await this._rowFor(item);
       }
+      let next = 0;
+      const worker = async () => {
+        while (next < queue.length) {
+          const item = queue[next++];
+          item.status = 'working';
+          try {
+            await this._buildOne(item);
+            item.status = 'done';
+          } catch (e) {
+            item.status = 'failed';
+            item.error = e.name === 'AbortError' ? 'La IA tardó demasiado.'
+              : e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(BUILD_CONCURRENCY, queue.length) }, worker));
       // Si alguno falló, los de su fila ocupan el hueco; una fila sin widgets no queda.
       const rowIds = Object.values(this._rowIds);
       await this.store.fillRows(rowIds);
@@ -176,6 +196,20 @@ function aiBoard() {
         window.showToast(done === queue.length ? `Tablero listo: ${done} widgets creados.`
           : `Se crearon ${done} de ${queue.length} widgets.`);
       }
+    },
+
+    // Los campos calculados se crean de a uno: si dos widgets que se configuran a la vez
+    // proponen el mismo campo, el segundo usa el que ya creó el primero.
+    _addCalculated(fields) {
+      const run = async () => {
+        const fresh = fields.filter(f => !this._calculatedNames.has(f.name));
+        if (!fresh.length) return;
+        await this.store.addCalculatedFields(this.source, fresh);
+        fresh.forEach(f => this._calculatedNames.add(f.name));
+      };
+      const result = this._calculated.then(run);
+      this._calculated = result.catch(() => {});
+      return result;
     },
 
     async _buildOne(item) {
@@ -198,15 +232,14 @@ function aiBoard() {
         calculatedFields = data.calculated_fields || [];
       }
 
-      if (calculatedFields.length) {
-        await this.store.addCalculatedFields(this.source, calculatedFields);
-      }
+      if (calculatedFields.length) await this._addCalculated(calculatedFields);
       const result = await this.store.createWidgetFromProposal({
         type: item.widget_type,
         source: this.source,
         title: item.title,
         width: item.width,
-        rowId: await this._rowFor(item),
+        rowId: item._rowId,
+        order: item._order,
         fields,
         style,
       });

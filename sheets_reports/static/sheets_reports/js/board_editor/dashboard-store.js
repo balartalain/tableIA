@@ -428,7 +428,7 @@ document.addEventListener('alpine:init', () => {
 
     // «Generar con IA»: crea en el servidor un widget ya configurado (la propuesta del
     // asistente) al final del tablero y lo monta. → {ok, error?}
-    async createWidgetFromProposal({ type, source, title, width, rowId, fields, style }) {
+    async createWidgetFromProposal({ type, source, title, width, rowId, order, fields, style }) {
       const WidgetClass = WidgetRegistry.get(type);
       const manifest = this.widgetManifest[type] || {};
       const defaultWStr = WidgetClass?.defaults?.width || 'md:col-span-6';
@@ -446,7 +446,10 @@ document.addEventListener('alpine:init', () => {
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
         source_id: source,
-        position: { order: this.widgets.length, w: defaultW, h: WidgetClass.defaults.height || 300, row_id: destRowId },
+        position: {
+          order: typeof order === 'number' ? order : this.widgets.length,
+          w: defaultW, h: WidgetClass.defaults.height || 300, row_id: destRowId,
+        },
         title: title || manifest.label || 'Nuevo Widget',
         fields: { ...EMPTY_FIELDS(), ...(fields || {}) },
         style: { ...(manifest.style_defaults || {}), ...(style || {}) },
@@ -454,7 +457,13 @@ document.addEventListener('alpine:init', () => {
       });
       // Se ve enseguida (con su indicador de carga); al guardarse toma su id real y sus datos.
       this.widgets.push(widget);
-      containerFor(widget).appendChild(widget.mount());
+      // Con `order` (varios creándose a la vez) entra antes del primero que va después de él.
+      const container = containerFor(widget);
+      const after = typeof order !== 'number' ? null : Array.from(container.children).find(el => {
+        const other = this.widgets.find(w => w.el === el);
+        return other && (other.position?.order ?? -1) > order;
+      });
+      container.insertBefore(widget.mount(), after || null);
       widget.setLoading(true);
       const result = await this._saveWidget(widget);
       if (!result.ok) {

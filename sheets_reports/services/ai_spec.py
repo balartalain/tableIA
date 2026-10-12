@@ -693,12 +693,15 @@ def samples_note(field, samples: dict, refs: dict) -> str:
     return ""
 
 
-def columns_context(ctx: SheetContext) -> str:
+def columns_context(ctx: SheetContext, only=None) -> str:
     """Las columnas con su alias, tipo y ejemplos, y los campos calculados con su fórmula: así la IA
-    sabe qué calcula cada uno aunque su nombre no lo diga."""
-    refs, shared = shared_samples(ctx.samples, ctx.fields)
+    sabe qué calcula cada uno aunque su nombre no lo diga. Con `only` (las columnas que usa un
+    widget ya planificado) lista solo esas y la ID: en una hoja ancha es casi todo el mensaje."""
+    only = set(only or ())
+    fields = [f for f in ctx.fields if not only or f in only or is_id_column(f)]
+    refs, shared = shared_samples(ctx.samples, fields)
     lines = []
-    for field in ctx.fields:
+    for field in fields:
         alias = ctx.alias_for(field)
         kind = "numérica" if ctx.is_numeric(field) else "fecha" if ctx.is_date(field) else "texto"
         line = f"- {alias}: {json.dumps(field, ensure_ascii=False)} ({kind})"
@@ -711,7 +714,9 @@ def columns_context(ctx: SheetContext) -> str:
             line += f" — campo calculado por fila: {calculated['formula']}"
         line += samples_note(field, ctx.samples, refs)
         lines.append(line)
-    text = shared + "Columnas de la hoja:\n" + "\n".join(lines)
+    title = ("Columnas de la hoja para este widget (la hoja tiene más: usa solo estas)" if only
+             else "Columnas de la hoja")
+    text = shared + f"{title}:\n" + "\n".join(lines)
     if ctx.aggregated_fields:
         def describe(name):
             info = ctx.calculated.get(name) or {}
@@ -737,8 +742,9 @@ def _history_text(history: list[dict] | None) -> str:
 
 
 def _user_message(prompt: str, widget_type: str | None, ctx: SheetContext,
-                  current: dict | None = None, history: list[dict] | None = None) -> str:
-    parts = [columns_context(ctx)]
+                  current: dict | None = None, history: list[dict] | None = None,
+                  columns=None) -> str:
+    parts = [columns_context(ctx, only=columns)]
     if widget_type:
         parts.append(f"El tipo de widget está fijado en: {widget_type}.")
     if current:
@@ -1211,7 +1217,8 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
 
 
 def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext,
-                         current: dict | None = None, history: list[dict] | None = None) -> dict:
+                         current: dict | None = None, history: list[dict] | None = None,
+                         columns: list[str] | None = None) -> dict:
     """
     Genera `{widget_type, title, fields, style}` para `prompt` sobre la hoja de `ctx` (con
     `samples` para que la IA escriba los valores exactos). `title` va siempre vacío: el título
@@ -1220,6 +1227,9 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
     Con `current` (`{title, fields, style}` del widget que se edita) la IA ajusta ese estado en
     vez de crear desde cero; `history` son los mensajes previos del hilo
     (`{"role": "user", "text"}` / `{"role": "assistant", "proposal"}`).
+
+    `columns` (las que el plan de tablero asignó al widget) acota las columnas que ve la IA en
+    el primer intento; el reintento ve la hoja completa, por si el plan omitió alguna.
 
     Si la primera propuesta no pasa la validación, reintenta UNA vez pasándole a la IA los
     errores; si vuelve a fallar, lanza SpecGenerationError con un mensaje legible. Nunca
@@ -1230,7 +1240,8 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
     if not ctx.fields:
         raise SpecGenerationError("La hoja no tiene columnas.")
 
-    contents = _user_message(prompt, widget_type, ctx, current, history)
+    columns = [c for c in columns or [] if c in ctx.fields]
+    contents = _user_message(prompt, widget_type, ctx, current, history, columns=columns)
     errors: list[str] = []
     for attempt in (1, 2):
         call_name, args = _call_model(contents, ctx, widget_type,

@@ -398,6 +398,22 @@ class ToolSchemaTests(SimpleTestCase):
         self.assertNotIn("- style.title:", prompt)
         self.assertNotIn('"title":', prompt)   # ni en los ejemplos
 
+    def test_con_columnas_asignadas_la_ia_ve_solo_esas_y_el_reintento_todas(self):
+        responses = [("create_widget", INVALID_ARGS), ("create_widget", VALID_ARGS)]
+        with mock.patch.object(ai_spec, "_call_model", side_effect=responses) as call:
+            generate_widget_form("ventas por categoría", "bar", sales_ctx(),
+                                 columns=["categoria", "ventas", "no_existe"])
+        first, retry = (attempt.args[0] for attempt in call.call_args_list)
+        self.assertIn("usa solo estas", first)
+        self.assertIn('"categoria" (texto)', first)
+        self.assertIn('"ventas" (numérica)', first)
+        self.assertIn('"ID" (numérica)', first)   # la de sistema siempre está
+        self.assertNotIn('"mes"', first)
+        self.assertNotIn('"anio"', first)
+        # Si el plan omitió una columna, el reintento la tiene.
+        self.assertIn('"mes" (texto)', retry)
+        self.assertNotIn("usa solo estas", retry)
+
     def test_con_el_tipo_fijado_el_prompt_solo_trae_ese_widget(self):
         from sheets_reports.services.ai_spec import system_prompt_for
         full, kpi = system_prompt_for(None), system_prompt_for("kpi")

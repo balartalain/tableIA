@@ -44,6 +44,14 @@ class CleanPlanTests(SimpleTestCase):
         plan3 = clean_plan({"items": items3}, ctx=ctx)
         self.assertEqual(plan3["items"][0]["fields"], {"dimensions": ["categoria", "mes"]})
 
+    def test_cada_widget_lleva_las_columnas_que_usa(self):
+        ctx = sales_ctx()
+        items = [item(columns=["col_5", "[col_2]", "col_1", "col_99", "col_2"]), item("kpi")]
+        plan = clean_plan({"items": items}, ctx=ctx)
+        # Nombres reales, sin la ID, sin las que no existen y sin repetir.
+        self.assertEqual(plan["items"][0]["columns"], ["ventas", "categoria"])
+        self.assertNotIn("columns", plan["items"][1])
+
     def test_sin_pedido_no_entra_y_sin_titulo_usa_el_del_tipo(self):
         plan = clean_plan({"items": [item(request=" "), item("donut", title="")]})
         self.assertEqual([(i["widget_type"], i["title"]) for i in plan["items"]], [("donut", "Gráfico de Dona")])

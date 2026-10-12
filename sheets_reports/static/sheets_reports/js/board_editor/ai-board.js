@@ -188,7 +188,9 @@ function aiBoard() {
         const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.store.dashboardId}/table-assistant/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: item.request, widget_type: item.widget_type, source: this.source }),
+          body: JSON.stringify({
+            prompt: item.request, widget_type: item.widget_type, source: this.source, columns: item.columns || [],
+          }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
         fields = data.fields;

@@ -44,7 +44,10 @@ Reglas:
 - request: el pedido en lenguaje natural para configurar ese widget, con los nombres exactos de
   las columnas, la agregación, el agrupamiento, el orden, el límite y las condiciones (ej.
   «suma de ventas por categoria, las 5 más altas»). Sin JSON.
-- Para widget_type "filter": incluye en "columns" la lista de alias de las columnas por las que filtrar (ej. ["col_3", "col_7"]).
+- columns: los alias de TODAS las columnas que ese widget necesita: por las que agrupa, las que
+  calcula, las de sus condiciones y la de tiempo si compara periodos (ej. ["col_3", "col_7"]).
+  El widget se configura viendo solo esas columnas: no omitas ninguna. En un "filter" son las
+  columnas por las que filtrar.
 - note: vacío si se pudo todo; si no, qué cambiaste y por qué, en una frase.
 {singletons}
 Pedido del usuario:
@@ -66,10 +69,10 @@ SCHEMA = {
                     "columns": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Solo para widget_type 'filter': lista de alias (ej. col_1, col_2) o columnas a filtrar.",
+                        "description": "Alias (ej. col_1, col_2) de todas las columnas que usa el widget.",
                     },
                 },
-                "required": ["widget_type", "title", "description", "request"],
+                "required": ["widget_type", "title", "description", "request", "columns"],
             },
         },
         "note": {"type": "string"},
@@ -90,9 +93,21 @@ def _text(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
+def _plan_columns(raw, ctx: SheetContext) -> list[str]:
+    """Las columnas que la IA dijo que usa un widget (alias o nombres), con su nombre real: sin
+    la ID, sin repetir y solo las que existen."""
+    cols = []
+    for c in raw if isinstance(raw, list) else []:
+        field = ctx.field_for(str(c).strip())
+        if field in ctx.fields and not is_id_column(field) and field not in cols:
+            cols.append(field)
+    return cols
+
+
 def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
     """Lo que devolvió la IA, solo con lo que el tablero puede crear: tipos registrados con IA,
     a lo más uno de un tipo único por tablero (ninguno si ya está), título y pedido no vacíos.
+    `columns` son las columnas de la hoja que usa cada widget (su asistente solo ve esas).
     Para 'filter', si se especifican columnas, se resuelven en `fields.dimensions`.
     Sin widgets → SpecGenerationError."""
     allowed = {w.key: w for w in _widgets()}
@@ -118,14 +133,11 @@ def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
             "description": _text(item.get("description"), MAX_TEXT_CHARS),
             "request": request,
         }
+        cols = _plan_columns(item.get("columns"), ctx) if ctx is not None else []
+        if cols:
+            entry["columns"] = cols
         if widget.key == "filter" and ctx is not None:
-            cols = []
-            raw_cols = item.get("columns")
-            if isinstance(raw_cols, list):
-                for c in raw_cols:
-                    field = ctx.field_for(str(c).strip())
-                    if field in ctx.fields and not is_id_column(field) and field not in cols:
-                        cols.append(field)
+            cols = list(cols)
             if not cols:
                 for alias in re.findall(r"\bcol_\d+\b", request, re.IGNORECASE):
                     field = ctx.field_for(alias)

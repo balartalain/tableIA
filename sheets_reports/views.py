@@ -947,6 +947,13 @@ def dashboard_render(request, dashboard_id):
 MAX_ASSISTANT_HISTORY = 20
 
 
+def _assistant_columns(raw) -> list[str]:
+    """Las columnas que «Generar con IA» asignó al widget: la IA lo configura viendo solo esas."""
+    if not isinstance(raw, list):
+        return []
+    return [c for c in raw if isinstance(c, str)][:50]
+
+
 def _assistant_current(raw) -> dict | None:
     """El borrador del panel (`{title, fields, style}`) que la IA debe ajustar, o None."""
     if not isinstance(raw, dict):
@@ -1033,7 +1040,7 @@ def board_ai_plan(request, dashboard_id):
 @require_http_methods(["POST"])
 def table_assistant(request, dashboard_id):
     """
-    POST {prompt, source?, widget_type?, current?, history?}
+    POST {prompt, source?, widget_type?, current?, history?, columns?}
     Chat con la IA del panel de un widget: la IA propone el `WidgetForm` (fields + style, y
     los `calculated_fields` nuevos que usan sus métricas) validado contra la hoja de la fuente, ajustando el borrador actual (`current`:
     `{title, fields, style}`) con el contexto de los mensajes previos (`history`). El panel lo
@@ -1065,7 +1072,8 @@ def table_assistant(request, dashboard_id):
         ctx = SheetContext.from_dataframe(df, source.gid, samples=get_field_samples(df))
         proposal = generate_widget_form(prompt, data.get("widget_type"), ctx,
                                         current=_assistant_current(data.get("current")),
-                                        history=_assistant_history(data.get("history")))
+                                        history=_assistant_history(data.get("history")),
+                                        columns=_assistant_columns(data.get("columns")))
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     except Exception:

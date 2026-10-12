@@ -27,7 +27,6 @@ function sourceManager() {
     previewSource: null,
     loadingData: false,
     dataError: '',
-    previewRows: [],
     previewColumns: [],
     totalRows: 0,
     isFormResponse: false,
@@ -142,7 +141,6 @@ function sourceManager() {
       this.view = 'data';
       this.loadingData = true;
       this.dataError = '';
-      this.previewRows = [];
       this.previewColumns = [];
       this.totalRows = 0;
       this.isFormResponse = false;
@@ -151,10 +149,9 @@ function sourceManager() {
         this._previewTable = null;
       }
       try {
-        const { r, data } = await fetchJsonSafe(apiUrl(`/api/sources/${source.id}/rows/`));
+        const { r, data } = await fetchJsonSafe(apiUrl(`/api/sources/${source.id}/rows/?page=1&size=1`));
         if (!r.ok || !data || data.error) throw new Error((data && data.error) || 'No se pudieron cargar los datos.');
         this.previewColumns = data.columns || [];
-        this.previewRows = data.rows || [];
         this.totalRows = data.total_rows || 0;
         this.isFormResponse = !!data.is_form_response;
         this.loadingData = false;
@@ -184,18 +181,36 @@ function sourceManager() {
         hozAlign: 'left',
       }));
 
+      // La tabla pide al servidor solo la página que se ve (y el orden, sobre toda la fuente):
+      // así se recorre la hoja completa sin traerla entera al navegador.
+      const rowsUrl = apiUrl(`/api/sources/${this.previewSource.id}/rows/`);
       this._previewTable = new Tabulator(container, {
-        data: this.previewRows,
         nestedFieldSeparator: false,
         columns,
         layout: 'fitDataStretch',
-        pagination: 'local',
-        paginationSize: 20,
-        paginationCounter: function(pageSize, currentRow, currentPage, totalRows, totalPages) {
-          if (!totalRows) return 'Sin filas';
-          const start = currentRow;
-          const end = Math.min(currentRow + pageSize - 1, totalRows);
-          return `Mostrando ${start}–${end} de ${totalRows} filas`;
+        pagination: true,
+        paginationMode: 'remote',
+        sortMode: 'remote',
+        paginationSize: 100,
+        ajaxURL: rowsUrl,
+        ajaxURLGenerator: (url, config, params) => {
+          const query = new URLSearchParams({ page: params.page || 1, size: params.size || 100 });
+          const sorter = (params.sort || [])[0];
+          if (sorter) {
+            query.set('sort', sorter.field);
+            query.set('dir', sorter.dir);
+          }
+          return `${url}?${query}`;
+        },
+        ajaxResponse: (url, params, response) => {
+          this.totalRows = response.total_rows || 0;
+          return { last_page: response.last_page || 1, last_row: this.totalRows, data: response.rows || [] };
+        },
+        paginationCounter: (pageSize, currentRow) => {
+          const total = this.totalRows;
+          if (!total) return 'Sin filas';
+          const end = Math.min(currentRow + pageSize - 1, total);
+          return `Mostrando ${currentRow.toLocaleString('es')}–${end.toLocaleString('es')} de ${total.toLocaleString('es')} filas`;
         },
         maxHeight: '100%',
       });

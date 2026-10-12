@@ -801,10 +801,16 @@ def source_status(request, source_id):
     return JsonResponse({"status": google_drive.tab_status(source.sheet_id, source.gid)})
 
 
+# «Ver datos» de una fuente: filas por página (lo que pide la tabla) y el máximo que se acepta.
+SOURCE_ROWS_PAGE_SIZE = 100
+SOURCE_ROWS_MAX_PAGE_SIZE = 200
+
+
 @require_http_methods(["GET"])
 def source_rows(request, source_id):
-    """Devuelve las columnas y las filas del DataFrame transformado (sheets.load_source(source)).
-    Acepta opcionalmente ?limit=100 (por defecto 100)."""
+    """Las filas de la fuente como la ven los widgets (`sheets.load_source`), de a una página:
+    GET ?page=1&size=20&sort=<columna>&dir=asc|desc. El orden se aplica a toda la fuente antes
+    de paginar. → {columns, rows (la página), total_rows, last_page, is_form_response}."""
     source = _owned_source(request, source_id)
     if not source:
         return _error("Fuente no encontrada", status=404)
@@ -813,20 +819,29 @@ def source_rows(request, source_id):
     except SheetError as e:
         return _error(str(e), status=502)
 
-    limit = request.GET.get("limit")
-    try:
-        limit = min(int(limit), 1000) if limit else 100
-    except ValueError:
-        limit = 100
+    def positive(name: str, default: int) -> int:
+        try:
+            return max(int(request.GET.get(name) or default), 1)
+        except ValueError:
+            return default
 
-    preview_df = df.head(limit)
-    records = preview_df.to_dict(orient="records")
-    clean_records = [{k: to_python(v) for k, v in row.items()} for row in records]
+    page = positive("page", 1)
+    size = min(positive("size", SOURCE_ROWS_PAGE_SIZE), SOURCE_ROWS_MAX_PAGE_SIZE)
+    sort = request.GET.get("sort")
+    if sort in df.columns:
+        order = {"ascending": request.GET.get("dir") != "desc", "na_position": "last", "kind": "stable"}
+        try:
+            df = df.sort_values(sort, **order)
+        except TypeError:  # columna con textos y números mezclados: se ordena como texto
+            df = df.sort_values(sort, key=lambda column: column.map(str, na_action="ignore"), **order)
+    start = (page - 1) * size
+    records = df.iloc[start:start + size].to_dict(orient="records")
 
     return JsonResponse({
         "columns": list(df.columns),
-        "rows": clean_records,
+        "rows": [{k: to_python(v) for k, v in row.items()} for row in records],
         "total_rows": len(df),
+        "last_page": max(-(-len(df) // size), 1),
         "is_form_response": source.is_form_response,
     })
 

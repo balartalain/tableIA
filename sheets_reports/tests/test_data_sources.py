@@ -107,6 +107,27 @@ class SourcesCrudTests(TestCase):
         self.assertGreater(len(r["rows"]), 0)
         self.assertIn("ventas", r["columns"])
 
+    def test_source_rows_pagina_y_ordena_toda_la_fuente(self, _df):
+        url = f"/api/sources/{self.source.id}/rows/"
+        every = self.client.get(url, {"size": 200}).json()
+        total = every["total_rows"]
+        self.assertEqual(len(every["rows"]), total)
+        self.assertGreater(total, 4)
+
+        page = self.client.get(url, {"page": 2, "size": 2}).json()
+        self.assertEqual(page["rows"], every["rows"][2:4])
+        self.assertEqual(page["total_rows"], total)          # el total, no el tamaño de la página
+        self.assertEqual(page["last_page"], -(-total // 2))
+
+        # El orden se aplica a toda la fuente antes de paginar.
+        top = self.client.get(url, {"size": 1, "sort": "ventas", "dir": "desc"}).json()
+        self.assertEqual(top["rows"][0]["ventas"], max(row["ventas"] for row in every["rows"]))
+        # Columna desconocida: sin orden; página fuera de rango: vacía.
+        self.assertEqual(self.client.get(url, {"size": 2, "sort": "no_existe"}).json()["rows"], every["rows"][:2])
+        self.assertEqual(self.client.get(url, {"page": 999}).json()["rows"], [])
+        # Valores que no son números no rompen: valen los de por defecto.
+        self.assertEqual(self.client.get(url, {"page": "x", "size": "y"}).json()["rows"], every["rows"][:100])
+
 
 SALES_COLUMNS = [{"name": "categoria", "type": "text", "include": True},
                  {"name": "mes", "type": "text", "include": True},

@@ -1,7 +1,7 @@
 """
 Sugerencias de pedidos para el chat del panel: dos frases cortas, como las escribiría el
-usuario, pensadas para el tipo de widget a partir de las cabeceras y las primeras filas de la
-hoja. Se cachean por hoja, tipo y esa vista previa: abrir el panel de nuevo no vuelve a llamar
+usuario, pensadas para el tipo de widget a partir de las columnas de la hoja y sus valores de
+ejemplo. Se cachean por hoja, tipo y esa vista previa: abrir el panel de nuevo no vuelve a llamar
 a la IA.
 """
 import hashlib
@@ -11,14 +11,15 @@ import logging
 import pandas as pd
 from django.core.cache import cache
 
-from sheets_reports.services.ai_spec import SUBMISSION_NOTE, capabilities_text, generate_json
+from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, capabilities_text, generate_json,
+                                             samples_note, shared_samples)
+from sheets_reports.services.sheets import get_field_samples
 from sheets_reports.utils.data import date_fields
 
 logger = logging.getLogger(__name__)
 
 SUGGESTIONS = 2
 MAX_AVOID = 10
-PREVIEW_ROWS = 3
 MAX_SUGGESTION_CHARS = 80
 CACHE_TTL_SECONDS = 24 * 60 * 60
 
@@ -30,11 +31,12 @@ que un usuario escribiría en el chat para configurar un widget «{label}».
 {examples}
 Reglas:
 - En español, cortos (máximo 60 caracteres cada uno), en lenguaje natural, sin comillas.
-- Usa los nombres reales de las columnas; las filas son solo para entender qué hay en cada una.
+- Usa los nombres reales de las columnas; los valores de ejemplo son solo para entender qué hay
+  en cada una.
 - Prefiere los análisis que más se usan: totales, comparaciones, evolución en el tiempo,
   reparto o ranking por una categoría.
-- No sugieras un año, una fecha ni un valor suelto. Un valor concreto, solo si aparece en las
-  filas y para compararlo con el total o con otro (ej. «ventas de Hogar frente al total»).
+- No sugieras un año, una fecha ni un valor suelto. Un valor concreto, solo si aparece en los
+  valores de ejemplo y para compararlo con el total o con otro (ej. «ventas de Hogar frente al total»).
 - Si comparas periodos, di contra cuál (este año frente al anterior, el último mes frente al
   anterior); nunca «variación anual» o «evolución» sin referencia. Solo si la hoja tiene una
   columna de fecha, de año o de mes de los datos: sin ella no propongas comparar periodos ni
@@ -46,19 +48,23 @@ Reglas:
 
 
 def _sheet_preview(df: pd.DataFrame) -> str:
-    """Las cabeceras con su tipo y las primeras filas en CSV: lo que la IA ve de la hoja."""
+    """Lo que la IA ve de la hoja: cada columna con su tipo y, si tiene pocos valores distintos,
+    esos valores (las listas que se repiten, una sola vez). Sin filas: en una hoja ancha pesan
+    mucho y no dicen más que los valores."""
     numeric = set(df.select_dtypes(include="number").columns)
     dates = set(date_fields(df))
     submission = df.attrs.get("submission_field")
+    samples = get_field_samples(df)
+    refs, shared = shared_samples(samples, df.columns)
 
     def kind(c):
         if c == submission:
             return SUBMISSION_NOTE
         return "numérica" if c in numeric else "fecha" if c in dates else "texto"
 
-    columns = ", ".join(f"{json.dumps(str(c), ensure_ascii=False)} ({kind(c)})" for c in df.columns)
-    rows = df.head(PREVIEW_ROWS).to_csv(index=False).strip()
-    return f"Columnas: {columns}\n\nPrimeras filas:\n{rows}"
+    lines = [f"- {json.dumps(str(c), ensure_ascii=False)} ({kind(c)}){samples_note(c, samples, refs)}"
+             for c in df.columns]
+    return shared + "Columnas de la hoja:\n" + "\n".join(lines)
 
 
 def _capability_rules(widget) -> str:
@@ -78,7 +84,7 @@ def _capability_rules(widget) -> str:
 
 
 def _cache_key(source: str, widget_type: str, prompt: str, preview: str) -> str:
-    """Si cambian las columnas, sus tipos o las primeras filas, cambia la clave. Si cambia el
+    """Si cambian las columnas, sus tipos o sus valores de ejemplo, cambia la clave. Si cambia el
     prompt, también cambia la clave."""
     digest = hashlib.sha1((prompt + preview).encode("utf-8")).hexdigest()[:16]
     return f"widget_suggestions:{source}:{widget_type}:{digest}"

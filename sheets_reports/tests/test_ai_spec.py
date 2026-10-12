@@ -408,7 +408,6 @@ class ToolSchemaTests(SimpleTestCase):
         self.assertNotIn("- dynamic_table:", kpi)
 
     def test_las_listas_de_valores_repetidas_se_escriben_una_vez(self):
-        import pandas as pd
         from sheets_reports.services.ai_spec import columns_context
         from sheets_reports.services.sheets import get_field_samples
         df = pd.DataFrame({

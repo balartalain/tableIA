@@ -29,15 +29,17 @@ class WidgetSuggestionsTests(SimpleTestCase):
                                   "x" * 81, "total de ventas por mes", "Una tercera"])
         self.assertEqual(result, ["Ventas de Hogar vs total", "Total de ventas por mes"])
 
-    def test_el_prompt_lleva_el_tipo_las_cabeceras_y_las_primeras_filas(self):
+    def test_el_prompt_lleva_el_tipo_y_las_columnas_con_sus_valores(self):
         _, model = self.suggest(["A", "B"])
         contents = model.call_args.args[0]
         self.assertIn("«Tarjeta KPI»", contents)
         self.assertIn("condiciones por métrica", contents)
         self.assertIn('"categoria" (texto)', contents)
         self.assertIn('"ventas" (numérica)', contents)
-        self.assertIn("ID,categoria,mes,anio,ventas\n1,Hogar,Ene,2026,100.0", contents)
-        self.assertNotIn("Ropa", contents)   # está más abajo de las 3 primeras filas
+        # Los valores distintos de las columnas con pocos; ninguna fila de la hoja.
+        self.assertIn('"categoria" (texto) — valores de ejemplo: ["Hogar", "Electrónica", "Ropa"]', contents)
+        self.assertNotIn("Primeras filas", contents)
+        self.assertNotIn("100.0", contents)
 
     def test_un_grafico_pide_que_cada_sugerencia_diga_por_que_agrupar(self):
         _, model = self.suggest(["A", "B"], widget=WIDGETS.get("line"))
@@ -60,12 +62,12 @@ class WidgetSuggestionsTests(SimpleTestCase):
         model.assert_called_once()
         self.assertEqual(result, ["C", "D"])
         changed = sales_df()
-        changed.loc[0, "ventas"] = 999
+        changed.loc[0, "categoria"] = "Jardín"
         result, model = self.suggest(["E", "F"], df=changed)
         model.assert_called_once()
         self.assertEqual(result, ["E", "F"])
 
-    def test_filas_posteriores_a_las_primeras_no_cambian_la_cache(self):
+    def test_un_numero_distinto_no_cambia_la_cache(self):
         self.suggest(["A", "B"])
         later = sales_df()
         later.loc[len(later) - 1, "ventas"] = 999

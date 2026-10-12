@@ -221,7 +221,7 @@ class TidySourceIntegrationTests(TestCase):
         marked = [line for line in context.splitlines() if SUBMISSION_NOTE in line]
         self.assertEqual(len(marked), 1)
         self.assertIn('"Marca de tiempo"', marked[0])
-        self.assertIn(f'"Marca de tiempo" ({SUBMISSION_NOTE})', _sheet_preview(df))
+        self.assertIn(f'- "Marca de tiempo" ({SUBMISSION_NOTE})', _sheet_preview(df))
 
         # Con otro nombre a mostrar la sigue; excluida, no hay columna de envío.
         source.columns = [{"name": "Marca de tiempo", "type": "date", "include": True, "label": "Enviado"}]

@@ -15,6 +15,7 @@ from sheets_reports.engine.formulas import (
     FormulaError,
     compile_formula,
     formula_tree,
+    rename_columns,
 )
 from sheets_reports.services.ai_spec import SpecGenerationError, generate_json
 from sheets_reports.services.sheets import get_field_samples
@@ -42,7 +43,7 @@ usuario.
 {columns}
 
 Gramática:
-- Columnas entre corchetes con su nombre exacto: [Gasto Real]. Textos entre comillas dobles:
+- Columnas entre corchetes con su alias (ej. [col_1]) o su nombre exacto: [Gasto Real]. Textos entre comillas dobles:
   "Sí". Números con punto decimal: 1.5.
 - Operadores: {arithmetic}, paréntesis; comparaciones {compare}; lógicos AND, OR, NOT.
 - Funciones: {functions}.
@@ -78,9 +79,11 @@ class FormulaAIError(Exception):
 def _columns_text(df: pd.DataFrame) -> str:
     numeric = set(df.select_dtypes(include="number").columns)
     samples = get_field_samples(df)
+    attr_aliases = df.attrs.get("column_aliases") or {}
     lines = []
-    for column in df.columns:
-        line = f"- {json.dumps(str(column), ensure_ascii=False)} ({'numérica' if column in numeric else 'texto'})"
+    for i, column in enumerate(df.columns):
+        alias = attr_aliases.get(column) or f"col_{i + 1}"
+        line = f"- {alias}: {json.dumps(str(column), ensure_ascii=False)} ({'numérica' if column in numeric else 'texto'})"
         if samples.get(column):
             line += f" — ejemplos: {json.dumps(samples[column], ensure_ascii=False, default=str)}"
         lines.append(line)
@@ -118,6 +121,9 @@ def generate_formula(prompt: str, df: pd.DataFrame, aggregated=()) -> dict:
             reason = str((answer or {}).get("reason") or "").strip() if isinstance(answer, dict) else ""
             raise FormulaAIError(f"No pude armar la fórmula: {reason or 'el pedido no alcanza para un cálculo.'}")
         text = str(answer.get("formula") or "").strip()
+        attr_aliases = df.attrs.get("column_aliases") or {}
+        reverse_aliases = {alias: name for name, alias in attr_aliases.items()}
+        text = rename_columns(text, reverse_aliases)
         try:
             formula = compile_formula(text, df.columns, aggregated)
         except FormulaError as e:

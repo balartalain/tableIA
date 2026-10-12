@@ -150,7 +150,14 @@ def _clean_columns(columns: list) -> list[dict]:
         # está incluida y su configuración no se guarda.
         if is_id_column(c.get("name")):
             continue
-        column = {"name": c["name"], "type": c["type"], "include": bool(c.get("include", True))}
+        column = {
+            "name": c["name"],
+            "type": c["type"],
+            "include": bool(c.get("include", True)),
+        }
+        alias = str(c.get("alias") or "").strip()
+        if alias:
+            column["alias"] = alias
         label = str(c.get("label") or "").strip()
         if label and label != c["name"]:
             column["label"] = label
@@ -625,9 +632,11 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
     incluida)."""
     by_name = {c["name"]: c for c in saved}
     out = []
-    for column in sheet_columns:
+    for i, column in enumerate(sheet_columns):
         stored = None if is_id_column(column["name"]) else by_name.get(column["name"])
+        alias = (stored or {}).get("alias") or column.get("alias") or f"col_{i + 1}"
         out.append({**column,
+                    "alias": alias,
                     "type": stored["type"] if stored else column["type"],
                     "include": stored.get("include", True) if stored else True,
                     "label": (stored or {}).get("label", ""),

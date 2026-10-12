@@ -18,7 +18,7 @@ from google.genai import types
 
 from sheets_reports.engine.steps.filter import condition_errors
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula, formula_tree
+from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula, formula_tree, rename_columns
 from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.data import is_id_column
 from sheets_reports.utils.validation import MAX_IN_VALUES
@@ -70,17 +70,20 @@ Tú NO calculas nada ni ves los datos: solo describes QUÉ calcular. El backend 
 consulta.
 
 ## fields (los datos)
-- dimensions: columnas por las que agrupar (categorías del eje X / filas de la tabla). Si el
+- Cada columna de la hoja tiene un alias asignado (col_1, col_2, ...). En dimensions, pivots,
+  columns, metrics.field, filters y trend_by usa SIEMPRE su alias (ej. "col_1", "col_2") en vez
+  del nombre largo de la columna para evitar errores con nombres largos o corchetes.
+- dimensions: alias de las columnas por las que agrupar (categorías del eje X / filas de la tabla). Si el
   widget exige dimensión y el usuario no dice cómo agrupar, usa una columna de texto con pocos
   valores distintos (ej. departamento, campus); nunca una fecha suelta ni un identificador.
 - columns: SOLO la tabla de datos: columnas de la hoja a mostrar tal cual, en orden, cada una
-  como {"field": "mes", "label": "Mes"}; `label` es opcional (nombre a mostrar en la cabecera,
+  como {"field": "col_1", "label": "Nombre a mostrar"}; `label` es opcional (nombre a mostrar en la cabecera,
   sin él se muestra la columna). La tabla NO agrupa ni resume: no lleva dimensions ni metrics.
-- pivots: columnas para desagregar además de la dimensión (columnas de una tabla dinámica,
+- pivots: alias de las columnas para desagregar además de la dimensión (columnas de una tabla dinámica,
   series de un gráfico). [] si no aplica.
-- filters: condiciones sobre las FILAS que entran al widget. [] si no hay.
-- trend_by: columna de TIEMPO (año, mes, fecha) de la mini tendencia (sparkline) bajo el
-  número del KPI (ej. "mes"); nunca una categoría. Solo en widgets con tendencia. Omitir si no
+- filters: condiciones sobre las FILAS que entran al widget (usando el alias en "field"). [] si no hay.
+- trend_by: alias de la columna de TIEMPO (año, mes, fecha) de la mini tendencia (sparkline) bajo el
+  número del KPI (ej. "col_1"); nunca una categoría. Solo en widgets con tendencia. Omitir si no
   aplica.
 - La hoja siempre tiene una columna ID (una por fila, de solo lectura): NO la uses como
   dimensión, pivote, columna ni field de una métrica. El Conteo (agg "count" sin field) ya
@@ -90,7 +93,8 @@ consulta.
   nombre de la columna con la que se calcula (ej. "total_ventas") y, si hace falta un texto más
   claro para la persona que mira el widget, un `label` (nombre a mostrar, ej. "Costos totales";
   sin label se muestra el agg en español con la columna, ej. «Promedio Ventas»):
-  - {"agg", "field", "alias"}: resume una columna.
+  - {"agg", "field", "alias"}: resume una columna. `field` es el alias de la columna a resumir
+    (ej. "col_2"), salvo agg "count" sin field, o agg "auto" que usa el nombre del campo calculado agregado.
     - agg "count": "cuántos", "cantidad de". Cuenta FILAS DISTINTAS (sobre la
       columna de sistema ID): sin field, todas las filas; con field, las filas
       distintas con esa columna no vacía. En respuestas de formulario, sin
@@ -360,7 +364,7 @@ def build_system_prompt(widgets=None) -> str:
         "## style de cada tipo",
         *style_docs,
         "",
-        "## Ejemplos (columnas ilustrativas; usa SOLO las columnas reales de la hoja)",
+        "## Ejemplos (columnas ilustrativas; usa los alias col_1, col_2 o las columnas reales de la hoja)",
         "",
         "\n\n".join(examples),
     ]) + "\n"
@@ -573,8 +577,8 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
 
 
 def _column_schema(description: str = "") -> dict:
-    """Una columna de la hoja en el schema de la tool: texto, sin enum (ver build_tool_parameters)."""
-    hint = "Nombre exacto de una de las columnas listadas en el mensaje."
+    """Una columna de la hoja en el schema de la tool: alias (col_1) o texto."""
+    hint = "Alias de la columna (ej. 'col_1', 'col_2') o su nombre exacto."
     return {"type": "string", "description": f"{description} {hint}".strip()}
 
 
@@ -611,12 +615,13 @@ FORMAT_LABELS = {"percent": "porcentaje", "currency": "moneda", "progress": "por
 
 
 def columns_context(ctx: SheetContext) -> str:
-    """Las columnas con su tipo y ejemplos, y los campos calculados con su fórmula: así la IA
+    """Las columnas con su alias, tipo y ejemplos, y los campos calculados con su fórmula: así la IA
     sabe qué calcula cada uno aunque su nombre no lo diga."""
     lines = []
     for field in ctx.fields:
+        alias = ctx.alias_for(field)
         kind = "numérica" if ctx.is_numeric(field) else "texto"
-        line = f"- {json.dumps(field, ensure_ascii=False)} ({kind})"
+        line = f"- {alias}: {json.dumps(field, ensure_ascii=False)} ({kind})"
         if is_id_column(field):
             line += " — columna de sistema: una por fila, de solo lectura"
         calculated = ctx.calculated.get(field)
@@ -1079,8 +1084,10 @@ def _column_key(name) -> str:
 
 
 def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
-    """Cambia las columnas de la propuesta por el nombre real de la hoja cuando solo difieren en
-    espacios, mayúsculas, acentos o puntuación final: la IA no copia los encabezados exactos.
+    """Cambia las columnas de la propuesta por el nombre real de la hoja:
+    - Traduce alias de columnas (col_1, col_2, ...) a sus nombres reales.
+    - Corrige nombres que solo difieren en espacios, mayúsculas, acentos o puntuación final.
+    - Traduce alias dentro de las fórmulas de calculated_fields si las hay.
     Lo que no coincide queda igual y lo rechaza la validación."""
     known = (*ctx.fields, *sorted(ctx.aggregated_fields))
     matches: dict[str, list[str]] = {}
@@ -1089,12 +1096,32 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
     real = {key: names[0] for key, names in matches.items() if len(names) == 1}
 
     def resolve(value: str) -> str:
-        return value if value in known else real.get(_column_key(value), value)
+        if not value:
+            return value
+        val_clean = str(value).strip()
+        val_unbracket = val_clean.strip("[]")
+        if val_unbracket.lower() in ctx.aliases:
+            return ctx.aliases[val_unbracket.lower()]
+        if val_clean in known:
+            return val_clean
+        if val_unbracket in known:
+            return val_unbracket
+        return real.get(_column_key(val_clean), val_clean)
 
     fields, style = map_columns(data.get("fields"), data.get("style"), resolve)
     data["fields"] = fields
     if "style" in data:
         data["style"] = style
+
+    if "calculated_fields" in data and isinstance(data["calculated_fields"], list):
+        alias_map = dict(ctx.aliases)
+        for k, v in list(ctx.aliases.items()):
+            alias_map[k.upper()] = v
+            alias_map[k.capitalize()] = v
+        for calc in data["calculated_fields"]:
+            if isinstance(calc, dict) and "formula" in calc and isinstance(calc["formula"], str):
+                calc["formula"] = rename_columns(calc["formula"], alias_map)
+
     return data
 
 

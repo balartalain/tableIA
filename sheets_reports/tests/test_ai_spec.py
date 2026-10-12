@@ -135,6 +135,52 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertEqual(fields["metrics"][0]["filters"][0]["field"], "Nivel")
         self.assertEqual(fields["sort_by"], f"-{real}")
 
+    def test_la_ia_devuelve_alias_y_se_resuelven_al_nombre_real(self, _audit):
+        # Pregunta de Google Forms con corchetes y caracteres especiales
+        pregunta = "¿Qué tan satisfecho estás? [Atención al cliente]"
+        sede = "Sede / Departamento"
+        df = pd.DataFrame({sede: ["Central"], pregunta: [10]})
+        ctx = SheetContext.from_dataframe(df, "0")
+        self.assertEqual(ctx.alias_for(sede), "col_1")
+        self.assertEqual(ctx.alias_for(pregunta), "col_2")
+
+        # El mensaje que ve la IA incluye los alias
+        message = ai_spec._user_message("algo", None, ctx)
+        self.assertIn('- col_1: "Sede / Departamento" (texto)', message)
+        self.assertIn('- col_2: "¿Qué tan satisfecho estás? [Atención al cliente]" (numérica)', message)
+
+        # La IA responde usando los alias col_1 y col_2
+        args = {"widget_type": "bar", "fields": {
+            "dimensions": ["col_1"],
+            "metrics": [{"agg": "avg", "alias": "promedio_atencion", "field": "col_2",
+                         "filters": [{"field": "col_1", "op": "eq", "value": "Central"}]}],
+            "sort_by": "-col_2",
+        }, "style": {}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
+            result = generate_widget_form("promedio por sede", None, ctx)
+
+        call.assert_called_once()
+        fields = result["fields"]
+        self.assertEqual(fields["dimensions"], [sede])
+        self.assertEqual(fields["metrics"][0]["field"], pregunta)
+        self.assertEqual(fields["metrics"][0]["filters"][0]["field"], sede)
+        self.assertEqual(fields["sort_by"], f"-{pregunta}")
+
+    def test_la_ia_devuelve_alias_en_formula_de_campo_calculado(self, _audit):
+        pregunta = "¿Qué tan satisfecho estás? [Atención]"
+        df = pd.DataFrame({"sede": ["Central"], pregunta: [10]})
+        ctx = SheetContext.from_dataframe(df, "0")
+        args = {"widget_type": "bar", "calculated_fields": [
+            {"name": "Doble", "formula": "SUM([col_2]) * 2", "format": "number"}],
+            "fields": {"dimensions": ["col_1"],
+                       "metrics": [{"field": "Doble", "agg": "auto", "alias": "doble"}]}, "style": {}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
+            result = generate_widget_form("el doble de la atención", None, ctx)
+        call.assert_called_once()
+        self.assertEqual(result["calculated_fields"],
+                         [{"name": "Doble", "formula": f"SUM([{pregunta}]) * 2", "format": "number"}])
+        self.assertEqual(result["fields"]["dimensions"], ["sede"])
+
     def test_la_ia_propone_un_campo_calculado_y_lo_usa(self, _audit):
         args = {"widget_type": "bar", "calculated_fields": [
             {"name": "Doble", "formula": "SUM(ventas) * 2", "format": "number"}],

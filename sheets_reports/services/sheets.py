@@ -297,8 +297,10 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
     tipo elegido y con su nombre a mostrar (que reemplaza al encabezado en todo el tablero).
     Sin configuración devuelve la hoja tal cual. Las columnas que ya no existen en la hoja se
     ignoran; las nuevas se incluyen tal cual vienen. El formato de las numéricas (moneda, %)
-    queda en `df.attrs["column_formats"]` ({nombre a mostrar: formato}) para el motor."""
+    queda en `df.attrs["column_formats"]` ({nombre a mostrar: formato}) para el motor. Los alias
+    quedan en `df.attrs["column_aliases"]` ({nombre a mostrar: alias}) para la IA."""
     if not columns:
+        df.attrs.setdefault("column_aliases", {col: f"col_{i + 1}" for i, col in enumerate(df.columns)})
         return df
     df = df.copy()
     excluded = [c["name"] for c in columns if not c.get("include", True) and c.get("name") in df.columns]
@@ -317,6 +319,16 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
         if c.get("include", True) and c.get("type") == "number" and c.get("format") in COLUMN_FORMATS
         and column_display_name(c) in df.columns
     }
+    column_aliases = {}
+    for i, c in enumerate(columns):
+        if c.get("include", True):
+            disp = column_display_name(c)
+            if disp in df.columns:
+                column_aliases[disp] = c.get("alias") or f"col_{i + 1}"
+    for i, col in enumerate(df.columns):
+        if col not in column_aliases:
+            column_aliases[col] = f"col_{len(column_aliases) + 1}"
+    df.attrs["column_aliases"] = column_aliases
     return df
 
 

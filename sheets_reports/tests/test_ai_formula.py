@@ -25,6 +25,15 @@ class GenerateFormulaTests(SimpleTestCase):
         with mock.patch(ASK, return_value=row):
             self.assertEqual(generate_formula("el doble de las ventas", sales_df())["kind"], "row")
 
+    def test_la_ia_devuelve_alias_en_formula_y_se_traduce(self):
+        df = sales_df()
+        # sales_df tiene categoria, monto, fecha, mes, anio, ventas...
+        # con column_aliases: {"ventas": "col_6"}
+        df.attrs["column_aliases"] = {"ventas": "col_6", "categoria": "col_1"}
+        with mock.patch(ASK, return_value={"ok": True, "formula": "[col_6] * 2", "name": "Doble"}):
+            out = generate_formula("el doble de las ventas", df)
+        self.assertEqual(out["formula"], "[ventas] * 2")
+
     def test_si_no_puede_dice_por_que(self):
         with mock.patch(ASK, return_value={"ok": False, "reason": "La hoja no tiene una columna de costos."}):
             with self.assertRaisesMessage(FormulaAIError, "La hoja no tiene una columna de costos."):

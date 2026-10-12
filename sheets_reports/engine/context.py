@@ -25,9 +25,20 @@ class SheetContext:
     time_fields: frozenset[str] = frozenset()
     aggregated_fields: frozenset[str] = frozenset()
     calculated: dict = field(default_factory=dict, compare=False)
+    aliases: dict = field(default_factory=dict, compare=False)
+
+    def __post_init__(self):
+        if not self.aliases and self.fields:
+            default_aliases = {f"col_{i + 1}": field for i, field in enumerate(self.fields)}
+            object.__setattr__(self, "aliases", default_aliases)
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame, source: str, samples: dict | None = None) -> "SheetContext":
+        attr_aliases = df.attrs.get("column_aliases") or {}
+        aliases = {}
+        for i, col in enumerate(df.columns):
+            alias = attr_aliases.get(col) or f"col_{i + 1}"
+            aliases[alias.lower()] = col
         return cls(
             source=str(source),
             fields=tuple(df.columns),
@@ -41,7 +52,18 @@ class SheetContext:
                 **{name: {"formula": f.formula.text, "kind": "aggregated", "format": f.format}
                    for name, f in aggregated_fields(df).items()},
             },
+            aliases=aliases,
         )
+
+    def alias_for(self, field: str) -> str:
+        for alias, name in self.aliases.items():
+            if name == field:
+                return alias
+        return field
+
+    def field_for(self, alias_or_field: str) -> str:
+        clean = alias_or_field.strip().strip("[]").lower()
+        return self.aliases.get(clean, alias_or_field)
 
     def is_aggregated(self, name) -> bool:
         return name in self.aggregated_fields

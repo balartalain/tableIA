@@ -322,7 +322,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         // en la edición (las columnas de igual encabezado).
         if (refresh) this.columns = this._keepEdits(data.columns || []);
         else if (this.mode === 'replace') this.columns = this._keepEdits(data.columns || [], this._editSnapshot.columns);
-        else this.columns = (data.columns || []).map(c => ({ ...c, include: true, label: '', format: '' }));
+        else this.columns = (data.columns || []).map((c, i) => ({ ...c, alias: c.alias || `col_${i + 1}`, include: true, label: '', format: '' }));
         this.rows = data.rows || 0;
         const doc = this.spreadsheet.name.trim();
         if (this.mode === 'create' && !refresh) {
@@ -539,7 +539,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         .map(f => ({ id: f.id, name: f.name.trim(), format: f.format, ...this._formulaBody(f) }));
       return {
         first_row_headers: this.headers, calculated_fields: previous,
-        columns: this.columns.map(({ name, type, include, label }) => ({ name, type, include, label: (label || '').trim() })),
+        columns: this.columns.map(({ name, type, include, label, alias }) => ({ name, type, include, alias: alias || '', label: (label || '').trim() })),
       };
     },
 
@@ -614,8 +614,8 @@ function sourcePicker({ mode = 'create' } = {}) {
     },
 
     _payload() {
-      const columns = this.columns.map(({ name, type, include, label, format }) =>
-        ({ name, type, include, label: (label || '').trim(), format: type === 'number' ? (format || '') : '' }));
+      const columns = this.columns.map(({ name, type, include, label, format, alias }) =>
+        ({ name, type, include, alias: alias || '', label: (label || '').trim(), format: type === 'number' ? (format || '') : '' }));
       const body = { columns, first_row_headers: this.headers };
       // ¿Respuestas de Google Forms? (null en edición directa no debería
       // pasar: arranca con el valor guardado de la fuente).

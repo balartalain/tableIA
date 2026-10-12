@@ -145,6 +145,14 @@ class CreateFromSourceTests(TestCase):
         self.assertEqual(source.columns, columns)
         self.assertEqual(r.json()["sources"], ["Ventas 2026 · Detalle"])
 
+    def test_crea_con_alias_y_se_conserva(self):
+        columns = [{"name": "ventas", "type": "number", "include": True, "alias": "col_1"},
+                   {"name": "categoria", "type": "text", "include": False, "alias": "col_2"}]
+        r = self.post(columns=columns)
+        self.assertEqual(r.status_code, 201, r.content)
+        source = Dashboard.objects.get(id=r.json()["id"]).sources.get()
+        self.assertEqual(source.columns, columns)
+
     def test_valida_las_columnas(self):
         for columns in ([{"name": "ventas", "type": "moneda", "include": True}],
                         [{"name": "ventas", "type": "number", "include": False}],

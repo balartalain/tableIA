@@ -27,6 +27,23 @@ class CleanPlanTests(SimpleTestCase):
         plan = clean_plan({"items": items}, existing_types=["filter"])
         self.assertEqual([i["widget_type"] for i in plan["items"]], ["bar"])
 
+    def test_filtro_resuelve_dimensiones_desde_columns_o_request(self):
+        ctx = sales_ctx()  # campos: ID (col_1), categoria (col_2), mes (col_3), anio (col_4), ventas (col_5)
+        # 1. Con columns explícito
+        items = [item("filter", request="filtrar", columns=["col_2", "col_3"])]
+        plan = clean_plan({"items": items}, ctx=ctx)
+        self.assertEqual(plan["items"][0]["fields"], {"dimensions": ["categoria", "mes"]})
+
+        # 2. Con alias en request
+        items2 = [item("filter", request="filtro por col_2 y col_3")]
+        plan2 = clean_plan({"items": items2}, ctx=ctx)
+        self.assertEqual(plan2["items"][0]["fields"], {"dimensions": ["categoria", "mes"]})
+
+        # 3. Con nombre de columna en request
+        items3 = [item("filter", request="filtrar por categoria y mes")]
+        plan3 = clean_plan({"items": items3}, ctx=ctx)
+        self.assertEqual(plan3["items"][0]["fields"], {"dimensions": ["categoria", "mes"]})
+
     def test_sin_pedido_no_entra_y_sin_titulo_usa_el_del_tipo(self):
         plan = clean_plan({"items": [item(request=" "), item("donut", title="")]})
         self.assertEqual([(i["widget_type"], i["title"]) for i in plan["items"]], [("donut", "Gráfico de Dona")])

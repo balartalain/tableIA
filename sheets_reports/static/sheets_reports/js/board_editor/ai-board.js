@@ -136,21 +136,32 @@ function aiBoard() {
     },
 
     async _buildOne(item) {
-      const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.store.dashboardId}/table-assistant/`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: item.request, widget_type: item.widget_type, source: this.source }),
-      });
-      if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
-      if ((data.calculated_fields || []).length) {
-        await this.store.addCalculatedFields(this.source, data.calculated_fields);
+      let fields = item.fields;
+      let style = item.style || {};
+      let calculatedFields = item.calculated_fields || [];
+
+      // Si el widget no trae fields ya resueltos (ej. filter), consulta al asistente con IA
+      if (!fields) {
+        const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.store.dashboardId}/table-assistant/`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: item.request, widget_type: item.widget_type, source: this.source }),
+        });
+        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+        fields = data.fields;
+        style = data.style || style;
+        calculatedFields = data.calculated_fields || [];
+      }
+
+      if (calculatedFields.length) {
+        await this.store.addCalculatedFields(this.source, calculatedFields);
       }
       const result = await this.store.createWidgetFromProposal({
         type: item.widget_type,
         source: this.source,
         title: item.title,
-        fields: data.fields,
-        style: data.style,
+        fields,
+        style,
       });
       if (!result.ok) throw new Error(result.error);
     },

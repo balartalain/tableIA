@@ -7,10 +7,12 @@ configura después con `generate_widget_form` (el mismo chat del panel, ya valid
 """
 import json
 import logging
+import re
 
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.services.ai_spec import (SpecGenerationError, capabilities_text, columns_context,
                                              generate_json)
+from sheets_reports.utils.data import is_id_column
 from sheets_reports.widgets import WIDGETS
 
 logger = logging.getLogger(__name__)
@@ -40,6 +42,7 @@ Reglas:
 - request: el pedido en lenguaje natural para configurar ese widget, con los nombres exactos de
   las columnas, la agregación, el agrupamiento, el orden, el límite y las condiciones (ej.
   «suma de ventas por categoria, las 5 más altas»). Sin JSON.
+- Para widget_type "filter": incluye en "columns" la lista de alias de las columnas por las que filtrar (ej. ["col_3", "col_7"]).
 - note: vacío si se pudo todo; si no, qué cambiaste y por qué, en una frase.
 {singletons}
 Pedido del usuario:
@@ -58,6 +61,11 @@ SCHEMA = {
                     "title": {"type": "string"},
                     "description": {"type": "string"},
                     "request": {"type": "string"},
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Solo para widget_type 'filter': lista de alias (ej. col_1, col_2) o columnas a filtrar.",
+                    },
                 },
                 "required": ["widget_type", "title", "description", "request"],
             },
@@ -80,9 +88,10 @@ def _text(value, limit: int) -> str:
     return " ".join(str(value or "").split())[:limit]
 
 
-def clean_plan(raw, existing_types=()) -> dict:
+def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
     """Lo que devolvió la IA, solo con lo que el tablero puede crear: tipos registrados con IA,
     a lo más uno de un tipo único por tablero (ninguno si ya está), título y pedido no vacíos.
+    Para 'filter', si se especifican columnas, se resuelven en `fields.dimensions`.
     Sin widgets → SpecGenerationError."""
     allowed = {w.key: w for w in _widgets()}
     taken = {t for t in existing_types if (allowed.get(t) and allowed[t].max_per_dashboard == 1)}
@@ -101,12 +110,32 @@ def clean_plan(raw, existing_types=()) -> dict:
             if widget.key in taken:
                 continue
             taken.add(widget.key)
-        items.append({
+        entry = {
             "widget_type": widget.key,
             "title": title or widget.label,
             "description": _text(item.get("description"), MAX_TEXT_CHARS),
             "request": request,
-        })
+        }
+        if widget.key == "filter" and ctx is not None:
+            cols = []
+            raw_cols = item.get("columns")
+            if isinstance(raw_cols, list):
+                for c in raw_cols:
+                    field = ctx.field_for(str(c).strip())
+                    if field in ctx.fields and not is_id_column(field) and field not in cols:
+                        cols.append(field)
+            if not cols:
+                for alias in re.findall(r"\bcol_\d+\b", request, re.IGNORECASE):
+                    field = ctx.field_for(alias)
+                    if field in ctx.fields and not is_id_column(field) and field not in cols:
+                        cols.append(field)
+            if not cols:
+                for f in ctx.fields:
+                    if not is_id_column(f) and re.search(r"\b" + re.escape(f) + r"\b", request, re.IGNORECASE) and f not in cols:
+                        cols.append(f)
+            if cols:
+                entry["fields"] = {"dimensions": cols}
+        items.append(entry)
         if len(items) == MAX_ITEMS:
             break
     if not items:
@@ -131,4 +160,4 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=()) -> dict:
     )
     raw = generate_json(contents, SCHEMA)
     logger.info("Plan de tablero con IA: %s", json.dumps(raw, ensure_ascii=False)[:2000])
-    return clean_plan(raw, existing_types)
+    return clean_plan(raw, existing_types, ctx=ctx)

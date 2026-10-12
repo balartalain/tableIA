@@ -19,6 +19,8 @@ function aiBoard() {
     error: '',
     loading: false,
     building: false,
+    // Fila del lienzo de cada fila de la tanda que se está creando: {índice: row_id}.
+    _rowIds: {},
 
     get store() { return Alpine.store('dashboard'); },
     get sources() { return this.store.sources || []; },
@@ -47,39 +49,74 @@ function aiBoard() {
       return (this.store.widgetManifest[type] || {}).label || type;
     },
 
+    _isHeader(item) {
+      const WidgetClass = WidgetRegistry.has(item.widget_type) ? WidgetRegistry.get(item.widget_type) : null;
+      return (WidgetClass && WidgetClass.placement === 'header') || item.widget_type === 'filter';
+    },
+
+    // Orden del tablero: filtros, luego KPI, dona y ranking (los números clave arriba) y después
+    // el resto, cada grupo en el orden que propuso la IA.
     _organizePlanItems(items) {
-      const TOP_TYPES = new Set(['kpi', 'donut', 'ranking']);
-      const mapped = (items || []).map(i => {
-        const WidgetClass = WidgetRegistry.get(i.widget_type);
-        const isHeader = (WidgetClass && WidgetClass.placement === 'header') || i.widget_type === 'filter';
-        const isTop = TOP_TYPES.has(i.widget_type);
+      const TOP_ORDER = ['kpi', 'donut', 'ranking'];
+      const rank = i => {
+        if (this._isHeader(i)) return 0;
+        const top = TOP_ORDER.indexOf(i.widget_type);
+        return top >= 0 ? 1 + top : 1 + TOP_ORDER.length;
+      };
+      return (items || [])
+        .map((i, index) => ({ item: { ...i, include: true, status: '', error: '' }, rank: rank(i), index }))
+        .sort((a, b) => a.rank - b.rank || a.index - b.index)
+        .map(({ item }) => item);
+    },
 
-        let category = 3;
-        let width = 6;
+    // Ancho mínimo con el que un widget entra a una fila; lo que sobre de la fila se reparte.
+    _baseWidth(type) {
+      if (type === 'kpi') return 3;
+      const WidgetClass = WidgetRegistry.has(type) ? WidgetRegistry.get(type) : null;
+      const width = parseInt(((WidgetClass && WidgetClass.defaults.width) || '').match(/col-span-(\d+)/)?.[1] || '6', 10);
+      return Math.min(12, Math.max(2, width));
+    },
 
-        if (isHeader) {
-          category = 1;
-          width = 12;
-        } else if (isTop) {
-          category = 2;
-          width = 4;
-        } else {
-          category = 3;
-          width = 6;
+    // Reparte los widgets en filas de 12 columnas, en orden: cada fila se llena hasta que el
+    // siguiente no cabe y el espacio que sobra se reparte parejo entre los de la fila. Deja en
+    // cada item su `width` y su `_row` (índice de fila dentro de esta tanda).
+    _layoutQueue(queue) {
+      const rows = [];
+      let current = null;
+      queue.filter(i => !this._isHeader(i)).forEach(item => {
+        const width = this._baseWidth(item.widget_type);
+        if (!current || current.used + width > 12) {
+          current = { used: 0, items: [] };
+          rows.push(current);
         }
-
-        return {
-          ...i,
-          width,
-          include: true,
-          status: '',
-          error: '',
-          _category: category,
-        };
+        current.items.push(item);
+        current.used += width;
+        item.width = width;
+        item._row = rows.length - 1;
       });
+      rows.forEach(row => {
+        const spare = 12 - row.used;
+        const each = Math.floor(spare / row.items.length);
+        const extra = spare % row.items.length;
+        row.items.forEach((item, index) => { item.width += each + (index < extra ? 1 : 0); });
+      });
+    },
 
-      mapped.sort((a, b) => a._category - b._category);
-      return mapped.map(({ _category, ...item }) => item);
+    // La fila del lienzo de un item: las filas de la tanda van al final del tablero, en orden
+    // (la primera aprovecha una fila vacía, como la del tablero recién creado).
+    async _rowFor(item) {
+      if (this._isHeader(item)) return null;
+      if (this._rowIds[item._row]) return this._rowIds[item._row];
+      const store = this.store;
+      const taken = new Set(Object.values(this._rowIds));
+      const last = store.rows.length ? store.rows[store.rows.length - 1].id : null;
+      let rowId = last && !taken.has(last) && !store.getRowWidgets(last).length ? last : null;
+      if (!rowId) {
+        rowId = store.addRowBelow(last);
+        await Alpine.nextTick();
+      }
+      this._rowIds[item._row] = rowId;
+      return rowId;
     },
 
     async propose() {
@@ -116,6 +153,8 @@ function aiBoard() {
       queue.forEach(i => { i.status = 'pending'; i.error = ''; });
       this.step = 'build';
       this.building = true;
+      this._layoutQueue(queue);
+      this._rowIds = {};
       for (const item of queue) {
         item.status = 'working';
         try {
@@ -127,6 +166,10 @@ function aiBoard() {
             : e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message;
         }
       }
+      // Si alguno falló, los de su fila ocupan el hueco; una fila sin widgets no queda.
+      const rowIds = Object.values(this._rowIds);
+      await this.store.fillRows(rowIds);
+      rowIds.forEach(id => this.store.removeRow(id));
       this.building = false;
       const done = queue.filter(i => i.status === 'done').length;
       if (!this.open && typeof window.showToast === 'function') {
@@ -160,6 +203,8 @@ function aiBoard() {
         type: item.widget_type,
         source: this.source,
         title: item.title,
+        width: item.width,
+        rowId: await this._rowFor(item),
         fields,
         style,
       });

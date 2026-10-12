@@ -428,13 +428,15 @@ document.addEventListener('alpine:init', () => {
 
     // «Generar con IA»: crea en el servidor un widget ya configurado (la propuesta del
     // asistente) al final del tablero y lo monta. → {ok, error?}
-    async createWidgetFromProposal({ type, source, title, width, fields, style }) {
+    async createWidgetFromProposal({ type, source, title, width, rowId, fields, style }) {
       const WidgetClass = WidgetRegistry.get(type);
       const manifest = this.widgetManifest[type] || {};
       const defaultWStr = WidgetClass?.defaults?.width || 'md:col-span-6';
       const defaultW = width || parseInt(defaultWStr.match(/col-span-(\d+)/)?.[1] || '6', 10);
-      let destRowId = this.rows.find(r => this.canAddWidgetToRow(r.id, defaultW))?.id;
-      if (!destRowId) {
+      const isHeader = WidgetClass?.placement === 'header';
+      let destRowId = (this.rows.some(r => r.id === rowId) && rowId)
+        || this.rows.find(r => this.canAddWidgetToRow(r.id, defaultW))?.id;
+      if (!destRowId && !isHeader) {
         const lastRow = this.rows.length ? this.rows[this.rows.length - 1].id : null;
         destRowId = this.addRowBelow(lastRow);
         if (typeof Alpine !== 'undefined' && Alpine.nextTick) {
@@ -462,6 +464,35 @@ document.addEventListener('alpine:init', () => {
       }
       requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
       return result;
+    },
+
+    // Reparte parejo entre los widgets de cada fila las columnas que le sobran (hasta 12) y
+    // guarda solo la posición: no se recalculan sus datos.
+    async fillRows(rowIds) {
+      const changed = [];
+      (rowIds || []).forEach(rowId => {
+        const widgets = this.getRowWidgets(rowId);
+        const spare = 12 - this.getRowWidth(rowId);
+        if (!widgets.length || spare <= 0) return;
+        const each = Math.floor(spare / widgets.length);
+        const extra = spare % widgets.length;
+        widgets.forEach((w, index) => {
+          const grow = each + (index < extra ? 1 : 0);
+          if (!grow) return;
+          const current = typeof w.position?.w === 'number' ? w.position.w : 6;
+          w.position = { ...(w.position || {}), w: current + grow };
+          w.updateChrome?.();
+          changed.push(w);
+        });
+      });
+      if (!changed.length) return;
+      requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+      await Promise.all(changed.filter(w => w.id > 0).map(w =>
+        fetch(apiUrl(`/api/widget/${w.id}/`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position: w.position }),
+        }).catch(() => null)));
     },
 
     // Crea o guarda según el id: un widget con id local todavía no existe en el servidor.

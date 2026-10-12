@@ -89,9 +89,7 @@
         const wrap = document.createElement('div');
         wrap.className = 'w-56 max-w-full shrink-0';
         wrap.title = filter.label;
-        wrap.innerHTML = `
-          <div class="filter-control"></div>
-          ${filter.truncated ? `<p class="mt-0.5 text-[10px] text-ink/40">Solo las primeras ${filter.options.length.toLocaleString()} opciones</p>` : ''}`;
+        wrap.innerHTML = '<div class="filter-control"></div>';
         container.appendChild(wrap);
         const ele = wrap.querySelector('.filter-control');
         if (filter.type === 'multi_select') this._initMultiSelect(ele, filter);

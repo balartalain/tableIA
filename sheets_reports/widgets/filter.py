@@ -36,7 +36,7 @@ class FilterWidget(BaseWidget):
         # Aquí `dimensions` son las columnas que la caja expone al usuario.
         "dimensions": [0, 50],
         "dimensions_label": "Columnas del filtro",
-        "dimensions_hint": "Columnas que se muestran como controles de filtro.",
+        "dimensions_hint": f"Solo las primeras {MAX_FILTER_VALUES} opciones",
         "pivots": [0, 0],
         "metrics": [0, 0],
         "sort": False,

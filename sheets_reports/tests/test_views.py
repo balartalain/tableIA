@@ -145,7 +145,7 @@ class ViewsTests(TestCase):
                 json.dumps(payload(
                     "dynamic_table", "Ventas por categoría y mes",
                     fields_data=fields(pivots=["mes"], metrics=[agg("cantidad", agg="count")]),
-                    position={"x": 0, "y": 3, "w": 12, "h": 400},
+                    position={"order": 3, "w": 12, "h": 400, "row_id": "row_1"},
                 )),
                 content_type="application/json",
             )
@@ -153,7 +153,7 @@ class ViewsTests(TestCase):
         self.assertEqual(r.status_code, 201, r.content)
         widget = Widget.objects.get(id=r.json()["id"])
         self.assertIsNone(widget.source_prompt)
-        self.assertEqual(widget.position, {"x": 0, "y": 3, "w": 12, "h": 400})
+        self.assertEqual(widget.position, {"order": 3, "w": 12, "h": 400, "row_id": "row_1"})
         headers = {ch["header"] for c in r.json()["data"]["columns"] for ch in c.get("children", [])}
         self.assertEqual(headers, {"Ene", "Feb", "Mar"})
 
@@ -248,7 +248,7 @@ class ViewsTests(TestCase):
         self.assertEqual(table.style, style)
 
     def test_update_position_only_no_recalcula_datos(self, _df):
-        new_pos = {"x": 0, "y": 0, "w": 8, "h": 400}
+        new_pos = {"order": 0, "w": 8, "h": 400, "row_id": "row_1"}
         r = self.client.put(
             f"/api/widget/{self.widget.id}/",
             json.dumps({"position": new_pos}),

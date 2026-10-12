@@ -214,7 +214,7 @@
       this.source_id = raw.source_id ?? null;
       this.title = raw.title || defaults.title;
       this.chart_type = this.constructor.type;
-      this.position = raw.position || { x: 0, y: 0, w: 6, h: 300, row_id: 'row_1' };
+      this.position = raw.position || { order: 0, w: 6, h: 300, row_id: 'row_1' };
       this.fields = raw.fields || BaseWidget.emptyFields();
       this.style = raw.style || {};
       this.data = raw.data || null;
@@ -228,16 +228,15 @@
       this._legendObserver = null;
       this._interactable = null;
       this._readOnly = false;
-      this.order = raw.order ?? 0;
+      this.order = (this.position && typeof this.position.order === 'number') ? this.position.order : 0;
       this.syncLayoutFromPosition();
     }
 
     // El ancho y el alto de la tarjeta salen de `position` (lo único que se guarda).
     syncLayoutFromPosition() {
-      const pos = this.position || { x: 0, y: 0, w: 6, h: 300 };
+      const pos = this.position || { order: 0, w: 6, h: 300 };
       this.width = `md:col-span-${Math.min(12, Math.max(2, pos.w || 6))}`;
       this.height = pos.h || 300;
-      this.startCol = pos.x ? `md:col-start-${Math.min(12, pos.x + 1)}` : '';
     }
 
     static fromServer(w) {
@@ -253,7 +252,7 @@
         type: w.type,
         source_id: w.source_id ?? null,
         title: w.title,
-        position: { x: pos.x || 0, y: pos.y || 0, w: pos.w || 6, h: pos.h || 300, ...(pos.row_id ? { row_id: pos.row_id } : {}) },
+        position: { order: pos.order ?? 0, w: pos.w || 6, h: pos.h || 300, ...(pos.row_id ? { row_id: pos.row_id } : {}) },
         fields: w.fields || BaseWidget.emptyFields(),
         style: w.style || {},
         data: w.data || null,
@@ -285,7 +284,7 @@
 
     buildStandardCardElement() {
       const el = document.createElement('div');
-      el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative group`;
+      el.className = `col-span-12 ${this.width} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative group`;
       el.style.height = this.height + 'px';
       el.style.setProperty('--ghost-span', this._ghostSpanFromWidth());
       el.dataset.widgetId = this.id;
@@ -330,7 +329,7 @@
 
     buildReadOnlyElement() {
       const el = document.createElement('div');
-      el.className = `col-span-12 ${this.width}${this.startCol ? ' ' + this.startCol : ''} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative`;
+      el.className = `col-span-12 ${this.width} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative`;
       el.style.height = this.height + 'px';
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
@@ -367,7 +366,6 @@
 
       Array.from(this.el.classList).filter(c => c.startsWith('col-start-') || c.startsWith('md:col-start-') || c.startsWith('md:col-span-')).forEach(c => this.el.classList.remove(c));
       this.el.classList.add(this.width);
-      if (this.startCol) this.el.classList.add(this.startCol);
       this.el.style.height = this.height + 'px';
       this.el.style.setProperty('--ghost-span', this._ghostSpanFromWidth());
 
@@ -379,12 +377,12 @@
     }
 
     getPosition() {
-      const pos = this.position || { x: 0, y: 0, w: 6, h: 300 };
+      const pos = this.position || { order: 0, w: 6, h: 300, row_id: 'row_1' };
       return {
-        x: pos.x,
-        y: pos.y,
+        order: pos.order ?? 0,
         w: pos.w,
         h: pos.h,
+        row_id: pos.row_id || 'row_1',
       };
     }
 
@@ -545,7 +543,7 @@
     _onResizeMove(event) {
       const target = this.el || event.target;
       if (!target) return;
-      const pos = this.position || { x: 0, y: 0, w: 6, h: 300 };
+      const pos = this.position || { order: 0, w: 6, h: 300, row_id: 'row_1' };
       this.position = pos;
 
       const step = 20;
@@ -557,7 +555,7 @@
 
       const grid = this._singleColumnWidth();
       if (grid) {
-        const cols = Math.max(2, Math.min(12 - (pos.x || 0),
+        const cols = Math.max(2, Math.min(12,
           Math.round((event.rect.width + grid.gap) / (grid.colW + grid.gap))));
         pos.w = cols;
         target.style.width = cols * grid.colW + (cols - 1) * grid.gap + 'px';

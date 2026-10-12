@@ -89,7 +89,7 @@ class PanelTests(StaticLiveServerTestCase):
         return Widget.objects.create(
             dashboard=self.dashboard, source=self.source, type="dynamic_table", title="Tabla",
             fields=widget_fields, style=extra.pop("style", {}),
-            position=extra.pop("position", {"x": 0, "y": 0, "w": 12, "h": 420}), **extra)
+            position=extra.pop("position", {"order": 0, "w": 12, "h": 420, "row_id": "row_1"}), **extra)
 
     def open_editor(self, widget):
         self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")

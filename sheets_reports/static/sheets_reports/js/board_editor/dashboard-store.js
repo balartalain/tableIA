@@ -217,12 +217,15 @@ document.addEventListener('alpine:init', () => {
     },
 
     normalizeWidget(w) {
+      const pos = w.position ? { ...w.position } : { order: 0, w: 6, h: 300, row_id: 'row_1' };
+      delete pos.x;
+      delete pos.y;
       return {
         id: w.id,
         type: w.type,
         source_id: w.source_id ?? null,
         title: w.title || 'Nuevo Widget',
-        position: w.position || { x: 0, y: 0, w: 6, h: 300, row_id: 'row_1' },
+        position: pos,
         fields: { ...EMPTY_FIELDS(), ...(w.fields || {}) },
         style: w.style || {},
         data: w.data || null,
@@ -243,7 +246,7 @@ document.addEventListener('alpine:init', () => {
       this.widgets = data.widgets
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))
         .filter(Boolean)
-        .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+        .sort((a, b) => (a.position?.order ?? 0) - (b.position?.order ?? 0));
       this._initRowsFromWidgets();
       this.boardLoaded = true;
       return Object.fromEntries(data.widgets.map(w => [w.id, w]));
@@ -411,7 +414,7 @@ document.addEventListener('alpine:init', () => {
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
         source_id: this.sources.length ? this.sources[0].id : null,
-        position: { x: 0, y: this.widgets.length, w: defaultW, h: 300, row_id: destRowId },
+        position: { order: this.widgets.length, w: defaultW, h: 300, row_id: destRowId },
         title: manifest.label || 'Nuevo Widget',
         style: { ...(manifest.style_defaults || {}) },
         _dirty: false,
@@ -438,7 +441,7 @@ document.addEventListener('alpine:init', () => {
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
         source_id: source,
-        position: { x: 0, y: this.widgets.length, w: defaultW, h: WidgetClass.defaults.height || 300, row_id: destRowId },
+        position: { order: this.widgets.length, w: defaultW, h: WidgetClass.defaults.height || 300, row_id: destRowId },
         title: title || manifest.label || 'Nuevo Widget',
         fields: { ...EMPTY_FIELDS(), ...(fields || {}) },
         style: { ...(manifest.style_defaults || {}), ...(style || {}) },
@@ -564,8 +567,8 @@ document.addEventListener('alpine:init', () => {
           const id = parseInt(el.dataset.widgetId, 10);
           const w = this.widgets.find(widget => widget.id === id || widget.el === el);
           if (w) {
-            if (w.position?.row_id !== r.id || w.position?.y !== seq) {
-              w.position = { ...(w.position || {}), row_id: r.id, y: seq };
+            if (w.position?.row_id !== r.id || w.position?.order !== seq) {
+              w.position = { ...(w.position || {}), row_id: r.id, order: seq };
               w._dirty = true;
             }
             seq++;
@@ -575,16 +578,6 @@ document.addEventListener('alpine:init', () => {
 
       this.widgets = [...this.widgets];
       this.rows = [...this.rows];
-      this.scheduleLayoutSave();
-    },
-
-    fluidStartColOnDrop(widgetEl) {
-      const id = parseInt(widgetEl.dataset.widgetId);
-      const w = this.widgets.find(w => w.id === id);
-      if (!w || !w.position?.x) return;
-      w.position.x = 0;
-      w._dirty = true;
-      w.updateChrome?.();
       this.scheduleLayoutSave();
     },
 

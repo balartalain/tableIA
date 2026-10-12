@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   store.widgets = data.widgets
     .map(w => BaseWidget.fromServer(w))
     .filter(Boolean)
-    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+    .sort((a, b) => (a.position?.order ?? 0) - (b.position?.order ?? 0));
   const headerEl = document.getElementById('dashboard-filters');
   const rowGrids = {};
   store.widgets.forEach(w => {

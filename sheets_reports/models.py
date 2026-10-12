@@ -3,7 +3,7 @@ from django.db import models
 
 
 def default_position():
-    return {"x": 0, "y": 0, "w": 6, "h": 300}
+    return {"order": 0, "w": 6, "h": 300, "row_id": "row_1"}
 
 
 class Dashboard(models.Model):
@@ -106,7 +106,7 @@ class Widget(models.Model):
     title = models.CharField(max_length=255, default="Nuevo Widget")
     position = models.JSONField(
         default=default_position,
-        help_text="Posición en el lienzo: x = columna inicial (0 = fluido), y = orden, w = columnas (1-12), h = alto en px.",
+        help_text="Posición en el lienzo: order = orden secuencial, w = columnas (1-12), h = alto en px, row_id = fila.",
     )
     
     # Contratos planos del nuevo approach

@@ -46,7 +46,7 @@ from sheets_reports.utils.data import (
 )
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
 from sheets_reports.utils.validation import SpecValidationError
-from sheets_reports.services.widget_service import WidgetService
+from sheets_reports.services.widget_service import WidgetService, clean_position
 
 logger = logging.getLogger(__name__)
 
@@ -1185,7 +1185,7 @@ def widget_detail(request, widget_id):
         )
 
         if is_position_only:
-            widget.position = data["position"]
+            widget.position = clean_position(data["position"], fallback=widget.position)
             widget.save(update_fields=["position", "updated_at"])
             return JsonResponse({
                 **_serialize_widget(widget),

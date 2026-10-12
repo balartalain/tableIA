@@ -22,15 +22,18 @@ logger = logging.getLogger(__name__)
 
 def clean_position(value, fallback=None) -> dict:
     position = dict(fallback or default_position())
+    position.pop("x", None)
+    position.pop("y", None)
     if isinstance(value, dict):
-        for key in ("x", "y", "w", "h"):
+        for key in ("order", "w", "h"):
             if isinstance(value.get(key), (int, float)) and not isinstance(value.get(key), bool):
                 position[key] = int(value[key])
         if "row_id" in value and isinstance(value["row_id"], str) and value["row_id"].strip():
             position["row_id"] = str(value["row_id"]).strip()
-    position["w"] = min(max(position["w"], 2), 12)
-    position["x"] = min(max(position["x"], 0), 12)
-    position["h"] = min(max(position["h"], 100), 3000)
+    position["w"] = min(max(position.get("w", 6), 2), 12)
+    position["h"] = min(max(position.get("h", 300), 100), 3000)
+    position.setdefault("order", 0)
+    position.setdefault("row_id", "row_1")
     return position
 
 

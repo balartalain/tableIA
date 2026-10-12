@@ -378,7 +378,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           } else {
             evt.item.replaceWith(widgetEl);
             store.reorderWidgets();
-            store.fluidStartColOnDrop(widgetEl);
           }
           requestAnimationFrame(() => {
             window.dispatchEvent(new Event('resize'));
@@ -391,7 +390,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       onEnd: function (evt) {
         store.reorderWidgets();
-        store.fluidStartColOnDrop(evt.item);
       },
     });
   }

@@ -139,18 +139,29 @@ class ToTidyTests(SimpleTestCase):
         self.assertEqual(sorted(tidy["_ID"].unique()), ["R1", "R2", "R3", "R4"])
         self.assertEqual(len(tidy), 4)
 
-    def test_valores_de_casillas_son_binarios(self):
+    def test_una_coma_entre_parentesis_no_separa_opciones(self):
+        from sheets_reports.services.form_transform import _split_tokens
+        self.assertEqual(
+            _split_tokens("Investigación, Comunicación (WhatsApp, correo, etc.), Trabajo"),
+            ["Investigación", "Comunicación (WhatsApp, correo, etc.)", "Trabajo"])
+        self.assertEqual(_split_tokens("A [x, y] , B,, C"), ["A [x, y]", "B", "C"])
+        # Un paréntesis sin cerrar no se traga el resto de la celda más allá de lo inevitable.
+        self.assertEqual(_split_tokens("A), B"), ["A)", "B"])
+        self.assertEqual(_split_tokens(None), [])
+
+    def test_las_casillas_valen_si_o_no(self):
         tidy = to_tidy(form_df())
-        self.assertEqual(tidy["Sabores favoritos_Chocolate"].tolist(), [1, 0, 1, 1, 0, 1])
-        self.assertEqual(tidy["Sabores favoritos_Vainilla"].tolist(), [1, 1, 1, 0, 1, 0])
-        self.assertEqual(tidy["Sabores favoritos_Fresa"].tolist(), [0, 0, 1, 0, 1, 0])
+        self.assertEqual(marks(tidy["Sabores favoritos_Chocolate"]), [1, 0, 1, 1, 0, 1])
+        self.assertEqual(marks(tidy["Sabores favoritos_Vainilla"]), [1, 1, 1, 0, 1, 0])
+        self.assertEqual(marks(tidy["Sabores favoritos_Fresa"]), [0, 0, 1, 0, 1, 0])
+        self.assertEqual(set(tidy["Sabores favoritos_Fresa"]), {"Sí", "No"})
 
     def test_opciones_numericas_se_expanden_como_columnas(self):
         tidy = to_tidy(form_df())
         self.assertIn("Puntuación_1", tidy.columns)
         self.assertIn("Puntuación_2", tidy.columns)
         self.assertIn("Puntuación_3", tidy.columns)
-        self.assertEqual(tidy["Puntuación_1"].tolist(), [1, 0, 0, 1, 0, 1])
+        self.assertEqual(marks(tidy["Puntuación_1"]), [1, 0, 0, 1, 0, 1])
 
     def test_grid_se_mantiene_como_columna_ancha(self):
         tidy = to_tidy(form_df())
@@ -163,7 +174,7 @@ class ToTidyTests(SimpleTestCase):
         tidy = to_tidy(form_df())
         self.assertIn("Actividades [Deporte]_Fútbol", tidy.columns)
         self.assertIn("Actividades [Deporte]_Natación", tidy.columns)
-        self.assertEqual(tidy["Actividades [Deporte]_Fútbol"].tolist(), [1, 1, 0, 1, 0, 1])
+        self.assertEqual(marks(tidy["Actividades [Deporte]_Fútbol"]), [1, 1, 0, 1, 0, 1])
 
     def test_texto_libre_con_comas_es_contexto(self):
         tidy = to_tidy(form_df())
@@ -175,13 +186,17 @@ class ToTidyTests(SimpleTestCase):
                          ["2026-10-01 10:00", "2026-10-01 11:00"])
 
 
+def marks(series: pd.Series) -> list:
+    """Una columna de casilla («Sí»/«No») como unos y ceros, para leer los tests de un vistazo."""
+    return [{"Sí": 1, "No": 0}[v] for v in series]
+
+
 def seed_sheet_cache(sheet_id: str, gid: str, raw: pd.DataFrame,
                      headers: bool = True):
-    """Deja la hoja (cruda y con coerción) en el caché, como si se
-    acabara de leer de Google."""
-    entry = {"raw_df": raw, "df": sheets._coerce_numeric_columns(raw.copy()),
-             "fetched_at": now()}
+    """Deja la hoja cruda en el caché, como si se acabara de leer de Google."""
+    entry = {"raw_df": raw, "fetched_at": now()}
     caches["sheets"].set(sheets._cache_key(sheet_id, gid, headers), entry, None)
+    caches["sheets"].set(sheets._stamp_key(sheet_id, gid, headers), entry["fetched_at"], None)
 
 
 @override_settings(CACHES=LOCMEM)
@@ -201,6 +216,48 @@ class TidySourceIntegrationTests(TestCase):
         self.assertIn("Evaluación [Limpieza]", df.columns)
         self.assertEqual(df["_ID"].nunique(), 6)
         self.assertEqual(len(df), 6)
+
+    def test_el_transformado_convierte_los_numeros_despues_de_expandir(self):
+        seed_sheet_cache("form1", "0", form_df())
+        _, source = make_board(self.user, sheet_id="form1", is_form_response=True)
+        df = sheets.load_source(source)
+        self.assertTrue(pd.api.types.is_numeric_dtype(df["Edad"]))
+        # La casilla «1, 2» se expandió como dos opciones antes de convertir: no es el 12.
+        self.assertIn("Puntuación_1", df.columns)
+        self.assertNotIn("Puntuación", df.columns)
+
+    def test_una_casilla_se_agrupa_y_se_cuenta_como_una_pregunta_de_si_o_no(self):
+        from sheets_reports.engine.context import SheetContext
+        from sheets_reports.services.ai_spec import columns_context
+        from sheets_reports.services.sheets import get_field_samples
+        from sheets_reports.tests.fixtures import execute, fields
+        seed_sheet_cache("form1", "0", form_df())
+        _, source = make_board(self.user, sheet_id="form1", is_form_response=True)
+        df = sheets.load_source(source)
+        column = "Sabores favoritos_Chocolate"
+        self.assertFalse(pd.api.types.is_numeric_dtype(df[column]))   # texto: no se suma
+        # Reparto: agrupar por la opción y contar.
+        out = execute(df, fields(dimensions=[column], metrics=[{"agg": "count", "alias": "respuestas"}]))
+        self.assertEqual({row[column]: row["respuestas"] for row in out["data"]}, {"Sí": 4, "No": 2})
+        # Cuántos la marcaron: conteo con la condición «es igual a Sí».
+        out = execute(df, fields(dimensions=[], metrics=[
+            {"agg": "count", "alias": "marcaron", "filters": [{"field": column, "op": "eq", "value": "Sí"}]},
+            {"agg": "count", "alias": "respuestas"}]))
+        self.assertEqual(out["data"]["values"], {"marcaron": 4, "respuestas": 6})
+        # La IA la ve como texto con sus dos valores, escritos una sola vez para todas las opciones.
+        context = columns_context(SheetContext.from_dataframe(df, "0", samples=get_field_samples(df)))
+        self.assertEqual(context.count('["Sí", "No"]'), 1)
+        self.assertIn(f'"{column}" (texto) — valores de ejemplo: los de V', context)
+
+    def test_el_crudo_solo_se_lee_para_derivar(self):
+        seed_sheet_cache("form1", "0", form_df())
+        with mock.patch.object(sheets, "_base", side_effect=sheets._base) as base:
+            sheets.get_transformed_dataframe("form1", "0")
+            sheets.get_sheet_dataframe("form1", "0")
+            self.assertEqual(base.call_count, 2)   # una vez por derivado
+            sheets.get_transformed_dataframe("form1", "0")
+            sheets.get_sheet_dataframe("form1", "0")
+            self.assertEqual(base.call_count, 2)   # ya en caché: el crudo no se toca
 
     def test_fuente_normal_no_se_transforma(self):
         seed_sheet_cache("form1", "0", form_df())

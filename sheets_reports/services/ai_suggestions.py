@@ -11,8 +11,9 @@ import logging
 import pandas as pd
 from django.core.cache import cache
 
-from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS, capabilities_text,
-                                             generate_json, samples_note, shared_samples)
+from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS,
+                                             capabilities_text, generate_json, samples_note,
+                                             shared_samples)
 from sheets_reports.services.sheets import get_field_samples
 from sheets_reports.utils.data import date_fields
 

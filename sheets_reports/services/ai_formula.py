@@ -17,8 +17,9 @@ from sheets_reports.engine.formulas import (
     formula_tree,
     rename_columns,
 )
-from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS, SpecGenerationError,
-                                             generate_json, samples_note, shared_samples)
+from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS,
+                                             SpecGenerationError, generate_json, samples_note,
+                                             shared_samples)
 from sheets_reports.services.sheets import get_field_samples
 from sheets_reports.utils.data import date_fields
 
@@ -87,7 +88,8 @@ def _columns_text(df: pd.DataFrame) -> str:
     lines = []
     for i, column in enumerate(df.columns):
         alias = attr_aliases.get(column) or f"col_{i + 1}"
-        line = f"- {alias}: {json.dumps(str(column), ensure_ascii=False)} ({'numérica' if column in numeric else 'fecha' if column in dates else 'texto'})"
+        kind = "numérica" if column in numeric else "fecha" if column in dates else "texto"
+        line = f"- {alias}: {json.dumps(str(column), ensure_ascii=False)} ({kind})"
         if column == df.attrs.get("submission_field"):
             line += f" — {SUBMISSION_NOTE}"
         line += samples_note(column, samples, refs)

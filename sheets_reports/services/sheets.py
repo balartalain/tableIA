@@ -133,26 +133,85 @@ def _cache_key(sheet_id: str, gid: str, headers: bool) -> str:
     return f"sheet_df:{sheet_id}:{gid}:{int(bool(headers))}"
 
 
-def get_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
-    """La pestaña desde el caché; solo se lee de Google la primera vez (o tras
-    `refresh_sheet`). El caché no vence: los datos cambian cuando el usuario actualiza."""
-    entry = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
-    if entry is None:
-        entry = _store(sheet_id, gid, headers)
-    return entry["df"].copy()
+# Caché de una pestaña (caches["sheets"], no vence). Tres tipos de entrada:
+#   - la base (`_cache_key`): el crudo tal como vino de Google, todo texto, con su ID. Solo se
+#     lee para derivar los otros dos, no en cada petición;
+#   - su fecha de lectura (`…:fetched_at`): pequeña, dice si un derivado sigue vigente;
+#   - los derivados, lo que de verdad usa cada fuente: `…:coerced` (hoja normal, con los
+#     números convertidos) y `…:transformed` (respuestas de formulario: casillas expandidas y
+#     después los números convertidos). Se recalculan solos cuando cambia la fecha de la base.
+_DERIVED_VERSION = 5
 
 
-def refresh_sheet(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
-    """Relee la pestaña de Google y pisa el caché («Actualizar datos»)."""
-    return _store(sheet_id, gid, headers)["df"].copy()
+def _stamp_key(sheet_id: str, gid: str, headers: bool) -> str:
+    return f"{_cache_key(sheet_id, gid, headers)}:fetched_at"
+
+
+def _coerced_cache_key(sheet_id: str, gid: str, headers: bool) -> str:
+    return f"{_cache_key(sheet_id, gid, headers)}:coerced"
+
+
+def _transformed_cache_key(sheet_id: str, gid: str, headers: bool) -> str:
+    return f"{_cache_key(sheet_id, gid, headers)}:transformed"
+
+
+_tidy_cache_key = _transformed_cache_key
 
 
 def _store(sheet_id: str, gid: str, headers: bool) -> dict:
+    """Lee la pestaña de Google y pisa la base; los derivados quedan viejos por su fecha."""
     raw = _with_row_id(fetch_sheet_dataframe(sheet_id, gid, headers, coerce=False))
-    entry = {"raw_df": raw, "df": _coerce_numeric_columns(raw.copy()),
-             "fetched_at": now()}
+    entry = {"raw_df": raw, "fetched_at": now()}
     caches["sheets"].set(_cache_key(sheet_id, gid, headers), entry, None)
+    caches["sheets"].set(_stamp_key(sheet_id, gid, headers), entry["fetched_at"], None)
     return entry
+
+
+def _base(sheet_id: str, gid: str, headers: bool) -> dict:
+    """La entrada base, leyéndola de Google si no está en caché."""
+    entry = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
+    if entry is None or "raw_df" not in entry:  # entradas de antes del crudo
+        entry = _store(sheet_id, gid, headers)
+    return entry
+
+
+def _base_stamp(sheet_id: str, gid: str, headers: bool):
+    """Cuándo se leyó la base, sin cargar su frame (None si no está en caché)."""
+    stamp = caches["sheets"].get(_stamp_key(sheet_id, gid, headers))
+    if stamp is None:
+        entry = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
+        if entry is None or "raw_df" not in entry:
+            return None
+        stamp = entry["fetched_at"]
+        caches["sheets"].set(_stamp_key(sheet_id, gid, headers), stamp, None)
+    return stamp
+
+
+def _derived(key: str, sheet_id: str, gid: str, headers: bool, build) -> pd.DataFrame:
+    """Un frame derivado del crudo (`build(raw)`), desde su caché mientras la base no cambie."""
+    stamp = _base_stamp(sheet_id, gid, headers)
+    entry = caches["sheets"].get(key) if stamp is not None else None
+    if entry is not None and entry.get("version") == _DERIVED_VERSION \
+            and entry.get("base_fetched_at") == stamp:
+        return entry["df"].copy()
+    base = _base(sheet_id, gid, headers)
+    df = build(base["raw_df"].copy())
+    caches["sheets"].set(key, {"df": df, "base_fetched_at": base["fetched_at"],
+                               "version": _DERIVED_VERSION}, None)
+    return df.copy()
+
+
+def get_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
+    """La pestaña con los números convertidos, desde el caché; solo se lee de Google la primera
+    vez (o tras `refresh_sheet`). El caché no vence: los datos cambian cuando el usuario
+    actualiza."""
+    return _derived(_coerced_cache_key(sheet_id, gid, headers), sheet_id, gid, headers,
+                    _coerce_numeric_columns)
+
+
+def refresh_sheet(sheet_id: str, gid: str, headers: bool = True) -> None:
+    """Relee la pestaña de Google y pisa el caché («Actualizar datos»)."""
+    _store(sheet_id, gid, headers)
 
 
 def _with_row_id(df: pd.DataFrame) -> pd.DataFrame:
@@ -169,42 +228,18 @@ def _with_row_id(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_raw_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
-    """La pestaña cruda (sin coerción numérica) desde el caché: para la
-    detección y el tidy de respuestas de formulario."""
-    entry = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
-    if entry is None or "raw_df" not in entry:  # entradas de antes del crudo
-        entry = _store(sheet_id, gid, headers)
-    return entry["raw_df"].copy()
-
-
-def _transformed_cache_key(sheet_id: str, gid: str, headers: bool) -> str:
-    return f"sheet_df:{sheet_id}:{gid}:{int(bool(headers))}:transformed"
-
-
-_tidy_cache_key = _transformed_cache_key
+    """La pestaña cruda (todo texto, sin convertir números) desde el caché: para detectar si es
+    una hoja de respuestas de formulario."""
+    return _base(sheet_id, gid, headers)["raw_df"].copy()
 
 
 def get_transformed_dataframe(sheet_id: str, gid: str, headers: bool = True) -> pd.DataFrame:
-    """El frame transformado de una pestaña de respuestas de formulario
-    (ver services/form_transform.py). En caché aparte — la clasificación
-    es automática y los ajustes de columnas (incluir, tipo, nombre a
-    mostrar) se aplican fuera, con `apply_column_config` — y la
-    coherencia con los datos va por `base_fetched_at`: al «Actualizar
-    datos» (`_store`/`refresh_sheet`) la fecha base cambia y el frame
-    se recalcula solo."""
-    raw = get_raw_sheet_dataframe(sheet_id, gid, headers=headers)
-    base = caches["sheets"].get(_cache_key(sheet_id, gid, headers))
-    key = _transformed_cache_key(sheet_id, gid, headers)
-    entry = caches["sheets"].get(key)
-    if entry is not None and base is not None \
-            and entry.get("base_fetched_at") == base.get("fetched_at"):
-        return entry["df"].copy()
-    transformed = form_transform.transform(raw)
-    caches["sheets"].set(key, {
-        "df": transformed, "fetched_at": now(),
-        "base_fetched_at": base["fetched_at"] if base else now(),
-    }, None)
-    return transformed.copy()
+    """El frame de una pestaña de respuestas de formulario (ver services/form_transform.py):
+    primero se expanden las casillas sobre el crudo —«1, 2» son dos opciones, no un número— y
+    después se convierten los números. En caché aparte; los ajustes de columnas (incluir, tipo,
+    nombre a mostrar) se aplican fuera, con `apply_column_config`."""
+    return _derived(_transformed_cache_key(sheet_id, gid, headers), sheet_id, gid, headers,
+                    lambda raw: _coerce_numeric_columns(form_transform.transform(raw)))
 
 
 get_tidy_dataframe = get_transformed_dataframe
@@ -212,8 +247,7 @@ get_tidy_dataframe = get_transformed_dataframe
 
 def fetched_at(source):
     """Cuándo se leyó de Google la hoja de la fuente (None si todavía no está en caché)."""
-    entry = caches["sheets"].get(_cache_key(source.sheet_id, source.gid, source.first_row_headers))
-    return entry["fetched_at"] if entry else None
+    return _base_stamp(source.sheet_id, source.gid, source.first_row_headers)
 
 
 def load_source(source) -> pd.DataFrame:
@@ -325,7 +359,11 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
     for column in columns:
         name, cast = column.get("name"), _CASTS.get(column.get("type"))
         if name in df.columns and cast and column.get("include", True):
-            df[name] = cast(df[name])
+            converted = cast(df[name])
+            # Un tipo guardado que ya no vale para la columna (ej. «número» sobre una que ahora
+            # trae texto) la dejaría vacía: se ignora y queda como viene de la hoja.
+            if converted.notna().any() or not df[name].notna().any():
+                df[name] = converted
     renames = {c["name"]: column_display_name(c) for c in columns
                if c.get("include", True) and c.get("name") in df.columns
                and column_display_name(c) != c["name"]}

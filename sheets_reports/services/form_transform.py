@@ -29,6 +29,8 @@ BAND_MAX_VOCAB = 50         # …y el vocabulario es pequeño
 QUESTION_TYPES = ("SCALAR", "CHECKBOX", "GRID", "CHECKBOX_GRID", "FREE_TEXT_WITH_COMMAS")
 
 # Columnas que no son preguntas: el identificador de la respuesta.
+# Valor de una opción de casilla en cada respuesta (ver `_expand_checkbox_column`).
+CHECKED, UNCHECKED = "Sí", "No"
 SEPARATOR_DEFAULT = " ["   # «Pregunta [Aspecto]»
 _DUPLICATE_SUFFIX = re.compile(r"\.\d+$")  # pandas: «Eval [A].1» ante encabezados duplicados
 
@@ -36,10 +38,24 @@ _EXCLUDED_COLUMNS = {alias.lower() for alias in ID_ALIASES}
 
 
 def _split_tokens(value) -> list[str]:
-    """Opciones de una celda multi-valor («A, B, C»), sin vacíos; None/NaN → ninguna."""
+    """Opciones de una celda multi-valor («A, B, C»), sin vacíos; None/NaN → ninguna. Una coma
+    dentro de paréntesis o corchetes es parte de la opción («Comunicación (WhatsApp, correo)»),
+    no un separador."""
     if value is None or pd.isna(value):
         return []
-    return [token.strip() for token in re.split(r"\s*,\s*", str(value)) if token.strip()]
+    tokens, current, depth = [], [], 0
+    for char in str(value):
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth = max(depth - 1, 0)
+        if char == "," and depth == 0:
+            tokens.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    tokens.append("".join(current))
+    return [token.strip() for token in tokens if token.strip()]
 
 
 def _clean_header(name: str) -> str:
@@ -167,7 +183,8 @@ def _find_alias(columns, aliases) -> str | None:
 def _expand_checkbox_column(series: pd.Series, col_name: str) -> pd.DataFrame:
     """Para una columna de casillas (CHECKBOX o CHECKBOX_GRID), obtiene los valores
     únicos separados por coma y genera una columna `col_name_valor` por cada uno
-    con valor 1 si fue seleccionado y 0 en otro caso."""
+    con «Sí» si fue seleccionado y «No» en otro caso: una columna de texto, como cualquier
+    pregunta de sí o no (se agrupa por ella y se cuenta; no se suma ni se promedia)."""
     clean_name = _clean_header(col_name)
     tokens_per_cell = [
         _split_tokens(v) if v is not None and not pd.isna(v) else []
@@ -187,7 +204,7 @@ def _expand_checkbox_column(series: pd.Series, col_name: str) -> pd.DataFrame:
     cols = {}
     for token in unique_tokens:
         cols[f"{clean_name}_{token}"] = [
-            1 if token in tokens else 0
+            CHECKED if token in tokens else UNCHECKED
             for tokens in tokens_per_cell
         ]
     return pd.DataFrame(cols, index=series.index)
@@ -197,7 +214,7 @@ def transform(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd
     """Transforma las respuestas de formulario: mantiene el formato ancho (1 fila por respuesta `_ID`),
     conserva las columnas escalares y de cuadrículas simples (`GRID`), y transforma las columnas
     multi-opción (`CHECKBOX` y `CHECKBOX_GRID`) creando una columna por cada valor posible
-    en formato `pregunta_valor` con valor 1 si fue seleccionado y 0 si no."""
+    en formato `pregunta_valor` con «Sí» si fue seleccionado y «No» si no."""
     df = df.copy()
     id_name = find_id_column(df.columns)
     if id_name is None:

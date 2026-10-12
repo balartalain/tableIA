@@ -96,6 +96,12 @@ consulta.
   salvo que el usuario pida expresamente algo sobre cuándo se respondió (ej. "respuestas por
   mes"). Si el pedido compara periodos y no hay otra columna de tiempo, recházalo con
   reject_request explicando que la hoja no tiene una fecha de los datos.
+- En una hoja de respuestas de formulario, una columna «Pregunta_Opción» con valores "Sí"/"No"
+  es una opción de una pregunta de selección múltiple ("Sí" = la marcó). Cuántos la marcaron:
+  agg "count" con filters [{"field": esa columna, "op": "eq", "value": "Sí"}]. Reparto entre
+  Sí y No: esa columna como dimensión y agg "count". Comparar las opciones de una pregunta: una
+  métrica "count" por opción, cada una con su filtro "Sí", sin dimensión. Porcentaje que la
+  marcó en un solo número: campo calculado AVG(IF([col_N] = "Sí", 1, 0)) * 100.
 - La hoja siempre tiene una columna ID (una por fila, de solo lectura): NO la uses como
   dimensión, pivote, columna ni field de una métrica. El Conteo (agg "count" sin field) ya
   cuenta las filas distintas; para contar filas en una fórmula de campo calculado agregado

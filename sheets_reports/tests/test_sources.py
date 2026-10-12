@@ -40,6 +40,13 @@ class ColumnTypesTests(SimpleTestCase):
         df = raw_df()
         self.assertIs(apply_column_config(df, []), df)
 
+    def test_un_tipo_guardado_que_dejaria_la_columna_vacia_se_ignora(self):
+        df = pd.DataFrame({"opcion": ["Sí", "No", "Sí"], "vacia": [None, None, None]})
+        out = apply_column_config(df, [{"name": "opcion", "type": "number", "include": True},
+                                       {"name": "vacia", "type": "number", "include": True}])
+        self.assertEqual(out["opcion"].tolist(), ["Sí", "No", "Sí"])
+        self.assertTrue(out["vacia"].isna().all())
+
     def test_excluye_y_convierte(self):
         df = apply_column_config(raw_df(), [
             {"name": "categoria", "type": "text", "include": False},

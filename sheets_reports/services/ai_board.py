@@ -37,6 +37,8 @@ Reglas:
   área), usa el más parecido y dilo en "note".
 - Cada widget usa columnas reales de la hoja. Si algo del pedido no se puede con estas columnas,
   no lo inventes: dilo en "note".
+- Si una columna está marcada como «fecha y hora en que se envió la respuesta», no es una fecha
+  de los datos: no propongas evolución en el tiempo ni comparación de periodos con ella.
 - title: corto, en español, como lo leería quien ve el tablero (ej. «Ventas por categoría»).
 - description: una frase que explica qué muestra.
 - request: el pedido en lenguaje natural para configurar ese widget, con los nombres exactos de

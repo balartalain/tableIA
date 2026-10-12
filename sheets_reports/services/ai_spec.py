@@ -85,6 +85,12 @@ consulta.
 - trend_by: alias de la columna de TIEMPO (año, mes, fecha) de la mini tendencia (sparkline) bajo el
   número del KPI (ej. "col_1"); nunca una categoría. Solo en widgets con tendencia. Omitir si no
   aplica.
+- En una hoja de respuestas de formulario, la columna marcada como «fecha y hora en que se envió
+  la respuesta» solo dice cuándo se respondió: no es una fecha de los datos. NO la uses como
+  dimensión, trend_by ni en filtros de periodo ("este año", "el año anterior", "el último mes"),
+  salvo que el usuario pida expresamente algo sobre cuándo se respondió (ej. "respuestas por
+  mes"). Si el pedido compara periodos y no hay otra columna de tiempo, recházalo con
+  reject_request explicando que la hoja no tiene una fecha de los datos.
 - La hoja siempre tiene una columna ID (una por fila, de solo lectura): NO la uses como
   dimensión, pivote, columna ni field de una métrica. El Conteo (agg "count" sin field) ya
   cuenta las filas distintas; para contar filas en una fórmula de campo calculado agregado
@@ -617,6 +623,9 @@ def _tools(ctx: SheetContext, widget_type: str | None) -> list[types.Tool]:
 
 FORMAT_LABELS = {"percent": "porcentaje", "currency": "moneda", "progress": "porcentaje"}
 
+# Cómo se le presenta a la IA la columna de envío de un formulario (`submission_field`).
+SUBMISSION_NOTE = "fecha y hora en que se envió la respuesta del formulario: no es una fecha de los datos"
+
 
 def columns_context(ctx: SheetContext) -> str:
     """Las columnas con su alias, tipo y ejemplos, y los campos calculados con su fórmula: así la IA
@@ -628,6 +637,8 @@ def columns_context(ctx: SheetContext) -> str:
         line = f"- {alias}: {json.dumps(field, ensure_ascii=False)} ({kind})"
         if is_id_column(field):
             line += " — columna de sistema: una por fila, de solo lectura"
+        if field == ctx.submission_field:
+            line += f" — {SUBMISSION_NOTE}"
         calculated = ctx.calculated.get(field)
         if calculated and calculated["kind"] == "row":
             line += f" — campo calculado por fila: {calculated['formula']}"

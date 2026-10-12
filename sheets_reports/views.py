@@ -701,10 +701,13 @@ def _draft_frame(source, data: dict):
         df = sheets.get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
     columns = data.get("columns")
     valid_columns = isinstance(columns, list) and columns and not _columns_errors(columns)
-    df = sheets.apply_column_config(df, _clean_columns(columns) if valid_columns else source.columns)
+    config = _clean_columns(columns) if valid_columns else source.columns
+    submission = sheets.submission_field(df, config) if source.is_form_response else None
+    df = sheets.apply_column_config(df, config)
     previous = data.get("calculated_fields") or []
     if _calculated_errors(previous) is None:
         df = apply_calculated_fields(df, _clean_calculated(previous))
+    df.attrs["submission_field"] = submission
     return df
 
 

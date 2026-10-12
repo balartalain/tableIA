@@ -209,6 +209,33 @@ class TidySourceIntegrationTests(TestCase):
         self.assertIn("Sabores favoritos", df.columns)
         self.assertNotIn("Sabores favoritos_Chocolate", df.columns)
 
+    def test_la_columna_de_envio_queda_marcada_para_la_ia(self):
+        from sheets_reports.engine.context import SheetContext
+        from sheets_reports.services.ai_spec import SUBMISSION_NOTE, columns_context
+        from sheets_reports.services.ai_suggestions import _sheet_preview
+        seed_sheet_cache("form1", "0", form_df())
+        _, source = make_board(self.user, sheet_id="form1", is_form_response=True)
+        df = sheets.load_source(source)
+        self.assertEqual(df.attrs["submission_field"], "Marca de tiempo")
+        context = columns_context(SheetContext.from_dataframe(df, "0"))
+        marked = [line for line in context.splitlines() if SUBMISSION_NOTE in line]
+        self.assertEqual(len(marked), 1)
+        self.assertIn('"Marca de tiempo"', marked[0])
+        self.assertIn(f'"Marca de tiempo" ({SUBMISSION_NOTE})', _sheet_preview(df))
+
+        # Con otro nombre a mostrar la sigue; excluida, no hay columna de envío.
+        source.columns = [{"name": "Marca de tiempo", "type": "date", "include": True, "label": "Enviado"}]
+        source.save()
+        self.assertEqual(sheets.load_source(source).attrs["submission_field"], "Enviado")
+        source.columns = [{"name": "Marca de tiempo", "type": "date", "include": False}]
+        source.save()
+        self.assertIsNone(sheets.load_source(source).attrs["submission_field"])
+
+    def test_una_hoja_normal_no_tiene_columna_de_envio(self):
+        seed_sheet_cache("form1", "0", form_df())
+        _, source = make_board(self.user, sheet_id="form1")
+        self.assertIsNone(sheets.load_source(source).attrs.get("submission_field"))
+
     def test_el_tidy_se_cachea_por_pestaña(self):
         seed_sheet_cache("form1", "0", form_df())
         _, source = make_board(self.user, sheet_id="form1", is_form_response=True)

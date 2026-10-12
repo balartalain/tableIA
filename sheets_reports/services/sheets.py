@@ -15,7 +15,7 @@ from django.utils.timezone import now
 
 from sheets_reports.engine.formulas import apply_calculated_fields
 from sheets_reports.services import form_transform
-from sheets_reports.utils.data import find_id_column, time_order, to_key
+from sheets_reports.utils.data import as_dates, find_id_column, is_id_column, time_order, to_key
 
 logger = logging.getLogger(__name__)
 
@@ -229,8 +229,25 @@ def load_source(source) -> pd.DataFrame:
         df = get_transformed_dataframe(source.sheet_id, source.gid, headers=headers)
     else:
         df = get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
-    return apply_calculated_fields(apply_column_config(df, source.columns),
-                                   source.calculated_fields)
+    out = apply_calculated_fields(apply_column_config(df, source.columns),
+                                  source.calculated_fields)
+    if source.is_form_response:
+        out.attrs["submission_field"] = submission_field(df, source.columns)
+    return out
+
+
+def submission_field(df: pd.DataFrame, columns: list[dict] | None) -> str | None:
+    """La columna de una hoja de respuestas de Google Forms que dice cuándo se envió cada
+    respuesta («Marca temporal», «Timestamp»...): la primera de la hoja (sin contar ID), si es
+    de fechas. No es una fecha de los datos: la IA no la usa para comparar periodos. Devuelve su
+    nombre a mostrar según la configuración `columns`; None si no hay o el usuario la excluyó."""
+    first = next((c for c in df.columns if not is_id_column(c)), None)
+    if first is None or as_dates(df[first]) is None:
+        return None
+    config = next((c for c in columns or [] if c.get("name") == first), None)
+    if config is None:
+        return first
+    return column_display_name(config) if config.get("include", True) else None
 
 
 def source_key(source) -> str:

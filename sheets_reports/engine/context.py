@@ -15,6 +15,8 @@ class SheetContext:
     `samples` son valores de ejemplo por columna, solo para el contexto de la IA.
     `date_fields` son las columnas de fechas completas: en ellas «este año» o «este mes» comparan
     el año o el mes de cada fecha.
+    `submission_field` es, en una hoja de respuestas de formulario, la columna con la fecha de
+    envío de cada respuesta: no describe los datos (solo para el contexto de la IA).
     `aggregated_fields` son los campos calculados agregados de la fuente: no son columnas
     (no agrupan ni filtran), solo métricas con agregación «auto».
     `calculated` son todos los campos calculados de la fuente con lo que calculan
@@ -26,6 +28,7 @@ class SheetContext:
     samples: dict = field(default_factory=dict, compare=False)
     time_fields: frozenset[str] = frozenset()
     date_fields: frozenset[str] = frozenset()
+    submission_field: str | None = field(default=None, compare=False)
     aggregated_fields: frozenset[str] = frozenset()
     calculated: dict = field(default_factory=dict, compare=False)
     aliases: dict = field(default_factory=dict, compare=False)
@@ -49,6 +52,7 @@ class SheetContext:
             samples=samples or {},
             time_fields=frozenset(time_fields(df)),
             date_fields=frozenset(date_fields(df)),
+            submission_field=df.attrs.get("submission_field"),
             aggregated_fields=frozenset(aggregated_fields(df)),
             calculated={
                 **{name: {"formula": text, "kind": "row", "format": "number"}

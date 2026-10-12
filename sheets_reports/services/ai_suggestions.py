@@ -11,7 +11,7 @@ import logging
 import pandas as pd
 from django.core.cache import cache
 
-from sheets_reports.services.ai_spec import capabilities_text, generate_json
+from sheets_reports.services.ai_spec import SUBMISSION_NOTE, capabilities_text, generate_json
 from sheets_reports.utils.data import date_fields
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,8 @@ Reglas:
   filas y para compararlo con el total o con otro (ej. «ventas de Hogar frente al total»).
 - Si comparas periodos, di contra cuál (este año frente al anterior, el último mes frente al
   anterior); nunca «variación anual» o «evolución» sin referencia. Solo si la hoja tiene una
-  columna de fecha, de año o de mes: sin ella no propongas comparar periodos.
+  columna de fecha, de año o de mes de los datos: sin ella no propongas comparar periodos ni
+  evolución en el tiempo. La fecha en que se envió la respuesta de un formulario no cuenta.
 {capability_rules}- Sin términos técnicos (KPI, widget, métrica, condición, pivote, alias).
 - Que el widget los pueda representar y que sean distintos entre sí (otra columna u otro
   enfoque).
@@ -48,9 +49,14 @@ def _sheet_preview(df: pd.DataFrame) -> str:
     """Las cabeceras con su tipo y las primeras filas en CSV: lo que la IA ve de la hoja."""
     numeric = set(df.select_dtypes(include="number").columns)
     dates = set(date_fields(df))
-    columns = ", ".join(f"{json.dumps(str(c), ensure_ascii=False)} "
-                        f"({'numérica' if c in numeric else 'fecha' if c in dates else 'texto'})"
-                        for c in df.columns)
+    submission = df.attrs.get("submission_field")
+
+    def kind(c):
+        if c == submission:
+            return SUBMISSION_NOTE
+        return "numérica" if c in numeric else "fecha" if c in dates else "texto"
+
+    columns = ", ".join(f"{json.dumps(str(c), ensure_ascii=False)} ({kind(c)})" for c in df.columns)
     rows = df.head(PREVIEW_ROWS).to_csv(index=False).strip()
     return f"Columnas: {columns}\n\nPrimeras filas:\n{rows}"
 

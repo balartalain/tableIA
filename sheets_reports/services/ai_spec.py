@@ -653,9 +653,39 @@ FORMAT_LABELS = {"percent": "porcentaje", "currency": "moneda", "progress": "por
 SUBMISSION_NOTE = "fecha y hora en que se envió la respuesta del formulario: no es una fecha de los datos"
 
 
+def shared_samples(samples: dict, fields) -> tuple[dict, str]:
+    """Las listas de valores de ejemplo que se repiten en varias columnas (las escalas de un
+    formulario: «Satisfecho», «Insatisfecho»...) se escriben una sola vez, con nombre.
+    → ({columna: nombre de su lista}, el bloque de texto que las define; "" si no hay)."""
+    groups: dict[tuple, list] = {}
+    for field in fields:
+        values = samples.get(field)
+        if values:
+            groups.setdefault(tuple(sorted(map(str, values))), []).append(field)
+    refs, lines = {}, []
+    for columns in groups.values():
+        if len(columns) < 2:
+            continue
+        name = f"V{len(lines) + 1}"
+        lines.append(f"- {name}: {json.dumps(samples[columns[0]], ensure_ascii=False, default=str)}")
+        refs.update(dict.fromkeys(columns, name))
+    block = "Listas de valores que comparten varias columnas:\n" + "\n".join(lines) + "\n\n" if lines else ""
+    return refs, block
+
+
+def samples_note(field, samples: dict, refs: dict) -> str:
+    """Los valores de ejemplo de una columna, o la lista compartida donde están."""
+    if field in refs:
+        return f" — valores de ejemplo: los de {refs[field]}"
+    if samples.get(field):
+        return f" — valores de ejemplo: {json.dumps(samples[field], ensure_ascii=False, default=str)}"
+    return ""
+
+
 def columns_context(ctx: SheetContext) -> str:
     """Las columnas con su alias, tipo y ejemplos, y los campos calculados con su fórmula: así la IA
     sabe qué calcula cada uno aunque su nombre no lo diga."""
+    refs, shared = shared_samples(ctx.samples, ctx.fields)
     lines = []
     for field in ctx.fields:
         alias = ctx.alias_for(field)
@@ -668,10 +698,9 @@ def columns_context(ctx: SheetContext) -> str:
         calculated = ctx.calculated.get(field)
         if calculated and calculated["kind"] == "row":
             line += f" — campo calculado por fila: {calculated['formula']}"
-        if ctx.samples.get(field):
-            line += f" — valores de ejemplo: {json.dumps(ctx.samples[field], ensure_ascii=False)}"
+        line += samples_note(field, ctx.samples, refs)
         lines.append(line)
-    text = "Columnas de la hoja:\n" + "\n".join(lines)
+    text = shared + "Columnas de la hoja:\n" + "\n".join(lines)
     if ctx.aggregated_fields:
         def describe(name):
             info = ctx.calculated.get(name) or {}

@@ -407,6 +407,22 @@ class ToolSchemaTests(SimpleTestCase):
         self.assertNotIn("- bar:", kpi)
         self.assertNotIn("- dynamic_table:", kpi)
 
+    def test_las_listas_de_valores_repetidas_se_escriben_una_vez(self):
+        import pandas as pd
+        from sheets_reports.services.ai_spec import columns_context
+        from sheets_reports.services.sheets import get_field_samples
+        df = pd.DataFrame({
+            "Aulas": ["Satisfecho", "Insatisfecho"], "Biblioteca": ["Insatisfecho", "Satisfecho"],
+            "Sede": ["Norte", "Sur"],
+        })
+        ctx = SheetContext.from_dataframe(df, "0", samples=get_field_samples(df))
+        context = columns_context(ctx)
+        self.assertEqual(context.count('"Satisfecho"'), 1)
+        self.assertIn('- V1: ["Satisfecho", "Insatisfecho"]', context)
+        self.assertIn('"Aulas" (texto) — valores de ejemplo: los de V1', context)
+        self.assertIn('"Biblioteca" (texto) — valores de ejemplo: los de V1', context)
+        self.assertIn('"Sede" (texto) — valores de ejemplo: ["Norte", "Sur"]', context)
+
     def test_sin_tipo_el_estilo_es_objeto_abierto(self):
         params = build_tool_parameters(sales_ctx(), widget_type=None)
         self.assertEqual(params["properties"]["widget_type"]["enum"],

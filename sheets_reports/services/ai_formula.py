@@ -17,7 +17,8 @@ from sheets_reports.engine.formulas import (
     formula_tree,
     rename_columns,
 )
-from sheets_reports.services.ai_spec import SUBMISSION_NOTE, SpecGenerationError, generate_json
+from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, SpecGenerationError, generate_json,
+                                             samples_note, shared_samples)
 from sheets_reports.services.sheets import get_field_samples
 from sheets_reports.utils.data import date_fields
 
@@ -81,6 +82,7 @@ def _columns_text(df: pd.DataFrame) -> str:
     numeric = set(df.select_dtypes(include="number").columns)
     dates = set(date_fields(df))
     samples = get_field_samples(df)
+    refs, shared = shared_samples(samples, df.columns)
     attr_aliases = df.attrs.get("column_aliases") or {}
     lines = []
     for i, column in enumerate(df.columns):
@@ -88,10 +90,9 @@ def _columns_text(df: pd.DataFrame) -> str:
         line = f"- {alias}: {json.dumps(str(column), ensure_ascii=False)} ({'numérica' if column in numeric else 'fecha' if column in dates else 'texto'})"
         if column == df.attrs.get("submission_field"):
             line += f" — {SUBMISSION_NOTE}"
-        if samples.get(column):
-            line += f" — ejemplos: {json.dumps(samples[column], ensure_ascii=False, default=str)}"
+        line += samples_note(column, samples, refs)
         lines.append(line)
-    return "Columnas de la hoja:\n" + "\n".join(lines)
+    return shared + "Columnas de la hoja:\n" + "\n".join(lines)
 
 
 def build_prompt(prompt: str, df: pd.DataFrame) -> str:

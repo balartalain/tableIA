@@ -146,10 +146,9 @@ function aiBoard() {
         await this.store.addCalculatedFields(this.source, data.calculated_fields);
       }
       const result = await this.store.createWidgetFromProposal({
-        type: data.widget_type || item.widget_type,
+        type: item.widget_type,
         source: this.source,
         title: item.title,
-        width: item.width,
         fields: data.fields,
         style: data.style,
       });

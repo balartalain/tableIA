@@ -26,6 +26,8 @@ def clean_position(value, fallback=None) -> dict:
         for key in ("x", "y", "w", "h"):
             if isinstance(value.get(key), (int, float)) and not isinstance(value.get(key), bool):
                 position[key] = int(value[key])
+        if "row_id" in value and isinstance(value["row_id"], str) and value["row_id"].strip():
+            position["row_id"] = str(value["row_id"]).strip()
     position["w"] = min(max(position["w"], 2), 12)
     position["x"] = min(max(position["x"], 0), 12)
     position["h"] = min(max(position["h"], 100), 3000)

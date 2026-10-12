@@ -425,11 +425,15 @@ document.addEventListener('alpine:init', () => {
     async createWidgetFromProposal({ type, source, title, width, fields, style }) {
       const WidgetClass = WidgetRegistry.get(type);
       const manifest = this.widgetManifest[type] || {};
-      const defaultW = width || 6;
+      const defaultWStr = WidgetClass?.defaults?.width || 'md:col-span-6';
+      const defaultW = width || parseInt(defaultWStr.match(/col-span-(\d+)/)?.[1] || '6', 10);
       let destRowId = this.rows.find(r => this.canAddWidgetToRow(r.id, defaultW))?.id;
       if (!destRowId) {
         const lastRow = this.rows.length ? this.rows[this.rows.length - 1].id : null;
         destRowId = this.addRowBelow(lastRow);
+        if (typeof Alpine !== 'undefined' && Alpine.nextTick) {
+          await Alpine.nextTick();
+        }
       }
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,

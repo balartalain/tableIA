@@ -32,7 +32,9 @@ function searchText(text) {
 // directos con [data-type], así los encabezados quedan fijos.
 function renderPalette(sidebarEl) {
   const esc = BaseWidget.escapeHTML;
-  const entries = WidgetRegistry.getPaletteEntries();
+  // Los widgets de la franja superior (filtros) no se arrastran: se crean con «Añadir filtro».
+  const entries = WidgetRegistry.getPaletteEntries()
+    .filter(entry => WidgetRegistry.get(entry.type).placement !== 'header');
   sidebarEl.innerHTML = PALETTE_GROUPS.map(group => {
     const rows = entries.filter(e => (e.category || 'data') === group.id);
     if (!rows.length) return '';
@@ -266,17 +268,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       fallbackTolerance: 3,
       fallbackOnBody: true,
       ...noTextSelection,
-      onAdd: function (evt) {
-        const isNewFromSidebar = !evt.item.hasAttribute('data-widget-id');
-        if (isNewFromSidebar) {
-          const type = evt.item.getAttribute('data-type');
-          if (!type) return;
-          const widget = store.addWidget(type);
-          const widgetEl = widget.mount();
-          evt.item.replaceWith(widgetEl);
-          store.openDrawer(widget.id);
-        }
-      },
     });
   }
   new Sortable(canvasEl, {

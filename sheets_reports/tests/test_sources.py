@@ -225,7 +225,7 @@ class SheetCacheTests(SimpleTestCase):
         caches["sheets"].clear()
 
     def test_la_hoja_queda_en_cache_hasta_actualizar(self):
-        source = mock.Mock(sheet_id="abc", gid="0", first_row_headers=True)
+        source = mock.Mock(sheet_id="abc", gid="0", first_row_headers=True, is_form_response=False)
         with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=sales_df()) as fetch:
             self.assertIsNone(sheets.fetched_at(source))
             sheets.get_sheet_dataframe("abc", "0")
@@ -234,7 +234,8 @@ class SheetCacheTests(SimpleTestCase):
             first = sheets.fetched_at(source)
             self.assertIsNotNone(first)
 
-            sheets.refresh_sheet("abc", "0")
+            refreshed = sheets.refresh_sheet("abc", "0")
+            self.assertEqual(len(refreshed), len(sales_df()))   # devuelve el frame nuevo
             self.assertEqual(fetch.call_count, 2)
             self.assertGreaterEqual(sheets.fetched_at(source), first)
 

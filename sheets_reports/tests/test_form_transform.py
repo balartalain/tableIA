@@ -193,10 +193,10 @@ def marks(series: pd.Series) -> list:
 
 def seed_sheet_cache(sheet_id: str, gid: str, raw: pd.DataFrame,
                      headers: bool = True):
-    """Deja la hoja cruda en el caché, como si se acabara de leer de Google."""
-    entry = {"raw_df": raw, "fetched_at": now()}
-    caches["sheets"].set(sheets._cache_key(sheet_id, gid, headers), entry, None)
-    caches["sheets"].set(sheets._stamp_key(sheet_id, gid, headers), entry["fetched_at"], None)
+    """La hoja que Google devolverá al leerla (cruda, todo texto). El caché solo guarda el
+    frame que usa cada fuente, así que la lectura ocurre en la primera petición. El parche se
+    quita con `mock.patch.stopall` (ver `setUp`)."""
+    mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=raw).start()
 
 
 @override_settings(CACHES=LOCMEM)
@@ -207,6 +207,7 @@ class TidySourceIntegrationTests(TestCase):
         self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.client.force_login(self.user)
         caches["sheets"].clear()
+        self.addCleanup(mock.patch.stopall)
 
     def test_load_source_sirve_el_frame_tidy(self):
         seed_sheet_cache("form1", "0", form_df())
@@ -249,15 +250,32 @@ class TidySourceIntegrationTests(TestCase):
         self.assertEqual(context.count('["Sí", "No"]'), 1)
         self.assertIn(f'"{column}" (texto) — valores de ejemplo: los de V', context)
 
-    def test_el_crudo_solo_se_lee_para_derivar(self):
-        seed_sheet_cache("form1", "0", form_df())
-        with mock.patch.object(sheets, "_base", side_effect=sheets._base) as base:
+    def test_la_hoja_se_lee_de_google_una_vez_por_version(self):
+        with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=form_df()) as fetch:
             sheets.get_transformed_dataframe("form1", "0")
-            sheets.get_sheet_dataframe("form1", "0")
-            self.assertEqual(base.call_count, 2)   # una vez por derivado
             sheets.get_transformed_dataframe("form1", "0")
+            self.assertEqual(fetch.call_count, 1)   # la segunda, del caché
             sheets.get_sheet_dataframe("form1", "0")
-            self.assertEqual(base.call_count, 2)   # ya en caché: el crudo no se toca
+            self.assertEqual(fetch.call_count, 2)   # la hoja original no se guarda
+
+    def test_actualizar_rehace_las_dos_versiones_con_una_lectura(self):
+        normal = mock.Mock(sheet_id="form1", gid="0", first_row_headers=True, is_form_response=False)
+        form = mock.Mock(sheet_id="form1", gid="0", first_row_headers=True, is_form_response=True)
+        with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=form_df()) as fetch:
+            sheets.get_sheet_dataframe("form1", "0")
+            sheets.get_transformed_dataframe("form1", "0")
+            before = sheets.fetched_at(normal)
+            refreshed = sheets.refresh_sheet("form1", "0", form=True)
+            self.assertEqual(fetch.call_count, 3)
+            self.assertIn("Sabores favoritos_Chocolate", refreshed.columns)   # el frame pedido
+            self.assertEqual(sheets.fetched_at(normal), sheets.fetched_at(form))
+            self.assertGreaterEqual(sheets.fetched_at(normal), before)
+
+    def test_actualizar_en_el_selector_con_form_responde_el_transformado(self):
+        with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=form_df()):
+            r = self.client.get("/api/sources/google/spreadsheets/form1/tabs/0/columns/", {"refresh": 1, "form": 1})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIn("Sabores favoritos_Chocolate", [c["name"] for c in r.json()["columns"]])
 
     def test_fuente_normal_no_se_transforma(self):
         seed_sheet_cache("form1", "0", form_df())

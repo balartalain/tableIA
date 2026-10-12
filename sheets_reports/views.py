@@ -397,8 +397,12 @@ def _headers_param(request, default: bool = True) -> bool:
 
 
 def _read_sheet(request, sheet_id: str, gid: str, headers: bool):
-    """La pestaña desde el caché o, con `?refresh=1` («Actualizar datos»), releída de Google."""
-    read = sheets.refresh_sheet if request.GET.get("refresh") else sheets.get_sheet_dataframe
+    """La pestaña desde el caché o, con `?refresh=1` («Actualizar datos»), releída de Google.
+    Con `?form=1` es de respuestas de Google Forms: el frame transformado."""
+    form = bool(request.GET.get("form"))
+    if request.GET.get("refresh"):
+        return sheets.refresh_sheet(sheet_id, gid, headers=headers, form=form)
+    read = sheets.get_transformed_dataframe if form else sheets.get_sheet_dataframe
     return read(sheet_id, gid, headers=headers)
 
 
@@ -410,8 +414,6 @@ def source_columns(request, spreadsheet_id, gid):
     try:
         headers = _headers_param(request)
         df = _read_sheet(request, spreadsheet_id, gid, headers)
-        if request.GET.get("form"):
-            df = sheets.get_transformed_dataframe(spreadsheet_id, gid, headers=headers)
     except SheetError as e:
         return _error(str(e), status=502)
     return JsonResponse({"columns": _sheet_columns(df), "rows": len(df)})
@@ -785,7 +787,8 @@ def source_refresh(request, source_id):
         return _error("Fuente no encontrada", status=404)
     status = google_drive.tab_status(source.sheet_id, source.gid)
     try:
-        sheets.refresh_sheet(source.sheet_id, source.gid, headers=source.first_row_headers)
+        sheets.refresh_sheet(source.sheet_id, source.gid, headers=source.first_row_headers,
+                             form=source.is_form_response)
     except SheetError as e:
         return JsonResponse({"error": str(e), "status": status}, status=502)
     return JsonResponse({**_serialize_source(source), "status": status})

@@ -218,7 +218,7 @@ class SourceChangesTests(TestCase):
         with mock.patch("sheets_reports.services.sheets.refresh_sheet", return_value=sales_df()) as refresh:
             r = self.client.get(f"/api/sources/{self.source.id}/columns/?refresh=1")
         self.assertEqual(r.status_code, 200, r.content)
-        refresh.assert_called_once_with("abc", "0", headers=True)
+        refresh.assert_called_once_with("abc", "0", headers=True, form=False)
         # La estructura actual de la hoja, con lo guardado de las columnas que siguen.
         columns = r.json()["columns"]
         self.assertEqual([c["name"] for c in columns], ["ID", "categoria", "mes", "anio", "ventas"])
@@ -236,7 +236,7 @@ class SourceChangesTests(TestCase):
         with mock.patch("sheets_reports.services.sheets.refresh_sheet", return_value=stock_df()) as refresh:
             r = self.client.get("/api/sources/google/spreadsheets/inv/tabs/3/columns/?refresh=1&headers=0")
         self.assertEqual([c["name"] for c in r.json()["columns"]], ["producto", "stock"])
-        refresh.assert_called_once_with("inv", "3", headers=False)
+        refresh.assert_called_once_with("inv", "3", headers=False, form=False)
 
     def test_eliminar_en_dry_run_lista_sus_widgets(self, _df):
         r = self.client.delete(f"/api/sources/{self.source.id}/?dry_run=1")
@@ -269,7 +269,7 @@ class SourceRefreshAndStatusTests(TestCase):
              mock.patch("sheets_reports.services.google_drive.tab_status", return_value="ok"):
             r = self.client.post(f"/api/sources/{self.source.id}/refresh/")
         self.assertEqual(r.status_code, 200, r.content)
-        refresh.assert_called_once_with("abc", "0", headers=True)
+        refresh.assert_called_once_with("abc", "0", headers=True, form=False)
         self.assertEqual((r.json()["id"], r.json()["status"]), (self.source.id, "ok"))
         with mock.patch("sheets_reports.services.sheets.refresh_sheet", side_effect=SheetError("No se pudo leer la hoja.")), \
              mock.patch("sheets_reports.services.google_drive.tab_status", return_value="no_access"):

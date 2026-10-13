@@ -23,11 +23,11 @@
   <i class="ti ti-database text-base" aria-hidden="true"></i>
   <span class="hidden sm:inline">Gestionar fuente de datos</span>
 </button>
-<button id="email-btn" type="button" aria-label="Envío de correos" title="Envío de correos"
-        x-data x-on:click="$store.bottomSheet.open({ title: 'Envío de correos', view: 'email' }); window.dispatchEvent(new CustomEvent('email-campaign:open'))"
+<button id="email-btn" type="button" aria-label="Configurar envío de correos" title="Configurar envío de correos"
+        x-data x-on:click="$store.bottomSheet.open({ title: 'Configurar envío de correos', view: 'email' }); window.dispatchEvent(new CustomEvent('email-campaign:open'))"
         class="shrink-0 ml-1 bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
   <i class="ti ti-mail text-base" aria-hidden="true"></i>
-  <span class="hidden sm:inline">Correos</span>
+  <span class="hidden sm:inline">Configurar envío de correos</span>
 </button>
 {% else %}
 <span class="px-2 font-sans font-semibold text-sm text-ink">Nuevo tablero</span>

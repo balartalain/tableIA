@@ -100,14 +100,14 @@ del correo:
 
 1. En la cuenta de Google, activar la verificación en dos pasos.
 2. Entrar a <https://myaccount.google.com/apppasswords>, crear una contraseña de aplicación
-   y copiar las 16 letras.
+   y copiar las 16 letras. alain.perez@uapa.edu.do => dwpn vhng yuma ffal
 3. Pegarla en el tablero junto al correo del remitente (con o sin espacios).
 
 La contraseña se guarda cifrada y no vuelve al navegador: el campo aparece vacío, y solo se
 cambia si se escribe otra. Gmail admite unos **500 correos al día por cuenta**; con más
 remitentes se puede subir el máximo diario.
 
-## 3. El tablero (botón «Correos» del editor)
+## 3. El tablero (botón «Configurar envío de correos» del editor)
 
 | Campo | Qué es |
 |---|---|
@@ -253,7 +253,7 @@ De solo lectura, para la vista compartida; responden 404 si el envío no está a
 
 ## 7. Frontend
 
-**Configuración (editor).** El botón «Correos» del header abre el bottom sheet con
+**Configuración (editor).** El botón «Configurar envío de correos» del header abre el bottom sheet con
 `view: 'email'` (el store `bottomSheet` elige entre `'sources'` y `'email'`) y despacha
 `email-campaign:open`. `emailCampaign()` (`email-campaign.js`, `email_campaign.html`) carga
 la configuración y la guarda entera con «Guardar»:

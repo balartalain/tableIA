@@ -394,6 +394,14 @@ de columnas:
 
 - «Usar la primera fila como encabezado» (`?headers=0|1`): sin ella, la fila 1 es un dato y
   las columnas se llaman «Columna A», «Columna B»…
+- **Buscar columna…** (`columnFilter`): filtra las filas de la tabla por el nombre de la
+  columna, sin mayúsculas ni acentos (`matchesColumn`). Oculta las filas con `x-show`, sin
+  quitarlas del `x-for`. Con el buscador activo, la casilla «Incluir» del encabezado actúa
+  solo sobre las columnas a la vista (`shownColumns`).
+- El ancho de la columna «Columna» se ajusta arrastrando el borde derecho de su encabezado
+  (`startNameColumnResize`; flechas con el teclado, doble clic o Inicio para volver al
+  original). Va en la variable CSS `--name-column-width` de la tabla y se recuerda en
+  `localStorage`.
 - Por columna: incluir, **nombre a mostrar** (reemplaza al encabezado en todo el tablero) y tipo.
 - En `edit`, pestaña **Campos calculados**: los campos como fichas (el elegido se arma abajo),
   nombre, el tipo que decide la fórmula («Por fila» / «Agregado») y, en los agregados, formato
@@ -499,7 +507,7 @@ Todas usan `forceFallback: true` + `fallbackOnBody: true` para arrastre consiste
 
 ## Selects con buscador (`x-vselect`)
 
-Todos los `<select>` del editor llevan la directiva `x-vselect` (`vselect.js`), que monta un
+Los `<select>` del editor llevan la directiva `x-vselect` (`vselect.js`), que monta un
 VirtualSelect con caja de búsqueda en su lugar. El select nativo sigue en el DOM, oculto
 (`.vselect-native`), como fuente de verdad: Alpine maneja sus opciones (`x-for`), su valor,
 `disabled` y `x-show`, y la directiva los refleja. Al elegir, pone el valor en el select y
@@ -516,6 +524,9 @@ Con `x-bind:value` (sin `x-model`) la directiva lleva la misma expresión, que e
 avisa de que el valor cambió. La opción de valor vacío («Sin orden», «Todas las filas») viaja
 con un valor centinela, porque VirtualSelect trata el vacío como «nada elegido». Los estilos
 (`.vselect`) están en `base.html`.
+
+La excepción es la tabla de columnas de la fuente (`source_picker.html`): sus selects de
+«Tipo» y «Formato», uno por columna de la hoja, son nativos.
 
 ## Envío de correos
 

@@ -224,24 +224,41 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <p x-show="loadingColumns" class="text-xs text-ink/50">
         <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Leyendo la pestaña…
       </p>
+      <label class="relative ml-auto">
+        <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40 text-sm" aria-hidden="true"></i>
+        <input type="search" x-model="columnFilter" placeholder="Buscar columna…" aria-label="Buscar columna"
+               class="w-56 text-sm border border-line rounded-md pl-8 pr-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+      </label>
       <p x-show="!loadingColumns" class="text-xs text-ink/50">
+        <span x-show="columnFilter.trim()"><span x-text="shownColumns.length"></span> coincidencias ·</span>
         <span x-text="includedCount"></span> de <span x-text="columns.length"></span> columnas ·
         <span x-text="rows.toLocaleString('es')"></span> filas
       </p>
     </div>
 
     <div x-show="columnsTab === 'columns'" class="flex-1 min-h-0 overflow-auto border border-line rounded">
-      <table class="w-full text-sm">
+      <table class="w-full text-sm" x-bind:style="`--name-column-width: ${nameColumnWidth}px`">
         <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
           <tr>
             <th class="px-3 py-2 w-20 font-semibold">
               <label class="inline-flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" class="accent-moss-500" x-bind:checked="includedCount === columns.length"
-                       x-on:change="columns.forEach(c => { if (!c.readonly) c.include = $event.target.checked })">
+                <!-- Con el buscador activo, solo las columnas a la vista. -->
+                <input type="checkbox" class="accent-moss-500"
+                       x-bind:checked="shownColumns.length > 0 && shownColumns.every(c => c.include)"
+                       x-on:change="shownColumns.forEach(c => { if (!c.readonly) c.include = $event.target.checked })">
                 Incluir
               </label>
             </th>
-            <th class="px-3 py-2 font-semibold">Columna</th>
+            <th class="relative px-3 py-2 font-semibold w-[var(--name-column-width)] min-w-[var(--name-column-width)]">
+              Columna
+              <!-- Arrastrar para cambiar el ancho; doble clic lo devuelve al original. -->
+              <span role="separator" aria-orientation="vertical" tabindex="0" aria-label="Ancho de la columna «Columna»"
+                    title="Arrastra para cambiar el ancho (doble clic: ancho original)"
+                    x-bind:aria-valuenow="nameColumnWidth"
+                    x-on:pointerdown="startNameColumnResize($event)" x-on:dblclick="setNameColumnWidth(288)"
+                    x-on:keydown="onNameColumnResizeKey($event)"
+                    class="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r-2 border-line hover:border-moss-500 focus:border-moss-500 focus:outline-none"></span>
+            </th>
             <th class="px-3 py-2 font-semibold" title="Alias interno asignado a la columna">Alias</th>
             <th class="px-3 py-2 font-semibold">Nombre a mostrar</th>
             <th class="px-3 py-2 w-40 font-semibold">Tipo</th>
@@ -251,13 +268,13 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
         </thead>
         <tbody>
           <template x-for="(c, index) in columns" :key="c.name">
-            <tr class="border-t border-line" x-bind:class="c.include ? '' : 'text-ink/40'">
+            <tr x-show="matchesColumn(c)" class="border-t border-line" x-bind:class="c.include ? '' : 'text-ink/40'">
               <td class="px-3 py-2">
                 <!-- ID: columna de sistema, de solo lectura (siempre incluida). -->
                 <input type="checkbox" x-model="c.include" class="accent-moss-500"
                        x-bind:disabled="c.readonly" x-bind:aria-label="`Incluir ${c.name}`">
               </td>
-              <td class="px-3 py-2 font-medium max-w-[18rem] truncate" x-text="c.name" x-bind:title="c.name"></td>
+              <td class="px-3 py-2 font-medium max-w-[var(--name-column-width)] truncate" x-text="c.name" x-bind:title="c.name"></td>
               <td class="px-3 py-2 font-mono text-xs text-ink/60">
                 <code class="bg-paper border border-line px-1.5 py-0.5 rounded text-[11px]" x-text="c.alias || `col_${index + 1}`" x-bind:title="`Alias interno: ${c.alias || 'col_' + (index + 1)}`"></code>
               </td>
@@ -268,7 +285,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                        class="w-full min-w-[10rem] text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
               </td>
               <td class="px-3 py-2">
-                <select x-vselect x-model="c.type" x-bind:disabled="!c.include || c.readonly" x-bind:aria-label="`Tipo de ${c.name}`"
+                <select x-model="c.type" x-bind:disabled="!c.include || c.readonly" x-bind:aria-label="`Tipo de ${c.name}`"
                         class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
                   <template x-for="t in TYPES" :key="t.value">
                     <option x-bind:value="t.value" x-text="t.label" x-bind:selected="c.type === t.value"></option>
@@ -277,7 +294,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               </td>
               <td class="px-3 py-2">
                 <!-- Solo las numéricas: todas las métricas que las suman, promedian… lo heredan. -->
-                <select x-vselect x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include || c.readonly"
+                <select x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include || c.readonly"
                         x-bind:aria-label="`Formato de ${c.name}`"
                         class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
                   <template x-for="f in FORMATS" :key="f.value">
@@ -289,6 +306,9 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               <td class="px-3 py-2 text-xs text-ink/50 truncate max-w-[20rem]" x-text="c.samples.join(' · ')"></td>
             </tr>
           </template>
+          <tr x-show="columns.length && !shownColumns.length" x-cloak class="border-t border-line">
+            <td colspan="7" class="px-3 py-6 text-center text-sm text-ink/50">Ninguna columna coincide con la búsqueda.</td>
+          </tr>
         </tbody>
       </table>
     </div>

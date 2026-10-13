@@ -33,6 +33,20 @@ function timeAgoLabel(iso) {
   return iso ? `Actualizado ${timeAgo(iso)}` : '';
 }
 
+// Ancho (px) de la columna «Columna» de la tabla de columnas: lo ajusta el usuario arrastrando
+// el borde del encabezado y se recuerda en este navegador.
+const NAME_COLUMN_STORAGE_KEY = 'tableia:source-name-column-width';
+const NAME_COLUMN_WIDTH = { default: 288, min: 160, max: 960, step: 24 };
+
+function storedNameColumnWidth() {
+  try {
+    const width = Number(localStorage.getItem(NAME_COLUMN_STORAGE_KEY));
+    return width >= NAME_COLUMN_WIDTH.min && width <= NAME_COLUMN_WIDTH.max ? width : NAME_COLUMN_WIDTH.default;
+  } catch (e) {
+    return NAME_COLUMN_WIDTH.default;
+  }
+}
+
 function sourcePicker({ mode = 'create' } = {}) {
   return {
     mode,
@@ -88,6 +102,9 @@ function sourcePicker({ mode = 'create' } = {}) {
     _editSnapshot: null,
     // Pestaña del paso de columnas al editar: 'columns' | 'calculated'.
     columnsTab: 'columns',
+    // Lo escrito en «Buscar columna…»: filtra las filas de la tabla por el nombre de la columna.
+    columnFilter: '',
+    nameColumnWidth: storedNameColumnWidth(),
     // Campos calculados: {id, name, formula, format} + su árbol de bloques (_tree; _unreadable
     // si la fórmula guardada no se pudo leer; _rev cuenta sus cambios) y el estado de la vista
     // previa (_kind 'row'|'aggregated', _values, _error, _checking). Al servidor va el árbol
@@ -125,6 +142,46 @@ function sourcePicker({ mode = 'create' } = {}) {
       return this.columns.filter(c => c.include).length;
     },
 
+    // La columna pasa el buscador: su nombre contiene lo escrito, sin mayúsculas ni acentos.
+    matchesColumn(c) {
+      const query = searchText(this.columnFilter);
+      return !query || searchText(c.name).includes(query);
+    },
+
+    get shownColumns() {
+      return this.columns.filter(c => this.matchesColumn(c));
+    },
+
+    // Fija el ancho de la columna «Columna» dentro de sus límites y lo recuerda.
+    setNameColumnWidth(width) {
+      this.nameColumnWidth = Math.round(Math.min(NAME_COLUMN_WIDTH.max, Math.max(NAME_COLUMN_WIDTH.min, width)));
+      try { localStorage.setItem(NAME_COLUMN_STORAGE_KEY, String(this.nameColumnWidth)); } catch (e) {}
+    },
+
+    // Arrastrar el borde del encabezado «Columna» cambia su ancho.
+    startNameColumnResize(event) {
+      const startX = event.clientX;
+      const startWidth = this.nameColumnWidth;
+      const move = (e) => this.setNameColumnWidth(startWidth + e.clientX - startX);
+      const stop = () => {
+        window.removeEventListener('pointermove', move);
+        document.body.classList.remove('select-none', 'cursor-col-resize');
+      };
+      event.preventDefault();
+      document.body.classList.add('select-none', 'cursor-col-resize');
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', stop, { once: true });
+    },
+
+    // Con el teclado: flechas para ajustar e Inicio para volver al ancho original.
+    onNameColumnResizeKey(event) {
+      const delta = { ArrowLeft: -NAME_COLUMN_WIDTH.step, ArrowRight: NAME_COLUMN_WIDTH.step }[event.key];
+      if (delta) this.setNameColumnWidth(this.nameColumnWidth + delta);
+      else if (event.key === 'Home') this.setNameColumnWidth(NAME_COLUMN_WIDTH.default);
+      else return;
+      event.preventDefault();
+    },
+
     get canSubmit() {
       return this.includedCount > 0 && (this.mode !== 'create' || this.name.trim() !== '');
     },
@@ -149,7 +206,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         sourceName: source ? source.name || '' : '',
         headers: source ? source.first_row_headers !== false : true, impact: null,
         refreshing: false, dataRefreshed: false, refreshedAt: source ? source.refreshed_at : null,
-        columnsTab: 'columns', helpOpen: false, replaceFromList: changeSheet,
+        columnsTab: 'columns', columnFilter: '', helpOpen: false, replaceFromList: changeSheet,
         // Al editar no se elige la hoja: el flag guardado es el que se
         // conserva (y se reenvía al guardar). Al cambiarla se vuelve a preguntar.
         formQuestion: source && mode === 'edit' ? !!source.is_form_response : null,
@@ -227,7 +284,7 @@ function sourcePicker({ mode = 'create' } = {}) {
     changeSheet() {
       this._editSnapshot = { columns: this.columns, rows: this.rows, headers: this.headers,
                               formQuestion: this.formQuestion };
-      Object.assign(this, { mode: 'replace', step: 'source', impact: null, createError: '', columnsTab: 'columns',
+      Object.assign(this, { mode: 'replace', step: 'source', impact: null, createError: '', columnsTab: 'columns', columnFilter: '',
                             spreadsheet: null, tabs: [], tab: null, formQuestion: null });
       if (!this.source) this.selectSource('google');
     },

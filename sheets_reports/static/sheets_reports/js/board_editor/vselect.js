@@ -46,6 +46,18 @@ document.addEventListener('alpine:init', () => {
     let signature = '';
     let frame = null;
 
+    // VirtualSelect enfoca su caja al fijar un valor; al sincronizar eso movería el foco y el
+    // scroll de la página (una tabla con cientos de selects quedaba desplazada al final).
+    const setValueQuietly = (value) => {
+      const wrapper = mount.querySelector('.vscomp-ele-wrapper');
+      if (wrapper) wrapper.focus = () => {};
+      try {
+        mount.setValue(value, true);
+      } finally {
+        if (wrapper) delete wrapper.focus;
+      }
+    };
+
     // Lleva al VirtualSelect lo que tenga ahora el select: opciones, valor, disabled y x-show.
     const refresh = () => {
       frame = null;
@@ -59,7 +71,7 @@ document.addEventListener('alpine:init', () => {
           mount.setOptions(options, true);
         }
         const value = el.selectedIndex < 0 ? '' : toVs(el.value);
-        if (mount.value !== value) mount.setValue(value, true);
+        if (mount.value !== value) setValueQuietly(value);
         if (el.disabled) mount.disable(); else mount.enable();
         mount.style.display = el.style.display === 'none' ? 'none' : '';
       } finally {

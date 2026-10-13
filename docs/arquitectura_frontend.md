@@ -498,34 +498,7 @@ Todas usan `forceFallback: true` + `fallbackOnBody: true` para arrastre consiste
 
 ## Envío de correos
 
-**Configuración (editor).** El botón «Correos» del header abre el bottom sheet con
-`view: 'email'` (el store `bottomSheet` elige entre `'sources'` y `'email'`) y despacha
-`email-campaign:open`. `emailCampaign()` (`email-campaign.js`, `email_campaign.html`) carga
-la configuración y la guarda entera con «Guardar»:
-
-- **Destinatarios:** «Cargar CSV» sube el archivo y muestra cuántos se agregaron, cuántos ya
-  estaban y cuáles no son un correo. «Vaciar lista» pide confirmación.
-- **Remitentes:** correo y contraseña de aplicación. Una contraseña ya guardada no vuelve al
-  navegador: el campo queda vacío y solo se envía si se escribe otra.
-- **Programación:** máximo de correos al día, tamaño del lote por remitente, frecuencia
-  (todos los días o días de la semana) y hora. Muestra el próximo envío que calcula el servidor.
-- **Mensaje:** asunto y cuerpo. «Enviar prueba» guarda lo escrito y manda el mensaje a la
-  dirección indicada.
-- **Activar el envío:** el servidor lo rechaza si falta el mensaje, un remitente o los
-  destinatarios.
-
-**Reporte (vista compartida).** Con el envío activado, `board_view.html` trae las pestañas
-«Gráficas» y «Correos» y carga `email-report.js`. La pestaña activa va en el hash
-(`#correos`). Al volver a «Gráficas» se despacha `resize` para que los gráficos tomen su
-ancho. La pestaña «Correos» tiene:
-
-- el KPI de notificados (enviados de total, pendientes, con error y próximo envío);
-- la tabla de destinatarios y la del registro de envíos, las dos con paginación remota.
-
-**Aviso de novedades.** No hay websocket: mientras la pestaña «Correos» está a la vista, la
-página pide cada 10 s `GET /email-report/` (unos conteos). Si cambian los totales o
-`last_log_id`, actualiza el KPI y vuelve a pedir las dos tablas. Con el documento oculto no
-consulta, y al volver consulta de inmediato.
+El envío de correos está documentado en [`configuracion_correos.md`](configuracion_correos.md).
 
 ## apiUrl y despliegue
 

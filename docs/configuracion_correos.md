@@ -1,9 +1,9 @@
 # Configuración del envío de correos
 
 Cada tablero puede enviar un mensaje a una lista de destinatarios. Cada destinatario lo
-recibe **una sola vez**; el envío se reparte en lotes y, si hace falta, en varios días. El
-detalle técnico está en [`arquitectura_backend.md`](arquitectura_backend.md) §11 y
-[`arquitectura_frontend.md`](arquitectura_frontend.md) («Envío de correos»).
+recibe **una sola vez**; el envío se reparte en lotes y, si hace falta, en varios días. Este
+es el único documento del envío de correos: las secciones 1 a 5 son la guía de uso y las
+secciones 6 y 7, el detalle técnico.
 
 ## 1. Servidor
 
@@ -105,8 +105,143 @@ Lo que pasa cuando algo falla:
 
 ## 5. Seguimiento
 
-Con el envío activado, la vista compartida del tablero tiene la pestaña **«Correos»**:
-notificados, pendientes, con error y próximo envío, la tabla de destinatarios y el registro
-de envíos (inicio, cada lote, cada error y el resumen). Se actualiza sola cada 10 segundos.
+Con el envío activado, la vista compartida del tablero tiene la pestaña **«Correos»**, que se
+actualiza sola cada 10 segundos:
+
+| Pieza | Qué responde |
+|---|---|
+| **Franja de estado** | ¿En qué está el envío? «Enviando ahora» (con cuántos van de hoy), «Próximo envío», «El envío de hoy terminó antes de llegar al máximo» (con el último error) o «Envío completado». |
+| **Notificados** | ¿Cuánto falta? Total notificado, barra con notificados, pendientes y fallidos, y la fecha aproximada en que termina. |
+| **Enviados por día** | ¿Va al ritmo esperado? Una barra por día y la línea del máximo diario; una barra corta es un día que no llegó al máximo. |
+| **Remitentes** | ¿Qué cuenta falla? Por cuenta: enviados hoy, en total, errores y el último error. |
+| **Errores por motivo** | ¿Por qué falla? Los errores agrupados y contados: distingue direcciones que no existen de un problema de la cuenta. |
+| **Destinatarios** | ¿Qué pasó con una persona? Estado, fecha, remitente y error de cada correo. |
+| **Registro de envíos** | El detalle cronológico (inicio, cada lote, cada error, resumen). Está plegado: se despliega al hacer clic. |
+
+«Terminó antes de llegar al máximo» significa que quedaron pendientes sin enviar hoy: o
+ningún remitente pudo enviar (revisar «Remitentes»), o los que quedan fallaron y se
+reintentan el próximo día de envío.
+
 En el admin de Django están los mismos datos (`Envíos de correos`, `Destinatarios`, `Logs de
 correos`).
+
+## 6. Backend (`services/mailing.py`, `views_email.py`)
+
+### 6.1 Modelos
+
+| Modelo | Qué guarda |
+|---|---|
+| `EmailCampaign` | Uno por tablero (`dashboard.email_campaign`): `enabled`, `subject`, `body`, `daily_limit` (máximo de correos al día), `batch_size` (correos por remitente en cada lote), `frequency` (`daily` \| `weekly`), `send_time`, `weekdays` (0 = lunes … 6 = domingo, solo en `weekly`), `last_run_on` (día local cerrado: ese día ya no se envía más) y `running_since` (hay un lote en curso). |
+| `EmailSender` | Cuenta de Gmail que envía: `email` y `password_encrypted` (su contraseña de aplicación, cifrada). |
+| `EmailRecipient` | Destinatario: `email`, `status` (`pending` \| `sent` \| `failed`), `attempts`, `sent_at`, `sender_email` y `error`. |
+| `EmailLog` | Bitácora: `created_at`, `level` (`info` \| `error`), `message`, `recipient_email`, `sender_email`. |
+
+### 6.2 Servicio (`services/mailing.py`)
+
+- **Contraseñas:** `encrypt_password` / `decrypt_password` (Fernet con `EMAIL_ENCRYPTION_KEY`
+  o, sin ella, una clave derivada de `SECRET_KEY`). Nunca se devuelven al navegador.
+- **`parse_recipients_csv(content)`** → `(válidos, inválidos)`: de cada fila, la primera celda
+  que es un correo; en minúsculas y sin repetir. Una primera fila sin correo es el encabezado.
+- **`is_due(campaign, now)`**: activada, con pendientes, hoy es día de envío, ya pasó
+  `send_time`, el día no está cerrado (`last_run_on`) y queda cupo de `daily_limit`. La hora
+  y el día son de `CAMPAIGN_TIME_ZONE`. Un cron atrasado la ejecuta igual; `next_run` da la
+  próxima fecha (ahora mismo si el envío de hoy quedó sin terminar).
+- **`run_campaign(campaign, now, force)`** hace **el envío del día**, en lotes:
+  1. Toma el candado con un `update` condicionado sobre `running_since`: de dos crons
+     solapados, solo uno sigue (el otro recibe `None`). El envío renueva el candado en cada
+     lote; uno de más de `LOCK_STALE` (10 min) es de un proceso que murió y no bloquea. Con
+     el día cerrado también devuelve `None`, salvo `force`.
+  2. Cada lote: cupo = el menor entre `daily_limit` − enviados hoy y `batch_size` ×
+     remitentes; toma esa cantidad de pendientes y los reparte en ronda entre los remitentes
+     con contraseña (a lo sumo `batch_size` cada uno). Cada remitente envía los suyos por
+     una conexión SMTP (`CAMPAIGN_SMTP_HOST`/`PORT`, TLS).
+  3. Entre un lote y el siguiente espera `BATCH_PAUSE_S` (60 s, fijo en el código). Sigue
+     hasta llegar al máximo del día, quedarse sin pendientes o sin remitentes, o cambiar el
+     día.
+  4. Un destinatario que falla suma un intento y sigue pendiente, pero no se reintenta en
+     la misma ejecución sino el próximo día de envío; al tercero (`MAX_ATTEMPTS`) queda
+     `failed`. Si falla el remitente (no inicia sesión, se desconecta, el servidor lo
+     rechaza), no se usa más en esa ejecución y sus destinatarios quedan pendientes, sin
+     sumar intentos, para los demás remitentes.
+  5. Al terminar cierra el día (`last_run_on`). Si el proceso se corta a medias el día
+     queda abierto: la siguiente pasada del cron retoma cuando el candado vence.
+  6. Deja en `EmailLog` el inicio, cada lote, cada error y el resumen.
+- **`send_test(campaign, to)`**: el mensaje a una dirección, con el primer remitente.
+- **`report_summary(campaign)`** (lo que se consulta cada pocos segundos): `state`
+  (`running`: hay un envío en curso · `done`: sin pendientes · `stopped`: el día se cerró
+  antes del máximo y quedan pendientes · `scheduled`: espera su próxima ejecución), totales
+  por estado, `sent_today`, `daily_limit`, `last_log_id`, `next_run`, `estimated_end` (el día
+  en que se acaban los pendientes al ritmo del máximo diario) y `last_error` (el último error
+  de hoy).
+- **`report_stats(campaign)`** (se pide cuando hay novedades): `by_day` (enviados por día
+  local, últimos `STATS_DAYS`), `by_sender` (por remitente: enviados hoy y en total, errores
+  y último error; incluye los configurados sin envíos y los quitados que enviaron) y
+  `errors` (los `STATS_ERRORS` motivos más frecuentes, juntando los intentos del mismo).
+
+### 6.3 Comando y crontab
+
+`manage.py send_campaign_emails` recorre los envíos activados y ejecuta los que `is_due`.
+El cron solo dispara el arranque: el ritmo de los lotes lo lleva `run_campaign`, así que el
+comando puede durar varios minutos.
+`--campaign <id>` limita a uno y `--force` ignora el horario (para probar). La línea del crontab está en §1.
+
+### 6.4 Endpoints (`views_email.py`)
+
+Del dueño del tablero:
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /api/dashboard/{id}/email-campaign/` | La configuración, los remitentes (`email`, `has_password`) y `report`. Sin envío guardado, los valores por defecto. |
+| `PUT /api/dashboard/{id}/email-campaign/` | Guarda. Un remitente sin `password` conserva la suya; el que no viene se quita. Para activar exige asunto, cuerpo, un remitente y destinatarios. Guardar reabre el día (`last_run_on = None`). |
+| `POST /api/dashboard/{id}/email-campaign/recipients/` | CSV (`file`, multipart) → `{added, duplicates, invalid, invalid_count}`. Los que ya estaban conservan su estado. |
+| `DELETE /api/dashboard/{id}/email-campaign/recipients/` | Vacía la lista y desactiva el envío. |
+| `POST /api/dashboard/{id}/email-campaign/test/` | `{to}` → envía la prueba. |
+
+De solo lectura, para la vista compartida; responden 404 si el envío no está activado:
+
+| Ruta | Qué devuelve |
+|---|---|
+| `GET /api/dashboard/{id}/email-report/` | `report_summary`: lo que la página consulta cada pocos segundos. |
+| `GET /api/dashboard/{id}/email-report/stats/` | `report_stats`: enviados por día, por remitente y errores por motivo. |
+| `GET /api/dashboard/{id}/email-report/recipients/?page&size&status` | Destinatarios paginados: `{rows, total_rows, last_page}`. |
+| `GET /api/dashboard/{id}/email-report/logs/?page&size` | Bitácora paginada, lo más reciente primero. |
+
+`board_view` pasa `email_enabled` a su template.
+
+## 7. Frontend
+
+**Configuración (editor).** El botón «Correos» del header abre el bottom sheet con
+`view: 'email'` (el store `bottomSheet` elige entre `'sources'` y `'email'`) y despacha
+`email-campaign:open`. `emailCampaign()` (`email-campaign.js`, `email_campaign.html`) carga
+la configuración y la guarda entera con «Guardar»:
+
+- **Destinatarios:** «Cargar CSV» sube el archivo y muestra cuántos se agregaron, cuántos ya
+  estaban y cuáles no son un correo. «Vaciar lista» pide confirmación.
+- **Remitentes:** correo y contraseña de aplicación. Una contraseña ya guardada no vuelve al
+  navegador: el campo queda vacío y solo se envía si se escribe otra.
+- **Programación:** máximo de correos al día, tamaño del lote por remitente, frecuencia
+  (todos los días o días de la semana) y hora. Muestra el próximo envío que calcula el servidor.
+- **Mensaje:** asunto y cuerpo. «Enviar prueba» guarda lo escrito y manda el mensaje a la
+  dirección indicada.
+- **Activar el envío:** el servidor lo rechaza si falta el mensaje, un remitente o los
+  destinatarios.
+
+**Reporte (vista compartida).** Con el envío activado, `board_view.html` trae las pestañas
+«Gráficas» y «Correos» y carga `email-report.js`. La pestaña activa va en el hash
+(`#correos`). Al volver a «Gráficas» se despacha `resize` para que los gráficos tomen su
+ancho. La pestaña «Correos» tiene:
+
+- la franja de estado (`state` del reporte): enviando ahora, próximo envío, terminó antes
+  del máximo (con el último error) o completado;
+- «Notificados»: el total, una barra de avance (notificados, pendientes, fallidos) y la
+  fecha estimada de fin;
+- «Enviados por día»: barras (ApexCharts) con la línea del máximo diario;
+- «Remitentes» y «Errores por motivo»: tablas cortas (Tabulator, datos locales);
+- la tabla de destinatarios, con paginación remota;
+- el registro de envíos, plegado (`<details>`): su tabla se crea al desplegarlo.
+
+**Aviso de novedades.** No hay websocket: mientras la pestaña «Correos» está a la vista, la
+página pide cada 10 s `GET /email-report/` (unos conteos). Si cambian los totales o
+`last_log_id`, actualiza la franja y el avance, pide `GET /email-report/stats/` (gráfico,
+remitentes, errores) y vuelve a pedir las tablas paginadas. Con el documento oculto no
+consulta, y al volver consulta de inmediato.

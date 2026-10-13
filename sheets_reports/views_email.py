@@ -249,6 +249,16 @@ def email_report(request, dashboard_id):
 
 
 @require_http_methods(["GET"])
+def email_report_stats(request, dashboard_id):
+    """Enviados por día, detalle por remitente y errores por motivo: la pestaña «Correos» lo
+    pide al abrirse y cada vez que cambian los totales."""
+    campaign = _enabled_campaign(dashboard_id)
+    if not campaign:
+        return _error("Este tablero no tiene el envío de correos activado.", status=404)
+    return JsonResponse(mailing.report_stats(campaign))
+
+
+@require_http_methods(["GET"])
 def email_report_recipients(request, dashboard_id):
     campaign = _enabled_campaign(dashboard_id)
     if not campaign:

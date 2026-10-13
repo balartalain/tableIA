@@ -23,6 +23,8 @@ urlpatterns = [
          name='email_recipients'),
     path('api/dashboard/<int:dashboard_id>/email-campaign/test/', views_email.email_test, name='email_test'),
     path('api/dashboard/<int:dashboard_id>/email-report/', views_email.email_report, name='email_report'),
+    path('api/dashboard/<int:dashboard_id>/email-report/stats/', views_email.email_report_stats,
+         name='email_report_stats'),
     path('api/dashboard/<int:dashboard_id>/email-report/recipients/', views_email.email_report_recipients,
          name='email_report_recipients'),
     path('api/dashboard/<int:dashboard_id>/email-report/logs/', views_email.email_report_logs,

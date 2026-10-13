@@ -51,25 +51,55 @@
 {% if email_enabled %}
 <div id="tab-emails" class="mx-auto p-6 space-y-6 hidden">
   <p id="email-report-error" role="alert" class="hidden text-sm text-red-600"></p>
+  <!-- En qué está el envío -->
+  <div id="email-status" role="status" class="flex items-start gap-3 border border-line rounded bg-white p-4">
+    <i id="email-status-icon" class="ti ti-clock text-xl text-ink/50" aria-hidden="true"></i>
+    <div class="min-w-0">
+      <p id="email-status-title" class="text-sm font-semibold text-ink">—</p>
+      <p id="email-status-detail" class="mt-0.5 text-xs text-ink/60 break-words"></p>
+    </div>
+  </div>
   <div class="grid grid-cols-12 gap-4">
-    <div class="col-span-12 md:col-span-4 bg-white border border-line rounded shadow-sm p-4">
-      <span class="text-[10px] font-bold uppercase tracking-wider text-ink/40">Notificados</span>
-      <p class="mt-2 font-semibold text-ink">
+    <section class="col-span-12 md:col-span-4 bg-white border border-line rounded shadow-sm p-4">
+      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Notificados</h2>
+      <p class="font-semibold text-ink">
         <span id="email-kpi-sent" class="text-4xl">—</span>
         <span class="text-sm text-ink/50">de <span id="email-kpi-total">—</span> destinatarios</span>
       </p>
-      <p id="email-kpi-detail" class="mt-2 text-xs text-ink/60"></p>
-      <p id="email-kpi-next" class="mt-1 text-xs text-ink/60"></p>
-    </div>
+      <div class="mt-4 flex h-2 gap-0.5 rounded-full overflow-hidden bg-paper" aria-hidden="true">
+        <div id="email-bar-sent" class="h-full bg-moss-500" style="width: 0"></div>
+        <div id="email-bar-failed" class="h-full bg-red-500" style="width: 0"></div>
+      </div>
+      <ul class="mt-3 space-y-1 text-xs text-ink/70">
+        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-moss-500" aria-hidden="true"></span><span id="email-legend-sent"></span></li>
+        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-paper border border-line" aria-hidden="true"></span><span id="email-legend-pending"></span></li>
+        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-500" aria-hidden="true"></span><span id="email-legend-failed"></span></li>
+      </ul>
+      <p id="email-kpi-end" class="mt-3 text-xs text-ink/60"></p>
+    </section>
+    <section class="col-span-12 md:col-span-8 bg-white border border-line rounded shadow-sm p-4">
+      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Enviados por día</h2>
+      <div id="email-by-day-chart"></div>
+    </section>
+  </div>
+  <div class="grid grid-cols-12 gap-4">
+    <section class="col-span-12 lg:col-span-7 bg-white border border-line rounded shadow-sm p-4">
+      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Remitentes</h2>
+      <div id="email-senders-table"></div>
+    </section>
+    <section class="col-span-12 lg:col-span-5 bg-white border border-line rounded shadow-sm p-4">
+      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Errores por motivo</h2>
+      <div id="email-errors-table"></div>
+    </section>
   </div>
   <section class="bg-white border border-line rounded shadow-sm p-4">
     <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Destinatarios</h2>
     <div id="email-recipients-table"></div>
   </section>
-  <section class="bg-white border border-line rounded shadow-sm p-4">
-    <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Registro de envíos</h2>
-    <div id="email-logs-table"></div>
-  </section>
+  <details id="email-logs" class="bg-white border border-line rounded shadow-sm p-4">
+    <summary class="text-[10px] font-bold uppercase tracking-wider text-ink/40 cursor-pointer">Registro de envíos</summary>
+    <div id="email-logs-table" class="mt-2"></div>
+  </details>
 </div>
 {% endif %}
 

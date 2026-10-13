@@ -9,6 +9,7 @@ import base64
 import csv
 import hashlib
 import io
+import re
 import smtplib
 from datetime import datetime, time, timedelta
 from time import sleep
@@ -19,7 +20,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage, get_connection
 from django.core.validators import validate_email
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 
 from sheets_reports.models import EmailCampaign, EmailLog, EmailRecipient
@@ -110,8 +112,12 @@ def _has_pending(campaign: EmailCampaign) -> bool:
     return campaign.recipients.filter(status=EmailRecipient.PENDING).exists()
 
 
+def _day_start(current: datetime) -> datetime:
+    return datetime.combine(current.date(), time.min, tzinfo=current.tzinfo)
+
+
 def _sent_today(campaign: EmailCampaign, current: datetime) -> int:
-    start = datetime.combine(current.date(), time.min, tzinfo=current.tzinfo)
+    start = _day_start(current)
     return campaign.recipients.filter(status=EmailRecipient.SENT, sent_at__gte=start,
                                       sent_at__lt=start + timedelta(days=1)).count()
 
@@ -303,17 +309,105 @@ def send_test(campaign: EmailCampaign, to: str) -> str:
 
 
 # ----------------------------------------------------------------- reporte
-def report_summary(campaign: EmailCampaign) -> dict:
-    """Lo que la pestaña «Correos» consulta cada pocos segundos: totales por estado y el id del
-    último log (si cambian, hay novedades)."""
+# Estado del envío que muestra la franja de la pestaña «Correos».
+RUNNING, DONE, STOPPED, SCHEDULED = "running", "done", "stopped", "scheduled"
+# Días que muestra el gráfico de enviados por día y motivos de la tabla de errores.
+STATS_DAYS = 30
+STATS_ERRORS = 10
+# «(intento 2 de 3)»: fuera, para que el mismo motivo cuente junto.
+_ATTEMPT_RE = re.compile(r" \(intento \d+ de \d+\)")
+
+
+def _estimated_end(campaign: EmailCampaign, current: datetime, pending: int, sent_today: int):
+    """El día en que se acaban los pendientes al ritmo del máximo diario, o None si no hay
+    pendientes o falta más de un año."""
+    if not pending or not campaign.enabled:
+        return None
+    for offset in range(366):
+        day = current.date() + timedelta(days=offset)
+        if not _is_scheduled_day(campaign, day) or campaign.last_run_on == day:
+            continue
+        pending -= max(campaign.daily_limit - sent_today, 0) if offset == 0 else campaign.daily_limit
+        if pending <= 0:
+            return day
+    return None
+
+
+def report_summary(campaign: EmailCampaign, now: datetime | None = None) -> dict:
+    """Lo que la pestaña «Correos» consulta cada pocos segundos: en qué está el envío, los
+    totales por estado y el id del último log (si cambian, hay novedades)."""
+    current = local_now(now)
     counts = dict(campaign.recipients.values_list("status").annotate(n=Count("id")))
+    pending = counts.get(EmailRecipient.PENDING, 0)
+    sent_today = _sent_today(campaign, current)
     last_log = campaign.logs.order_by("-id").values_list("id", flat=True).first()
-    upcoming = next_run(campaign)
+    upcoming = next_run(campaign, now)
+    running_since = campaign.running_since
+    if running_since and running_since >= current - LOCK_STALE:
+        state = RUNNING
+    elif not pending:
+        state = DONE
+    elif campaign.last_run_on == current.date() and sent_today < campaign.daily_limit:
+        state = STOPPED
+    else:
+        state = SCHEDULED
+    error = campaign.logs.filter(level=EmailLog.ERROR, created_at__gte=_day_start(current)).order_by("-id").first()
+    end = _estimated_end(campaign, current, pending, sent_today)
     return {
+        "state": state,
         "total": sum(counts.values()),
         "sent": counts.get(EmailRecipient.SENT, 0),
-        "pending": counts.get(EmailRecipient.PENDING, 0),
+        "pending": pending,
         "failed": counts.get(EmailRecipient.FAILED, 0),
+        "sent_today": sent_today,
+        "daily_limit": campaign.daily_limit,
         "last_log_id": last_log or 0,
         "next_run": upcoming.isoformat() if upcoming else None,
+        "estimated_end": end.isoformat() if end else None,
+        "last_error": {"message": error.message, "sender_email": error.sender_email,
+                       "created_at": error.created_at.isoformat()} if error else None,
+    }
+
+
+def report_stats(campaign: EmailCampaign, now: datetime | None = None) -> dict:
+    """Lo que la pestaña «Correos» pide cuando hay novedades: enviados por día, el detalle por
+    remitente y los errores agrupados por motivo."""
+    current = local_now(now)
+    sent = campaign.recipients.filter(status=EmailRecipient.SENT, sent_at__isnull=False)
+    by_day = (sent.annotate(day=TruncDate("sent_at", tzinfo=current.tzinfo))
+              .values("day").annotate(n=Count("id")).order_by("-day")[:STATS_DAYS])
+
+    senders = {s.email: {"email": s.email, "active": True} for s in campaign.senders.all()}
+
+    def row(email: str) -> dict:
+        item = senders.setdefault(email, {"email": email, "active": False})
+        for key, default in (("sent_today", 0), ("sent_total", 0), ("errors", 0),
+                             ("last_error", ""), ("last_error_at", None)):
+            item.setdefault(key, default)
+        return item
+
+    for email in list(senders):
+        row(email)
+    today = Count("id", filter=Q(sent_at__gte=_day_start(current)))
+    for item in sent.exclude(sender_email="").values("sender_email").annotate(total=Count("id"), today=today):
+        row(item["sender_email"]).update(sent_total=item["total"], sent_today=item["today"])
+
+    errors = campaign.logs.filter(level=EmailLog.ERROR)
+    for item in errors.exclude(sender_email="").values("sender_email").annotate(n=Count("id"), last=Max("id")):
+        last = errors.get(id=item["last"])
+        row(item["sender_email"]).update(errors=item["n"], last_error=last.message,
+                                         last_error_at=last.created_at.isoformat())
+
+    reasons = {}
+    for item in errors.values("message").annotate(n=Count("id"), last=Max("created_at")):
+        reason = reasons.setdefault(_ATTEMPT_RE.sub("", item["message"]), {"count": 0, "last_at": item["last"]})
+        reason["count"] += item["n"]
+        reason["last_at"] = max(reason["last_at"], item["last"])
+    top = sorted(reasons.items(), key=lambda pair: -pair[1]["count"])[:STATS_ERRORS]
+    return {
+        "daily_limit": campaign.daily_limit,
+        "by_day": [{"date": item["day"].isoformat(), "sent": item["n"]} for item in list(by_day)[::-1]],
+        "by_sender": sorted(senders.values(), key=lambda item: (not item["active"], item["email"])),
+        "errors": [{"message": message, "count": reason["count"], "last_at": reason["last_at"].isoformat()}
+                   for message, reason in top],
     }

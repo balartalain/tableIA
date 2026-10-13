@@ -374,6 +374,53 @@ class EmailReportTests(TestCase):
         self.assertEqual((after["sent"], after["pending"]), (2, 1))
         self.assertGreater(after["last_log_id"], before["last_log_id"])
 
+    def test_el_estado_del_envio(self):
+        campaign = make_campaign(self.dashboard, recipients=3, daily_limit=2, senders=())
+        self.assertEqual(mailing.report_summary(campaign, utc(1, 11))["state"], "scheduled")
+        campaign.running_since = utc(1, 14, 58)
+        self.assertEqual(mailing.report_summary(campaign, utc(1, 15))["state"], "running")
+        # Un candado viejo no es un envío en curso.
+        self.assertEqual(mailing.report_summary(campaign, utc(1, 16))["state"], "scheduled")
+        campaign.running_since = None
+        mailing.run_campaign(campaign, utc(1, 15))  # sin remitentes: no envía y cierra el día
+        stopped = self.client.get(self.url).json()
+        self.assertEqual(mailing.report_summary(campaign, utc(1, 15, 5))["state"], "stopped")
+        self.assertIn("No hay remitentes", stopped["last_error"]["message"])
+        campaign.recipients.update(status=EmailRecipient.SENT, sent_at=utc(1, 15))
+        self.assertEqual(mailing.report_summary(campaign, utc(1, 15, 5))["state"], "done")
+
+    def test_la_fecha_estimada_de_fin(self):
+        campaign = make_campaign(self.dashboard, recipients=5, daily_limit=2)
+        self.assertEqual(mailing.report_summary(campaign, utc(1, 11))["estimated_end"], "2026-06-03")
+        campaign.frequency, campaign.weekdays = EmailCampaign.WEEKLY, [2]  # solo los miércoles
+        self.assertEqual(mailing.report_summary(campaign, utc(1, 11))["estimated_end"], "2026-06-17")
+        campaign.recipients.update(status=EmailRecipient.SENT, sent_at=utc(1, 15))
+        self.assertIsNone(mailing.report_summary(campaign, utc(1, 16))["estimated_end"])
+
+    def test_enviados_por_dia_remitentes_y_errores_por_motivo(self):
+        campaign = make_campaign(self.dashboard, recipients=5, senders=("a@gmail.com", "b@gmail.com"))
+        first, second, third, fourth, _ = campaign.recipients.order_by("id")
+        # Las 03:00 UTC del día 2 todavía son el día 1 en Santo Domingo.
+        for recipient, sent_at in ((first, utc(1, 15)), (second, utc(2, 3)), (third, utc(2, 15))):
+            EmailRecipient.objects.filter(id=recipient.id).update(
+                status=EmailRecipient.SENT, sent_at=sent_at, sender_email="a@gmail.com")
+        for attempt in (1, 2):
+            EmailLog.objects.create(campaign=campaign, level=EmailLog.ERROR, recipient_email=fourth.email,
+                                    sender_email="a@gmail.com",
+                                    message=f"No se pudo enviar (intento {attempt} de 3): buzón lleno")
+        EmailLog.objects.create(campaign=campaign, level=EmailLog.ERROR, message="No hay remitentes")
+        stats = mailing.report_stats(campaign, utc(2, 16))
+        self.assertEqual(stats["by_day"], [{"date": "2026-06-01", "sent": 2}, {"date": "2026-06-02", "sent": 1}])
+        a, b = stats["by_sender"]
+        self.assertEqual((a["email"], a["sent_today"], a["sent_total"], a["errors"]), ("a@gmail.com", 1, 3, 2))
+        self.assertIn("intento 2", a["last_error"])
+        self.assertEqual((b["email"], b["active"], b["sent_total"], b["errors"]), ("b@gmail.com", True, 0, 0))
+        self.assertEqual([(e["message"], e["count"]) for e in stats["errors"]],
+                         [("No se pudo enviar: buzón lleno", 2), ("No hay remitentes", 1)])
+        self.assertEqual(self.client.get(f"{self.url}stats/").json()["daily_limit"], 100)
+        EmailCampaign.objects.update(enabled=False)
+        self.assertEqual(self.client.get(f"{self.url}stats/").status_code, 404)
+
     def test_destinatarios_y_logs_paginados(self):
         campaign = make_campaign(self.dashboard, recipients=5, daily_limit=2)
         mailing.run_campaign(campaign, utc(1, 15))

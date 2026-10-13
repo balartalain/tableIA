@@ -202,6 +202,16 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": "WARNING"},
 }
 
+# Envío de correos de los tableros (services/mailing.py; lo ejecuta el crontab con
+# `manage.py send_campaign_emails`). La hora de envío que elige el usuario es de esta zona.
+CAMPAIGN_TIME_ZONE = config("CAMPAIGN_TIME_ZONE", default="America/Santo_Domingo")
+# Los remitentes son cuentas de Gmail con contraseña de aplicación.
+CAMPAIGN_EMAIL_BACKEND = config("CAMPAIGN_EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+CAMPAIGN_SMTP_HOST = config("CAMPAIGN_SMTP_HOST", default="smtp.gmail.com")
+CAMPAIGN_SMTP_PORT = config("CAMPAIGN_SMTP_PORT", default=587, cast=int)
+# Clave con la que se cifran las contraseñas de los remitentes; vacía, se deriva de SECRET_KEY.
+EMAIL_ENCRYPTION_KEY = config("EMAIL_ENCRYPTION_KEY", default="")
+
 # Configuración para GUNICON - APACHE
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

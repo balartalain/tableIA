@@ -89,7 +89,12 @@ def board_new(request):
 
 def board_view(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
-    return render(request, "board_view.html", {"dashboard": dashboard})
+    campaign = getattr(dashboard, "email_campaign", None)
+    return render(request, "board_view.html", {
+        "dashboard": dashboard,
+        # Con el envío de correos activado, la vista suma la pestaña «Correos».
+        "email_enabled": bool(campaign and campaign.enabled),
+    })
 
 
 @csrf_exempt

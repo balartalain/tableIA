@@ -23,6 +23,12 @@
   <i class="ti ti-database text-base" aria-hidden="true"></i>
   <span class="hidden sm:inline">Gestionar fuente de datos</span>
 </button>
+<button id="email-btn" type="button" aria-label="Envío de correos" title="Envío de correos"
+        x-data x-on:click="$store.bottomSheet.open({ title: 'Envío de correos', view: 'email' }); window.dispatchEvent(new CustomEvent('email-campaign:open'))"
+        class="shrink-0 ml-1 bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+  <i class="ti ti-mail text-base" aria-hidden="true"></i>
+  <span class="hidden sm:inline">Correos</span>
+</button>
 {% else %}
 <span class="px-2 font-sans font-semibold text-sm text-ink">Nuevo tablero</span>
 {% endif %}
@@ -401,7 +407,10 @@
       </button>
     </div>
     <div class="flex-1 min-h-0 overflow-auto p-5">
-      {% if dashboard %}{% include "sheets_reports/source_manager.html" %}{% else %}{% include "sheets_reports/source_picker.html" with picker_mode="create" %}{% endif %}
+      {% if dashboard %}
+      <div x-show="$store.bottomSheet.view === 'sources'" class="h-full">{% include "sheets_reports/source_manager.html" %}</div>
+      <div x-show="$store.bottomSheet.view === 'email'" x-cloak class="h-full">{% include "sheets_reports/email_campaign.html" %}</div>
+      {% else %}{% include "sheets_reports/source_picker.html" with picker_mode="create" %}{% endif %}
     </div>
   </section>
 
@@ -455,6 +464,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/formula-builder.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/source-picker.js' %}"></script>
 {% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/source-manager.js' %}"></script>{% endif %}
+{% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/email-campaign.js' %}"></script>{% endif %}
 <script src="{% static 'sheets_reports/js/board_editor/board-editor-init.js' %}"></script>
 
 {% endblock %}

@@ -26,6 +26,7 @@ templates/
   sheets_reports/
     source_manager.html       # Gestor de fuentes del tablero (bottom sheet)
     source_picker.html        # Selector de hoja → pestaña → columnas (crear, agregar, editar, cambiar hoja)
+    email_campaign.html       # Envío de correos: destinatarios, remitentes, programación y mensaje
 
 static/sheets_reports/js/board_editor/
   widget-registry.js          # WidgetRegistry (Map tipo → clase)
@@ -36,7 +37,9 @@ static/sheets_reports/js/board_editor/
   source-picker.js            # sourcePicker(): elegir/editar/reemplazar la hoja de una fuente
   formula-builder.js          # FormulaBlocks: árbol ↔ texto, bloques y arrastre de los campos calculados
   board-editor-init.js        # Bootstrap: palette, drag-drop, Sortable, resize
+  email-campaign.js           # emailCampaign(): configurar el envío de correos del tablero
   board-view-init.js          # Bootstrap read-only: store mínimo + mount
+  email-report.js             # Vista compartida: pestañas y reporte del envío de correos
   utils/
     formatearEtiquetaApex.js  # Wrap de labels largos para ApexCharts
     number-format.js          # formatNumber: el formato de todo valor de datos
@@ -492,6 +495,37 @@ Todas usan `forceFallback: true` + `fallbackOnBody: true` para arrastre consiste
 - **Tabler Icons** (`ti ti-*`).
 - **CSS custom properties** en `:root` para toda la paleta.
 - **`[x-cloak]`** global para ocultar elementos antes de que Alpine arranque.
+
+## Envío de correos
+
+**Configuración (editor).** El botón «Correos» del header abre el bottom sheet con
+`view: 'email'` (el store `bottomSheet` elige entre `'sources'` y `'email'`) y despacha
+`email-campaign:open`. `emailCampaign()` (`email-campaign.js`, `email_campaign.html`) carga
+la configuración y la guarda entera con «Guardar»:
+
+- **Destinatarios:** «Cargar CSV» sube el archivo y muestra cuántos se agregaron, cuántos ya
+  estaban y cuáles no son un correo. «Vaciar lista» pide confirmación.
+- **Remitentes:** correo y contraseña de aplicación. Una contraseña ya guardada no vuelve al
+  navegador: el campo queda vacío y solo se envía si se escribe otra.
+- **Programación:** correos por día de envío, frecuencia (todos los días o días de la
+  semana) y hora. Muestra el próximo envío que calcula el servidor.
+- **Mensaje:** asunto y cuerpo. «Enviar prueba» guarda lo escrito y manda el mensaje a la
+  dirección indicada.
+- **Activar el envío:** el servidor lo rechaza si falta el mensaje, un remitente o los
+  destinatarios.
+
+**Reporte (vista compartida).** Con el envío activado, `board_view.html` trae las pestañas
+«Gráficas» y «Correos» y carga `email-report.js`. La pestaña activa va en el hash
+(`#correos`). Al volver a «Gráficas» se despacha `resize` para que los gráficos tomen su
+ancho. La pestaña «Correos» tiene:
+
+- el KPI de notificados (enviados de total, pendientes, con error y próximo envío);
+- la tabla de destinatarios y la del registro de envíos, las dos con paginación remota.
+
+**Aviso de novedades.** No hay websocket: mientras la pestaña «Correos» está a la vista, la
+página pide cada 10 s `GET /email-report/` (unos conteos). Si cambian los totales o
+`last_log_id`, actualiza el KPI y vuelve a pedir las dos tablas. Con el documento oculto no
+consulta, y al volver consulta de inmediato.
 
 ## apiUrl y despliegue
 

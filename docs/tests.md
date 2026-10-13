@@ -58,6 +58,7 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 | `tests/test_ai_spec.py` | Generación del formulario por la IA (con el modelo simulado): reintento con errores, schema de la tool, prompt. |
 | `tests/test_ai_suggestions.py` | Pedidos sugeridos del chat: limpieza y caché. |
 | `tests/test_ai_formula.py` | «Generar con IA» de un campo calculado (modelo simulado): fórmula con su árbol, motivo cuando no puede, reintento con el error del motor, errores legibles. |
+| `tests/test_email_campaign.py` | Envío de correos (con el backend de correo en memoria): lectura del CSV, cifrado de la contraseña, cuándo le toca ejecutarse (diario, semanal, zona horaria, una vez por día), la ejecución (límite diario, reparto entre remitentes, reintentos, remitente que no inicia sesión, bitácora), sus endpoints (la contraseña nunca sale, validación, solo el dueño), el reporte paginado y el comando del crontab. |
 
 ## Widget nuevo
 1. Su clase en `sheets_reports/widgets/` y su partial del panel.

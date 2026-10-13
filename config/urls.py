@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path
 
-from sheets_reports import views
+from sheets_reports import views, views_email
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -18,6 +18,15 @@ urlpatterns = [
     path('api/dashboard/<int:dashboard_id>/table-assistant/', views.table_assistant, name='table_assistant'),
     path('api/dashboard/<int:dashboard_id>/board-plan/', views.board_ai_plan, name='board_ai_plan'),
     path('api/dashboard/<int:dashboard_id>/widget-suggestions/', views.widget_suggestions, name='widget_suggestions'),
+    path('api/dashboard/<int:dashboard_id>/email-campaign/', views_email.email_campaign, name='email_campaign'),
+    path('api/dashboard/<int:dashboard_id>/email-campaign/recipients/', views_email.email_recipients,
+         name='email_recipients'),
+    path('api/dashboard/<int:dashboard_id>/email-campaign/test/', views_email.email_test, name='email_test'),
+    path('api/dashboard/<int:dashboard_id>/email-report/', views_email.email_report, name='email_report'),
+    path('api/dashboard/<int:dashboard_id>/email-report/recipients/', views_email.email_report_recipients,
+         name='email_report_recipients'),
+    path('api/dashboard/<int:dashboard_id>/email-report/logs/', views_email.email_report_logs,
+         name='email_report_logs'),
     path('api/sources/google/spreadsheets/', views.source_spreadsheets, name='source_spreadsheets'),
     path('api/sources/google/spreadsheets/<str:spreadsheet_id>/tabs/', views.source_tabs, name='source_tabs'),
     path('api/sources/google/spreadsheets/<str:spreadsheet_id>/tabs/<str:gid>/columns/',

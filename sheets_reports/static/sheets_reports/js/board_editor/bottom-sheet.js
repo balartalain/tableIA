@@ -11,10 +11,13 @@ document.addEventListener('alpine:init', () => {
     title: '',
     // Sin él (tablero nuevo, sin fuente) no se cierra: la ✕ vuelve al inicio.
     dismissible: true,
+    // Qué contenido muestra: 'sources' (fuentes de datos) | 'email' (envío de correos).
+    view: 'sources',
 
-    open({ title = '', dismissible = true } = {}) {
+    open({ title = '', dismissible = true, view = 'sources' } = {}) {
       this.heightPct = BOTTOM_SHEET_DEFAULT_PCT;
       this.title = title;
+      this.view = view;
       this.dismissible = dismissible;
       this.isOpen = true;
     },

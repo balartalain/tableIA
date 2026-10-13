@@ -29,12 +29,49 @@
      role="progressbar" aria-label="Cargando tablero">
   <div class="h-full w-1/3 bg-moss-500"></div>
 </div>
-<div class="mx-auto p-6">
+{% if email_enabled %}
+<!-- Con el envío de correos activado: el tablero o el reporte del envío (email-report.js). -->
+<nav id="view-tabs" role="tablist" aria-label="Reportes" class="border-b border-line bg-white px-6 flex gap-1">
+  <button type="button" role="tab" data-tab="charts" aria-controls="tab-charts"
+          class="view-tab -mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition cursor-pointer inline-flex items-center gap-1.5">
+    <i class="ti ti-chart-bar text-base" aria-hidden="true"></i>Gráficas
+  </button>
+  <button type="button" role="tab" data-tab="emails" aria-controls="tab-emails"
+          class="view-tab -mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition cursor-pointer inline-flex items-center gap-1.5">
+    <i class="ti ti-mail text-base" aria-hidden="true"></i>Correos
+  </button>
+</nav>
+{% endif %}
+<div id="tab-charts" class="mx-auto p-6">
   <!-- Caja de filtros: siempre arriba, fuera del grid. -->
   <div id="dashboard-filters" class="mb-4 flex flex-wrap items-center gap-2.5 w-full max-w-full"></div>
   <div id="dashboard-canvas" class="flex flex-col gap-6">
   </div>
 </div>
+{% if email_enabled %}
+<div id="tab-emails" class="mx-auto p-6 space-y-6 hidden">
+  <p id="email-report-error" role="alert" class="hidden text-sm text-red-600"></p>
+  <div class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 md:col-span-4 bg-white border border-line rounded shadow-sm p-4">
+      <span class="text-[10px] font-bold uppercase tracking-wider text-ink/40">Notificados</span>
+      <p class="mt-2 font-semibold text-ink">
+        <span id="email-kpi-sent" class="text-4xl">—</span>
+        <span class="text-sm text-ink/50">de <span id="email-kpi-total">—</span> destinatarios</span>
+      </p>
+      <p id="email-kpi-detail" class="mt-2 text-xs text-ink/60"></p>
+      <p id="email-kpi-next" class="mt-1 text-xs text-ink/60"></p>
+    </div>
+  </div>
+  <section class="bg-white border border-line rounded shadow-sm p-4">
+    <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Destinatarios</h2>
+    <div id="email-recipients-table"></div>
+  </section>
+  <section class="bg-white border border-line rounded shadow-sm p-4">
+    <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Registro de envíos</h2>
+    <div id="email-logs-table"></div>
+  </section>
+</div>
+{% endif %}
 
 <script>
   window.DASHBOARD_ID = {{ dashboard.id }};
@@ -65,5 +102,6 @@
 
 <script src="{% static 'sheets_reports/js/board_editor/board-view-init.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
+{% if email_enabled %}<script src="{% static 'sheets_reports/js/board_editor/email-report.js' %}"></script>{% endif %}
 
 {% endblock %}

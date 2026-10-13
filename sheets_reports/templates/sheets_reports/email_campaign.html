@@ -1,0 +1,153 @@
+{% comment %} Envío de correos del tablero (cuerpo del bottom sheet): destinatarios, remitentes,
+programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% endcomment %}
+<div x-data="emailCampaign()" class="h-full flex flex-col gap-4">
+
+  <p x-show="loading" class="text-xs text-ink/50">
+    <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando…
+  </p>
+  <p x-show="error" x-text="error" role="alert" class="text-sm text-red-600"></p>
+
+  <div x-show="!loading" class="flex-1 min-h-0 overflow-auto grid grid-cols-1 lg:grid-cols-2 gap-4 content-start">
+
+    <!-- Destinatarios -->
+    <section class="border border-line rounded p-4 space-y-3">
+      <div class="flex items-center justify-between gap-3">
+        <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Destinatarios</h4>
+        <span class="text-xs text-ink/60">
+          <span x-text="report.total.toLocaleString('es')"></span> cargados ·
+          <span x-text="report.sent.toLocaleString('es')"></span> notificados
+        </span>
+      </div>
+      <p class="text-xs text-ink/60">Un archivo CSV con un correo electrónico por fila. Los correos nuevos se agregan a la lista; los que ya estaban conservan su estado.</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-md px-4 py-2 transition cursor-pointer inline-flex items-center gap-1.5"
+               x-bind:class="uploading && 'opacity-60 pointer-events-none'">
+          <i class="ti ti-upload text-base" aria-hidden="true"></i>
+          <span x-text="uploading ? 'Cargando…' : 'Cargar CSV'"></span>
+          <input type="file" accept=".csv,text/csv" class="sr-only" x-on:change="upload($event)">
+        </label>
+        <button type="button" x-show="report.total && !confirmClear" x-on:click="confirmClear = true"
+                class="text-sm font-medium text-ink/60 hover:text-ink bg-white border border-line hover:bg-paper rounded-md px-3 py-2 transition cursor-pointer">Vaciar lista</button>
+      </div>
+      <div x-show="confirmClear" x-cloak role="alertdialog" aria-label="Confirmar vaciado"
+           class="rounded border border-red-200 bg-red-50 p-3 space-y-2">
+        <p class="text-sm text-red-900">¿Vaciar la lista? Se pierde también quién ya fue notificado y el envío se desactiva.</p>
+        <div class="flex justify-end gap-2">
+          <button type="button" x-on:click="confirmClear = false"
+                  class="text-sm font-medium text-ink/60 bg-white hover:bg-paper rounded-md px-3 py-1.5 transition cursor-pointer">Cancelar</button>
+          <button type="button" x-on:click="clearRecipients()"
+                  class="text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md px-3 py-1.5 transition cursor-pointer">Vaciar</button>
+        </div>
+      </div>
+      <div x-show="uploadResult" x-cloak class="text-xs text-ink/70 space-y-1">
+        <p>
+          <span class="font-semibold" x-text="uploadResult && uploadResult.added"></span> agregados ·
+          <span x-text="uploadResult && uploadResult.duplicates"></span> ya estaban ·
+          <span x-text="uploadResult && uploadResult.invalid_count"></span> no son un correo
+        </p>
+        <p x-show="uploadResult && uploadResult.invalid_count" class="text-red-600"
+           x-text="uploadResult && `No válidos: ${uploadResult.invalid.join(', ')}${uploadResult.invalid_count > uploadResult.invalid.length ? '…' : ''}`"></p>
+      </div>
+    </section>
+
+    <!-- Remitentes -->
+    <section class="border border-line rounded p-4 space-y-3">
+      <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Remitentes</h4>
+      <p class="text-xs text-ink/60">Cuentas de Gmail que envían. La contraseña es la <strong>contraseña de aplicación</strong> que genera Google para la cuenta, no la del correo.</p>
+      <template x-for="(s, index) in form.senders" :key="index">
+        <div class="flex flex-wrap items-center gap-2">
+          <input type="email" x-model="s.email" placeholder="correo@gmail.com" x-bind:aria-label="`Correo del remitente ${index + 1}`"
+                 class="flex-1 min-w-[12rem] border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
+          <input type="password" x-model="s.password" autocomplete="new-password"
+                 x-bind:placeholder="s.has_password ? 'Guardada · escribe para cambiarla' : 'Contraseña de aplicación'"
+                 x-bind:aria-label="`Contraseña de aplicación del remitente ${index + 1}`"
+                 class="flex-1 min-w-[12rem] border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
+          <button type="button" x-on:click="removeSender(index)" title="Quitar remitente" x-bind:aria-label="`Quitar remitente ${index + 1}`"
+                  class="w-8 h-8 rounded-md flex items-center justify-center text-ink/50 hover:text-red-600 hover:bg-paper cursor-pointer">
+            <i class="ti ti-trash text-base" aria-hidden="true"></i>
+          </button>
+        </div>
+      </template>
+      <button type="button" x-on:click="addSender()"
+              class="text-sm font-medium text-moss-700 hover:text-moss-600 inline-flex items-center gap-1 cursor-pointer">
+        <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar remitente
+      </button>
+    </section>
+
+    <!-- Programación -->
+    <section class="border border-line rounded p-4 space-y-3">
+      <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Programación</h4>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="block">
+          <span class="block text-[11px] font-semibold text-ink/60 mb-1">Correos por día de envío</span>
+          <input type="number" min="1" x-model.number="form.daily_limit"
+                 class="w-32 border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="block text-[11px] font-semibold text-ink/60 mb-1">Frecuencia</span>
+          <select x-model="form.frequency"
+                  class="border border-line rounded-md px-3 py-1.5 text-sm bg-white focus:border-moss-500 focus:outline-none">
+            <option value="daily">Todos los días</option>
+            <option value="weekly">Días de la semana</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="block text-[11px] font-semibold text-ink/60 mb-1">Hora</span>
+          <input type="time" x-model="form.send_time"
+                 class="border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
+        </label>
+      </div>
+      <div x-show="form.frequency === 'weekly'" class="flex flex-wrap gap-1.5" role="group" aria-label="Días de envío">
+        <template x-for="d in WEEKDAYS" :key="d.value">
+          <button type="button" x-on:click="toggleDay(d.value)" x-text="d.label" x-bind:aria-pressed="form.weekdays.includes(d.value)"
+                  x-bind:class="form.weekdays.includes(d.value) ? 'bg-moss-500 text-white border-moss-500' : 'bg-white text-ink/70 border-line hover:bg-paper'"
+                  class="border rounded-md px-3 py-1.5 text-sm font-medium transition cursor-pointer"></button>
+        </template>
+      </div>
+      <p class="text-xs text-ink/60">
+        El límite se reparte entre los remitentes; Gmail admite unos 500 correos al día por cuenta.
+        <span x-show="timeZone">La hora es de <span x-text="timeZone"></span>.</span>
+      </p>
+      <p x-show="nextRunLabel" x-cloak class="text-xs text-ink/70">Próximo envío: <span class="font-semibold" x-text="nextRunLabel"></span></p>
+    </section>
+
+    <!-- Mensaje -->
+    <section class="border border-line rounded p-4 space-y-3">
+      <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Mensaje</h4>
+      <label class="block">
+        <span class="block text-[11px] font-semibold text-ink/60 mb-1">Asunto</span>
+        <input type="text" maxlength="255" x-model="form.subject"
+               class="w-full border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
+      </label>
+      <label class="block">
+        <span class="block text-[11px] font-semibold text-ink/60 mb-1">Cuerpo</span>
+        <textarea rows="7" x-model="form.body"
+                  class="w-full border border-line rounded-md px-3 py-2 text-sm focus:border-moss-500 focus:outline-none"></textarea>
+      </label>
+      <div class="flex flex-wrap items-center gap-2">
+        <input type="email" x-model="testTo" placeholder="Correo para la prueba" aria-label="Correo para la prueba"
+               class="flex-1 min-w-[12rem] border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
+        <button type="button" x-on:click="sendTest()" x-bind:disabled="testing || saving || !testTo.trim()"
+                class="text-sm font-medium text-ink/70 bg-white border border-line hover:bg-paper disabled:opacity-50 rounded-md px-3 py-1.5 transition cursor-pointer inline-flex items-center gap-1.5">
+          <i class="ti ti-send text-base" aria-hidden="true"></i>
+          <span x-text="testing ? 'Enviando…' : 'Enviar prueba'"></span>
+        </button>
+      </div>
+      <p x-show="testMessage" x-cloak x-text="testMessage" role="status"
+         x-bind:class="testFailed ? 'text-red-600' : 'text-moss-700'" class="text-xs"></p>
+    </section>
+  </div>
+
+  <!-- Activar y guardar -->
+  <div x-show="!loading" class="shrink-0 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+    <label class="inline-flex items-center gap-2 cursor-pointer text-sm">
+      <input type="checkbox" class="accent-moss-500 w-4 h-4" x-model="form.enabled">
+      <span class="font-medium">Activar el envío de correos</span>
+      <span class="text-xs text-ink/50">Suma la pestaña «Correos» a la vista compartida.</span>
+    </label>
+    <button type="button" x-on:click="save()" x-bind:disabled="saving"
+            class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-60 rounded-md px-4 py-2 transition cursor-pointer">
+      <span x-text="saving ? 'Guardando…' : 'Guardar'"></span>
+    </button>
+  </div>
+</div>

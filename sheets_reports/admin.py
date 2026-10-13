@@ -3,7 +3,9 @@ import json
 from django.contrib import admin
 from django.utils.html import format_html
 
-from sheets_reports.models import Dashboard, DataSource, Widget
+from sheets_reports.models import (
+    Dashboard, DataSource, EmailCampaign, EmailLog, EmailRecipient, EmailSender, Widget,
+)
 
 
 def _pretty_json(value):
@@ -47,3 +49,31 @@ class WidgetAdmin(admin.ModelAdmin):
     @admin.display(description="style")
     def style_pretty(self, obj):
         return _pretty_json(obj.style)
+
+
+class EmailSenderInline(admin.TabularInline):
+    model = EmailSender
+    extra = 0
+    # La contraseña de aplicación está cifrada: no se muestra ni se edita aquí.
+    fields = ["email"]
+
+
+@admin.register(EmailCampaign)
+class EmailCampaignAdmin(admin.ModelAdmin):
+    list_display = ["dashboard", "enabled", "frequency", "send_time", "daily_limit", "last_run_on"]
+    list_filter = ["enabled", "frequency"]
+    inlines = [EmailSenderInline]
+
+
+@admin.register(EmailRecipient)
+class EmailRecipientAdmin(admin.ModelAdmin):
+    list_display = ["email", "campaign", "status", "attempts", "sent_at", "sender_email"]
+    list_filter = ["status"]
+    search_fields = ["email"]
+
+
+@admin.register(EmailLog)
+class EmailLogAdmin(admin.ModelAdmin):
+    list_display = ["created_at", "campaign", "level", "message", "recipient_email", "sender_email"]
+    list_filter = ["level"]
+    search_fields = ["message", "recipient_email"]

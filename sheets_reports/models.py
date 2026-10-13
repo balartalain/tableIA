@@ -132,3 +132,96 @@ class Widget(models.Model):
         if self.type not in WIDGET_REGISTRY:
             return None
         return WIDGET_REGISTRY.get(self.type)
+
+class EmailCampaign(models.Model):
+    """El envío de correos de un tablero: el mensaje, cuántos se envían por día y cuándo.
+    Cada destinatario lo recibe una sola vez (ver services/mailing.py)."""
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    FREQUENCY_CHOICES = [(DAILY, "Diario"), (WEEKLY, "Días de la semana")]
+
+    dashboard = models.OneToOneField(Dashboard, on_delete=models.CASCADE, related_name="email_campaign")
+    enabled = models.BooleanField(default=False)
+    subject = models.CharField(max_length=255, blank=True, default="")
+    body = models.TextField(blank=True, default="")
+    daily_limit = models.PositiveIntegerField(
+        default=100, help_text="Correos por día de envío, repartidos entre los remitentes.")
+    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default=DAILY)
+    send_time = models.TimeField(default="08:00", help_text="Hora local (CAMPAIGN_TIME_ZONE).")
+    weekdays = models.JSONField(
+        default=list, blank=True,
+        help_text="Días de envío con frecuencia semanal: 0 = lunes … 6 = domingo.")
+    last_run_on = models.DateField(
+        null=True, blank=True, help_text="Día local de la última ejecución: una por día.")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Envío de correos"
+        verbose_name_plural = "Envíos de correos"
+
+    def __str__(self):
+        return f"Correos de {self.dashboard}"
+
+
+class EmailSender(models.Model):
+    """Cuenta de Gmail que envía: su correo y su contraseña de aplicación, cifrada."""
+    campaign = models.ForeignKey(EmailCampaign, on_delete=models.CASCADE, related_name="senders")
+    email = models.EmailField()
+    password_encrypted = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Remitente"
+        verbose_name_plural = "Remitentes"
+        ordering = ["id"]
+        constraints = [models.UniqueConstraint(fields=["campaign", "email"], name="unique_campaign_sender")]
+
+    def __str__(self):
+        return self.email
+
+
+class EmailRecipient(models.Model):
+    """Un destinatario del envío y si ya se le notificó."""
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+    STATUS_CHOICES = [(PENDING, "Pendiente"), (SENT, "Notificado"), (FAILED, "Falló")]
+
+    campaign = models.ForeignKey(EmailCampaign, on_delete=models.CASCADE, related_name="recipients")
+    email = models.EmailField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=PENDING)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    sender_email = models.EmailField(blank=True, default="")
+    error = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Destinatario"
+        verbose_name_plural = "Destinatarios"
+        ordering = ["id"]
+        constraints = [models.UniqueConstraint(fields=["campaign", "email"], name="unique_campaign_recipient")]
+        indexes = [models.Index(fields=["campaign", "status"])]
+
+    def __str__(self):
+        return self.email
+
+
+class EmailLog(models.Model):
+    """Bitácora del envío: cada ejecución, sus errores y su resumen."""
+    INFO = "info"
+    ERROR = "error"
+    LEVEL_CHOICES = [(INFO, "Información"), (ERROR, "Error")]
+
+    campaign = models.ForeignKey(EmailCampaign, on_delete=models.CASCADE, related_name="logs")
+    created_at = models.DateTimeField(auto_now_add=True)
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default=INFO)
+    message = models.TextField()
+    recipient_email = models.EmailField(blank=True, default="")
+    sender_email = models.EmailField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Log de correos"
+        verbose_name_plural = "Logs de correos"
+        ordering = ["-id"]
+
+    def __str__(self):
+        return self.message[:80]

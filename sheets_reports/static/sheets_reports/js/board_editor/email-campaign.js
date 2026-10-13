@@ -1,0 +1,170 @@
+// Envío de correos del tablero (bottom sheet «Envío de correos»): los destinatarios (desde un
+// CSV), los remitentes (cuentas de Gmail con su contraseña de aplicación), cuántos correos se
+// envían por día y cuándo, y el mensaje. El envío lo ejecuta el crontab del servidor; con el
+// envío activado, la vista compartida muestra la pestaña «Correos» (email-report.js).
+const EMAIL_WEEKDAYS = [
+  { value: 0, label: 'Lun' }, { value: 1, label: 'Mar' }, { value: 2, label: 'Mié' },
+  { value: 3, label: 'Jue' }, { value: 4, label: 'Vie' }, { value: 5, label: 'Sáb' },
+  { value: 6, label: 'Dom' },
+];
+
+function emailCampaign() {
+  return {
+    WEEKDAYS: EMAIL_WEEKDAYS,
+    loading: false,
+    error: '',
+    saving: false,
+    // Lo que se edita. Cada remitente: {email, password (solo si se escribe una nueva), has_password}.
+    form: { enabled: false, subject: '', body: '', daily_limit: 100, frequency: 'daily', send_time: '08:00', weekdays: [], senders: [] },
+    report: { total: 0, sent: 0, pending: 0, failed: 0, next_run: null },
+    timeZone: '',
+    uploading: false,
+    // Resultado de la última carga del CSV: {added, duplicates, invalid, invalid_count}.
+    uploadResult: null,
+    confirmClear: false,
+    testTo: '',
+    testing: false,
+    testMessage: '',
+    testFailed: false,
+
+    init() {
+      window.addEventListener('email-campaign:open', () => this.load());
+    },
+
+    get url() {
+      return apiUrl(`/api/dashboard/${window.DASHBOARD_ID}/email-campaign/`);
+    },
+
+    _message(e) {
+      return e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message;
+    },
+
+    // La respuesta del servidor (configuración + totales) al formulario.
+    apply(data) {
+      this.form = {
+        enabled: data.enabled, subject: data.subject, body: data.body, daily_limit: data.daily_limit,
+        frequency: data.frequency, send_time: data.send_time, weekdays: data.weekdays || [],
+        senders: (data.senders || []).map(s => ({ email: s.email, password: '', has_password: s.has_password })),
+      };
+      this.report = data.report;
+      this.timeZone = data.time_zone || '';
+    },
+
+    async load() {
+      this.loading = true;
+      this.error = '';
+      this.uploadResult = null;
+      this.confirmClear = false;
+      this.testMessage = '';
+      try {
+        const { r, data } = await fetchJsonSafe(this.url);
+        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+        this.apply(data);
+      } catch (e) {
+        this.error = this._message(e);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    addSender() {
+      this.form.senders.push({ email: '', password: '', has_password: false });
+    },
+
+    removeSender(index) {
+      this.form.senders.splice(index, 1);
+    },
+
+    toggleDay(day) {
+      const days = this.form.weekdays;
+      this.form.weekdays = days.includes(day) ? days.filter(d => d !== day) : [...days, day].sort();
+    },
+
+    get nextRunLabel() {
+      if (!this.report.next_run) return '';
+      return new Date(this.report.next_run).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+    },
+
+    // Sube el CSV elegido: sus correos se agregan a la lista (los que ya estaban no cambian).
+    async upload(event) {
+      const file = event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      this.uploading = true;
+      this.error = '';
+      this.uploadResult = null;
+      const body = new FormData();
+      body.append('file', file);
+      try {
+        const { r, data } = await fetchJsonSafe(`${this.url}recipients/`, { method: 'POST', body });
+        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+        this.report = data.report;
+        this.uploadResult = data;
+      } catch (e) {
+        this.error = this._message(e);
+      } finally {
+        this.uploading = false;
+      }
+    },
+
+    async clearRecipients() {
+      this.confirmClear = false;
+      this.error = '';
+      try {
+        const { r, data } = await fetchJsonSafe(`${this.url}recipients/`, { method: 'DELETE' });
+        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+        this.uploadResult = null;
+        this.report = data.report;
+        this.form.enabled = data.enabled;
+      } catch (e) {
+        this.error = this._message(e);
+      }
+    },
+
+    // Guarda la configuración → true si se guardó.
+    async save({ silent = false } = {}) {
+      this.saving = true;
+      this.error = '';
+      const body = {
+        ...this.form,
+        daily_limit: Number(this.form.daily_limit),
+        senders: this.form.senders.filter(s => s.email.trim() || s.password)
+          .map(s => ({ email: s.email.trim(), password: s.password })),
+      };
+      try {
+        const { r, data } = await fetchJsonSafe(this.url, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+        this.apply(data);
+        if (!silent) showToast(data.enabled ? 'Envío de correos guardado y activado.' : 'Envío de correos guardado.');
+        return true;
+      } catch (e) {
+        this.error = this._message(e);
+        return false;
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    // «Enviar prueba»: guarda lo escrito y manda el mensaje a una dirección con el primer remitente.
+    async sendTest() {
+      this.testMessage = '';
+      this.testFailed = false;
+      if (!(await this.save({ silent: true }))) return;
+      this.testing = true;
+      try {
+        const { r, data } = await fetchJsonSafe(`${this.url}test/`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: this.testTo.trim() }),
+        });
+        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+        this.testMessage = `Prueba enviada desde ${data.sender}.`;
+      } catch (e) {
+        this.testFailed = true;
+        this.testMessage = this._message(e);
+      } finally {
+        this.testing = false;
+      }
+    },
+  };
+}

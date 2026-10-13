@@ -14,7 +14,7 @@
       <label class="block text-xs font-semibold text-ink/70">Tarjeta KPI</label>
       <div>
         <label class="block text-[11px] font-semibold text-ink/60 mb-1">Número principal</label>
-        <select x-model="$store.dashboard.drawerDraft.style.primary"
+        <select x-vselect x-model="$store.dashboard.drawerDraft.style.primary"
                 class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
           <template x-for="o in $store.dashboard.metricRoleOptions([{ value: '', label: 'Primera métrica' }])" :key="o.value">
             <option x-bind:value="o.value" x-text="o.label"></option>
@@ -23,7 +23,7 @@
       </div>
       <div>
         <label class="block text-[11px] font-semibold text-ink/60 mb-1">Comparar con</label>
-        <select x-model="$store.dashboard.drawerDraft.style.compare"
+        <select x-vselect x-model="$store.dashboard.drawerDraft.style.compare"
                 class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
           <template x-for="o in $store.dashboard.metricRoleOptions([{ value: '', label: 'Sin comparación' }])" :key="o.value">
             <option x-bind:value="o.value" x-text="o.label"></option>
@@ -32,7 +32,7 @@
       </div>
       <div>
         <label class="block text-[11px] font-semibold text-ink/60 mb-1">Modo de comparación</label>
-        <select x-model="$store.dashboard.drawerDraft.style.compareMode"
+        <select x-vselect x-model="$store.dashboard.drawerDraft.style.compareMode"
                 class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
           <option value="pct">Porcentaje</option>
           <option value="abs">Absoluto</option>
@@ -70,7 +70,7 @@
           <div class="flex items-end gap-1.5">
             <div class="flex-1 min-w-0">
               <label class="block text-[11px] font-semibold text-ink/60 mb-1">Valor objetivo</label>
-              <select x-model="style.targetMetric" x-on:change="onMetaChange()"
+              <select x-vselect x-model="style.targetMetric" x-on:change="onMetaChange()"
                       class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
                 <template x-for="o in metaOptions" :key="o.value">
                   <option x-bind:value="o.value" x-text="o.label"></option>
@@ -92,7 +92,7 @@
           <div class="flex items-end gap-1.5">
             <div class="flex-1 min-w-0">
               <label class="block text-[11px] font-semibold text-ink/60 mb-1" x-bind:class="hasMeta ? '' : 'opacity-40'">Semáforo según</label>
-              <select x-model="style.statusBasis" x-bind:disabled="!hasMeta"
+              <select x-vselect x-model="style.statusBasis" x-bind:disabled="!hasMeta"
                       class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-40 disabled:cursor-not-allowed">
                 <option value="">Automático</option>
                 <option value="target_pct">% de la meta</option>

@@ -36,7 +36,7 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-[11px] font-semibold text-ink/60 mb-1">Mostrar</label>
-          <select x-bind:value="show" x-on:change="setSort(by, $event.target.value)"
+          <select x-vselect="show" x-bind:value="show" x-on:change="setSort(by, $event.target.value)"
                   class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
             <option value="best" x-bind:selected="show === 'best'">Los mejores</option>
             <option value="worst" x-bind:selected="show === 'worst'">Los peores</option>

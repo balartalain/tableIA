@@ -25,7 +25,7 @@
            aria-hidden="true" title="Arrastra para reordenar"></i>
         <div class="flex-1 min-w-0 space-y-1.5">
           <div class="space-y-1.5">
-            <select x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
+            <select x-vselect x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
                     class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
               <option value="" x-show="metric.agg === 'count' || !metric.field" x-text="metric.agg === 'count' ? 'Todas las filas' : '— elegir —'"></option>
               <template x-for="col in $store.dashboard.schema.all_fields || []" :key="col">
@@ -41,7 +41,7 @@
               </template>
             </select>
             <div class="flex gap-1.5">
-              <select x-model="metric.agg" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Agregación"
+              <select x-vselect x-model="metric.agg" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Agregación"
                       x-bind:disabled="metric.agg === 'auto'"
                       x-bind:title="metric.agg === 'auto' ? 'La agregación viene en la fórmula del campo calculado' : ''"
                       class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:bg-paper disabled:text-ink/60">
@@ -52,7 +52,7 @@
               <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total de la columna, acumulado…). -->
               <template x-if="$store.dashboard.metricWindowOptions(metric).length">
                 <div class="flex items-center gap-1 w-full">
-                  <select x-bind:value="(metric.window && metric.window.type) || ''"
+                  <select x-vselect="(metric.window && metric.window.type) || ''" x-bind:value="(metric.window && metric.window.type) || ''"
                           x-on:change="$store.dashboard.setMetricWindow(metric, $event.target.value)"
                           aria-label="Mostrar como" title="Mostrar como"
                           class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
@@ -70,7 +70,7 @@
               </template>
             </div>
             <!-- Formato: automático = el de la columna en la fuente (moneda, %) o el del campo calculado. -->
-            <select x-bind:value="metric.format || ''"
+            <select x-vselect="metric.format || ''" x-bind:value="metric.format || ''"
                     x-on:change="$event.target.value ? metric.format = $event.target.value : delete metric.format"
                     aria-label="Formato" title="Cómo se muestran los valores de esta métrica"
                     class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">

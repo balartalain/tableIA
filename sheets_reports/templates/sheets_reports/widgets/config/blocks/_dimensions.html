@@ -24,7 +24,7 @@
         <div class="flex gap-1.5 items-center rounded-lg bg-paper/70 border border-line/60 p-1.5">
           <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
              aria-hidden="true" title="Arrastra para reordenar"></i>
-          <select x-model="$store.dashboard.drawerDraft.fields.dimensions[idx]"
+          <select x-vselect x-model="$store.dashboard.drawerDraft.fields.dimensions[idx]"
                   aria-label="Dimensión"
                   class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
             <option value="" x-show="!col" x-text="'— elegir —'"></option>

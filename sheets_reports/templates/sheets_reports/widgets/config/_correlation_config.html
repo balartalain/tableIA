@@ -11,7 +11,7 @@
          la muestre bajo «Matriz de correlación». -->
     <div x-data x-init="$store.dashboard.registerStyleGroup('Matriz de correlación', ['method'])">
       <label class="block text-xs font-semibold text-ink/70 mb-1">Método</label>
-      <select x-model="$store.dashboard.drawerDraft.style.method"
+      <select x-vselect x-model="$store.dashboard.drawerDraft.style.method"
               class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500">
         <option value="pearson">Pearson (relación lineal)</option>
         <option value="spearman">Spearman (por rangos)</option>

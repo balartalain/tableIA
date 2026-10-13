@@ -2,7 +2,7 @@
 <div class="grid grid-cols-2 gap-3">
   <div>
     <label class="block text-xs font-semibold text-ink/70 mb-1">Ordenar por</label>
-    <select x-bind:value="$store.dashboard.sortValue"
+    <select x-vselect="$store.dashboard.sortValue" x-bind:value="$store.dashboard.sortValue"
             x-on:change="$store.dashboard.setSortValue($event.target.value)"
             class="w-full text-sm border border-line rounded-md px-2 py-2 focus:outline-none focus:border-moss-500">
       <option value="">Sin orden</option>
@@ -13,7 +13,7 @@
   </div>
   <div>
     <label class="block text-xs font-semibold text-ink/70 mb-1">Dirección</label>
-    <select x-bind:value="$store.dashboard.sortDirection"
+    <select x-vselect="$store.dashboard.sortDirection" x-bind:value="$store.dashboard.sortDirection"
             x-on:change="$store.dashboard.setSortDirection($event.target.value)"
             x-bind:disabled="!$store.dashboard.sortValue"
             class="w-full text-sm border border-line rounded-md px-2 py-2 focus:outline-none focus:border-moss-500 disabled:opacity-50">

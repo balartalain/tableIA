@@ -1,7 +1,7 @@
 {# Paleta de colores de los gráficos (`style.color_scheme`). #}
 <div>
   <label class="block text-xs font-semibold text-ink/70 mb-1">Paleta</label>
-  <select x-model="$store.dashboard.drawerDraft.style.color_scheme"
+  <select x-vselect x-model="$store.dashboard.drawerDraft.style.color_scheme"
           class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500">
     <option value="default">Por defecto</option>
     <option value="ocean">Océano</option>

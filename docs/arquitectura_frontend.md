@@ -33,6 +33,7 @@ static/sheets_reports/js/board_editor/
   base-widget.js              # BaseWidget (lifecycle, DOM, resize, chart)
   dashboard-store.js          # $store.dashboard (editor): estado + CRUD + drawer + IA
   filters.js                  # Filtros de tablero (extiende el store)
+  vselect.js                  # Directiva x-vselect: selects del editor con buscador (VirtualSelect)
   source-manager.js           # sourceManager(): fuentes del tablero, actualizar datos, eliminar
   source-picker.js            # sourcePicker(): elegir/editar/reemplazar la hoja de una fuente
   formula-builder.js          # FormulaBlocks: árbol ↔ texto, bloques y arrastre de los campos calculados
@@ -495,6 +496,26 @@ Todas usan `forceFallback: true` + `fallbackOnBody: true` para arrastre consiste
 - **Tabler Icons** (`ti ti-*`).
 - **CSS custom properties** en `:root` para toda la paleta.
 - **`[x-cloak]`** global para ocultar elementos antes de que Alpine arranque.
+
+## Selects con buscador (`x-vselect`)
+
+Todos los `<select>` del editor llevan la directiva `x-vselect` (`vselect.js`), que monta un
+VirtualSelect con caja de búsqueda en su lugar. El select nativo sigue en el DOM, oculto
+(`.vselect-native`), como fuente de verdad: Alpine maneja sus opciones (`x-for`), su valor,
+`disabled` y `x-show`, y la directiva los refleja. Al elegir, pone el valor en el select y
+despacha `input` y `change`, así que `x-model` y `x-on:change` funcionan igual que antes.
+
+Un select nuevo solo necesita el atributo:
+
+```html
+<select x-vselect x-model="c.type">…</select>
+<select x-vselect="metric.format || ''" x-bind:value="metric.format || ''" x-on:change="…">…</select>
+```
+
+Con `x-bind:value` (sin `x-model`) la directiva lleva la misma expresión, que es lo que le
+avisa de que el valor cambió. La opción de valor vacío («Sin orden», «Todas las filas») viaja
+con un valor centinela, porque VirtualSelect trata el vacío como «nada elegido». Los estilos
+(`.vselect`) están en `base.html`.
 
 ## Envío de correos
 

@@ -67,6 +67,11 @@
   /* Selects de la caja de filtros (Virtual Select): el botón como un control, la lista como un contenedor. */
   .vscomp-toggle-button { border-radius: 0.375rem; }
   .vscomp-dropbox { border-radius: 0.25rem; overflow: hidden; }
+  /* x-vselect (vselect.js): el select nativo queda oculto y el VirtualSelect ocupa su lugar. */
+  .vselect-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .vselect { min-width: 0; }
+  .vselect .vscomp-toggle-button { border-color: var(--color-line); font-size: inherit; }
+  .vselect.focused .vscomp-toggle-button, .vselect:focus .vscomp-toggle-button { border-color: var(--color-moss-500); box-shadow: none; }
 </style>
 </head>
 <body class="bg-paper text-ink antialiased min-h-screen">

@@ -3,13 +3,13 @@ Una condición {field, op, valor} dentro de un `x-for="(c, ci) in …"`. `list` 
 Alpine de la lista que la contiene (filtros del widget o de una métrica).
 {% endcomment %}
 <div class="flex flex-wrap items-center gap-1 rounded bg-paper/70 border border-line/60 p-1">
-  <select x-model="c.field" x-on:change="$store.dashboard.onFilterFieldChange(c)" aria-label="Columna"
+  <select x-vselect x-model="c.field" x-on:change="$store.dashboard.onFilterFieldChange(c)" aria-label="Columna"
           class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
     <template x-for="f in $store.dashboard.schema.all_fields || []" :key="f">
       <option x-bind:value="f" x-text="f"></option>
     </template>
   </select>
-  <select x-model="c.op" x-on:change="$store.dashboard.onFilterOpChange(c)" aria-label="Operador"
+  <select x-vselect x-model="c.op" x-on:change="$store.dashboard.onFilterOpChange(c)" aria-label="Operador"
           class="w-36 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
     <template x-for="o in $store.dashboard.filterOpOptions" :key="o.value">
       <option x-bind:value="o.value" x-text="o.label"></option>
@@ -17,7 +17,7 @@ Alpine de la lista que la contiene (filtros del widget o de una métrica).
   </select>
 
   <template x-if="$store.dashboard.filterNeedsValue(c)">
-    <select x-model="c.mode" aria-label="Tipo de valor"
+    <select x-vselect x-model="c.mode" aria-label="Tipo de valor"
             class="w-28 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
       <option value="value" x-text="$store.dashboard.filterIsList(c) ? 'Lista' : ($store.dashboard.filterIsRange(c) ? 'Rango' : 'Valor')"></option>
       <option value="relative" x-text="'Relativo…'"></option>
@@ -41,7 +41,7 @@ Alpine de la lista que la contiene (filtros del widget o de una métrica).
   </template>
 
   <template x-if="$store.dashboard.filterNeedsValue(c) && c.mode === 'relative'">
-    <select x-model="c.relative" aria-label="Valor relativo"
+    <select x-vselect x-model="c.relative" aria-label="Valor relativo"
             class="flex-1 min-w-[7rem] text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
       <template x-for="o in $store.dashboard.relativeOptionsFor(c)" :key="o.value">
         <option x-bind:value="o.value" x-text="o.label"></option>

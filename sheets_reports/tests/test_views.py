@@ -453,6 +453,8 @@ class ViewsTests(TestCase):
         r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")
         self.assertNotContains(r, "REFRESH_MINUTES")
         self.assertContains(r, "donut-widget.js")
+        self.assertContains(r, "vselect.js")
+        self.assertContains(r, "x-vselect")
         self.assertContains(r, 'id="module-rail"')
         self.assertContains(r, "tableia:rail-collapsed")
         # Header del editor: salir, nombre editable, modos y compartir.

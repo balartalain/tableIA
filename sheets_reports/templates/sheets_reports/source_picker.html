@@ -268,7 +268,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                        class="w-full min-w-[10rem] text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
               </td>
               <td class="px-3 py-2">
-                <select x-model="c.type" x-bind:disabled="!c.include || c.readonly" x-bind:aria-label="`Tipo de ${c.name}`"
+                <select x-vselect x-model="c.type" x-bind:disabled="!c.include || c.readonly" x-bind:aria-label="`Tipo de ${c.name}`"
                         class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
                   <template x-for="t in TYPES" :key="t.value">
                     <option x-bind:value="t.value" x-text="t.label" x-bind:selected="c.type === t.value"></option>
@@ -277,7 +277,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               </td>
               <td class="px-3 py-2">
                 <!-- Solo las numéricas: todas las métricas que las suman, promedian… lo heredan. -->
-                <select x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include || c.readonly"
+                <select x-vselect x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include || c.readonly"
                         x-bind:aria-label="`Formato de ${c.name}`"
                         class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
                   <template x-for="f in FORMATS" :key="f.value">
@@ -348,7 +348,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                   class="text-[11px] font-semibold rounded-full bg-moss-50 text-moss-700 border border-moss-100 px-2 py-0.5">Por fila</span>
             <span x-show="f._kind === 'aggregated'" title="Se calcula por grupo del widget; solo como métrica"
                   class="text-[11px] font-semibold rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5">Agregado</span>
-            <select x-show="f._kind === 'aggregated'" x-model="f.format" aria-label="Formato"
+            <select x-vselect x-show="f._kind === 'aggregated'" x-model="f.format" aria-label="Formato"
                     class="text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
               <option value="number" x-bind:selected="f.format !== 'percent'">Número</option>
               <option value="percent" x-bind:selected="f.format === 'percent'">Porcentaje (%)</option>

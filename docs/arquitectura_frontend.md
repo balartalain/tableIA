@@ -384,6 +384,10 @@ tienen problema («Sin acceso», «Pestaña no encontrada»). Acciones por fuent
 - **Cambiar fuente** → selector en `edit` con `changeSheet` (pasa a `replace` cuando
   cargan las columnas guardadas).
 - **Abrir origen** → la hoja de Google en la pestaña de la fuente (`#gid=`), en otra pestaña.
+- **Ver** → `viewData`: los datos de la fuente en una tabla (Tabulator) con carga progresiva
+  (`progressiveLoad: 'scroll'`): pide `GET …/rows/?page&size&sort&dir` de 100 en 100 filas y,
+  al llegar con el scroll al final, suma el bloque siguiente a los ya cargados. El orden es
+  remoto y reinicia la carga. El encabezado muestra «Mostrando N de M filas» (`loadedRows`).
 - **Editar** → selector en modo `edit` (columnas y campos calculados).
 - **Eliminar** → `DELETE ?dry_run=1` lista los widgets que se quedan sin datos y pide
   confirmación.

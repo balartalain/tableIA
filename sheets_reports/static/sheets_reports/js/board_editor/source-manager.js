@@ -29,6 +29,8 @@ function sourceManager() {
     dataError: '',
     previewColumns: [],
     totalRows: 0,
+    // Filas ya cargadas en la tabla de datos (crece al hacer scroll).
+    loadedRows: 0,
     isFormResponse: false,
     _previewTable: null,
 
@@ -143,6 +145,7 @@ function sourceManager() {
       this.dataError = '';
       this.previewColumns = [];
       this.totalRows = 0;
+      this.loadedRows = 0;
       this.isFormResponse = false;
       if (this._previewTable) {
         this._previewTable.destroy();
@@ -181,15 +184,16 @@ function sourceManager() {
         hozAlign: 'left',
       }));
 
-      // La tabla pide al servidor solo la página que se ve (y el orden, sobre toda la fuente):
-      // así se recorre la hoja completa sin traerla entera al navegador.
+      // La tabla pide al servidor un bloque de filas y, al llegar con el scroll al final, el
+      // siguiente, que se suma a los ya cargados. El orden se aplica en el servidor, sobre
+      // toda la fuente: al cambiarlo se vuelve a empezar desde el primer bloque.
       const rowsUrl = apiUrl(`/api/sources/${this.previewSource.id}/rows/`);
       this._previewTable = new Tabulator(container, {
         nestedFieldSeparator: false,
         columns,
         layout: 'fitDataStretch',
-        pagination: true,
-        paginationMode: 'remote',
+        progressiveLoad: 'scroll',
+        progressiveLoadScrollMargin: 300,
         sortMode: 'remote',
         paginationSize: 100,
         ajaxURL: rowsUrl,
@@ -206,13 +210,11 @@ function sourceManager() {
           this.totalRows = response.total_rows || 0;
           return { last_page: response.last_page || 1, last_row: this.totalRows, data: response.rows || [] };
         },
-        paginationCounter: (pageSize, currentRow) => {
-          const total = this.totalRows;
-          if (!total) return 'Sin filas';
-          const end = Math.min(currentRow + pageSize - 1, total);
-          return `Mostrando ${currentRow.toLocaleString('es')}–${end.toLocaleString('es')} de ${total.toLocaleString('es')} filas`;
-        },
-        maxHeight: '100%',
+        // La carga por scroll necesita una altura fija: la del contenedor.
+        height: '100%',
+      });
+      this._previewTable.on('dataProcessed', () => {
+        if (this._previewTable) this.loadedRows = this._previewTable.getDataCount();
       });
 
       this._previewTable.on('tableBuilt', () => {

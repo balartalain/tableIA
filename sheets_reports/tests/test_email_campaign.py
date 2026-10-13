@@ -75,10 +75,21 @@ class ScheduleTests(TestCase):
         self.assertTrue(mailing.is_due(campaign, utc(1, 12, 0)))    # 08:00
         self.assertTrue(mailing.is_due(campaign, utc(1, 20, 0)))    # un cron atrasado
 
-    def test_una_vez_por_dia(self):
+    def test_con_el_dia_cerrado_no_le_toca(self):
         campaign = make_campaign(self.dashboard, last_run_on=date(2026, 6, 1))
         self.assertFalse(mailing.is_due(campaign, utc(1, 15)))
         self.assertTrue(mailing.is_due(campaign, utc(2, 15)))
+
+    def test_con_el_maximo_del_dia_enviado_no_le_toca(self):
+        campaign = make_campaign(self.dashboard, recipients=3)
+        campaign.recipients.filter(email__in=["p0@uapa.edu.do", "p1@uapa.edu.do"]).update(
+            status=EmailRecipient.SENT, sent_at=utc(1, 14))
+        self.assertTrue(mailing.is_due(campaign, utc(1, 15)))
+        # Un envío que se cortó a medias se retoma ya mismo.
+        self.assertEqual(mailing.next_run(campaign, utc(1, 15)), mailing.local_now(utc(1, 15)))
+        campaign.daily_limit = 2
+        self.assertFalse(mailing.is_due(campaign, utc(1, 15)))
+        self.assertEqual(mailing.next_run(campaign, utc(1, 15)).date(), date(2026, 6, 2))
 
     def test_semanal_solo_sus_dias(self):
         campaign = make_campaign(self.dashboard, frequency=EmailCampaign.WEEKLY, weekdays=[2])
@@ -97,6 +108,9 @@ class ScheduleTests(TestCase):
 @LOCMEM
 class RunCampaignTests(TestCase):
     def setUp(self):
+        patcher = mock.patch("sheets_reports.services.mailing.sleep")
+        self.sleep = patcher.start()
+        self.addCleanup(patcher.stop)
         user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.dashboard, _ = make_board(user)
 
@@ -121,11 +135,71 @@ class RunCampaignTests(TestCase):
         self.assertEqual(mailing.run_campaign(campaign, utc(2, 15))["sent"], 2)
         self.assertEqual(self.statuses(campaign), ["sent"] * 4 + ["pending"])
 
-    def test_dos_ejecuciones_el_mismo_dia_envian_una_vez(self):
+    def test_con_el_maximo_alcanzado_no_envia_mas_ese_dia(self):
         campaign = make_campaign(self.dashboard, recipients=4, daily_limit=2)
         mailing.run_campaign(campaign, utc(1, 15))
         self.assertIsNone(mailing.run_campaign(EmailCampaign.objects.get(id=campaign.id), utc(1, 15, 5)))
         self.assertEqual(len(mail.outbox), 2)
+        self.assertIn("Se alcanzó el máximo", campaign.logs.first().message)
+
+    def test_cada_lote_envia_su_tamano_por_remitente(self):
+        campaign = make_campaign(self.dashboard, recipients=7, batch_size=2,
+                                 senders=("a@gmail.com", "b@gmail.com"))
+        self.assertEqual(mailing.run_campaign(campaign, utc(1, 15)), {"sent": 7, "failed": 0, "pending": 0})
+        # 4 + 3: dos lotes, con un minuto entre uno y otro.
+        self.assertEqual(self.sleep.call_args_list, [mock.call(60)])
+        self.assertEqual(campaign.logs.filter(message__startswith="Lote").count(), 2)
+        self.assertFalse(mailing.is_due(campaign, utc(1, 15, 5)))
+
+    def test_los_lotes_paran_en_el_maximo_del_dia(self):
+        campaign = make_campaign(self.dashboard, recipients=5, daily_limit=4, batch_size=2)
+        self.assertEqual(mailing.run_campaign(campaign, utc(1, 15)), {"sent": 4, "failed": 0, "pending": 1})
+        self.assertEqual(self.sleep.call_count, 1)
+        self.assertEqual(mailing.next_run(campaign, utc(1, 15, 5)).date(), date(2026, 6, 2))
+
+    def test_el_que_falla_no_se_reintenta_en_la_misma_ejecucion(self):
+        campaign = make_campaign(self.dashboard, recipients=3, batch_size=1)
+        real_send = mailing.EmailMessage.send
+
+        def send(message, *args, **kwargs):
+            if message.to == ["p0@uapa.edu.do"]:
+                raise smtplib.SMTPRecipientsRefused({})
+            return real_send(message, *args, **kwargs)
+
+        with mock.patch("sheets_reports.services.mailing.EmailMessage.send", send):
+            result = mailing.run_campaign(campaign, utc(1, 15))
+        self.assertEqual(result, {"sent": 2, "failed": 1, "pending": 1})
+        self.assertEqual(campaign.recipients.get(email="p0@uapa.edu.do").attempts, 1)
+
+    def test_un_remitente_que_falla_sale_y_el_otro_termina(self):
+        campaign = make_campaign(self.dashboard, recipients=4, batch_size=1,
+                                 senders=("a@gmail.com", "b@gmail.com"))
+        real_connection = mailing._connection
+
+        def connection(sender):
+            if sender.email == "a@gmail.com":
+                raise smtplib.SMTPAuthenticationError(535, b"Username and Password not accepted")
+            return real_connection(sender)
+
+        with mock.patch("sheets_reports.services.mailing._connection", connection):
+            result = mailing.run_campaign(campaign, utc(1, 15))
+        self.assertEqual(result, {"sent": 4, "failed": 0, "pending": 0})
+        self.assertEqual(set(campaign.recipients.values_list("sender_email", flat=True)), {"b@gmail.com"})
+        self.assertEqual(campaign.logs.filter(level=EmailLog.ERROR).count(), 1)
+
+    def test_con_otro_envio_en_curso_no_envia(self):
+        campaign = make_campaign(self.dashboard, running_since=utc(1, 14, 58))
+        self.assertIsNone(mailing.run_campaign(campaign, utc(1, 15)))
+        self.assertEqual(len(mail.outbox), 0)
+        # Un candado viejo es de un envío que murió: no bloquea.
+        self.assertEqual(mailing.run_campaign(campaign, utc(1, 15, 9))["sent"], 3)
+        self.assertIsNone(EmailCampaign.objects.get(id=campaign.id).running_since)
+
+    def test_sin_remitentes_tambien_cierra_el_dia(self):
+        campaign = make_campaign(self.dashboard, senders=())
+        mailing.run_campaign(campaign, utc(1, 15))
+        self.assertFalse(mailing.is_due(campaign, utc(1, 15, 5)))
+        self.assertTrue(mailing.is_due(campaign, utc(2, 15)))
 
     def test_reparte_entre_los_remitentes(self):
         campaign = make_campaign(self.dashboard, recipients=4, senders=("a@gmail.com", "b@gmail.com"))
@@ -181,7 +255,7 @@ class CampaignEndpointsTests(TestCase):
         self.url = f"/api/dashboard/{self.dashboard.id}/email-campaign/"
 
     def put(self, **changes):
-        body = {"enabled": False, "subject": "Hola", "body": "Mensaje", "daily_limit": 50,
+        body = {"enabled": False, "subject": "Hola", "body": "Mensaje", "daily_limit": 50, "batch_size": 10,
                 "frequency": "daily", "send_time": "09:30", "weekdays": [],
                 "senders": [{"email": "a@gmail.com", "password": "abcd efgh ijkl mnop"}], **changes}
         return self.client.put(self.url, json.dumps(body), content_type="application/json")
@@ -212,8 +286,14 @@ class CampaignEndpointsTests(TestCase):
         sender = EmailSender.objects.get()
         self.assertEqual((sender.email, mailing.decrypt_password(sender.password_encrypted)), ("a@gmail.com", "uno"))
 
+    def test_guardar_reabre_el_dia(self):
+        self.put()
+        EmailCampaign.objects.update(last_run_on=date(2026, 6, 1))
+        self.assertEqual(self.put(batch_size=25).json()["batch_size"], 25)
+        self.assertIsNone(EmailCampaign.objects.get().last_run_on)
+
     def test_valida_lo_que_llega(self):
-        for changes in ({"send_time": "25:00"}, {"daily_limit": 0}, {"frequency": "mensual"},
+        for changes in ({"send_time": "25:00"}, {"daily_limit": 0}, {"batch_size": 0}, {"frequency": "mensual"},
                         {"frequency": "weekly", "weekdays": []}, {"weekdays": [9]},
                         {"senders": [{"email": "sin-arroba", "password": "x"}]},
                         {"senders": [{"email": "nuevo@gmail.com", "password": ""}]}):
@@ -303,5 +383,5 @@ class EmailReportTests(TestCase):
         sent = self.client.get(f"{self.url}recipients/?status=sent").json()
         self.assertEqual([row["sender_email"] for row in sent["rows"]], ["a@gmail.com"] * 2)
         logs = self.client.get(f"{self.url}logs/").json()
-        self.assertEqual(logs["total_rows"], 2)
+        self.assertEqual(logs["total_rows"], 3)  # inicio, el lote y el resumen
         self.assertIn("Fin del envío", logs["rows"][0]["message"])  # el más reciente primero

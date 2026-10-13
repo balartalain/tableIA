@@ -35,6 +35,7 @@ def _serialize_campaign(campaign: EmailCampaign) -> dict:
         "subject": campaign.subject,
         "body": campaign.body,
         "daily_limit": campaign.daily_limit,
+        "batch_size": campaign.batch_size,
         "frequency": campaign.frequency,
         "send_time": send_time.strftime("%H:%M"),
         "weekdays": campaign.weekdays or [],
@@ -73,7 +74,10 @@ def _clean_campaign(data: dict, campaign: EmailCampaign) -> tuple[dict, list[dic
         return {}, [], "Elige al menos un día de la semana."
     limit = data.get("daily_limit")
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        return {}, [], "El límite de correos por día debe ser un número mayor que cero."
+        return {}, [], "El máximo de correos al día debe ser un número mayor que cero."
+    batch_size = data.get("batch_size")
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+        return {}, [], "El tamaño del lote por remitente debe ser un número mayor que cero."
 
     stored = {s.email: s for s in campaign.senders.all()} if campaign.pk else {}
     senders, seen = [], set()
@@ -94,6 +98,7 @@ def _clean_campaign(data: dict, campaign: EmailCampaign) -> tuple[dict, list[dic
         "subject": str(data.get("subject") or "").strip()[:255],
         "body": str(data.get("body") or "").strip(),
         "daily_limit": limit,
+        "batch_size": batch_size,
         "frequency": frequency,
         "send_time": send_time,
         "weekdays": weekdays,
@@ -112,8 +117,9 @@ def _clean_campaign(data: dict, campaign: EmailCampaign) -> tuple[dict, list[dic
 @require_http_methods(["GET", "PUT"])
 def email_campaign(request, dashboard_id):
     """GET: la configuración del envío del tablero (sin contraseñas). PUT {enabled, subject,
-    body, daily_limit, frequency, send_time, weekdays, senders: [{email, password?}]}: la
-    guarda; un remitente sin `password` conserva la que tenía y uno que no viene se quita."""
+    body, daily_limit, batch_size, frequency, send_time, weekdays, senders: [{email,
+    password?}]}: la guarda; un remitente sin `password` conserva la que tenía y uno que no
+    viene se quita."""
     dashboard = _owned_dashboard(request, dashboard_id)
     if not dashboard:
         return _error("Tablero no encontrado", status=404)
@@ -129,6 +135,9 @@ def email_campaign(request, dashboard_id):
         return _error(error)
     for key, value in fields.items():
         setattr(campaign, key, value)
+    # Guardar reabre el día (p. ej. tras corregir una contraseña); el máximo diario se
+    # sigue respetando porque se cuenta sobre lo enviado hoy.
+    campaign.last_run_on = None
     campaign.save()
     campaign.senders.exclude(email__in=[s["email"] for s in senders]).delete()
     for item in senders:

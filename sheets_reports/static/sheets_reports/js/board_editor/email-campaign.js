@@ -1,6 +1,6 @@
 // Envío de correos del tablero (bottom sheet «Envío de correos»): los destinatarios (desde un
 // CSV), los remitentes (cuentas de Gmail con su contraseña de aplicación), cuántos correos se
-// envían por día y cuándo, y el mensaje. El envío lo ejecuta el crontab del servidor; con el
+// envían por día, en lotes de qué tamaño y cuándo, y el mensaje. El envío lo ejecuta el crontab del servidor; con el
 // envío activado, la vista compartida muestra la pestaña «Correos» (email-report.js).
 const EMAIL_WEEKDAYS = [
   { value: 0, label: 'Lun' }, { value: 1, label: 'Mar' }, { value: 2, label: 'Mié' },
@@ -15,7 +15,7 @@ function emailCampaign() {
     error: '',
     saving: false,
     // Lo que se edita. Cada remitente: {email, password (solo si se escribe una nueva), has_password}.
-    form: { enabled: false, subject: '', body: '', daily_limit: 100, frequency: 'daily', send_time: '08:00', weekdays: [], senders: [] },
+    form: { enabled: false, subject: '', body: '', daily_limit: 100, batch_size: 50, frequency: 'daily', send_time: '08:00', weekdays: [], senders: [] },
     report: { total: 0, sent: 0, pending: 0, failed: 0, next_run: null },
     timeZone: '',
     uploading: false,
@@ -43,6 +43,7 @@ function emailCampaign() {
     apply(data) {
       this.form = {
         enabled: data.enabled, subject: data.subject, body: data.body, daily_limit: data.daily_limit,
+        batch_size: data.batch_size,
         frequency: data.frequency, send_time: data.send_time, weekdays: data.weekdays || [],
         senders: (data.senders || []).map(s => ({ email: s.email, password: '', has_password: s.has_password })),
       };
@@ -128,6 +129,7 @@ function emailCampaign() {
       const body = {
         ...this.form,
         daily_limit: Number(this.form.daily_limit),
+        batch_size: Number(this.form.batch_size),
         senders: this.form.senders.filter(s => s.email.trim() || s.password)
           .map(s => ({ email: s.email.trim(), password: s.password })),
       };

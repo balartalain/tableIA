@@ -79,8 +79,13 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
       <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Programación</h4>
       <div class="flex flex-wrap items-end gap-3">
         <label class="block">
-          <span class="block text-[11px] font-semibold text-ink/60 mb-1">Correos por día de envío</span>
+          <span class="block text-[11px] font-semibold text-ink/60 mb-1">Máximo de correos al día</span>
           <input type="number" min="1" x-model.number="form.daily_limit"
+                 class="w-32 border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="block text-[11px] font-semibold text-ink/60 mb-1">Tamaño del lote por remitente</span>
+          <input type="number" min="1" x-model.number="form.batch_size"
                  class="w-32 border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
         </label>
         <label class="block">
@@ -105,7 +110,7 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
         </template>
       </div>
       <p class="text-xs text-ink/60">
-        El límite se reparte entre los remitentes; Gmail admite unos 500 correos al día por cuenta.
+        Desde la hora indicada, cada remitente envía un lote por minuto hasta llegar al máximo del día; Gmail admite unos 500 correos al día por cuenta.
         <span x-show="timeZone">La hora es de <span x-text="timeZone"></span>.</span>
       </p>
       <p x-show="nextRunLabel" x-cloak class="text-xs text-ink/70">Próximo envío: <span class="font-semibold" x-text="nextRunLabel"></span></p>

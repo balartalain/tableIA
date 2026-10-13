@@ -145,14 +145,19 @@ class EmailCampaign(models.Model):
     subject = models.CharField(max_length=255, blank=True, default="")
     body = models.TextField(blank=True, default="")
     daily_limit = models.PositiveIntegerField(
-        default=100, help_text="Correos por día de envío, repartidos entre los remitentes.")
+        default=100, help_text="Máximo de correos al día, entre todos los remitentes.")
+    batch_size = models.PositiveIntegerField(
+        default=50, help_text="Correos que envía cada remitente en cada lote; entre lotes pasa 1 minuto.")
     frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default=DAILY)
     send_time = models.TimeField(default="08:00", help_text="Hora local (CAMPAIGN_TIME_ZONE).")
     weekdays = models.JSONField(
         default=list, blank=True,
         help_text="Días de envío con frecuencia semanal: 0 = lunes … 6 = domingo.")
     last_run_on = models.DateField(
-        null=True, blank=True, help_text="Día local de la última ejecución: una por día.")
+        null=True, blank=True,
+        help_text="Día local cerrado: ya no se envía más ese día (se alcanzó el máximo o un lote no envió nada).")
+    running_since = models.DateTimeField(
+        null=True, blank=True, help_text="Hay un lote en curso desde entonces (candado entre crons).")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

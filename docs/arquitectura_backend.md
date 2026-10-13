@@ -883,14 +883,14 @@ con otra fórmula es un error) y luego guarda el widget.
 ## 11. Envío de correos (`services/mailing.py`, `views_email.py`)
 
 Cada tablero puede tener un envío de correos: una lista de destinatarios que reciben un
-mensaje **una sola vez**, repartido en varios días según un límite diario. Lo ejecuta el
-crontab del servidor; nada se envía desde una petición web salvo «Enviar prueba».
+mensaje **una sola vez**, en lotes y repartido en varios días según un máximo diario. Lo
+ejecuta el crontab del servidor; nada se envía desde una petición web salvo «Enviar prueba».
 
 ### 11.1 Modelos
 
 | Modelo | Qué guarda |
 |---|---|
-| `EmailCampaign` | Uno por tablero (`dashboard.email_campaign`): `enabled`, `subject`, `body`, `daily_limit` (correos por día de envío), `frequency` (`daily` \| `weekly`), `send_time`, `weekdays` (0 = lunes … 6 = domingo, solo en `weekly`) y `last_run_on` (día local de la última ejecución). |
+| `EmailCampaign` | Uno por tablero (`dashboard.email_campaign`): `enabled`, `subject`, `body`, `daily_limit` (máximo de correos al día), `batch_size` (correos por remitente en cada lote), `frequency` (`daily` \| `weekly`), `send_time`, `weekdays` (0 = lunes … 6 = domingo, solo en `weekly`), `last_run_on` (día local cerrado: ese día ya no se envía más) y `running_since` (hay un lote en curso). |
 | `EmailSender` | Cuenta de Gmail que envía: `email` y `password_encrypted` (su contraseña de aplicación, cifrada). |
 | `EmailRecipient` | Destinatario: `email`, `status` (`pending` \| `sent` \| `failed`), `attempts`, `sent_at`, `sender_email` y `error`. |
 | `EmailLog` | Bitácora: `created_at`, `level` (`info` \| `error`), `message`, `recipient_email`, `sender_email`. |
@@ -902,25 +902,38 @@ crontab del servidor; nada se envía desde una petición web salvo «Enviar prue
 - **`parse_recipients_csv(content)`** → `(válidos, inválidos)`: de cada fila, la primera celda
   que es un correo; en minúsculas y sin repetir. Una primera fila sin correo es el encabezado.
 - **`is_due(campaign, now)`**: activada, con pendientes, hoy es día de envío, ya pasó
-  `send_time` y hoy no se ejecutó. La hora y el día son de `CAMPAIGN_TIME_ZONE`. Un cron
-  atrasado la ejecuta igual; `next_run` da la próxima fecha.
-- **`run_campaign(campaign, now, force)`**:
-  1. Reserva el día con un `update` condicionado sobre `last_run_on`: de dos crons
-     solapados, solo uno sigue (el otro recibe `None`).
-  2. Cupo = `daily_limit` − enviados hoy; toma esa cantidad de pendientes.
-  3. Los reparte en ronda entre los remitentes con contraseña. Cada remitente envía los
-     suyos por una conexión SMTP (`CAMPAIGN_SMTP_HOST`/`PORT`, TLS).
-  4. Un destinatario que falla suma un intento y sigue pendiente; al tercero
-     (`MAX_ATTEMPTS`) queda `failed`. Si falla el remitente (no inicia sesión, se
-     desconecta, el servidor lo rechaza), sus destinatarios quedan pendientes sin sumar
-     intentos.
-  5. Deja en `EmailLog` el inicio, cada error y el resumen.
+  `send_time`, el día no está cerrado (`last_run_on`) y queda cupo de `daily_limit`. La hora
+  y el día son de `CAMPAIGN_TIME_ZONE`. Un cron atrasado la ejecuta igual; `next_run` da la
+  próxima fecha (ahora mismo si el envío de hoy quedó sin terminar).
+- **`run_campaign(campaign, now, force)`** hace **el envío del día**, en lotes:
+  1. Toma el candado con un `update` condicionado sobre `running_since`: de dos crons
+     solapados, solo uno sigue (el otro recibe `None`). El envío renueva el candado en cada
+     lote; uno de más de `LOCK_STALE` (10 min) es de un proceso que murió y no bloquea. Con
+     el día cerrado también devuelve `None`, salvo `force`.
+  2. Cada lote: cupo = el menor entre `daily_limit` − enviados hoy y `batch_size` ×
+     remitentes; toma esa cantidad de pendientes y los reparte en ronda entre los remitentes
+     con contraseña (a lo sumo `batch_size` cada uno). Cada remitente envía los suyos por
+     una conexión SMTP (`CAMPAIGN_SMTP_HOST`/`PORT`, TLS).
+  3. Entre un lote y el siguiente espera `BATCH_PAUSE_S` (60 s, fijo en el código). Sigue
+     hasta llegar al máximo del día, quedarse sin pendientes o sin remitentes, o cambiar el
+     día.
+  4. Un destinatario que falla suma un intento y sigue pendiente, pero no se reintenta en
+     la misma ejecución sino el próximo día de envío; al tercero (`MAX_ATTEMPTS`) queda
+     `failed`. Si falla el remitente (no inicia sesión, se desconecta, el servidor lo
+     rechaza), no se usa más en esa ejecución y sus destinatarios quedan pendientes, sin
+     sumar intentos, para los demás remitentes.
+  5. Al terminar cierra el día (`last_run_on`). Si el proceso se corta a medias el día
+     queda abierto: la siguiente pasada del cron retoma cuando el candado vence.
+  6. Deja en `EmailLog` el inicio, cada lote, cada error y el resumen.
 - **`send_test(campaign, to)`**: el mensaje a una dirección, con el primer remitente.
 - **`report_summary(campaign)`**: totales por estado, `last_log_id` y `next_run`.
 
 ### 11.3 Comando y crontab
 
 `manage.py send_campaign_emails` recorre los envíos activados y ejecuta los que `is_due`.
+El cron solo dispara el arranque: el ritmo de los lotes lo lleva `run_campaign`, así que el
+comando puede durar varios minutos. La guía de puesta en marcha está en
+[`configuracion_correos.md`](configuracion_correos.md).
 `--campaign <id>` limita a uno y `--force` ignora el horario (para probar). En el servidor:
 
 ```
@@ -934,7 +947,7 @@ Del dueño del tablero:
 | Ruta | Qué hace |
 |---|---|
 | `GET /api/dashboard/{id}/email-campaign/` | La configuración, los remitentes (`email`, `has_password`) y `report`. Sin envío guardado, los valores por defecto. |
-| `PUT /api/dashboard/{id}/email-campaign/` | Guarda. Un remitente sin `password` conserva la suya; el que no viene se quita. Para activar exige asunto, cuerpo, un remitente y destinatarios. |
+| `PUT /api/dashboard/{id}/email-campaign/` | Guarda. Un remitente sin `password` conserva la suya; el que no viene se quita. Para activar exige asunto, cuerpo, un remitente y destinatarios. Guardar reabre el día (`last_run_on = None`). |
 | `POST /api/dashboard/{id}/email-campaign/recipients/` | CSV (`file`, multipart) → `{added, duplicates, invalid, invalid_count}`. Los que ya estaban conservan su estado. |
 | `DELETE /api/dashboard/{id}/email-campaign/recipients/` | Vacía la lista y desactiva el envío. |
 | `POST /api/dashboard/{id}/email-campaign/test/` | `{to}` → envía la prueba. |

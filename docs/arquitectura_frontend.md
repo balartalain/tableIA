@@ -507,8 +507,8 @@ la configuración y la guarda entera con «Guardar»:
   estaban y cuáles no son un correo. «Vaciar lista» pide confirmación.
 - **Remitentes:** correo y contraseña de aplicación. Una contraseña ya guardada no vuelve al
   navegador: el campo queda vacío y solo se envía si se escribe otra.
-- **Programación:** correos por día de envío, frecuencia (todos los días o días de la
-  semana) y hora. Muestra el próximo envío que calcula el servidor.
+- **Programación:** máximo de correos al día, tamaño del lote por remitente, frecuencia
+  (todos los días o días de la semana) y hora. Muestra el próximo envío que calcula el servidor.
 - **Mensaje:** asunto y cuerpo. «Enviar prueba» guarda lo escrito y manda el mensaje a la
   dirección indicada.
 - **Activar el envío:** el servidor lo rechaza si falta el mensaje, un remitente o los

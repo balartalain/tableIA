@@ -435,6 +435,9 @@ function sourcePicker({ mode = 'create' } = {}) {
       return FormulaBlocks.pieces.column(name);
     },
 
+    // La ficha «Vacío» del subpanel «Valores»: deja la celda en blanco (resultado de un SI).
+    EMPTY_PIECE: { ...FormulaBlocks.emptyInfo, piece: FormulaBlocks.pieces.empty() },
+
     // La ficha del subpanel «Valores», o null si lo escrito no vale.
     get valuePiece() {
       const raw = this.valueInput;

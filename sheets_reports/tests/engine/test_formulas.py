@@ -155,6 +155,46 @@ class FormulaLanguageTests(SimpleTestCase):
                          ["condición", "si se cumple", "si no"])
         self.assertEqual({o["op"] for o in BUILDER_CATALOG["arithmetic"]}, {"+", "-", "*", "/"})
 
+    def test_vacio_como_resultado_de_un_if(self):
+        df = budget_df()
+        ones = compile_formula('IF(Campus = "Santiago", 1, EMPTY)', df.columns).evaluate_rows(df)
+        self.assertEqual(ones.dropna().tolist(), [1.0, 1.0])
+        self.assertEqual(ones.isna().tolist(), [False, True, True, True, False])
+        # Como una celda en blanco: la suma y el promedio la ignoran y el conteo no la cuenta.
+        self.assertEqual((ones.sum(), ones.mean(), int(ones.count())), (2.0, 1.0, 2))
+        # Con texto en la otra rama queda vacía, no el texto "nan"; y vale en cualquier rama.
+        labels = compile_formula('IF(Campus = "Santiago", EMPTY, Campus)', df.columns).evaluate_rows(df)
+        self.assertEqual(labels.dropna().tolist(), ["Santo Domingo", "Nagua", "Nagua"])
+        fixed = compile_formula('if(Campus = "Nagua", "N", empty)', df.columns).evaluate_rows(df)
+        self.assertEqual([None if pd.isna(v) else v for v in fixed], [None, None, "N", "N", None])
+
+    def test_vacio_dentro_de_una_agregacion(self):
+        df = budget_df()
+        only = compile_formula('AVG(IF(Campus = "Santiago", Gasto_Real, EMPTY))', df.columns)
+        self.assertTrue(only.aggregated)
+        self.assertEqual(only.aggregate(df), 2750.0)  # (4200 + 1300) / 2, sin los demás como ceros
+        counted = compile_formula('COUNT(IF(Departamento = "TI", 1, EMPTY))', df.columns)
+        self.assertEqual(counted.aggregate(df), 3.0)
+        self.assertIsNone(compile_formula('SUM(IF(Campus = "Otro", Gasto_Real, EMPTY))', df.columns).aggregate(df))
+
+    def test_vacio_solo_va_en_un_if(self):
+        df = budget_df()
+        for text in ("EMPTY", "Campus = EMPTY", "EMPTY + 1", "SUM(EMPTY)", "IF(EMPTY, 1, 2)",
+                     "IF(Campus = EMPTY, 1, 2)", "-EMPTY"):
+            with self.assertRaisesRegex(FormulaError, "solo va como resultado de un SI", msg=text):
+                compile_formula(text, df.columns)
+
+    def test_vacio_en_el_arbol_y_una_columna_con_ese_nombre(self):
+        tree = formula_tree('IF(Campus = "Santiago", 1, EMPTY)')
+        self.assertEqual(tree["args"][2], {"kind": "empty", "value": None, "args": []})
+        self.assertEqual(formula_text(tree), 'IF([Campus] = "Santiago", 1, EMPTY)')
+        self.assertEqual(formula_tree(formula_text(tree)), tree)
+        self.assertEqual(BUILDER_CATALOG["empty"]["label"], "Vacío")
+        # Una columna llamada así sigue siendo una columna, entre corchetes o suelta.
+        df = budget_df().rename(columns={"Campus": "Empty"})
+        self.assertEqual(compile_formula("[Empty]", df.columns).columns, ("Empty",))
+        self.assertEqual(compile_formula('IF(Empty = "Nagua", 1, 0)', df.columns).evaluate_rows(df).sum(), 2)
+
     def test_division_entre_cero_queda_vacia(self):
         df = budget_df()
         self.assertTrue(compile_formula("Gasto_Real / 0", df.columns).evaluate_rows(df).isna().all())

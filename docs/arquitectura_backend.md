@@ -844,6 +844,13 @@ Sintaxis: columnas por nombre o entre corchetes (`[Gasto Real]`), textos entre c
 `+ - * /`, comparaciones, `AND OR NOT`, `IF(c, sí, no)`. Errores legibles: columnas que no
 existen, sintaxis, agregaciones anidadas y **mezclar** agregados con columnas sueltas
 (`SUM(a) / b`). `rename_columns` reescribe una fórmula cuando se renombran columnas.
+
+`EMPTY` es el valor vacío: `IF([Recinto] = "Santiago", 1, EMPTY)` deja la celda en blanco
+cuando no se cumple, y `AVG(IF([Recinto] = "Santiago", [Nota], EMPTY))` promedia solo esas
+filas. Se evalúa como NaN, igual que una celda en blanco de la hoja: las sumas y promedios la
+ignoran y el conteo no la cuenta. Solo se admite como resultado de un `IF` (`_check_empty`):
+en una comparación o una cuenta se rechaza, para que `[x] = EMPTY` no parezca preguntar si
+la columna está vacía. Una columna que se llame «Empty» sigue siendo una columna.
 El constructor de bloques del editor trabaja con árboles; la gramática está solo aquí:
 - `formula_tree(texto)`: el árbol tal como está escrito (`{kind, value, args}`, sin resolver
   columnas; `None` si no se entiende). Las fuentes lo entregan en `calculated_fields[].tree`.

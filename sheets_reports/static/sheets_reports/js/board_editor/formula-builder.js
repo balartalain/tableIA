@@ -18,6 +18,8 @@ const FormulaBlocks = (() => {
   const catalogElement = document.getElementById('formula-catalog');
   const catalog = catalogElement ? JSON.parse(catalogElement.textContent)
     : { functions: [], compare: [], arithmetic: [], logic: [] };
+  // El valor vacío (EMPTY): deja la celda en blanco; el servidor solo lo admite en un SI.
+  const emptyInfo = catalog.empty || { label: 'Vacío', title: '' };
   const functionByName = Object.fromEntries(catalog.functions.map(f => [f.name, f]));
   // Familias de operadores binarios: el de un bloque se cambia dentro de la suya.
   const families = [catalog.compare, catalog.arithmetic, catalog.logic.filter(o => o.op !== 'NOT')];
@@ -28,6 +30,7 @@ const FormulaBlocks = (() => {
     column: name => node('col', name),
     number: n => (n < 0 ? node('neg', null, [node('num', -n)]) : node('num', n)),
     text: s => node('str', s),
+    empty: () => node('empty'),
     // Un operador binario o NOT (del catálogo).
     operator: op => (op === 'NOT' ? node('not', null, [null]) : node('bin', op, [null, null])),
     func: name => node('func', name, (functionByName[name] || { slots: [''] }).slots.map(() => null)),
@@ -123,6 +126,7 @@ const FormulaBlocks = (() => {
       const styles = {
         col: 'bg-moss-50 border-moss-300 text-moss-700 font-medium',
         str: 'bg-amber-50 border-amber-200 text-amber-900 font-mono',
+        empty: 'bg-white border-dashed border-ink/30 text-ink/60 italic',
       };
       block = el('span', `fb-block inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg border text-xs ${styles[n.kind] || 'bg-sky-50 border-sky-200 text-sky-900 font-mono'}${ring}`);
       block.append(el('span', 'truncate max-w-[14rem]', leafLabel(n)));
@@ -175,6 +179,7 @@ const FormulaBlocks = (() => {
   function leafLabel(n) {
     if (n.kind === 'col') return n.value;
     if (n.kind === 'str') return `"${n.value}"`;
+    if (n.kind === 'empty') return emptyInfo.label;
     if (n.kind === 'neg') return `−${formatNumber(n.args[0].value)}`;
     return formatNumber(n.value);
   }
@@ -272,7 +277,7 @@ const FormulaBlocks = (() => {
   const justDragged = () => Date.now() - lastDragEnd < 300;
 
   return {
-    catalog, pieces, hasHoles, getAt, setAt, place, nextHole,
+    catalog, emptyInfo, pieces, hasHoles, getAt, setAt, place, nextHole,
     isInside, clone, renameColumns, render, setupDrag, justDragged,
   };
 })();

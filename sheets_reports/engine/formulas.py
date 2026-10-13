@@ -11,7 +11,9 @@ La fórmula decide el tipo de campo:
 Sintaxis: columnas por nombre (`Ventas`) o entre corchetes si tienen espacios o signos
 (`[Gasto Real]`); números (`1.5`), textos entre comillas (`"Sí"`); `+ - * /`, paréntesis,
 comparaciones `= != <> > >= < <=`, `AND OR NOT`; funciones `IF(condición, sí, no)` y las
-agregaciones `SUM AVG COUNT COUNT_DISTINCT MIN MAX`. Un parser propio: nunca se ejecuta código.
+agregaciones `SUM AVG COUNT COUNT_DISTINCT MIN MAX`. `EMPTY` deja la celda vacía y solo va
+como resultado de un IF: `IF([Recinto] = "Santiago", 1, EMPTY)`. Un parser propio: nunca se
+ejecuta código.
 """
 from __future__ import annotations
 
@@ -52,6 +54,8 @@ _TOKEN_RE = re.compile(r"""
     )""", re.VERBOSE | re.UNICODE)
 
 _KEYWORDS = {"AND", "OR", "NOT"}
+# El valor vacío: una celda en blanco (las sumas y promedios la ignoran, el conteo no la cuenta).
+EMPTY = "EMPTY"
 
 
 @dataclass(frozen=True)
@@ -133,6 +137,9 @@ def tokenize(text: str, columns=()) -> list[Token]:
             rest = text[match.end():].lstrip()
             if upper in _KEYWORDS:
                 tokens.append(Token("keyword", upper, raw, start))
+            # Una columna que se llame así gana (y siempre se puede escribir [Empty]).
+            elif upper == EMPTY and raw.casefold() not in {c.casefold() for c in known_cols}:
+                tokens.append(Token("empty", None, raw, start))
             elif rest.startswith("("):
                 tokens.append(Token("func", upper, raw, start))
             else:
@@ -145,7 +152,7 @@ def tokenize(text: str, columns=()) -> list[Token]:
 # ------------------------------------------------------------------ sintaxis
 @dataclass(frozen=True)
 class Node:
-    kind: str          # num | str | col | neg | not | bin | func
+    kind: str          # num | str | col | empty | neg | not | bin | func
     value: object = None
     args: tuple = ()
 
@@ -243,6 +250,8 @@ class _Parser:
             return Node("str", token.value)
         if token.kind == "column":
             return Node("col", token.value)
+        if token.kind == "empty":
+            return Node("empty")
         if token.kind == "func":
             return self.call(token)
         if token.kind == "op" and token.value == "(":
@@ -288,6 +297,17 @@ def _check_levels(node: Node, inside_aggregate: bool = False) -> bool:
         _check_levels(node.args[0], inside_aggregate=True)
         return True
     return any(_check_levels(arg, inside_aggregate) for arg in node.args)
+
+
+def _check_empty(node: Node, allowed: bool = False) -> None:
+    """EMPTY solo como resultado de un IF: en una comparación o una cuenta no significa nada."""
+    if node.kind == "empty":
+        if not allowed:
+            raise FormulaError("Vacío (EMPTY) solo va como resultado de un SI: "
+                               "IF(condición, valor, EMPTY).")
+        return
+    for position, arg in enumerate(node.args):
+        _check_empty(arg, node.kind == "func" and node.value == "IF" and position > 0)
 
 
 def _loose_columns(node: Node) -> list[str]:
@@ -346,6 +366,7 @@ def compile_formula(text: str, columns, aggregated_names=()) -> Formula:
         resolved[name] = real
         used.append(real)
     tree = _resolve(tree, resolved)
+    _check_empty(tree)
     aggregated = _check_levels(tree)
     if aggregated:
         loose = _loose_columns(tree)
@@ -421,6 +442,9 @@ def formula_text(tree: dict | None) -> str:
         if '"' in text and "'" in text:
             raise FormulaError("Un texto no puede llevar comillas dobles y simples a la vez.")
         return f"'{text}'" if '"' in text else f'"{text}"'
+    if kind == "empty":
+        arity(0)
+        return EMPTY
     if kind == "col":
         arity(0)
         name = str(value or "").strip()
@@ -466,6 +490,7 @@ BUILDER_CATALOG = {
         *({"name": name, "label": name, "title": _FUNCTION_TITLES.get(name, name), "slots": [""]}
           for name in AGGREGATE_FUNCTIONS),
     ],
+    "empty": {"label": "Vacío", "title": "Deja la celda vacía; solo como resultado de un SI"},
     "compare": [{"op": op, "symbol": {"!=": "≠", ">=": "≥", "<=": "≤"}.get(op, op), "title": "Comparación"}
                 for op in _COMPARISONS],
     "arithmetic": [{"op": "+", "symbol": "+", "title": "Sumar"}, {"op": "-", "symbol": "−", "title": "Restar"},
@@ -575,9 +600,21 @@ def _binary(op, left, right):
     return _truthy(left) | _truthy(right)  # OR
 
 
+def _is_empty(value) -> bool:
+    return isinstance(value, (float, np.floating)) and np.isnan(value)
+
+
 def _if(condition, yes, no, index=None):
     if isinstance(condition, pd.Series) or isinstance(yes, pd.Series) or isinstance(no, pd.Series):
         cond = _truthy(condition) if isinstance(condition, pd.Series) else pd.Series(_truthy(condition), index=index)
+        if _is_empty(yes) or _is_empty(no):
+            # Con una rama vacía, np.where volvería texto el NaN ("nan"): se arma con where.
+            def branch(value):
+                if isinstance(value, pd.Series):
+                    return _broadcast(value, cond)
+                return pd.Series([value] * len(cond), index=cond.index,
+                                 dtype=object if isinstance(value, str) else None)
+            return branch(yes).where(cond, branch(no)).infer_objects()
         return pd.Series(np.where(cond, _broadcast(yes, cond), _broadcast(no, cond)), index=cond.index).infer_objects()
     return yes if _truthy(condition) else no
 
@@ -590,6 +627,8 @@ def _eval_row(node: Node, df: pd.DataFrame):
     kind = node.kind
     if kind == "num" or kind == "str":
         return node.value
+    if kind == "empty":
+        return np.nan
     if kind == "col":
         return df[node.value]
     if kind == "neg":
@@ -621,6 +660,8 @@ def _eval_aggregate(node: Node, rows: pd.DataFrame):
         return numbers.agg(func) if numbers.notna().any() else np.nan
     if kind == "num" or kind == "str":
         return node.value
+    if kind == "empty":
+        return np.nan
     if kind == "neg":
         return -_numeric(_eval_aggregate(node.args[0], rows))
     if kind == "not":

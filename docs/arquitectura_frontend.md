@@ -441,7 +441,9 @@ huecos y rótulos, operadores con su símbolo y título) vienen de `BUILDER_CATA
 
 - **Panel izquierdo** (`aside[data-fb-trash]`): *Columnas* (`builderColumns`: las incluidas con
   su nombre a mostrar y los campos por fila anteriores, con buscador) y su subpanel *Valores*
-  (Número/Texto → `valuePiece`); *Condición* (comparación, Y, O, NO); *Funciones* (SI y las
+  (Número/Texto → `valuePiece`, y la ficha «Vacío» → `EMPTY_PIECE`, que deja la celda en
+  blanco y solo vale como resultado de un SI: el servidor rechaza cualquier otro lugar con
+  su mensaje); *Condición* (comparación, Y, O, NO); *Funciones* (SI y las
   agregaciones). Bajo el canvas, la barra de operadores `+ − × ÷`.
 - **Canvas**: `FormulaBlocks.render` dibuja el árbol (Alpine no tiene templates recursivos)
   desde un `x-effect`. SI es un bloque vertical con tres huecos rotulados; las agregaciones,

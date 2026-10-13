@@ -51,6 +51,8 @@ Gramática:
 - Operadores: {arithmetic}, paréntesis; comparaciones {compare}; lógicos AND, OR, NOT.
 - Funciones: {functions}.
 - IF(condición, valor si se cumple, valor si no) va fila a fila; se pueden anidar.
+- EMPTY deja la celda vacía y solo va como resultado de un IF: las sumas y promedios la
+  ignoran y COUNT no la cuenta. Ej.: AVG(IF([sede] = "Norte", [nota], EMPTY)) promedia solo Norte.
 - Sin agregaciones la fórmula es por fila (una columna nueva, ej. una categoría o una resta).
   Con agregaciones es un cálculo entre totales: cada columna va dentro de una agregación
   (SUM([a]) / [b] no vale) y una agregación no va dentro de otra.

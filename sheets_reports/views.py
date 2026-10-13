@@ -633,10 +633,12 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
     La columna de sistema ID ignora lo guardado: es de solo lectura (siempre
     incluida)."""
     by_name = {c["name"]: c for c in saved}
+    used = {c["alias"] for c in saved if c.get("alias")}
     out = []
     for i, column in enumerate(sheet_columns):
         stored = None if is_id_column(column["name"]) else by_name.get(column["name"])
-        alias = (stored or {}).get("alias") or column.get("alias") or f"col_{i + 1}"
+        # Sin alias guardado (el ID, una columna nueva): la misma regla que el motor.
+        alias = (stored or {}).get("alias") or sheets.free_alias(i, used)
         out.append({**column,
                     "alias": alias,
                     "type": stored["type"] if stored else column["type"],

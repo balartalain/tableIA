@@ -784,7 +784,11 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
   de Google si no está; `refresh_sheet` relee y pisa; `fetched_at(source)` da la hora de la
   última lectura. El tablero no se refresca solo.
 - `load_source(source)` = hoja en caché + `apply_column_config`: quita las excluidas, aplica
-  el tipo y renombra cada columna a su nombre a mostrar.
+  el tipo y renombra cada columna a su nombre a mostrar. Deja en `df.attrs["column_aliases"]`
+  el alias de cada columna: el guardado o, si no tiene (la de sistema ID, una nueva de la
+  hoja), el de `free_alias`: el de su posición en la hoja, o el siguiente libre. El editor
+  de la fuente (`_merge_saved_columns`) usa esa misma función, así que ambos coinciden y
+  ningún alias se repite.
 - `service_account_email()`: el email con el que se comparten las hojas (se muestra en el
   selector).
 

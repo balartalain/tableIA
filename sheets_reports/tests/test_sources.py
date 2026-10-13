@@ -78,6 +78,47 @@ class ColumnTypesTests(SimpleTestCase):
         self.assertEqual(df["anio"].tolist(), ["2026", "2025", "2026"])
 
 
+class ColumnAliasTests(SimpleTestCase):
+    """Una columna sin alias guardado (el ID, una nueva de la hoja) recibe el mismo en el
+    editor y en el motor, y no repite el de ninguna guardada."""
+
+    SAVED = [{"name": "a", "type": "text", "include": True, "alias": "col_2"},
+             {"name": "b", "type": "text", "include": True, "alias": "col_3"}]
+
+    def frame(self, *names) -> pd.DataFrame:
+        return pd.DataFrame({name: ["x"] for name in names})
+
+    def editor_aliases(self, df, saved) -> dict:
+        from sheets_reports.views import _merge_saved_columns, _sheet_columns
+        return {c["name"]: c["alias"] for c in _merge_saved_columns(_sheet_columns(df), saved)}
+
+    def test_el_id_toma_el_alias_de_su_posicion(self):
+        df = self.frame("_ID", "a", "b")
+        aliases = apply_column_config(df, self.SAVED).attrs["column_aliases"]
+        self.assertEqual(aliases, {"_ID": "col_1", "a": "col_2", "b": "col_3"})
+        self.assertEqual(self.editor_aliases(df, self.SAVED), aliases)
+
+    def test_con_una_excluida_no_se_repite(self):
+        saved = [{**self.SAVED[0], "include": False}, self.SAVED[1]]
+        df = self.frame("_ID", "a", "b")
+        aliases = apply_column_config(df, saved).attrs["column_aliases"]
+        self.assertEqual(aliases, {"_ID": "col_1", "b": "col_3"})
+        self.assertEqual(self.editor_aliases(df, saved)["_ID"], "col_1")
+
+    def test_el_id_al_final_no_pisa_el_alias_de_la_ultima(self):
+        saved = [{**self.SAVED[0], "alias": "col_1"}, {**self.SAVED[1], "alias": "col_3"}]
+        df = self.frame("a", "b", "_ID")
+        aliases = apply_column_config(df, saved).attrs["column_aliases"]
+        self.assertEqual(aliases, {"a": "col_1", "b": "col_3", "_ID": "col_4"})
+        self.assertEqual(self.editor_aliases(df, saved), aliases)
+
+    def test_una_columna_nueva_en_medio_no_repite(self):
+        df = self.frame("_ID", "nueva", "a", "b")
+        aliases = apply_column_config(df, self.SAVED).attrs["column_aliases"]
+        self.assertEqual(aliases, {"_ID": "col_1", "nueva": "col_4", "a": "col_2", "b": "col_3"})
+        self.assertEqual(self.editor_aliases(df, self.SAVED), aliases)
+
+
 class SourceEndpointsTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")

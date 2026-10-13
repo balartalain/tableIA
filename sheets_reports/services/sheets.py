@@ -329,6 +329,17 @@ def column_display_name(column: dict) -> str:
     return str(column.get("label") or "").strip() or column["name"]
 
 
+def free_alias(position: int, used: set[str]) -> str:
+    """Alias de una columna que no tiene uno guardado (la de sistema ID, o una nueva de la
+    hoja): el de su posición en la hoja (`col_1` la primera) o, si ya está en uso, el
+    siguiente libre. Lo anota en `used`. El editor y el motor usan esta misma regla."""
+    n = position + 1
+    while f"col_{n}" in used:
+        n += 1
+    used.add(f"col_{n}")
+    return f"col_{n}"
+
+
 def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.DataFrame:
     """La hoja como la configuró el usuario al conectarla: sin las columnas excluidas, con el
     tipo elegido y con su nombre a mostrar (que reemplaza al encabezado en todo el tablero).
@@ -340,6 +351,7 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
         df.attrs.setdefault("column_aliases", {col: f"col_{i + 1}" for i, col in enumerate(df.columns)})
         return df
     df = df.copy()
+    position = {col: i for i, col in enumerate(df.columns)}
     excluded = [c["name"] for c in columns if not c.get("include", True) and c.get("name") in df.columns]
     df = df.drop(columns=excluded)
     for column in columns:
@@ -366,9 +378,11 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
             disp = column_display_name(c)
             if disp in df.columns:
                 column_aliases[disp] = c.get("alias") or f"col_{i + 1}"
-    for i, col in enumerate(df.columns):
+    # Sin alias guardado (el ID, una columna nueva): no repite el de ninguna guardada.
+    used = {c["alias"] for c in columns if c.get("alias")} | set(column_aliases.values())
+    for col in df.columns:
         if col not in column_aliases:
-            column_aliases[col] = f"col_{len(column_aliases) + 1}"
+            column_aliases[col] = free_alias(position[col], used)
     df.attrs["column_aliases"] = column_aliases
     return df
 

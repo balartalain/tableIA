@@ -15,7 +15,7 @@ secciones 6 y 7, el detalle técnico.
 | `EMAIL_ENCRYPTION_KEY` | vacía | Clave con la que se cifran las contraseñas de los remitentes. Vacía, se deriva de `SECRET_KEY` (cambiar `SECRET_KEY` obligaría a escribirlas de nuevo). |
 | `CAMPAIGN_SMTP_HOST` | `smtp.gmail.com` | Servidor SMTP de los remitentes. |
 | `CAMPAIGN_SMTP_PORT` | `587` | Puerto SMTP (TLS). |
-| `CAMPAIGN_EMAIL_BACKEND` | SMTP de Django | Para probar sin enviar: `django.core.mail.backends.console.EmailBackend`. |
+| `CAMPAIGN_EMAIL_BACKEND` | SMTP de Django | Cómo se envía; para probar sin enviar correos, ver «Probar sin enviar correos». |
 
 Generar una `EMAIL_ENCRYPTION_KEY`:
 
@@ -44,11 +44,54 @@ atrasarse el arranque, no el ritmo de los correos. El comando puede durar varios
 Para probar a mano:
 
 ```
-venv/bin/python manage.py send_campaign_emails --campaign <id> --force
+venv/bin/python manage.py send_campaign_emails --dashboard <id> --force
 ```
 
-`--campaign` limita a un envío (el id de `EmailCampaign`, visible en el admin) y `--force`
-ignora la hora y el día. El máximo de correos al día se respeta igual.
+`--dashboard` limita al envío de un tablero; su id es el número de la URL del tablero, por
+ejemplo `/tableros/19/edit/`.
+
+`--force` arranca el envío ahora mismo, sin esperar a que le toque. Se salta:
+
+- la hora de envío;
+- el día (envía aunque hoy no sea día de envío);
+- el día cerrado (envía aunque hoy ya se haya ejecutado y terminado);
+- solo junto con `--dashboard`: que el envío esté desactivado. Con `--force` solo, se
+  ejecutan únicamente los envíos activados.
+
+Sigue respetando:
+
+- el máximo de correos al día (si hoy ya se alcanzó, no envía nada y lo anota en el registro);
+- que cada persona lo recibe una sola vez: solo envía a los pendientes;
+- los lotes y la pausa de 1 minuto entre ellos;
+- el envío en curso: si ya hay uno corriendo para ese tablero, no arranca otro.
+
+Sin `--force`, el comando hace lo mismo que el cron: revisa si al envío le toca y, si no,
+termina sin hacer nada.
+
+### Probar sin enviar correos
+
+En el `.env` **local**:
+
+```
+CAMPAIGN_EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+```
+
+Ningún correo sale a Gmail: cada mensaje se imprime completo en la terminal. Los lotes, la
+pausa y la pestaña «Correos» se comportan como en un envío real.
+
+1. Reiniciar `runserver` después de cambiar el `.env`.
+2. En el tablero, guardar al menos un remitente con cualquier contraseña (se exige que
+   exista, pero no se usa).
+3. Lanzar `send_campaign_emails --dashboard <id> --force`: los correos aparecen en esa
+   terminal. «Enviar prueba» los imprime en la terminal de `runserver`.
+
+A tener en cuenta:
+
+- Los destinatarios quedan como **notificados** aunque no haya salido ningún correo. Tras
+  probar con una lista real hay que vaciarla y cargarla de nuevo para que el envío real
+  les llegue.
+- No valida la contraseña de aplicación ni los rechazos de Gmail: todo «se envía» bien.
+- No dejar esa línea en el `.env` del servidor: el envío parecería funcionar sin mandar nada.
 
 ## 2. Remitentes (cuentas de Gmail)
 
@@ -183,7 +226,7 @@ correos`).
 `manage.py send_campaign_emails` recorre los envíos activados y ejecuta los que `is_due`.
 El cron solo dispara el arranque: el ritmo de los lotes lo lleva `run_campaign`, así que el
 comando puede durar varios minutos.
-`--campaign <id>` limita a uno y `--force` ignora el horario (para probar). La línea del crontab está en §1.
+Las opciones `--dashboard` y `--force` y la línea del crontab están en §1.
 
 ### 6.4 Endpoints (`views_email.py`)
 

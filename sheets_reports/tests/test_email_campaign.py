@@ -235,15 +235,17 @@ class RunCampaignTests(TestCase):
         self.assertIn("No hay remitentes", campaign.logs.get().message)
 
     def test_comando_del_crontab(self):
-        campaign = make_campaign(self.dashboard, send_time=time(23, 59), last_run_on=None)
+        make_campaign(self.dashboard, send_time=time(23, 59), last_run_on=None)
         out = StringIO()
         with mock.patch("sheets_reports.services.mailing.local_now",
                         return_value=mailing.local_now(utc(1, 15))):
             call_command("send_campaign_emails", stdout=out)
             self.assertEqual(len(mail.outbox), 0)  # todavía no es la hora
-            call_command("send_campaign_emails", campaign=campaign.id, force=True, stdout=out)
+            call_command("send_campaign_emails", dashboard=self.dashboard.id, force=True, stdout=out)
+            call_command("send_campaign_emails", dashboard=self.dashboard.id + 1, force=True, stdout=out)
         self.assertEqual(len(mail.outbox), 3)
         self.assertIn("3 enviados", out.getvalue())
+        self.assertIn("no tiene envío de correos", out.getvalue())
 
 
 @LOCMEM

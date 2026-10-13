@@ -474,6 +474,8 @@ Dos niveles:
 
 El evento `dashboard:filters-changed` dispara `store.refreshData()`, que re-fetch `/render/` con los filtros y llama `applyRender` en cada widget.
 
+En la vista compartida, un indicador de carga de la página (`#page-loader`) está visible mientras hay algún request a `/render/` en curso: la carga inicial y cada refresco por filtros. Lo controla `setPageLoading()` en `board-view-init.js`, que cuenta los requests pendientes.
+
 ## Drag and drop
 
 Tres instancias de SortableJS:

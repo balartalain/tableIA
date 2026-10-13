@@ -1,3 +1,12 @@
+// Barra de carga de la página (board_view.html): visible mientras haya algún request en curso.
+// Arranca en 1 porque el HTML la trae visible para la carga inicial.
+let pendingLoads = 1;
+function setPageLoading(isLoading) {
+  pendingLoads = Math.max(0, pendingLoads + (isLoading ? 1 : -1));
+  const bar = document.getElementById('page-loader');
+  if (bar) bar.classList.toggle('hidden', pendingLoads === 0);
+}
+
 document.addEventListener('alpine:init', () => {
   Alpine.store('dashboard', {
     dashboardId: window.DASHBOARD_ID,
@@ -11,6 +20,7 @@ document.addEventListener('alpine:init', () => {
 
     // Todos los widgets se calculan en un solo request al endpoint render (sin IA).
     async refreshData() {
+      setPageLoading(true);
       try {
         const r = await fetch(this._renderUrl());
         const data = await r.json().catch(() => null);
@@ -25,6 +35,8 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         this.widgets.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
         return null;
+      } finally {
+        setPageLoading(false);
       }
     },
   });
@@ -34,9 +46,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   const canvasEl = document.getElementById('dashboard-canvas');
   const store = Alpine.store('dashboard');
 
-  const r = await fetch(store._renderUrl());
-  const data = await r.json().catch(() => null);
-  if (!r.ok || !data) {
+  let r = null;
+  let data = null;
+  try {
+    r = await fetch(store._renderUrl());
+    data = await r.json().catch(() => null);
+  } catch (e) {
+    // Sin conexión: cae en el mensaje de error de abajo.
+  } finally {
+    setPageLoading(false);
+  }
+  if (!r || !r.ok || !data) {
     canvasEl.innerHTML = `<p class="col-span-12 text-sm text-red-600">${BaseWidget.escapeHTML((data && data.error) || 'No se pudo cargar el tablero')}</p>`;
     return;
   }

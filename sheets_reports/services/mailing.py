@@ -309,7 +309,7 @@ def send_test(campaign: EmailCampaign, to: str) -> str:
 
 
 # ----------------------------------------------------------------- reporte
-# Estado del envío que muestra la franja de la pestaña «Correos».
+# Estado del envío que muestra la franja de la pestaña «Seguimiento de correos».
 RUNNING, DONE, STOPPED, SCHEDULED = "running", "done", "stopped", "scheduled"
 # Días que muestra el gráfico de enviados por día y motivos de la tabla de errores.
 STATS_DAYS = 30
@@ -334,7 +334,7 @@ def _estimated_end(campaign: EmailCampaign, current: datetime, pending: int, sen
 
 
 def report_summary(campaign: EmailCampaign, now: datetime | None = None) -> dict:
-    """Lo que la pestaña «Correos» consulta cada pocos segundos: en qué está el envío, los
+    """Lo que la pestaña «Seguimiento de correos» consulta cada pocos segundos: en qué está el envío, los
     totales por estado y el id del último log (si cambian, hay novedades)."""
     current = local_now(now)
     counts = dict(campaign.recipients.values_list("status").annotate(n=Count("id")))
@@ -370,7 +370,7 @@ def report_summary(campaign: EmailCampaign, now: datetime | None = None) -> dict
 
 
 def report_stats(campaign: EmailCampaign, now: datetime | None = None) -> dict:
-    """Lo que la pestaña «Correos» pide cuando hay novedades: enviados por día, el detalle por
+    """Lo que la pestaña «Seguimiento de correos» pide cuando hay novedades: enviados por día, el detalle por
     remitente y los errores agrupados por motivo."""
     current = local_now(now)
     sent = campaign.recipients.filter(status=EmailRecipient.SENT, sent_at__isnull=False)

@@ -92,7 +92,7 @@ def board_view(request, dashboard_id):
     campaign = getattr(dashboard, "email_campaign", None)
     return render(request, "board_view.html", {
         "dashboard": dashboard,
-        # Con el envío de correos activado, la vista suma la pestaña «Correos».
+        # Con el envío de correos activado, la vista suma la pestaña «Seguimiento de correos».
         "email_enabled": bool(campaign and campaign.enabled),
     })
 

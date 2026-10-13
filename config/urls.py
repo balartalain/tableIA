@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path
+from django.views.generic import RedirectView
 
 from sheets_reports import views, views_email
 
@@ -8,7 +9,9 @@ urlpatterns = [
     path('', views.home, name='home'),
     path('tableros/nuevo/', views.board_new, name='board_new'),
     path('tableros/<int:dashboard_id>/edit/', views.board_editor, name='board_editor'),
-    path('tableros/<int:dashboard_id>/shared/', views.board_view, name='board_view'),
+    path('tableros/<int:dashboard_id>/view/', views.board_view, name='board_view'),
+    # La ruta anterior: los enlaces ya compartidos siguen llegando a la vista.
+    path('tableros/<int:dashboard_id>/shared/', RedirectView.as_view(pattern_name='board_view', permanent=True)),
     path('api/dashboards/', views.dashboard_list, name='dashboard_list'),
     path('api/dashboards/<int:dashboard_id>/', views.dashboard_detail, name='dashboard_detail'),
     path('api/dashboards/<int:dashboard_id>/duplicate/', views.dashboard_duplicate, name='dashboard_duplicate'),

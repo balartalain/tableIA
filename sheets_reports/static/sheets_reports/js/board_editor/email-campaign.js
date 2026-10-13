@@ -1,7 +1,7 @@
-// Envío de correos del tablero (bottom sheet «Envío de correos»): los destinatarios (desde un
+// Envío de correos del tablero (bottom sheet «Configurar envío de correos»): los destinatarios (desde un
 // CSV), los remitentes (cuentas de Gmail con su contraseña de aplicación), cuántos correos se
 // envían por día, en lotes de qué tamaño y cuándo, y el mensaje. El envío lo ejecuta el crontab del servidor; con el
-// envío activado, la vista compartida muestra la pestaña «Correos» (email-report.js).
+// envío activado, la vista compartida muestra la pestaña «Seguimiento de correos» (email-report.js).
 const EMAIL_WEEKDAYS = [
   { value: 0, label: 'Lun' }, { value: 1, label: 'Mar' }, { value: 2, label: 'Mié' },
   { value: 3, label: 'Jue' }, { value: 4, label: 'Vie' }, { value: 5, label: 'Sáb' },

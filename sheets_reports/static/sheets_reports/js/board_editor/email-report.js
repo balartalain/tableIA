@@ -1,4 +1,4 @@
-// Pestaña «Correos» de la vista compartida (board_view.html, solo con el envío activado): en
+// Pestaña «Seguimiento de correos» de la vista compartida (board_view.html, solo con el envío activado): en
 // qué está el envío, el avance, los enviados por día, el detalle por remitente, los errores
 // por motivo, la tabla de destinatarios y el registro de envíos. Mientras la pestaña está a
 // la vista consulta cada pocos segundos los totales del envío; si cambiaron (el crontab

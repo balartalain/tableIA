@@ -240,7 +240,7 @@ def _page(request, queryset, serialize) -> JsonResponse:
 
 @require_http_methods(["GET"])
 def email_report(request, dashboard_id):
-    """Totales del envío y el id del último log: lo que la pestaña «Correos» consulta cada
+    """Totales del envío y el id del último log: lo que la pestaña «Seguimiento de correos» consulta cada
     pocos segundos para saber si el cron envió algo."""
     campaign = _enabled_campaign(dashboard_id)
     if not campaign:
@@ -250,7 +250,7 @@ def email_report(request, dashboard_id):
 
 @require_http_methods(["GET"])
 def email_report_stats(request, dashboard_id):
-    """Enviados por día, detalle por remitente y errores por motivo: la pestaña «Correos» lo
+    """Enviados por día, detalle por remitente y errores por motivo: la pestaña «Seguimiento de correos» lo
     pide al abrirse y cada vez que cambian los totales."""
     campaign = _enabled_campaign(dashboard_id)
     if not campaign:

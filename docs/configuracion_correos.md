@@ -77,7 +77,7 @@ CAMPAIGN_EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 ```
 
 Ningún correo sale a Gmail: cada mensaje se imprime completo en la terminal. Los lotes, la
-pausa y la pestaña «Correos» se comportan como en un envío real.
+pausa y la pestaña «Seguimiento de correos» se comportan como en un envío real.
 
 1. Reiniciar `runserver` después de cambiar el `.env`.
 2. En el tablero, guardar al menos un remitente con cualquier contraseña (se exige que
@@ -119,7 +119,7 @@ remitentes se puede subir el máximo diario.
 | **Hora** | Hora a la que arranca el envío, en `CAMPAIGN_TIME_ZONE`. |
 | **Asunto y cuerpo** | El mensaje, en texto plano. |
 | **Enviar prueba** | Guarda lo escrito y envía el mensaje a una dirección, con el primer remitente. |
-| **Activar el envío** | Exige asunto, cuerpo, al menos un remitente y destinatarios. Suma la pestaña «Correos» a la vista compartida. |
+| **Activar el envío** | Exige asunto, cuerpo, al menos un remitente y destinatarios. Suma la pestaña «Seguimiento de correos» a la vista compartida. |
 
 ## 4. Cómo se envía
 
@@ -148,7 +148,7 @@ Lo que pasa cuando algo falla:
 
 ## 5. Seguimiento
 
-Con el envío activado, la vista compartida del tablero tiene la pestaña **«Correos»**, que se
+Con el envío activado, la vista compartida del tablero tiene la pestaña **«Seguimiento de correos»**, que se
 actualiza sola cada 10 segundos:
 
 | Pieza | Qué responde |
@@ -270,9 +270,9 @@ la configuración y la guarda entera con «Guardar»:
   destinatarios.
 
 **Reporte (vista compartida).** Con el envío activado, `board_view.html` trae las pestañas
-«Gráficas» y «Correos» y carga `email-report.js`. La pestaña activa va en el hash
-(`#correos`). Al volver a «Gráficas» se despacha `resize` para que los gráficos tomen su
-ancho. La pestaña «Correos» tiene:
+«Tablero» y «Seguimiento de correos» y carga `email-report.js`. La pestaña activa va en el hash
+(`#correos`). Al volver a «Tablero» se despacha `resize` para que los gráficos tomen su
+ancho. La pestaña «Seguimiento de correos» tiene:
 
 - la franja de estado (`state` del reporte): enviando ahora, próximo envío, terminó antes
   del máximo (con el último error) o completado;
@@ -283,7 +283,7 @@ ancho. La pestaña «Correos» tiene:
 - la tabla de destinatarios, con paginación remota;
 - el registro de envíos, plegado (`<details>`): su tabla se crea al desplegarlo.
 
-**Aviso de novedades.** No hay websocket: mientras la pestaña «Correos» está a la vista, la
+**Aviso de novedades.** No hay websocket: mientras la pestaña «Seguimiento de correos» está a la vista, la
 página pide cada 10 s `GET /email-report/` (unos conteos). Si cambian los totales o
 `last_log_id`, actualiza la franja y el avance, pide `GET /email-report/stats/` (gráfico,
 remitentes, errores) y vuelve a pedir las tablas paginadas. Con el documento oculto no

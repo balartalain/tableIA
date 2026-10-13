@@ -351,7 +351,7 @@ class EmailReportTests(TestCase):
         self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.dashboard, _ = make_board(self.user)
         self.url = f"/api/dashboard/{self.dashboard.id}/email-report/"
-        self.view_url = f"/tableros/{self.dashboard.id}/shared/"
+        self.view_url = f"/tableros/{self.dashboard.id}/view/"
 
     def test_sin_envio_activado_no_hay_pestana_ni_reporte(self):
         self.assertNotContains(self.client.get(self.view_url), 'id="view-tabs"')

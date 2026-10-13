@@ -444,9 +444,12 @@ class ViewsTests(TestCase):
 
     # -------------------------------------------------------------- páginas
     def test_paginas_renderizan(self, _df):
-        for url in ("/", f"/tableros/{self.dashboard.id}/edit/", f"/tableros/{self.dashboard.id}/shared/"):
+        for url in ("/", f"/tableros/{self.dashboard.id}/edit/", f"/tableros/{self.dashboard.id}/view/"):
             r = self.client.get(url)
             self.assertEqual(r.status_code, 200, url)
+        # La ruta anterior de la vista compartida redirige a la nueva.
+        self.assertRedirects(self.client.get(f"/tableros/{self.dashboard.id}/shared/"),
+                             f"/tableros/{self.dashboard.id}/view/", status_code=301)
         r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")
         self.assertNotContains(r, "REFRESH_MINUTES")
         self.assertContains(r, "donut-widget.js")

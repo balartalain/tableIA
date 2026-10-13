@@ -50,7 +50,8 @@ class SourcesCrudTests(TestCase):
         self.assertEqual(r.json()["label"], "Inventario · Stock")
         listed = self.client.get(f"/api/dashboard/{self.dashboard.id}/sources/").json()["sources"]
         self.assertEqual([s["label"] for s in listed], ["Ventas · Hoja 1", "Inventario · Stock"])
-        self.assertEqual((listed[1]["columns_included"], listed[1]["columns_total"]), (1, 1))
+        # La guardada más la columna de sistema ID, como las cuenta el editor.
+        self.assertEqual((listed[1]["columns_included"], listed[1]["columns_total"]), (2, 2))
 
     def test_agregar_valida(self, _df):
         url = f"/api/dashboard/{self.dashboard.id}/sources/"

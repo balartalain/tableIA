@@ -341,8 +341,10 @@ def _serialize_source(source):
         "is_form_response": source.is_form_response,
         "refreshed_at": refreshed.isoformat() if refreshed else None,
         # Sin configuración (fuentes anteriores al selector) se usan todas: no se sabe cuántas.
-        "columns_included": len(included) if source.columns else None,
-        "columns_total": len(source.columns) if source.columns else None,
+        # El + 1 es la columna de sistema ID: siempre incluida y sin configuración guardada
+        # (ver `_clean_columns`), pero el editor la muestra y la cuenta.
+        "columns_included": len(included) + 1 if source.columns else None,
+        "columns_total": len(source.columns) + 1 if source.columns else None,
         # Con su árbol: el editor la arma como bloques.
         "calculated_fields": [{**f, "tree": formula_tree(f.get("formula", ""))}
                               for f in source.calculated_fields],

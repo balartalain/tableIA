@@ -190,7 +190,7 @@ class PanelTests(StaticLiveServerTestCase):
             self.page.locator("#sources-btn").click()
             self.page.get_by_text("Sin acceso").wait_for()
         self.assertTrue(self.page.get_by_role("cell", name="Sin usar").is_visible())
-        self.assertTrue(self.page.get_by_text("4 de 4 incluidas").is_visible())
+        self.assertTrue(self.page.get_by_text("5 de 5 incluidas").is_visible())
         self.assertTrue(self.page.get_by_role("button", name=f"Actualizar {self.source.label}").is_visible())
         link = self.page.get_by_role("link", name=f"Abrir origen de {self.source.label}")
         self.assertEqual(link.get_attribute("href"), "https://docs.google.com/spreadsheets/d/abc/edit#gid=0")

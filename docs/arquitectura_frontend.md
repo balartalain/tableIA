@@ -371,7 +371,7 @@ elige la suya en su panel. Se gestionan en el bottom sheet «Fuentes de datos».
 
 **Gestor** (`source-manager.js`, `source_manager.html`): tabla de fuentes con su nombre (el
 propio, con «Documento · Pestaña» debajo, o el original), columnas incluidas («7 de 9
-incluidas»), widgets que la usan («Sin usar» si ninguno) y «Actualizado hace X»
+incluidas», contando la columna de sistema `ID` igual que el editor), widgets que la usan («Sin usar» si ninguno) y «Actualizado hace X»
 (`timeAgoLabel`).
 Al cargar, pide el **estado** de cada fuente (`GET …/status/`, en paralelo) y marca las que
 tienen problema («Sin acceso», «Pestaña no encontrada»). Acciones por fuente:

@@ -218,11 +218,15 @@ def describe(field: str, profile: dict, numeric: bool) -> str:
 DEFAULT_IGNORED_VALUES = "No aplica, N/A, No corresponde, No utilizo este medio, No se utiliza, No he recibido este servicio, Sin respuesta"
 
 
-def parse_ignored_values(raw: str | None) -> set[str]:
+def parse_ignored_values(raw: str | list[str] | None) -> set[str]:
     """Conjunto de textos normalizados a ignorar en una correlación."""
-    if not raw or not isinstance(raw, str):
+    if not raw:
         return set()
-    return {normalize_text(v) for v in raw.split(",") if v.strip()}
+    if isinstance(raw, (list, tuple, set)):
+        return {normalize_text(v) for v in raw if v and str(v).strip()}
+    if isinstance(raw, str):
+        return {normalize_text(v) for v in raw.split(",") if v.strip()}
+    return set()
 
 
 def mask_ignored(series: pd.Series, ignored_set: set[str] | None) -> pd.Series:
@@ -254,9 +258,10 @@ def scale_errors(name: str, scale, order=None) -> list[str]:
     return []
 
 
-def order_gaps(series: pd.Series, order) -> list[str]:
-    """Los valores de la columna que no están en `order`: una ordinal debe cubrirlos todos."""
-    known = {normalize_text(v) for v in order or []}
+def order_gaps(series: pd.Series, order, ignored_set: set[str] | None = None) -> list[str]:
+    """Los valores de la columna que no están en `order`: una ordinal debe cubrirlos todos,
+    salvo los valores a ignorar (No aplica, N/A, etc.) si se proporcionan."""
+    known = {normalize_text(v) for v in order or []} | (ignored_set or set())
     return [v for v in column_values(series) if normalize_text(v) not in known]
 
 

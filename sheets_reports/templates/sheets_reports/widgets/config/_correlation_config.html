@@ -120,10 +120,17 @@
           <span>Ignorar respuestas no evaluables</span>
         </label>
         <div x-show="$store.dashboard.drawerDraft.style.ignoreNonApplicable" class="space-y-1.5 pt-1">
-          <label class="block text-[11px] font-medium text-ink/60">Valores a ignorar (separados por coma):</label>
-          <input type="text" x-model="$store.dashboard.drawerDraft.style.ignoredValues"
-                 placeholder="No aplica, N/A, No corresponde, No utilizo este medio, No se utiliza, No he recibido este servicio, Sin respuesta"
-                 class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+          <label class="block text-[11px] font-medium text-ink/60">Valores a ignorar:</label>
+          <select x-vselect
+                  multiple
+                  data-allow-new-option="true"
+                  placeholder="Elegir o escribir respuestas a ignorar…"
+                  x-model="$store.dashboard.ignoredValuesList"
+                  class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+            <template x-for="val in $store.dashboard.availableIgnoredOptions" :key="val">
+              <option x-bind:value="val" x-text="val"></option>
+            </template>
+          </select>
           <p class="text-[11px] text-ink/50 leading-tight">
             Los valores que coincidan (sin distinguir mayúsculas ni espacios) se tratan como vacíos al medir cada par, sin borrar la fila de otras variables.
           </p>

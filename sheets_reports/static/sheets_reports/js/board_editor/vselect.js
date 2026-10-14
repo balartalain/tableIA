@@ -49,6 +49,9 @@ document.addEventListener('alpine:init', () => {
     let signature = '';
     let frame = null;
 
+    const isMultiple = el.multiple || el.hasAttribute('multiple');
+    const allowNewOption = el.getAttribute('data-allow-new-option') === 'true' || el.hasAttribute('data-allow-new-option');
+
     // VirtualSelect enfoca su caja al fijar un valor; al sincronizar eso movería el foco y el
     // scroll de la página (una tabla con cientos de selects quedaba desplazada al final).
     const setValueQuietly = (value) => {
@@ -73,8 +76,13 @@ document.addEventListener('alpine:init', () => {
           signature = next;
           mount.setOptions(options, true);
         }
-        const value = el.selectedIndex < 0 ? '' : toVs(el.value);
-        if (mount.value !== value) setValueQuietly(value);
+        const value = isMultiple
+          ? Array.from(el.selectedOptions || []).map(o => toVs(o.value))
+          : (el.selectedIndex < 0 ? '' : toVs(el.value));
+        const valChanged = isMultiple
+          ? JSON.stringify(mount.value || []) !== JSON.stringify(value)
+          : mount.value !== value;
+        if (valChanged) setValueQuietly(value);
         if (el.disabled) mount.disable(); else mount.enable();
         mount.style.display = el.style.display === 'none' ? 'none' : '';
       } finally {
@@ -92,9 +100,11 @@ document.addEventListener('alpine:init', () => {
         ele: mount,
         options: [],
         search: true,
-        multiple: false,
+        multiple: isMultiple,
+        allowNewOption: allowNewOption,
+        showValueAsTags: isMultiple,
         alwaysShowSelectedOptionsLabel: true,
-        hideClearButton: true,
+        hideClearButton: !isMultiple,
         maxWidth: '100%',
         dropboxWrapper: 'body',
         zIndex: VSELECT_Z_INDEX,
@@ -104,6 +114,27 @@ document.addEventListener('alpine:init', () => {
       });
       mount.addEventListener('change', () => {
         if (syncing) return;
+        if (isMultiple) {
+          const raw = mount.value;
+          const values = (Array.isArray(raw) ? raw : (raw ? [raw] : [])).map(fromVs);
+          if (allowNewOption) {
+            values.forEach(v => {
+              if (!Array.from(el.options).some(o => o.value === v)) {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.textContent = v;
+                el.appendChild(opt);
+              }
+            });
+          }
+          Array.from(el.options).forEach(opt => {
+            opt.selected = values.includes(opt.value);
+          });
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          schedule();
+          return;
+        }
         const value = fromVs(mount.value || '');
         if (el.value === value) return;
         el.value = value;

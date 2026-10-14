@@ -45,7 +45,13 @@ from sheets_reports.utils.data import (
     to_key,
     to_python,
 )
-from sheets_reports.utils.scales import SCALES, order_gaps, scale_errors
+from sheets_reports.utils.scales import (
+    DEFAULT_IGNORED_VALUES,
+    SCALES,
+    order_gaps,
+    parse_ignored_values,
+    scale_errors,
+)
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
 from sheets_reports.utils.validation import SpecValidationError
 from sheets_reports.services.widget_service import WidgetService, clean_position
@@ -927,9 +933,9 @@ def source_schema(request, source_id):
     })
 
 
-def _scales_errors(df, scales) -> list[str]:
+def _scales_errors(df, scales, ignored_set: set[str] | None = None) -> list[str]:
     """Las escalas a guardar: de columnas de la hoja (no de campos calculados ni del ID) y,
-    en una ordinal, con un orden que cubre todos los valores de la columna."""
+    en una ordinal, con un orden que cubre todos los valores de la columna (salvo los ignorados)."""
     if not isinstance(scales, dict) or not scales:
         return ["'scales' debe ser un objeto {columna: {scale, order?}}"]
     calculated = set(df.attrs.get("row_fields") or {})
@@ -943,7 +949,7 @@ def _scales_errors(df, scales) -> list[str]:
             continue
         errors += scale_errors(name, item.get("scale"), item.get("order"))
         if not errors and item.get("scale") == "ordinal":
-            missing = order_gaps(df[name], item.get("order"))
+            missing = order_gaps(df[name], item.get("order"), ignored_set=ignored_set)
             if missing:
                 errors.append(f"El orden de '{name}' no incluye: {', '.join(missing[:5])}")
     return errors
@@ -953,9 +959,10 @@ def _scales_errors(df, scales) -> list[str]:
 @require_http_methods(["PUT"])
 def source_scales(request, source_id):
     """
-    PUT {scales: {columna: {scale, order?}}}: guarda la escala de medida confirmada de esas
-    columnas (por su nombre a mostrar) en `DataSource.columns`. Una fuente sin configuración
-    de columnas la crea con los tipos que trae la hoja. → la fuente serializada, o {error}.
+    PUT {scales: {columna: {scale, order?}}, ignored_values?}: guarda la escala de medida
+    confirmada de esas columnas (por su nombre a mostrar) en `DataSource.columns`.
+    Una fuente sin configuración de columnas la crea con los tipos que trae la hoja.
+    → la fuente serializada, o {error}.
     """
     source = _owned_source(request, source_id)
     if not source:
@@ -968,7 +975,9 @@ def source_scales(request, source_id):
     except SheetError as e:
         return _error(str(e), status=502)
     scales = data.get("scales")
-    errors = _scales_errors(df, scales)
+    ignored_raw = data.get("ignored_values")
+    ignored_set = parse_ignored_values(ignored_raw) if ignored_raw else None
+    errors = _scales_errors(df, scales, ignored_set=ignored_set)
     if errors:
         return _error(" ".join(errors))
 
@@ -996,7 +1005,7 @@ def source_scales(request, source_id):
 @require_http_methods(["POST"])
 def source_scales_ai(request, source_id):
     """
-    «Clasificar con IA»: POST {columns: [nombre, ...]} → {scales: {columna: {scale, order?,
+    «Clasificar con IA»: POST {columns: [nombre, ...], ignored_values?} → {scales: {columna: {scale, order?,
     reason}}}, la escala que propone la IA para cada columna. NO guarda nada: el panel la
     muestra y, si el usuario la acepta, la guarda con el PUT de `scales`.
     """
@@ -1013,12 +1022,13 @@ def source_scales_ai(request, source_id):
     columns = data.get("columns")
     if not isinstance(columns, list) or not columns:
         return _error("Elige al menos una columna para clasificar.")
+    ignored_values = data.get("ignored_values")
 
     from sheets_reports.services.ai_scales import classify_scales
     from sheets_reports.services.ai_spec import SpecGenerationError
     try:
         ctx = SheetContext.from_dataframe(df, source.gid)
-        proposal = classify_scales(df, [str(c) for c in columns], ctx.scales)
+        proposal = classify_scales(df, [str(c) for c in columns], ctx.scales, ignored_values=ignored_values)
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     return JsonResponse({"scales": proposal})

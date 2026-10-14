@@ -100,6 +100,8 @@ const SCALE_LABELS = {
   none: 'No se analiza',
 };
 
+const DEFAULT_IGNORED_VALUES = 'No aplica, N/A, No corresponde, No utilizo este medio, No se utiliza, No he recibido este servicio, Sin respuesta';
+
 function humanizeName(name) {
   const text = String(name || '').replace(/_/g, ' ').trim();
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
@@ -1066,13 +1068,42 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    get defaultIgnoredValues() { return DEFAULT_IGNORED_VALUES; },
+
+    get availableIgnoredOptions() {
+      const defaults = DEFAULT_IGNORED_VALUES.split(',').map(s => s.trim()).filter(Boolean);
+      const current = this.ignoredValuesList;
+      return Array.from(new Set([...defaults, ...current]));
+    },
+
+    get ignoredValuesList() {
+      const style = this.drawerDraft.style || {};
+      const raw = style.ignoredValues;
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'string' && raw.trim()) {
+        return raw.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      return DEFAULT_IGNORED_VALUES.split(',').map(s => s.trim()).filter(Boolean);
+    },
+
+    set ignoredValuesList(list) {
+      if (!this.drawerDraft.style) this.drawerDraft.style = {};
+      const arr = Array.isArray(list) ? list : (list ? [list] : []);
+      this.drawerDraft.style.ignoredValues = arr.join(', ');
+    },
+
     // Guarda en la fuente la escala de esas columnas ({columna: {scale, order?}}) y relee su
     // schema (cambian `scales`). Lanza con el mensaje del servidor si falla.
     async saveScales(source, scales) {
+      const style = this.drawerDraft.style || {};
+      const ignoreNonApplicable = style.ignoreNonApplicable !== false;
+      const ignoredValues = ignoreNonApplicable
+        ? (this.ignoredValuesList.length ? this.ignoredValuesList.join(', ') : DEFAULT_IGNORED_VALUES)
+        : null;
       const r = await fetch(apiUrl(`/api/sources/${source}/scales/`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scales }),
+        body: JSON.stringify({ scales, ignored_values: ignoredValues }),
       });
       const data = await r.json().catch(() => null);
       if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
@@ -1088,11 +1119,16 @@ document.addEventListener('alpine:init', () => {
       const columns = this.drawerDraft.fields.columns.map(c => c.field).filter(Boolean);
       if (!columns.length || (this.scaleProposal && this.scaleProposal.loading)) return;
       this.scaleProposal = { loading: true, error: '', items: [] };
+      const style = this.drawerDraft.style || {};
+      const ignoreNonApplicable = style.ignoreNonApplicable !== false;
+      const ignoredValues = ignoreNonApplicable
+        ? (this.ignoredValuesList.length ? this.ignoredValuesList.join(', ') : DEFAULT_IGNORED_VALUES)
+        : null;
       try {
         const { r, data } = await fetchJsonSafe(apiUrl(`/api/sources/${this.drawerDraft.source}/scales/ai/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ columns }),
+          body: JSON.stringify({ columns, ignored_values: ignoredValues }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || 'El servidor no respondió correctamente.');
         const items = Object.entries(data.scales || {})

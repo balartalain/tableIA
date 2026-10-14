@@ -97,8 +97,11 @@ class ScalesViewsTests(TestCase):
         self.client.force_login(self.user)
         self.dashboard, self.source = make_board(self.user)
 
-    def put(self, scales):
-        return self.client.put(f"/api/sources/{self.source.id}/scales/", json.dumps({"scales": scales}),
+    def put(self, scales, ignored_values=None):
+        body = {"scales": scales}
+        if ignored_values is not None:
+            body["ignored_values"] = ignored_values
+        return self.client.put(f"/api/sources/{self.source.id}/scales/", json.dumps(body),
                                content_type="application/json")
 
     def test_el_schema_trae_las_escalas(self, _df):
@@ -134,6 +137,9 @@ class ScalesViewsTests(TestCase):
         response = self.put({"talla": {"scale": "ordinal", "order": ["S", "M", "L"]}})
         self.assertEqual(response.status_code, 400, response.content)
         self.assertIn("No aplica", response.json()["error"])
+        # Con ignored_values no exige incluir No aplica
+        response_ign = self.put({"talla": {"scale": "ordinal", "order": ["S", "M", "L"]}}, ignored_values="No aplica")
+        self.assertEqual(response_ign.status_code, 200, response_ign.content)
         order = ["S", "M", "L", "No aplica"]
         response = self.put({"talla": {"scale": "ordinal", "order": order}})
         self.assertEqual(response.status_code, 200, response.content)
@@ -168,6 +174,17 @@ class ClassifyScalesTests(SimpleTestCase):
                     out = classify_scales(df, ["nivel"], effective_scales(df))
                 self.assertEqual(out, {"nivel": {"scale": "ordinal", "order": complete, "reason": "orden"}}
                                  if order == complete else {})
+
+    def test_con_ignored_values_la_ia_excluye_no_aplica_del_orden(self):
+        df = pd.DataFrame({"nivel": ["Bajo", "Alto", "No aplica", "N/A", None]})
+        answer = {"columns": [{"field": "nivel", "scale": "ordinal", "order": ["Bajo", "Alto", "No aplica"], "reason": "orden"}]}
+        with mock.patch("sheets_reports.services.ai_scales.generate_json", return_value=answer) as ai:
+            out = classify_scales(df, ["nivel"], effective_scales(df), ignored_values="No aplica, N/A")
+        self.assertEqual(out, {"nivel": {"scale": "ordinal", "order": ["Bajo", "Alto"], "reason": "orden"}})
+        prompt = ai.call_args.args[0]
+        col_line = next(line for line in prompt.splitlines() if '"nivel"' in line)
+        self.assertIn('valores: ["Bajo", "Alto"]', col_line)
+        self.assertNotIn("No aplica", col_line)
 
     def test_descarta_un_orden_incompleto_y_columnas_desconocidas(self):
         df = survey_df()

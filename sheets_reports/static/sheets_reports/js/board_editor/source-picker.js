@@ -119,6 +119,7 @@ function sourcePicker({ mode = 'create' } = {}) {
     _previewTimers: {},
     // Constructor: el campo abierto, el lugar del árbol elegido con clic y el valor que se escribe.
     selectedId: null,
+    activePaletteSection: 'columns',
     fbSelected: null,
     valueType: 'number',
     valueInput: '',
@@ -135,7 +136,7 @@ function sourcePicker({ mode = 'create' } = {}) {
     ],
     // Las funciones del catálogo en sus grupos de la paleta: SI y las agregaciones, y las de texto.
     // `tall`: las de varios huecos, que se dibujan como bloque vertical (el color de SI).
-    FUNCTION_GROUPS: [['Funciones', undefined], ['Texto', 'texto']].map(([title, group]) => ({
+    FUNCTION_GROUPS: [['Agregaciones', undefined], ['Funciones de Texto', 'texto']].map(([title, group]) => ({
       title,
       pieces: FormulaBlocks.catalog.functions.filter(f => f.group === group).map(({ name, label, title, slots }) =>
         ({ label, title, tall: slots.length > 1, piece: FormulaBlocks.pieces.func(name) })),
@@ -501,6 +502,10 @@ function sourcePicker({ mode = 'create' } = {}) {
     selectField(id) {
       this.selectedId = id;
       this.fbSelected = null;
+    },
+
+    togglePaletteSection(section) {
+      this.activePaletteSection = this.activePaletteSection === section ? '' : section;
     },
 
     // «Campos calculados»: antes de mostrar los bloques, siguen a las columnas renombradas.

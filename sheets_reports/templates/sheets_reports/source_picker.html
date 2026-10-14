@@ -395,24 +395,49 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             <!-- Panel de piezas: se arrastran al canvas o, con un lugar elegido, se colocan con
                  un clic. Soltar aquí un bloque del canvas lo quita. -->
             <aside data-fb-trash aria-label="Piezas de la fórmula"
-                   class="sm:min-h-0 sm:overflow-y-auto rounded border border-line bg-paper/60 p-2 space-y-3 text-xs">
-              <section class="space-y-1.5">
-                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Columnas</h4>
-                <input type="search" x-model="columnQuery" placeholder="Buscar columna" aria-label="Buscar columna"
-                       class="w-full text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
-                <!-- Con su propio scroll: una hoja con muchas columnas no empuja fuera de la vista a
-                     las secciones de abajo. -->
-                <div class="flex flex-wrap gap-1 max-h-28 overflow-y-auto pr-1">
-                  <template x-for="col in filteredBuilderColumns" :key="col">
-                    <button type="button" x-bind:data-fb-piece="JSON.stringify(columnPiece(col))" x-on:click="clickPiece(columnPiece(col))"
-                            x-bind:title="col"
-                            class="max-w-full truncate rounded-lg border border-moss-300 bg-moss-50 px-2 py-1 font-medium text-moss-700 hover:border-moss-500 cursor-grab"
-                            x-text="col"></button>
-                  </template>
+                   class="h-full min-h-[30rem] sm:min-h-0 flex flex-col overflow-hidden rounded border border-line bg-paper/60 text-xs">
+
+              <!-- 1. Columnas -->
+              <div class="flex flex-col border-b border-line transition-all duration-300"
+                   x-bind:class="activePaletteSection === 'columns' ? 'flex-1 min-h-0' : 'shrink-0'">
+                <button type="button" x-on:click="togglePaletteSection('columns')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/70 hover:text-ink hover:bg-white/60 transition cursor-pointer select-none shrink-0">
+                  <span>Columnas</span>
+                  <i class="ti ti-chevron-down text-xs transition-transform duration-300"
+                     x-bind:class="activePaletteSection === 'columns' ? 'rotate-180 text-moss-600' : 'text-ink/40'"></i>
+                </button>
+                <div x-show="activePaletteSection === 'columns'"
+                     x-transition:enter="transition-all duration-300 ease-out"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="flex-1 min-h-0 flex flex-col gap-2 p-2.5 pt-0">
+                  <input type="search" x-model="columnQuery" placeholder="Buscar columna…" aria-label="Buscar columna"
+                         class="w-full shrink-0 text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  <div class="flex-1 min-h-0 overflow-y-auto flex flex-wrap gap-1 content-start pr-1">
+                    <template x-for="col in filteredBuilderColumns" :key="col">
+                      <button type="button" x-bind:data-fb-piece="JSON.stringify(columnPiece(col))" x-on:click="clickPiece(columnPiece(col))"
+                              x-bind:title="col"
+                              class="max-w-full truncate rounded-lg border border-moss-300 bg-moss-50 px-2 py-1 font-medium text-moss-700 hover:border-moss-500 cursor-grab"
+                              x-text="col"></button>
+                    </template>
+                  </div>
                 </div>
-                <!-- Valores: un número o un texto escrito a mano, o «Vacío», listos para arrastrar. -->
-                <div class="mt-2 border-t border-line pt-2 space-y-1.5">
-                  <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Valores</h4>
+              </div>
+
+              <!-- 2. Valores -->
+              <div class="flex flex-col border-b border-line transition-all duration-300"
+                   x-bind:class="activePaletteSection === 'values' ? 'flex-1 min-h-0' : 'shrink-0'">
+                <button type="button" x-on:click="togglePaletteSection('values')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/70 hover:text-ink hover:bg-white/60 transition cursor-pointer select-none shrink-0">
+                  <span>Valores</span>
+                  <i class="ti ti-chevron-down text-xs transition-transform duration-300"
+                     x-bind:class="activePaletteSection === 'values' ? 'rotate-180 text-moss-600' : 'text-ink/40'"></i>
+                </button>
+                <div x-show="activePaletteSection === 'values'"
+                     x-transition:enter="transition-all duration-300 ease-out"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="flex-1 min-h-0 overflow-y-auto p-2.5 pt-0 space-y-2">
                   <div class="inline-flex rounded-md border border-line bg-white p-0.5" role="radiogroup" aria-label="Tipo de valor">
                     <template x-for="t in [['number', 'Número'], ['text', 'Texto']]" :key="t[0]">
                       <button type="button" role="radio" x-on:click="valueType = t[0]" x-bind:aria-checked="valueType === t[0]"
@@ -433,50 +458,114 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                             x-text="valueType === 'text' ? `&quot;${valueInput}&quot;` : valueInput.trim()"></button>
                     <span class="text-[11px] text-ink/40">← arrástralo</span>
                   </div>
-                  <button type="button" x-bind:data-fb-piece="JSON.stringify(EMPTY_PIECE.piece)"
-                          x-on:click="clickPiece(EMPTY_PIECE.piece)" x-bind:title="EMPTY_PIECE.title"
-                          class="rounded-lg border border-dashed border-ink/30 bg-white px-2 py-1 italic text-ink/60 hover:border-moss-500 cursor-grab"
-                          x-text="EMPTY_PIECE.label"></button>
+                  <div>
+                    <button type="button" x-bind:data-fb-piece="JSON.stringify(EMPTY_PIECE.piece)"
+                            x-on:click="clickPiece(EMPTY_PIECE.piece)" x-bind:title="EMPTY_PIECE.title"
+                            class="rounded-lg border border-dashed border-ink/30 bg-white px-2.5 py-1 italic text-ink/60 hover:border-moss-500 cursor-grab"
+                            x-text="EMPTY_PIECE.label"></button>
+                  </div>
                 </div>
-              </section>
+              </div>
 
-              <!-- Operadores: soltados sobre un bloque, lo envuelven ([ventas] → [ventas] + [ ]). -->
-              <section class="space-y-1.5">
-                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Operadores</h4>
-                <div class="flex flex-wrap gap-1">
-                  <template x-for="p in OPERATOR_PIECES" :key="p.label">
-                    <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
-                            x-bind:aria-label="p.title"
-                            class="w-8 h-7 rounded-lg border border-line bg-white text-sm font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
-                            x-text="p.label"></button>
-                  </template>
-                </div>
-              </section>
-
-              <section class="space-y-1.5">
-                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Condición</h4>
-                <div class="flex flex-wrap gap-1">
-                  <template x-for="p in CONDITION_PIECES" :key="p.label">
-                    <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
-                            class="rounded-lg border border-line bg-white px-2 py-1 font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
-                            x-text="p.label"></button>
-                  </template>
-                </div>
-              </section>
-
-              <template x-for="g in FUNCTION_GROUPS" :key="g.title">
-                <section class="space-y-1.5">
-                  <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50" x-text="g.title"></h4>
+              <!-- 3. Operadores -->
+              <div class="flex flex-col border-b border-line transition-all duration-300"
+                   x-bind:class="activePaletteSection === 'operators' ? 'flex-1 min-h-0' : 'shrink-0'">
+                <button type="button" x-on:click="togglePaletteSection('operators')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/70 hover:text-ink hover:bg-white/60 transition cursor-pointer select-none shrink-0">
+                  <span>Operadores</span>
+                  <i class="ti ti-chevron-down text-xs transition-transform duration-300"
+                     x-bind:class="activePaletteSection === 'operators' ? 'rotate-180 text-moss-600' : 'text-ink/40'"></i>
+                </button>
+                <div x-show="activePaletteSection === 'operators'"
+                     x-transition:enter="transition-all duration-300 ease-out"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="flex-1 min-h-0 overflow-y-auto p-2.5 pt-0">
                   <div class="flex flex-wrap gap-1">
-                    <template x-for="p in g.pieces" :key="p.label">
+                    <template x-for="p in OPERATOR_PIECES" :key="p.label">
+                      <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                              x-bind:aria-label="p.title"
+                              class="w-8 h-7 rounded-lg border border-line bg-white text-sm font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
+                              x-text="p.label"></button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4. Condición -->
+              <div class="flex flex-col border-b border-line transition-all duration-300"
+                   x-bind:class="activePaletteSection === 'condition' ? 'flex-1 min-h-0' : 'shrink-0'">
+                <button type="button" x-on:click="togglePaletteSection('condition')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/70 hover:text-ink hover:bg-white/60 transition cursor-pointer select-none shrink-0">
+                  <span>Condición</span>
+                  <i class="ti ti-chevron-down text-xs transition-transform duration-300"
+                     x-bind:class="activePaletteSection === 'condition' ? 'rotate-180 text-moss-600' : 'text-ink/40'"></i>
+                </button>
+                <div x-show="activePaletteSection === 'condition'"
+                     x-transition:enter="transition-all duration-300 ease-out"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="flex-1 min-h-0 overflow-y-auto p-2.5 pt-0">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="p in CONDITION_PIECES" :key="p.label">
+                      <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                              class="rounded-lg border border-line bg-white px-2 py-1 font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
+                              x-text="p.label"></button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5. Agregaciones -->
+              <div class="flex flex-col border-b border-line transition-all duration-300"
+                   x-bind:class="activePaletteSection === 'aggregations' ? 'flex-1 min-h-0' : 'shrink-0'">
+                <button type="button" x-on:click="togglePaletteSection('aggregations')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/70 hover:text-ink hover:bg-white/60 transition cursor-pointer select-none shrink-0">
+                  <span>Agregaciones</span>
+                  <i class="ti ti-chevron-down text-xs transition-transform duration-300"
+                     x-bind:class="activePaletteSection === 'aggregations' ? 'rotate-180 text-moss-600' : 'text-ink/40'"></i>
+                </button>
+                <div x-show="activePaletteSection === 'aggregations'"
+                     x-transition:enter="transition-all duration-300 ease-out"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="flex-1 min-h-0 overflow-y-auto p-2.5 pt-0">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="p in (FUNCTION_GROUPS[0] ? FUNCTION_GROUPS[0].pieces : [])" :key="p.label">
                       <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
                               x-bind:class="p.tall ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-sky-200 bg-sky-50 text-sky-700'"
                               class="rounded-lg border px-2 py-1 font-mono font-semibold cursor-grab"
                               x-text="p.label"></button>
                     </template>
                   </div>
-                </section>
-              </template>
+                </div>
+              </div>
+
+              <!-- 6. Funciones de Texto -->
+              <div class="flex flex-col transition-all duration-300"
+                   x-bind:class="activePaletteSection === 'text_functions' ? 'flex-1 min-h-0' : 'shrink-0'">
+                <button type="button" x-on:click="togglePaletteSection('text_functions')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/70 hover:text-ink hover:bg-white/60 transition cursor-pointer select-none shrink-0">
+                  <span>Funciones de Texto</span>
+                  <i class="ti ti-chevron-down text-xs transition-transform duration-300"
+                     x-bind:class="activePaletteSection === 'text_functions' ? 'rotate-180 text-moss-600' : 'text-ink/40'"></i>
+                </button>
+                <div x-show="activePaletteSection === 'text_functions'"
+                     x-transition:enter="transition-all duration-300 ease-out"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="flex-1 min-h-0 overflow-y-auto p-2.5 pt-0">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="p in (FUNCTION_GROUPS[1] ? FUNCTION_GROUPS[1].pieces : [])" :key="p.label">
+                      <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                              x-bind:class="p.tall ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-sky-200 bg-sky-50 text-sky-700'"
+                              class="rounded-lg border px-2 py-1 font-mono font-semibold cursor-grab"
+                              x-text="p.label"></button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
             </aside>
 
             <div class="sm:min-h-0 flex flex-col gap-2">

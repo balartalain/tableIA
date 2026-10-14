@@ -36,6 +36,8 @@ urlpatterns = [
     path('api/sources/google/spreadsheets/<str:spreadsheet_id>/tabs/', views.source_tabs, name='source_tabs'),
     path('api/sources/google/spreadsheets/<str:spreadsheet_id>/tabs/<str:gid>/columns/',
          views.source_columns, name='source_columns'),
+    path('api/sources/suggest-column-labels/', views.source_suggest_column_labels,
+         name='source_suggest_column_labels'),
     path('api/sources/<int:source_id>/', views.source_detail, name='source_detail'),
     path('api/sources/<int:source_id>/columns/', views.source_saved_columns, name='source_saved_columns'),
     path('api/sources/<int:source_id>/schema/', views.source_schema, name='source_schema'),

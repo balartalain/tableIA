@@ -216,14 +216,24 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
 
     <div x-show="columnsTab === 'columns'" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 -mb-2">
       <!-- Alineada con las casillas de la tabla: su borde (1px) + el padding de celda (px-3). -->
-      <label class="flex items-center gap-2 pl-[13px] text-xs font-medium text-ink/70 cursor-pointer">
-        <input type="checkbox" x-model="headers" x-on:change="toggleHeaders()" x-bind:disabled="loadingColumns"
-               class="accent-moss-500">
-        Usar la primera fila como encabezado
-      </label>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 pl-[13px] text-xs font-medium text-ink/70 cursor-pointer">
+          <input type="checkbox" x-model="headers" x-on:change="toggleHeaders()" x-bind:disabled="loadingColumns"
+                 class="accent-moss-500">
+          Usar la primera fila como encabezado
+        </label>
+        <button type="button" x-on:click="generateColumnLabels()"
+                x-bind:disabled="generatingLabels || loadingColumns || !columns.length"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-moss-200 text-moss-700 bg-moss-50 hover:bg-moss-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                title="Generar nombres cortos y limpios para las columnas con IA">
+          <i class="ti" x-bind:class="generatingLabels ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
+          <span x-text="generatingLabels ? 'Generando nombres…' : 'Generar nombres con IA'"></span>
+        </button>
+      </div>
       <p x-show="loadingColumns" class="text-xs text-ink/50">
         <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Leyendo la pestaña…
       </p>
+      <p x-show="generateLabelsError" x-text="generateLabelsError" role="alert" class="text-xs text-red-600"></p>
       <label class="relative ml-auto">
         <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40 text-sm" aria-hidden="true"></i>
         <input type="search" x-model="columnFilter" placeholder="Buscar columna…" aria-label="Buscar columna"

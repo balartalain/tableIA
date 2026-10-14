@@ -437,6 +437,28 @@ def source_columns(request, spreadsheet_id, gid):
     return JsonResponse({"columns": _sheet_columns(df), "rows": len(df)})
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def source_suggest_column_labels(request):
+    """«Generar nombres con IA»: POST {columns: [nombre1, ...]}
+    → {labels: {nombre1: "Nombre limpio 1", ...}}."""
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    columns = data.get("columns")
+    if not isinstance(columns, list) or not columns:
+        return _error("Envía al menos una columna.")
+
+    from sheets_reports.services.ai_column_labels import suggest_column_labels
+    from sheets_reports.services.ai_spec import SpecGenerationError
+    try:
+        labels = suggest_column_labels([str(c) for c in columns])
+    except SpecGenerationError as e:
+        return _error(str(e), status=422)
+    return JsonResponse({"labels": labels})
+
+
 # ------------------------------------------------------------------ fuentes del tablero
 @csrf_exempt
 @require_http_methods(["GET", "POST"])

@@ -38,7 +38,7 @@ audit_logger = logging.getLogger("tableia.ai_audit")
 GEMINI_TIMEOUT_MS = 120_000
 # Tokens de razonamiento del modelo por tipo de llamada: 0 = responde sin razonar; None = sin
 # límite (lo que decida el modelo). El reintento de una propuesta inválida razona sin límite.
-THINKING_BUDGETS = {"suggestions": 0, "widget": 512, "formula": 512, "board_plan": 1024, "scales": 512}
+THINKING_BUDGETS = {"suggestions": 0, "widget": 512, "formula": 512, "board_plan": 1024, "scales": 512, "column_labels": 256}
 CREATE_TOOL = "create_widget"
 REJECT_TOOL = "reject_request"
 

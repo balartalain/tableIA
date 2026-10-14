@@ -89,10 +89,12 @@ function sourcePicker({ mode = 'create' } = {}) {
     loadingSheets: false,
     loadingTabs: false,
     loadingColumns: false,
+    generatingLabels: false,
     saving: false,
     sheetsError: '',
     tabsError: '',
     columnsError: '',
+    generateLabelsError: '',
     createError: '',
     // Respuestas viejas (búsquedas o clics más rápidos que la red) no pisan a las nuevas.
     _sheetsRequest: 0,
@@ -306,6 +308,28 @@ function sourcePicker({ mode = 'create' } = {}) {
     toggleHeaders() {
       if (this.mode === 'edit') this.loadSavedColumns();
       else this.loadColumns();
+    },
+
+    // «Generar nombres con IA»: analiza los nombres originales y sugiere nombres limpios/cortos en «Nombre a mostrar».
+    async generateColumnLabels() {
+      if (this.generatingLabels || !this.columns.length) return;
+      this.generatingLabels = true;
+      this.generateLabelsError = '';
+      try {
+        const columns = this.columns.filter(c => !c.readonly).map(c => c.name);
+        const data = await this._send('POST', '/api/sources/suggest-column-labels/', { columns });
+        const labels = (data && data.labels) || {};
+        for (const col of this.columns) {
+          if (col.readonly) continue;
+          if (labels[col.name] !== undefined) {
+            col.label = labels[col.name] !== col.name ? labels[col.name] : '';
+          }
+        }
+      } catch (e) {
+        this.generateLabelsError = e.message || 'Error al generar nombres';
+      } finally {
+        this.generatingLabels = false;
+      }
     },
 
     async _get(path) {

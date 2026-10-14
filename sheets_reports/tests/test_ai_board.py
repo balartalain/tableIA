@@ -5,8 +5,10 @@ from django.test import SimpleTestCase
 
 from sheets_reports.services import ai_board
 from sheets_reports.services.ai_board import clean_plan, propose_board
-from sheets_reports.services.ai_spec import SpecGenerationError
-from sheets_reports.tests.fixtures import sales_ctx
+from sheets_reports.engine.context import SheetContext
+from sheets_reports.engine.formulas import apply_calculated_fields
+from sheets_reports.services.ai_spec import SpecGenerationError, build_system_prompt, generate_widget_form
+from sheets_reports.tests.fixtures import execute, sales_ctx, satisfaction_df
 
 
 def item(widget_type="bar", title="Ventas por categoría", request="suma de ventas por categoria", **extra):
@@ -66,6 +68,46 @@ class CleanPlanTests(SimpleTestCase):
 
 
 class ProposeBoardTests(SimpleTestCase):
+    @mock.patch("sheets_reports.services.ai_spec._audit")
+    def test_del_plan_a_una_medida_de_porcentaje_de_texto(self, _audit):
+        df = satisfaction_df()
+        ctx = SheetContext.from_dataframe(df, "0")
+        request = ("Porcentaje de Insatisfecho y Completamente insatisfecho sobre las respuestas "
+                   "no nulas de respuesta, incluyendo No aplica, por campus")
+        planned = item("bar", title="% insatisfechos por campus", request=request, columns=["col_2", "col_3"])
+        with mock.patch.object(ai_board, "generate_json", return_value={"items": [planned]}) as planner:
+            plan = propose_board("tablero de satisfacción", ctx)
+        for prompt in (planner.call_args.args[0], build_system_prompt()):
+            self.assertIn("No propongas promedios de texto", prompt)
+            self.assertIn("solo el usuario decide excluirlas", prompt)
+            self.assertIn("COUNT([Pregunta])", prompt)
+            self.assertIn("COUNT([ID])", prompt)
+
+        invalid = {"widget_type": "bar", "fields": {"dimensions": ["col_2"], "metrics": [
+            {"field": "col_3", "agg": "avg", "alias": "promedio"}]}, "style": {}}
+        formula = ('SUM(IF([col_3] = "Insatisfecho" OR [col_3] = "Completamente insatisfecho", '
+                   '1, 0)) / COUNT([col_3]) * 100')
+        valid = {"widget_type": "bar", "calculated_fields": [
+            {"name": "% Insatisfechos", "formula": formula, "format": "percent"}],
+            "fields": {"dimensions": ["col_2"], "metrics": [
+                {"field": "% Insatisfechos", "agg": "auto", "alias": "insatisfechos"}]}, "style": {}}
+        entry = plan["items"][0]
+        with mock.patch("sheets_reports.services.ai_spec._call_model", side_effect=[
+            ("create_widget", invalid), ("create_widget", valid)]) as assistant:
+            proposal = generate_widget_form(entry["request"], entry["widget_type"], ctx, columns=entry["columns"])
+        self.assertEqual(assistant.call_count, 2)
+        self.assertIn("solo se aplica a columnas numéricas", assistant.call_args.args[0])
+        ready = apply_calculated_fields(df, proposal["calculated_fields"])
+        out = execute(ready, proposal["fields"])
+        self.assertEqual(out["data"], [{"campus": "Norte", "insatisfechos": 40.0},
+                                       {"campus": "Sur", "insatisfechos": 0.0}])
+        metric = proposal["fields"]["metrics"]
+        proposal["fields"]["dimensions"] = []
+        self.assertEqual(execute(ready, proposal["fields"])["data"]["values"][metric[0]["alias"]], 20.0)
+        proposal["fields"]["filters"] = [{"field": "respuesta", "op": "ne", "value": "No aplica"}]
+        self.assertAlmostEqual(execute(ready, proposal["fields"])["data"]["values"][metric[0]["alias"]],
+                               100 * 2 / 9)
+
     def test_el_prompt_lleva_catalogo_columnas_y_pedido(self):
         with mock.patch.object(ai_board, "generate_json", return_value={"items": [item()]}) as model:
             plan = propose_board("tablero de ventas", sales_ctx(), existing_types=["filter"])

@@ -13,7 +13,7 @@ import pandas as pd
 
 from sheets_reports.services.ai_spec import THINKING_BUDGETS, SpecGenerationError, generate_json
 from sheets_reports.utils.scales import (MAX_CATEGORIES_LARGE, SCALES, column_values, describe,
-                                         normalize_text, not_applicable, scale_errors)
+                                         normalize_text, scale_errors)
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,9 @@ Escalas:
 - discrete: números enteros que cuentan o puntúan (cantidad de hijos, nota de 1 a 10).
 - ordinal: categorías con un orden natural (Bajo < Medio < Alto, escalas de acuerdo o
   satisfacción, niveles educativos, rangos de edad). Da su orden en `order`, de menor a mayor,
-  con todos los valores de la columna escritos exactamente igual, salvo los que dicen que la
-  pregunta no aplica («No aplica», «No utilizo este medio»): esos no van y cuentan como vacíos.
+  con TODOS los valores de la columna escritos exactamente igual. «No aplica», «N/A»,
+  «No utilizo este medio» o «Empty» son respuestas válidas, no nulos: no las omitas ni les
+  inventes una posición. Si no hay un orden justificable para todos los valores, usa nominal.
 - nominal: categorías sin orden (carrera, provincia, Sí/No, sexo).
 - none: no tiene sentido medir su relación (identificadores, nombres, correos, texto libre,
   fechas).
@@ -82,9 +83,8 @@ def _clean(item: dict, df: pd.DataFrame) -> dict | None:
         return None
     out = {"scale": scale, "reason": str(item.get("reason") or "").strip()}
     if scale == "ordinal":
-        # Las de «no aplica» no van en el orden: cuentan como vacías.
-        actual = {normalize_text(v): v for v in column_values(df[field]) if not not_applicable(v)}
-        written = [actual.get(normalize_text(v)) for v in order or [] if not not_applicable(v)]
+        actual = {normalize_text(v): v for v in column_values(df[field])}
+        written = [actual.get(normalize_text(v)) for v in order or []]
         if not actual or None in written or set(written) != set(actual.values()):
             return None
         out["order"] = written

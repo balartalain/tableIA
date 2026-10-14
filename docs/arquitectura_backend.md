@@ -587,8 +587,8 @@ guardadas en `df.attrs["column_scales"]`) y `compile` arma las filas de la matri
 - una por variable numérica u ordinal;
 - una por categoría de una nominal: una variable dummy (`one_hot`) que vale 1 si la fila es de
   esa categoría y 0 si no («Recinto: Santiago»), de la más a la menos frecuente. Una dicotómica
-  (Sí/No, 0/1) da una sola, la del «sí» (o la categoría menos frecuente). Las filas vacías o de
-  «no aplica» quedan vacías en todas sus dummies.
+  (Sí/No, 0/1) da una sola, la del «sí» (o la categoría menos frecuente). Solo las filas vacías
+  quedan vacías en todas sus dummies; «No aplica» es una categoría más.
 
 Las dummies se crean al calcular, sobre las filas filtradas, y no se guardan (ni en la fuente
 ni en la caché); el widget guarda solo la columna original. Para una dummy permanente está el
@@ -606,11 +606,11 @@ Todas van de −1 a 1. Spearman es Pearson sobre los rangos (sin scipy). Una var
 correlaciona (si su escala cambió en la fuente después de guardar el widget) deja su fila
 vacía. Cada par usa sus filas completas; con menos
 de 3, o con una columna constante, la celda va vacía. En una ordinal, un valor que no está en
-`order` cuenta como vacío y se informa (`variables[i].unmatched`); los de «no aplica» son vacíos
-sin aviso.
+`order` cuenta como vacío y se informa (`variables[i].unmatched`), sin excepciones por el texto
+de la respuesta. Al configurar una ordinal, su orden debe cubrir todos sus valores.
 
 `form_errors` rechaza una columna `none`, una ordinal sin orden, una nominal con más de
-`nominal_max_categories` categorías (10; sin contar las de «no aplica») y una matriz de más de
+`nominal_max_categories` categorías (10; incluyendo «No aplica») y una matriz de más de
 `matrix_max_rows` filas (30).
 
 Salida: `{type, method, variables, matrix, measures, n, rows, top: [{a, b, r, n, measure}],
@@ -962,9 +962,10 @@ que la IA ve de cada columna. `SheetContext.scales` la tiene para todas las colu
 
 Las escalas conocidas (`ORDINAL_SCALES`) son niveles con sinónimos: acuerdo, satisfacción,
 frecuencia, nivel, calidad, importancia, probabilidad, dificultad y cantidad. Se comparan sin
-acentos, mayúsculas ni género («Satisfecha» = «satisfecho»). Las respuestas de «no aplica»
-(«No aplica», «N/A», «No utilizo este medio», «No he recibido este servicio») no son un nivel:
-no impiden reconocer la escala, no van en el orden y cuentan como vacías.
+acentos, mayúsculas ni género («Satisfecha» = «satisfecho»). «No aplica», «N/A», «No utilizo este
+medio», «No he recibido este servicio» y «Empty» son respuestas válidas, no nulos. Si algún valor
+no pertenece al orden conocido, no se descarta: la detección propone nominal. El usuario puede
+filtrar las respuestas o definir una escala ordinal cuyo orden cubra todos sus valores.
 
 **Escala efectiva** (`effective_scales`): la guardada en la fuente manda sobre la detectada
 (`saved: true`). El perfil trae `stats`: vacíos (%), valores distintos, mínimo y máximo de las
@@ -975,15 +976,33 @@ numéricas, los valores de las categorías y los más frecuentes del texto libre
 Medio < Alto», «texto libre, no se analiza; los más frecuentes: …». Es lo que la IA sabe de los
 valores además de los ejemplos de las categorías; no recibe filas.
 
+**Reglas BI compartidas** (`services/ai_spec.BI_DATA_RULES`): planificación del tablero,
+configuración de widgets, sugerencias y generación de fórmulas usan la misma política. Las
+agregaciones numéricas solo se proponen sobre números o conversiones definidas; para texto se
+usan conteos, distribuciones y porcentajes. Un porcentaje de respuestas a una pregunta usa
+`COUNT([Pregunta])` como base no nula, incluyendo «No aplica»; sobre el total de registros usa
+`COUNT([ID])`. La condición del numerador no filtra el denominador. Las exclusiones de categorías
+dependen de filtros explícitos del usuario, no de interpretaciones del core ni de la IA.
+
 **La IA corrige escalas** de dos formas:
 - Con su widget: `create_widget` admite `column_scales: [{field, scale, order?}]` en los
   widgets con `columns_scaled`. `form_errors` las valida (escala válida, orden que cubre los
   valores de la columna) y valida las columnas con ellas superpuestas; `table_assistant` las
-  devuelve y el editor las guarda en la fuente al aplicar la propuesta.
+  devuelve y el editor las guarda en la fuente al aplicar la propuesta. Por defecto conserva
+  las escalas efectivas: las guardadas se señalan en el contexto y las correcciones idénticas
+  se omiten de la propuesta validada, sin volver a persistirlas.
 - «Clasificar con IA» (`services/ai_scales.classify_scales`): la IA ve el perfil detectado y
   los valores de las columnas elegidas y propone escala, orden y motivo. Una propuesta cuyo
   orden no cubre los valores de la columna se descarta; el orden se reescribe como está en la
   hoja.
+
+La generación de un widget permite dos intentos. Solo para correlación, si el segundo introduce
+errores diferentes (por ejemplo, corrige el exceso de columnas pero mezcla escalas de acuerdo
+y aprendizaje), se permite una tercera y última reparación. Recibe los valores reales y la
+escala efectiva de cada columna con errores, junto con los errores anteriores para que no los
+reintroduzca. Si repite los mismos errores se detiene tras el segundo intento; ningún intento
+devuelve una propuesta inválida. Las instrucciones prohíben copiar órdenes entre preguntas o
+inventar posiciones para respuestas que no tienen un orden definido.
 
 ---
 

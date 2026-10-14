@@ -10,7 +10,7 @@ import logging
 import re
 
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.services.ai_spec import (THINKING_BUDGETS, SpecGenerationError, capabilities_text,
+from sheets_reports.services.ai_spec import (BI_DATA_RULES, THINKING_BUDGETS, SpecGenerationError, capabilities_text,
                                              columns_context, generate_json)
 from sheets_reports.utils.data import is_id_column
 from sheets_reports.widgets import WIDGETS
@@ -30,6 +30,8 @@ Widgets disponibles (widget_type: para qué sirve. Admite: …):
 {catalog}
 
 {columns}
+
+{data_rules}
 
 Reglas:
 - Entre 2 y {max_items} widgets, en el orden en que se verán (los números clave arriba).
@@ -168,7 +170,7 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=()) -> dict:
     singles = [w.key for w in _widgets() if w.max_per_dashboard == 1]
     taken = [k for k in singles if k in set(existing_types)]
     contents = BOARD_PROMPT.format(
-        catalog=_catalog(), columns=columns_context(ctx), max_items=MAX_ITEMS,
+        catalog=_catalog(), columns=columns_context(ctx), data_rules=BI_DATA_RULES, max_items=MAX_ITEMS,
         singletons=(f"- El tablero ya tiene: {', '.join(taken)}. No los propongas.\n" if taken else ""),
         prompt=prompt,
     )

@@ -24,7 +24,7 @@ from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formul
 from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.data import is_id_column
 from sheets_reports.utils.scales import (SCALES, describe as describe_scale, dummy_count,
-                                         normalize_text, not_applicable, scale_errors)
+                                         normalize_text, scale_errors)
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
 from sheets_reports.engine.steps.aggregation import METRIC_FORMATS
@@ -66,6 +66,36 @@ class SpecGenerationError(Exception):
     """Error legible para el usuario: la IA no produjo un WidgetForm válido."""
 
 
+BI_DATA_RULES = """\
+## Reglas de datos y agregación (comunes al plan y a cada widget)
+- Usa el tipo real de la columna: suma, promedio, mediana, mínimo, máximo y desviación estándar
+  solo sobre columnas numéricas. Una escala ordinal de texto NO convierte sus respuestas en
+  números. No propongas promedios de texto ni inventes puntuaciones a partir de su orden;
+  una conversión solo se usa si el usuario definió la equivalencia o ya existe un campo
+  calculado que la implementa.
+- Sobre texto, incluidas las escalas ordinales, puedes contar, contar distintos, mostrar la
+  distribución por respuesta y calcular porcentajes por condición. Para un tablero de
+  satisfacción, propone estos análisis en lugar de un promedio de las etiquetas.
+- «No aplica», «N/A», «No utilizo este medio», «Sin respuesta» y «Empty» son respuestas de texto
+  válidas, no valores nulos. No las excluyas, recodifiques ni filtres por iniciativa propia:
+  solo el usuario decide excluirlas mediante filtros explícitos. Solo los nulos reales son
+  ausencia de respuesta.
+- Un porcentaje de respuestas a una pregunta usa como denominador COUNT([Pregunta]): excluye
+  nulos reales pero incluye TODAS las categorías textuales. Si el usuario pide sobre el total
+  de registros, usa COUNT([ID]). Explicita la base en la descripción del plan o el nombre de
+  la medida; no cambies el denominador entre el plan y la configuración del widget.
+- Para «% de insatisfechos», usa las categorías reales correspondientes (por ejemplo,
+  «Insatisfecho» y «Completamente insatisfecho») y explicita cuáles incluyes. La condición
+  selecciona el numerador, NO filtra el widget completo ni su denominador. Ejemplo de campo
+  calculado: SUM(IF([Pregunta] = "Insatisfecho" OR [Pregunta] = "Completamente insatisfecho",
+  1, 0)) / COUNT([Pregunta]) * 100. El plan describe ese cálculo en lenguaje natural.
+- Los filtros del usuario y el agrupamiento se aplican tanto al numerador como al denominador.
+  Un denominador cero produce un resultado vacío, no 0 %. No uses AVG(IF(condición, 1, 0))
+  para excluir nulos de una pregunta: ese IF los transforma en ceros y cambia la base.
+
+"""
+
+
 CORE_PROMPT = """\
 Eres el asistente de un constructor de tableros de reportes sobre una hoja de cálculo. El
 usuario describe en español un widget y tú respondes SIEMPRE llamando a una función:
@@ -76,6 +106,7 @@ usuario describe en español un widget y tú respondes SIEMPRE llamando a una fu
 Tú NO calculas nada ni ves los datos: solo describes QUÉ calcular. El backend ejecuta la
 consulta.
 
+""" + BI_DATA_RULES + """\
 ## fields (los datos)
 - Cada columna de la hoja tiene un alias asignado (col_1, col_2, ...). En dimensions, pivots,
   columns, metrics.field, filters y trend_by usa SIEMPRE su alias (ej. "col_1", "col_2") en vez
@@ -83,7 +114,8 @@ consulta.
 - dimensions: alias de las columnas por las que agrupar (categorías del eje X / filas de la tabla). Si el
   widget exige dimensión y el usuario no dice cómo agrupar, usa una columna de texto con pocos
   valores distintos (ej. departamento, campus); nunca una fecha suelta ni un identificador.
-- columns: SOLO la tabla de datos: columnas de la hoja a mostrar tal cual, en orden, cada una
+- columns: columnas de la hoja a mostrar (tabla) o analizar (correlación y otros tipos que las
+  admitan), en orden, cada una
   como {"field": "col_1", "label": "Nombre a mostrar"}; `label` es opcional (nombre a mostrar en la cabecera,
   sin él se muestra la columna). La tabla NO agrupa ni resume: no lleva dimensions ni metrics.
 - pivots: alias de las columnas para desagregar además de la dimensión (columnas de una tabla dinámica,
@@ -103,7 +135,7 @@ consulta.
   agg "count" con filters [{"field": esa columna, "op": "eq", "value": "Sí"}]. Reparto entre
   Sí y No: esa columna como dimensión y agg "count". Comparar las opciones de una pregunta: una
   métrica "count" por opción, cada una con su filtro "Sí", sin dimensión. Porcentaje que la
-  marcó en un solo número: campo calculado AVG(IF([col_N] = "Sí", 1, 0)) * 100.
+  marcó en un solo número: SUM(IF([col_N] = "Sí", 1, 0)) / COUNT([col_N]) * 100.
 - La hoja siempre tiene una columna ID (una por fila, de solo lectura): NO la uses como
   dimensión, pivote, columna ni field de una métrica. El Conteo (agg "count" sin field) ya
   cuenta las filas distintas; para contar filas en una fórmula de campo calculado agregado
@@ -151,12 +183,14 @@ a su `name`. Se crea en la fuente al aplicar la propuesta y queda para todo el t
   es agregado; como una columna más si es por fila). No propongas uno con la misma fórmula.
 - {"name", "formula", "format"}: `name` corto y claro (ej. "% Ejecución", "Ganancia"), distinto
   de las columnas; `format` "percent" si el resultado es un porcentaje (la fórmula multiplica
-  por 100), si no "number".
+  por 100), si no "number". Para porcentajes de respuestas, respeta el denominador de las
+  reglas de datos: COUNT([Pregunta]) o COUNT([ID]) según el pedido.
 - `formula` SIEMPRE agregada: cada columna dentro de SUM, AVG, COUNT, COUNT_DISTINCT, MIN o MAX.
   Columnas entre corchetes ([Ventas]), textos entre comillas, + - * / ( ), comparaciones
   (= != > >= < <=), AND OR NOT e IF(condición, sí, no) dentro de las agregaciones.
   Ej.: SUM([Ventas]) - SUM([Costo]); SUM([Gasto]) / SUM([Presupuesto]) * 100;
-  AVG(IF([Respuesta] = "Sí", 1, 0)) * 100; SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100.
+  SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100;
+  SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100.
 - No combines columnas sueltas con agregaciones (SUM([a]) / [b] no vale).
 - Dentro de una agregación cada columna es el valor de la fila, no un total. Para contar filas
   que cumplen una condición usa SUM(IF(condición, 1, 0)): COUNT cuenta filas distintas (ID),
@@ -196,6 +230,25 @@ Usa los valores de ejemplo de las columnas para escribir el valor exacto.
 PIVOT_PROMPT = """\
 Con pivots, los gráficos permiten UNA métrica; si el usuario pide varias y un cruce en un
 gráfico, incluye todo tal como lo pidió: el sistema te pedirá que corrijas la propuesta."""
+
+CORRELATION_PROMPT = """\
+## Variables y escalas de la matriz de correlación
+- Respeta los límites de columnas y de filas de la matriz declarados por el widget. Cada
+  categoría nominal genera una fila (una sola si es dicotómica): no confundas el número de
+  indicadores pedidos con el número de columnas seleccionadas.
+- Conserva por defecto la escala efectiva de cada columna que indica el contexto, sobre todo
+  si está guardada en la fuente. Para conservarla, OMITE column_scales; no repitas todas las
+  escalas. Una corrección solo se propone si es necesaria y está justificada por el pedido
+  o por los valores reales de ESA columna.
+- Si propones una ordinal, order debe incluir TODOS los valores de esa columna, escritos
+  exactamente como aparecen, en un orden justificable. No copies el orden de otra pregunta:
+  acuerdo, satisfacción y aprendizaje son escalas distintas aunque sus nombres se parezcan.
+- No inventes posiciones para «No aplica», «No utilizo este medio» u otras respuestas fuera
+  del orden conocido. Consérvalas como categorías de una nominal, o usa el orden que haya
+  definido explícitamente el usuario. No las excluyas ni las conviertas en nulos.
+- Si una propuesta falla, revisa la propuesta COMPLETA, incluidas las escalas de las columnas
+  que conserves o sustituyas. No reintroduzcas errores corregidos en intentos anteriores.
+"""
 
 # El título de la tarjeta lo pone el usuario: la IA no lo genera ni lo ve en `style`.
 NOT_AI_STYLE_KEYS = {"title"}
@@ -387,6 +440,7 @@ def build_system_prompt(widgets=None) -> str:
         "## Tipos de widget (si no viene fijado)",
         *types_section,
         PIVOT_PROMPT,
+        CORRELATION_PROMPT if any(w.capabilities.get("columns_scaled") for w in widgets) else "",
         "",
         "## style de cada tipo",
         *style_docs,
@@ -635,15 +689,18 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
                 "type": "array",
                 "description": "Solo para corregir la escala de una columna de `columns` cuando la "
                                "indicada en la lista de columnas no es la correcta (ej. una nominal "
-                               "cuyos valores tienen un orden natural: ordinal). Omitir si no hace falta.",
+                               "cuyos valores tienen un orden natural: ordinal). Omitir para conservar "
+                               "las escalas efectivas; no repetir las ya detectadas o guardadas.",
                 "items": {"type": "object", "additionalProperties": False,
                           "required": ["field", "scale"],
                           "properties": {
                               "field": _column_schema("Columna cuya escala se corrige."),
                               "scale": {"enum": [s for s in SCALES if s != "none"]},
                               "order": {"type": "array", "items": {"type": "string"},
-                                        "description": "Solo en ordinal: TODOS sus valores, de "
-                                                       "menor a mayor, escritos como en la hoja."},
+                                         "description": "Solo en ordinal: TODOS sus valores, de "
+                                                        "menor a mayor, escritos como en ESA columna "
+                                                        "de la hoja. No copiar escalas de otra columna "
+                                                        "ni inventar posiciones para categorías sin orden."},
                           }},
             }} if any((w.capabilities or {}).get("columns_scaled") for w in widgets) else {}),
         },
@@ -737,6 +794,8 @@ def columns_context(ctx: SheetContext, only=None) -> str:
             # de los valores de una columna además de los ejemplos.
             kind += f", {describe_scale(field, profile, ctx.is_numeric(field))}"
         line = f"- {alias}: {json.dumps(field, ensure_ascii=False)} ({kind})"
+        if profile and profile.get("saved"):
+            line += " — escala guardada en la fuente: conservar salvo corrección explícita"
         if is_id_column(field):
             line += " — columna de sistema: una por fila, de solo lectura"
         if field == ctx.submission_field:
@@ -954,7 +1013,7 @@ def _column_scales_errors(items, ctx: SheetContext, caps: dict) -> tuple[dict, l
                 found = [f"'{name}': una ordinal necesita `order`, sus valores de menor a mayor"]
             elif values:
                 known = {normalize_text(v) for v in order}
-                missing = [v for v in values if normalize_text(v) not in known and not not_applicable(v)]
+                missing = [v for v in values if normalize_text(v) not in known]
                 if missing:
                     found = [f"el orden de '{name}' no incluye: {', '.join(missing[:5])}"]
         if found:
@@ -1323,6 +1382,48 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
     return data
 
 
+def _omit_unchanged_scales(data: dict, ctx: SheetContext) -> None:
+    """Una escala idéntica a la efectiva no debe volver a guardarse como corrección de la IA.
+    Solo se llama después de validar: una propuesta inválida nunca se descarta en silencio."""
+    changed = []
+    for item in data.get("column_scales") or []:
+        current = ctx.scales.get(item["field"]) or {}
+        same = item["scale"] == current.get("scale")
+        if same and item["scale"] == "ordinal":
+            same = ([normalize_text(v) for v in item["order"]]
+                    == [normalize_text(v) for v in current.get("order") or []])
+        if not same:
+            changed.append(item)
+    data["column_scales"] = changed
+
+
+def _correlation_retry_context(data: dict, ctx: SheetContext, errors: list[str]) -> str:
+    """Perfiles de las columnas con escalas inválidas, sin mezclar sus valores ni sus alias."""
+    items = data.get("column_scales") or []
+    profiles = {}
+    for error in errors:
+        match = re.match(r"column_scales\[(\d+)\]:", error)
+        if not match or int(match[1]) >= len(items):
+            continue
+        field = items[int(match[1])].get("field")
+        if field not in ctx.scales:
+            continue
+        profile = ctx.scales[field]
+        profiles[ctx.alias_for(field)] = {
+            "field": field, "scale": profile["scale"], "saved": profile.get("saved", False),
+            "order": profile.get("order"), "values": profile.get("stats", {}).get("values"),
+        }
+    text = ("\n\nCorrección de la matriz: conserva la selección válida, el método y los filtros. "
+            "Verifica todas sus columnas y sus escalas, no solo el número de variables. "
+            "Omite column_scales para conservar las escalas efectivas; no inventes órdenes "
+            "para sortear los límites de filas ni copies los de otra columna.")
+    if profiles:
+        text += ("\nEscalas efectivas y valores reales de las columnas con errores "
+                 "(cada lista pertenece únicamente a su columna):\n"
+                 + json.dumps(profiles, ensure_ascii=False, default=str))
+    return text
+
+
 def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext,
                          current: dict | None = None, history: list[dict] | None = None,
                          columns: list[str] | None = None) -> dict:
@@ -1338,9 +1439,10 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
     `columns` (las que el plan de tablero asignó al widget) acota las columnas que ve la IA en
     el primer intento; el reintento ve la hoja completa, por si el plan omitió alguna.
 
-    Si la primera propuesta no pasa la validación, reintenta UNA vez pasándole a la IA los
-    errores; si vuelve a fallar, lanza SpecGenerationError con un mensaje legible. Nunca
-    devuelve un form inválido.
+    Si la primera propuesta no pasa la validación, reintenta una vez con los errores. Solo
+    en correlación, si ese reintento introduce errores distintos, permite una última reparación
+    con los valores reales de las columnas afectadas. Nunca devuelve un form inválido ni
+    guarda correcciones de escala idénticas a las efectivas.
     """
     if widget_type is not None and widget_type not in WIDGETS:
         raise SpecGenerationError(f"Tipo de widget desconocido: {widget_type}.")
@@ -1350,7 +1452,8 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
     columns = [c for c in columns or [] if c in ctx.fields]
     contents = _user_message(prompt, widget_type, ctx, current, history, columns=columns)
     errors: list[str] = []
-    for attempt in (1, 2):
+    previous_errors: list[str] = []
+    for attempt in (1, 2, 3):
         call_name, args = _call_model(contents, ctx, widget_type,
                                       THINKING_BUDGETS["widget"] if attempt == 1 else None)
 
@@ -1365,7 +1468,12 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
         if not errors:
             # El form validado se re-parsea por el dataclass: lo que guarda es lo que se ejecuta.
             WidgetForm.from_dict({"fields": data["fields"], "style": data["style"]})
+            _omit_unchanged_scales(data, ctx)
             return data
+
+        correlation = (widget_type or data["widget_type"]) == "correlation"
+        if attempt >= 2 and (attempt == 3 or not correlation or not set(errors).difference(previous_errors)):
+            break
 
         contents = (
             f"{_user_message(prompt, widget_type, ctx, current, history)}\n\n"
@@ -1373,6 +1481,12 @@ def generate_widget_form(prompt: str, widget_type: str | None, ctx: SheetContext
             f"No es válida por estos errores:\n- " + "\n- ".join(errors) +
             "\n\nCorrígela y vuelve a llamar a create_widget."
         )
+        if correlation:
+            contents += _correlation_retry_context(data, ctx, errors)
+            if previous_errors:
+                contents += ("\nErrores de la propuesta anterior que no debes reintroducir:\n- "
+                             + "\n- ".join(previous_errors))
+        previous_errors = errors
 
     raise SpecGenerationError(
         "No se pudo generar un widget válido para ese pedido. Detalle: " + " ".join(errors)

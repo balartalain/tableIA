@@ -417,6 +417,7 @@
 </div>
 
 {% if dashboard %}{% include "sheets_reports/ai_board.html" %}{% endif %}
+{% if dashboard %}{% include "sheets_reports/data_chat.html" %}{% endif %}
 
 {{ widget_manifest|json_script:"widget-manifest" }}
 {{ formula_catalog|json_script:"formula-catalog" }}
@@ -431,6 +432,7 @@
   window.DASHBOARD_ID = null;
 {% endif %}
 </script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/interactjs@1.10.28/dist/interact.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@6.4.0/dist/apexcharts.min.js"></script>
@@ -460,6 +462,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/cramer-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/scatter-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/ai-board.js' %}"></script>
+{% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/data-chat.js' %}"></script>{% endif %}
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>

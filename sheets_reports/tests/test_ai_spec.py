@@ -636,3 +636,19 @@ class ColumnResolutionTests(SimpleTestCase):
         self.assertEqual(errors, [])
         # Verifica que se haya resuelto al nombre real de la hoja
         self.assertEqual(form["fields"]["dimensions"][0], col_real)
+
+    @mock.patch("sheets_reports.services.ai_spec.gemini_client")
+    def test_generate_with_code_execution(self, mock_client_fn):
+        mock_client = mock.Mock()
+        mock_client_fn.return_value = mock_client
+        mock_part_code = mock.Mock(text=None, inline_data=None, executable_code=mock.Mock(code="print(123)"))
+        mock_part_img = mock.Mock(text=None, inline_data=mock.Mock(mime_type="image/png", data=b"png_bytes"), executable_code=None)
+        mock_part_text = mock.Mock(text="Resultado: 123", inline_data=None, executable_code=None)
+        mock_candidate = mock.Mock(content=mock.Mock(parts=[mock_part_code, mock_part_img, mock_part_text]))
+        mock_client.models.generate_content.return_value = mock.Mock(candidates=[mock_candidate], usage_metadata=None)
+
+        res = ai_spec.generate_with_code_execution("fake.csv", "calcular")
+        self.assertIn("123", res["text"])
+        self.assertEqual(res["code"], ["print(123)"])
+        self.assertEqual(len(res["images"]), 1)
+        self.assertTrue(res["images"][0].startswith("data:image/png;base64,"))

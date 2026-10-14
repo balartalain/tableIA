@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/dashboard/<int:dashboard_id>/render/', views.dashboard_render, name='dashboard_render'),
     path('api/dashboard/<int:dashboard_id>/widgets/', views.create_widget, name='create_widget'),
     path('api/dashboard/<int:dashboard_id>/table-assistant/', views.table_assistant, name='table_assistant'),
+    path('api/dashboard/<int:dashboard_id>/data-chat/', views.dashboard_data_chat, name='dashboard_data_chat'),
     path('api/dashboard/<int:dashboard_id>/board-plan/', views.board_ai_plan, name='board_ai_plan'),
     path('api/dashboard/<int:dashboard_id>/widget-suggestions/', views.widget_suggestions, name='widget_suggestions'),
     path('api/dashboard/<int:dashboard_id>/email-campaign/', views_email.email_campaign, name='email_campaign'),

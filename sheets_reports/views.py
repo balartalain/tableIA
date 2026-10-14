@@ -1267,6 +1267,38 @@ def table_assistant(request, dashboard_id):
     })
 
 
+@csrf_exempt
+@require_http_methods(["POST"])
+def dashboard_data_chat(request, dashboard_id):
+    """
+    Chatbot analítico sobre la fuente de datos del tablero:
+    POST {prompt, source_id?} → {text, images: [...], code: [...]}
+    """
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return _error("Escribe una pregunta para la IA.")
+
+    source, error = _require_source(dashboard, data.get("source_id") or data.get("source"))
+    if error:
+        return error
+
+    from sheets_reports.services.ai_data_chat import ask_data_chat
+    try:
+        result = ask_data_chat(source, prompt)
+        return JsonResponse(result)
+    except Exception as e:
+        logger.exception("Falló la consulta con el chatbot de datos")
+        return _error(f"Error al procesar la consulta: {str(e)}", status=500)
+
+
 @require_http_methods(["GET"])
 def widget_suggestions(request, dashboard_id):
     """

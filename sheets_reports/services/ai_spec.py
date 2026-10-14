@@ -5,6 +5,7 @@ QUÉ calcular, devolviendo un JSON validado contra un schema construido en cada 
 las columnas reales de la hoja y el `style_schema` del widget. Nada de lo que devuelve se
 ejecuta tal cual.
 """
+import base64
 import copy
 import dataclasses
 import functools
@@ -510,6 +511,49 @@ def generate_json(contents: str, schema: dict, temperature: float = 0, call: str
     )
     _log_usage(call, response, started)
     return json.loads(response.text or "null")
+
+
+def generate_with_code_execution(file_path: str, prompt: str, system_instruction: str = "") -> dict:
+    """Ejecuta una consulta analítica en Gemini subiendo un archivo y activando la tool de code_execution."""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
+    client = gemini_client(api_key)
+    file_ref = client.files.upload(file=file_path)
+    contents = [file_ref, prompt]
+
+    config = types.GenerateContentConfig(
+        tools=[types.Tool(code_execution=types.ToolCodeExecution())],
+        temperature=0.2,
+    )
+    if system_instruction:
+        config.system_instruction = system_instruction
+
+    started = time.monotonic()
+    response = client.models.generate_content(
+        model=settings.GEMINI_MODEL,
+        contents=contents,
+        config=config,
+    )
+    _log_usage("code_execution", response, started)
+
+    texts, images, codes = [], [], []
+    if response.candidates and response.candidates[0].content:
+        for part in response.candidates[0].content.parts:
+            if getattr(part, "text", None):
+                texts.append(part.text)
+            if getattr(part, "inline_data", None) and part.inline_data.data:
+                b64 = base64.b64encode(part.inline_data.data).decode("ascii")
+                images.append(f"data:{part.inline_data.mime_type or 'image/png'};base64,{b64}")
+            if getattr(part, "executable_code", None) and part.executable_code.code:
+                codes.append(part.executable_code.code)
+
+    full_text = "\n\n".join(t.strip() for t in texts if t.strip()) or "No se pudo generar una respuesta."
+    return {
+        "text": full_text,
+        "images": images,
+        "code": codes,
+    }
 
 
 def _to_gemini_schema(node):

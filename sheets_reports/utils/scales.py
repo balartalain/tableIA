@@ -170,7 +170,8 @@ def column_values(series: pd.Series) -> list[str]:
 
 
 def effective_scales(df: pd.DataFrame, saved: dict | None = None, only=None,
-                     date_columns=(), submission: str | None = None) -> dict:
+                     date_columns=(), submission: str | None = None,
+                     ignored_set: set[str] | None = None) -> dict:
     """
     {columna: {scale, order?, uncertain, saved, stats}}: la escala detectada de cada columna
     (o de las de `only`), reemplazada por la guardada en la fuente (`saved`, de
@@ -180,7 +181,8 @@ def effective_scales(df: pd.DataFrame, saved: dict | None = None, only=None,
     columns = [c for c in df.columns if only is None or c in set(only)]
     out = {}
     for column in columns:
-        profile = profile_column(df[column], column, date=column in date_columns,
+        series = mask_ignored(df[column], ignored_set)
+        profile = profile_column(series, column, date=column in date_columns,
                                  submission=column == submission)
         override = saved.get(column)
         if isinstance(override, dict) and override.get("scale") in SCALES:
@@ -211,6 +213,23 @@ def describe(field: str, profile: dict, numeric: bool) -> str:
     if numeric and "min" in stats:
         text += f": {stats['min']} a {stats['max']}, {stats['distinct']} valores distintos"
     return text
+
+
+DEFAULT_IGNORED_VALUES = "No aplica, N/A, No corresponde, No utilizo este medio, No se utiliza, No he recibido este servicio, Sin respuesta"
+
+
+def parse_ignored_values(raw: str | None) -> set[str]:
+    """Conjunto de textos normalizados a ignorar en una correlación."""
+    if not raw or not isinstance(raw, str):
+        return set()
+    return {normalize_text(v) for v in raw.split(",") if v.strip()}
+
+
+def mask_ignored(series: pd.Series, ignored_set: set[str] | None) -> pd.Series:
+    """Reemplaza por None los valores de la serie que están en `ignored_set` (sin distinguir mayúsculas ni espacios)."""
+    if not ignored_set:
+        return series
+    return series.map(lambda v: None if pd.notna(v) and normalize_text(v) in ignored_set else v)
 
 
 def normalize_text(value) -> str:

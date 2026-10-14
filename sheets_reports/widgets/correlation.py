@@ -17,13 +17,15 @@ posición de su valor en el orden de la escala) o una dummy. De -1 a 1.
 Cada par usa sus filas completas y guarda cuántas usó (`n`). Con menos de MIN_ROWS filas, o con
 una columna constante, no hay medida: la celda va vacía (None), no un 0 engañoso.
 """
+import copy
 from typing import Any, ClassVar, Dict, List, Optional
 
 import pandas as pd
 
 from sheets_reports.engine.steps.association import CORRELATED_SCALES, associate, prepare
 from sheets_reports.utils.data import date_fields
-from sheets_reports.utils.scales import effective_scales
+from sheets_reports.utils.scales import (DEFAULT_IGNORED_VALUES, effective_scales, mask_ignored,
+                                          normalize_text, parse_ignored_values, profile_column)
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
 from sheets_reports.widgets.presentation import humanize
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
@@ -81,6 +83,9 @@ class CorrelationWidget(BaseWidget):
             {"value": "pearson", "label": "Pearson (relación lineal)"},
             {"value": "spearman", "label": "Spearman (por rangos)"},
         ]},
+        {"key": "ignoreNonApplicable", "label": "Ignorar respuestas no evaluables", "type": "boolean", "default": False},
+        {"key": "ignoredValues", "label": "Valores a ignorar", "type": "string",
+         "default": DEFAULT_IGNORED_VALUES},
         {"key": "showValues", "label": "Mostrar valores", "type": "boolean", "default": True},
         {"key": "lowerOnly", "label": "Solo la mitad inferior", "type": "boolean", "default": False},
     ]
@@ -107,18 +112,39 @@ class CorrelationWidget(BaseWidget):
         style_dict = style.to_dict()
         method = style_dict.get("method") if style_dict.get("method") in METHODS else "pearson"
         labels = {c["field"]: c.get("label") or humanize(c["field"]) for c in ((fields.columns if fields else None) or [])}
-        scales = (metadata or {}).get("scales") or {}
+
+        ignore_na = bool(style_dict.get("ignoreNonApplicable"))
+        ignored_raw = style_dict.get("ignoredValues") if ignore_na else None
+        if ignored_raw is None and ignore_na:
+            ignored_raw = DEFAULT_IGNORED_VALUES
+        ignored_set = parse_ignored_values(ignored_raw) if ignore_na else set()
 
         frame = result.rows
+        base_scales = (metadata or {}).get("scales") or {}
+
         # Las filas de la matriz: una por variable, o una por dummy en una nominal.
         rows = []
         for column in frame.columns:
-            profile = scales.get(column) or {"scale": "continuous"}
+            series = mask_ignored(frame[column], ignored_set)
+            profile = copy.deepcopy(base_scales.get(column)) if base_scales.get(column) else None
+            if profile:
+                if profile.get("scale") == "ordinal" and profile.get("order"):
+                    profile["order"] = [v for v in profile["order"] if normalize_text(v) not in ignored_set]
+            else:
+                profile = profile_column(series, column)
+
+            if profile and not profile.get("saved") and profile.get("scale") != "ordinal":
+                detected = profile_column(series, column)
+                if detected.get("scale") == "ordinal":
+                    profile["scale"] = "ordinal"
+                    profile["order"] = detected.get("order")
+
             label = labels.get(column, humanize(column))
-            for ready in prepare(frame[column], profile["scale"], profile.get("order")):
+            for ready in prepare(series, profile["scale"], profile.get("order")):
                 row = {**ready, "field": column, "label": label}
-                if "value" in ready:
-                    row["label"] = f"{label}: {ready['value']}"
+                val = ready.get("value")
+                if val:
+                    row["label"] = f"{label}: {val}"
                 rows.append(row)
 
         size = len(rows)

@@ -23,8 +23,8 @@ from sheets_reports.engine.context import SheetContext
 from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula, formula_tree, rename_columns
 from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.data import is_id_column
-from sheets_reports.utils.scales import (SCALES, describe as describe_scale, dummy_count,
-                                         normalize_text, scale_errors)
+from sheets_reports.utils.scales import (DEFAULT_IGNORED_VALUES, SCALES, describe as describe_scale, dummy_count,
+                                         normalize_text, parse_ignored_values, scale_errors)
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
 from sheets_reports.engine.steps.aggregation import METRIC_FORMATS
@@ -987,7 +987,7 @@ def _column_errors(column, index: int, ctx, seen_columns) -> list[str]:
     return errors
 
 
-def _column_scales_errors(items, ctx: SheetContext, caps: dict) -> tuple[dict, list[str]]:
+def _column_scales_errors(items, ctx: SheetContext, caps: dict, style: dict | None = None) -> tuple[dict, list[str]]:
     """Las escalas que propone la IA (`column_scales`: [{field, scale, order?}]).
     → ({columna: {scale, order?}} válidas, errores)."""
     if not items:
@@ -996,6 +996,14 @@ def _column_scales_errors(items, ctx: SheetContext, caps: dict) -> tuple[dict, l
         return {}, ["column_scales debe ser una lista."]
     if not caps.get("columns_scaled"):
         return {}, ["column_scales: este widget no usa la escala de las columnas."]
+
+    style = style or {}
+    ignore_na = bool(style.get("ignoreNonApplicable"))
+    ignored_raw = style.get("ignoredValues") if ignore_na else None
+    if ignored_raw is None and ignore_na:
+        ignored_raw = DEFAULT_IGNORED_VALUES
+    ignored_set = parse_ignored_values(ignored_raw) if ignore_na else set()
+
     valid, errors = {}, []
     for i, item in enumerate(items):
         path = f"column_scales[{i}]"
@@ -1013,7 +1021,7 @@ def _column_scales_errors(items, ctx: SheetContext, caps: dict) -> tuple[dict, l
                 found = [f"'{name}': una ordinal necesita `order`, sus valores de menor a mayor"]
             elif values:
                 known = {normalize_text(v) for v in order}
-                missing = [v for v in values if normalize_text(v) not in known]
+                missing = [v for v in values if normalize_text(v) not in known and normalize_text(v) not in ignored_set]
                 if missing:
                     found = [f"el orden de '{name}' no incluye: {', '.join(missing[:5])}"]
         if found:
@@ -1104,7 +1112,7 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
 
     # Las escalas que propone la IA para las variables: válidas contra la hoja, y desde aquí
     # la validación de las columnas las usa en vez de las detectadas.
-    proposed, scale_errs = _column_scales_errors(data.get("column_scales"), ctx, caps)
+    proposed, scale_errs = _column_scales_errors(data.get("column_scales"), ctx, caps, style=data.get("style"))
     errors += scale_errs
     if proposed:
         ctx = dataclasses.replace(ctx, scales={**ctx.scales, **{

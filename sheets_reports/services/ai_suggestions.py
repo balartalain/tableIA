@@ -11,7 +11,7 @@ import logging
 import pandas as pd
 from django.core.cache import cache
 
-from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS,
+from sheets_reports.services.ai_spec import (BI_DATA_RULES, SUBMISSION_NOTE, THINKING_BUDGETS,
                                              capabilities_text, generate_json, samples_note,
                                              shared_samples)
 from sheets_reports.services.sheets import get_field_samples
@@ -30,6 +30,7 @@ que un usuario escribiría en el chat para configurar un widget «{label}».
 {doc}Este widget admite: {capabilities}.
 
 {examples}
+{data_rules}
 Reglas:
 - En español, cortos (máximo 60 caracteres cada uno), en lenguaje natural, sin comillas.
 - Usa los nombres reales de las columnas; los valores de ejemplo son solo para entender qué hay
@@ -125,6 +126,7 @@ def widget_suggestions(widget, df: pd.DataFrame, source: str, refresh: bool = Fa
     examples = [f"- {p}" for p, _args in widget.ai_examples]
     prompt = SUGGESTIONS_PROMPT.format(
         n=SUGGESTIONS, label=widget.label,
+        data_rules=BI_DATA_RULES,
         doc=f"{widget.ai_doc}\n" if widget.ai_doc else "",
         capabilities=capabilities_text(widget),
         examples=("Así escriben los usuarios (de otra hoja, no copies sus columnas):\n"

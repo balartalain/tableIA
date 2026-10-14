@@ -28,6 +28,15 @@ def sales_int_df() -> pd.DataFrame:
     return df
 
 
+def satisfaction_df() -> pd.DataFrame:
+    """Diez respuestas: dos insatisfechas, siete satisfechas y una «No aplica»."""
+    return pd.DataFrame({
+        "ID": range(1, 11),
+        "campus": ["Norte"] * 5 + ["Sur"] * 5,
+        "respuesta": ["Insatisfecho", "Completamente insatisfecho"] + ["Satisfecho"] * 7 + ["No aplica"],
+    })
+
+
 def sellers_df() -> pd.DataFrame:
     """Ventas y plan por vendedor: Ana y Luis no llegan al plan, Eva sí."""
     return pd.DataFrame({

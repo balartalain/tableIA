@@ -50,13 +50,13 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 | `tests/test_sources.py` | Conectar una hoja: Drive, pestañas, tipos de columna, caché de la hoja. |
 | `tests/test_data_sources.py` | Fuentes del tablero: CRUD, renombrar/reemplazar/actualizar con aviso de impacto, campos calculados, formato de columnas (moneda, %), varios widgets por fuente. |
 | `tests/test_source_columns.py` | Las columnas que usa cada widget (para renombrar y avisar qué se rompe). |
-| `tests/test_column_scales.py` | Escala de medida de las columnas: reglas de detección (escalas conocidas, «no aplica», identificadores, discreta y continua), la guardada en la fuente manda, el PUT de escalas con su validación y «Clasificar con IA» (modelo simulado). |
+| `tests/test_column_scales.py` | Escala de medida de las columnas: reglas de detección (escalas conocidas, «No aplica» como categoría válida, identificadores, discreta y continua), la guardada en la fuente manda, el PUT de escalas con su validación y «Clasificar con IA» (modelo simulado). |
 | `tests/test_views.py` | Las vistas como adaptadores HTTP: render, guardar widgets, asistente de IA, tableros. |
 
 ### IA
 | Archivo | Qué prueba |
 |---|---|
-| `tests/test_ai_spec.py` | Generación del formulario por la IA (con el modelo simulado): reintento con errores, schema de la tool, prompt. |
+| `tests/test_ai_spec.py` | Generación del formulario por la IA (con el modelo simulado): reintento con errores, reparación adicional acotada de correlaciones con escalas mezcladas, conservación de escalas efectivas, schema de la tool y prompt. |
 | `tests/test_ai_suggestions.py` | Pedidos sugeridos del chat: limpieza y caché. |
 | `tests/test_ai_formula.py` | «Generar con IA» de un campo calculado (modelo simulado): fórmula con su árbol, motivo cuando no puede, reintento con el error del motor, errores legibles. |
 | `tests/test_email_campaign.py` | Envío de correos (con el backend de correo en memoria): lectura del CSV, cifrado de la contraseña, cuándo le toca ejecutarse (diario, semanal, zona horaria, máximo del día, día cerrado), la ejecución (máximo diario, lotes por remitente con su pausa, candado entre crons, remitente que falla, reparto entre remitentes, reintentos, remitente que no inicia sesión, bitácora), sus endpoints (la contraseña nunca sale, validación, solo el dueño), el reporte (estado del envío, fecha estimada de fin, enviados por día, por remitente, errores por motivo, tablas paginadas) y el comando del crontab. |

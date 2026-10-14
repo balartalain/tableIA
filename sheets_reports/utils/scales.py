@@ -73,13 +73,6 @@ ORDINAL_SCALES = [
     [("nada",), ("poco",), ("algo", "regular", "moderadamente"), ("bastante",), ("mucho", "muchisimo")],
 ]
 
-# Respuestas que dicen que la pregunta no aplica («No aplica», «No utilizo este medio»): no son un
-# nivel de la escala. En una ordinal cuentan como vacías y su orden no tiene que incluirlas.
-_NOT_APPLICABLE = re.compile(
-    r"^(n\s*/?\s*a|no aplica|no corresponde|no se|no lo se|no sabe|no responde|sin respuesta|"
-    r"no (lo )?(utilizo|uso|usa|utiliza)\b.*|no se (utiliza|usa)\b.*|"
-    r"no he (recibido|usado|utilizado|tenido)\b.*)$")
-
 _LEADING_NUMBER = re.compile(r"^\s*(\d+(?:[.,]\d+)?)\s*([-–.:)]|\s)")
 
 
@@ -92,11 +85,6 @@ def _level_key(text) -> str:
     return " ".join(re.sub(r"a$", "o", word) for word in plain.split())
 
 
-def not_applicable(value) -> bool:
-    """¿El valor dice que la pregunta no aplica (no es un nivel de ninguna escala)?"""
-    return bool(_NOT_APPLICABLE.match(_plain(value).strip(" .")))
-
-
 _KNOWN_LEVELS = [
     {_level_key(name): index for index, names in enumerate(scale) for name in names}
     for scale in ORDINAL_SCALES
@@ -106,7 +94,6 @@ _KNOWN_LEVELS = [
 def known_order(values: list[str]) -> list[str] | None:
     """Los valores de menor a mayor si todos son niveles de una escala conocida (Likert,
     frecuencia, nivel...) o si todos empiezan con un número («1 - Malo»); None si no."""
-    values = [v for v in values if not not_applicable(v)]
     if len(values) < 2:
         return None
     for levels in _KNOWN_LEVELS:
@@ -249,18 +236,16 @@ def scale_errors(name: str, scale, order=None) -> list[str]:
 
 
 def order_gaps(series: pd.Series, order) -> list[str]:
-    """Los valores de la columna que no están en `order` (una ordinal debe cubrirlos todos,
-    salvo los de «no aplica», que cuentan como vacíos)."""
+    """Los valores de la columna que no están en `order`: una ordinal debe cubrirlos todos."""
     known = {normalize_text(v) for v in order or []}
-    return [v for v in column_values(series) if normalize_text(v) not in known and not not_applicable(v)]
+    return [v for v in column_values(series) if normalize_text(v) not in known]
 
 
 def dummy_count(profile: dict | None) -> int:
-    """Cuántas dummies (filas 0/1) da una nominal en una correlación: una por categoría, sin las
-    de «no aplica»; una sola si es dicotómica (Sí/No)."""
+    """Cuántas dummies (filas 0/1) da una nominal: una por categoría; una sola si es dicotómica."""
     stats = (profile or {}).get("stats") or {}
     values = stats.get("values")
     # Una numérica marcada como nominal no trae sus valores: cuenta los distintos.
-    count = (len({normalize_text(v) for v in values if not not_applicable(v)}) if values
+    count = (len({normalize_text(v) for v in values}) if values
              else stats.get("distinct", 0))
     return 1 if count <= 2 else count

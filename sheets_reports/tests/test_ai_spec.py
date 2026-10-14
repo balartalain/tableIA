@@ -1,5 +1,6 @@
 """La IA solo propone el `WidgetForm`: prompt y schema salen de los registros, y la
-propuesta pasa siempre por `form_errors` (un reintento con los errores, luego falla)."""
+propuesta pasa siempre por `form_errors`, con reparaciones acotadas si falla."""
+import copy
 import json
 from unittest import mock
 
@@ -15,7 +16,7 @@ from sheets_reports.services.ai_spec import (
     build_tool_parameters,
     generate_widget_form,
 )
-from sheets_reports.tests.fixtures import agg, examples_ctx, sales_ctx, sales_df
+from sheets_reports.tests.fixtures import agg, compiled, examples_ctx, sales_ctx, sales_df
 from sheets_reports.widgets import WIDGETS
 
 VALID_ARGS = {
@@ -294,6 +295,110 @@ class GenerateWidgetFormTests(SimpleTestCase):
         _audit.assert_not_called()
 
 
+@mock.patch.object(ai_spec, "_audit")
+class CorrelationGenerationTests(SimpleTestCase):
+    agreement = "Plataforma: [Me resulto fácil aprender a usar esta plataforma.]"
+
+    def mixed_df(self):
+        return pd.DataFrame({
+            "ID": range(1, 7),
+            "satisfaccion": ["Insatisfecho", "Completamente insatisfecho", "Satisfecho",
+                             "Completamente satisfecho", "No aplica", "Satisfecho"],
+            "aprendizaje": ["Muy bajo", "Bajo", "Alto", "Muy alto", "Bajo", "Alto"],
+            self.agreement: ["Totalmente de acuerdo", "De acuerdo", "Desacuerdo",
+                             "Totalmente en desacuerdo", "No aplica", "De acuerdo"],
+            **{f"monto_{i}": [1.5, 2.5, 3.5, 4.5, 5.5, 6.5] for i in range(67)},
+        })
+
+    def proposals(self, ctx):
+        style = {"method": "spearman", "lowerOnly": True}
+        too_many = {"widget_type": "correlation", "style": style,
+                    "fields": {"columns": [{"field": ctx.alias_for(c)} for c in ctx.fields if c != "ID"]}}
+        selected = ["satisfaccion", "aprendizaje", self.agreement]
+        wrong_order = {"widget_type": "correlation", "style": style,
+                       "fields": {"columns": [{"field": ctx.alias_for(c)} for c in selected]},
+                       "column_scales": [
+                           {"field": ctx.alias_for("satisfaccion"), "scale": "nominal"},
+                           {"field": ctx.alias_for("aprendizaje"), "scale": "ordinal",
+                            "order": ["Muy bajo", "Bajo", "Alto", "Muy alto"]},
+                           {"field": ctx.alias_for(self.agreement), "scale": "ordinal",
+                            "order": ["Muy bajo", "Bajo", "Alto", "Muy alto"]},
+                       ]}
+        repaired = {**wrong_order, "column_scales": []}
+        return too_many, wrong_order, repaired
+
+    def test_repara_una_escala_mezclada_tras_reducir_70_columnas(self, _audit):
+        df = self.mixed_df()
+        ctx = SheetContext.from_dataframe(df, "0")
+        original_scales = copy.deepcopy(ctx.scales)
+        responses = [("create_widget", args) for args in self.proposals(ctx)]
+        with mock.patch.object(ai_spec, "_call_model", side_effect=responses) as call:
+            result = generate_widget_form("relaciona satisfacción, aprendizaje y plataforma", "correlation", ctx)
+        self.assertEqual(call.call_count, 3)
+        self.assertIn("entre 2 y 12", call.call_args_list[1].args[0])
+        repair = call.call_args_list[2].args[0]
+        self.assertIn(self.agreement, repair)
+        for value in ("Totalmente de acuerdo", "De acuerdo", "Desacuerdo", "Totalmente en desacuerdo", "No aplica"):
+            self.assertIn(value, repair)
+        self.assertIn("Escalas efectivas y valores reales", repair)
+        self.assertIn('"scale": "nominal"', repair)
+        self.assertIn("entre 2 y 12", repair)  # recuerda el límite corregido en el segundo intento
+        self.assertIn("column_scales[2]", _audit.call_args_list[1].args[-1][0])
+        self.assertEqual(_audit.call_args_list[2].args[-1], [])
+        self.assertEqual(result["column_scales"], [])
+        self.assertEqual(result["style"], {"method": "spearman", "lowerOnly": True})
+        self.assertEqual(ctx.scales, original_scales)
+        out = compiled("correlation", result["fields"], result["style"], df=df)
+        self.assertEqual(len(out["variables"]), 11)  # 5 de satisfacción, 1 ordinal, 5 de acuerdo
+        self.assertEqual(sum(v.get("value") == "No aplica" for v in out["variables"]), 2)
+        self.assertEqual(out["rows"], 6)
+
+    def test_no_reintenta_mas_si_repite_el_mismo_error_de_escala(self, _audit):
+        ctx = SheetContext.from_dataframe(self.mixed_df(), "0")
+        _, wrong, _ = self.proposals(ctx)
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", wrong)) as call:
+            with self.assertRaisesMessage(SpecGenerationError, "no incluye:") as error:
+                generate_widget_form("relaciona las tres variables", "correlation", ctx)
+        self.assertEqual(call.call_count, 2)
+        self.assertIn("Totalmente de acuerdo", str(error.exception))
+        self.assertIn("No aplica", str(error.exception))
+
+    def test_la_reparacion_adicional_tambien_debe_validarse_y_es_la_ultima(self, _audit):
+        ctx = SheetContext.from_dataframe(self.mixed_df(), "0")
+        too_many, wrong, _ = self.proposals(ctx)
+        with mock.patch.object(ai_spec, "_call_model", side_effect=[
+            ("create_widget", args) for args in (too_many, wrong, wrong)]) as call:
+            with self.assertRaisesMessage(SpecGenerationError, "column_scales[2]"):
+                generate_widget_form("relaciona las tres variables", "correlation", ctx)
+        self.assertEqual(call.call_count, 3)
+
+    def test_omite_correcciones_identicas_a_las_escalas_efectivas(self, _audit):
+        df = pd.DataFrame({"nivel": ["Bajo", "Medio", "Alto"], "monto": [1.5, 2.5, 3.5]})
+        df.attrs["column_scales"] = {"nivel": {"scale": "ordinal", "order": ["Bajo", "Medio", "Alto"]}}
+        ctx = SheetContext.from_dataframe(df, "0")
+        args = {"widget_type": "correlation", "fields": {"columns": [{"field": "col_1"}, {"field": "col_2"}]},
+                "column_scales": [{"field": "col_1", "scale": "ordinal", "order": ["bajo", "medio", "alto"]},
+                                  {"field": "col_2", "scale": "continuous"}], "style": {}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
+            result = generate_widget_form("relaciona nivel y monto", "correlation", ctx)
+        call.assert_called_once()
+        self.assertIn("escala guardada en la fuente", call.call_args.args[0])
+        self.assertEqual(result["column_scales"], [])
+        self.assertEqual(ctx.order_of("nivel"), ["Bajo", "Medio", "Alto"])
+        out = compiled("correlation", result["fields"], df=df)
+        self.assertEqual(out["matrix"][0][1], 1.0)
+
+    def test_conserva_una_correccion_real_y_valida(self, _audit):
+        df = pd.DataFrame({"talla": ["S", "M", "L"], "peso": [50.5, 70.5, 90.5]})
+        ctx = SheetContext.from_dataframe(df, "0")
+        args = {"widget_type": "correlation", "fields": {"columns": [{"field": "col_1"}, {"field": "col_2"}]},
+                "column_scales": [{"field": "col_1", "scale": "ordinal", "order": ["S", "M", "L"]}], "style": {}}
+        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)):
+            result = generate_widget_form("usa el orden S, M, L y correlaciona con peso", "correlation", ctx)
+        self.assertEqual(result["column_scales"], [{"field": "talla", "scale": "ordinal", "order": ["S", "M", "L"]}])
+        self.assertEqual(ctx.scale_of("talla"), "nominal")  # la generación no escribe en la fuente
+
+
 class ToolSchemaTests(SimpleTestCase):
     def test_las_columnas_van_como_texto_sin_enum(self):
         # Con muchas columnas de nombre largo el enum supera el límite de estados de Gemini.
@@ -531,4 +636,3 @@ class ColumnResolutionTests(SimpleTestCase):
         self.assertEqual(errors, [])
         # Verifica que se haya resuelto al nombre real de la hoja
         self.assertEqual(form["fields"]["dimensions"][0], col_real)
-

@@ -17,7 +17,7 @@ from sheets_reports.engine.formulas import (
     rename_columns,
     row_fields,
 )
-from sheets_reports.tests.fixtures import compiled, errors_for, execute, fields
+from sheets_reports.tests.fixtures import compiled, errors_for, execute, fields, satisfaction_df
 
 
 def budget_df() -> pd.DataFrame:
@@ -41,6 +41,23 @@ def with_fields(*definitions) -> pd.DataFrame:
 
 
 class FormulaLanguageTests(SimpleTestCase):
+    def test_porcentaje_incluye_no_aplica_y_distingue_las_dos_bases(self):
+        df = satisfaction_df()
+        numerator = 'SUM(IF([respuesta] = "Insatisfecho" OR [respuesta] = "Completamente insatisfecho", 1, 0))'
+        by_answer = compile_formula(f"{numerator} / COUNT([respuesta]) * 100", df.columns)
+        by_record = compile_formula(f"{numerator} / COUNT([ID]) * 100", df.columns)
+        self.assertEqual(by_answer.aggregate(df), 20.0)
+        self.assertEqual(by_record.aggregate(df), 20.0)
+        # La limpieza del usuario convierte la categoría en un nulo real.
+        cleaned = df.replace({"respuesta": {"No aplica": None}})
+        self.assertAlmostEqual(by_answer.aggregate(cleaned), 100 * 2 / 9)
+        self.assertEqual(by_record.aggregate(cleaned), 20.0)
+        # El literal «Empty» sigue siendo texto, no una celda vacía.
+        text = df.replace({"respuesta": {"No aplica": "Empty"}})
+        self.assertEqual(by_answer.aggregate(text), 20.0)
+        self.assertIsNone(by_answer.aggregate(cleaned[cleaned["respuesta"].isna()]))
+        self.assertIsNone(by_answer.aggregate(df.iloc[:0]))
+
     def test_por_fila_aritmetica_y_nombres(self):
         f = compile_formula("[Gasto_Real] - presupuesto_asignado", budget_df().columns)
         self.assertFalse(f.aggregated)

@@ -15,6 +15,18 @@ from sheets_reports.widgets.schemas import WidgetFields
 
 
 class AggregationTests(SimpleTestCase):
+    def test_conteo_distingue_nulos_de_respuestas_textuales(self):
+        df = pd.DataFrame({"ID": range(1, 7),
+                           "respuesta": ["No aplica", "N/A", "Empty", "No utilizo este medio", "Sí", None]})
+        metrics = [{"agg": "count", "alias": "registros"},
+                   {"agg": "count", "field": "respuesta", "alias": "respondidas"},
+                   {"agg": "count_distinct", "field": "respuesta", "alias": "categorias"}]
+        out = execute(df, fields(dimensions=[], metrics=metrics))
+        self.assertEqual(out["data"]["values"], {"registros": 6, "respondidas": 5, "categorias": 5})
+        out = execute(df, fields(dimensions=[], metrics=metrics,
+                                 filters=[{"field": "respuesta", "op": "ne", "value": "No aplica"}]))
+        self.assertEqual(out["data"]["values"]["respondidas"], 4)
+
     def test_agregaciones_disponibles_se_traducen_a_pandas(self):
         self.assertEqual(sorted(AGGREGATIONS), [
             "auto", "avg", "count", "count_distinct", "max", "mean", "median", "min", "std", "sum",

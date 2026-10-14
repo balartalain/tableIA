@@ -17,7 +17,7 @@ from sheets_reports.engine.formulas import (
     formula_tree,
     rename_columns,
 )
-from sheets_reports.services.ai_spec import (SUBMISSION_NOTE, THINKING_BUDGETS,
+from sheets_reports.services.ai_spec import (BI_DATA_RULES, SUBMISSION_NOTE, THINKING_BUDGETS,
                                              SpecGenerationError, generate_json, samples_note,
                                              shared_samples)
 from sheets_reports.services.sheets import get_field_samples
@@ -45,6 +45,8 @@ usuario.
 
 {columns}
 
+{data_rules}
+
 Gramática:
 - Columnas entre corchetes con su alias (ej. [col_1]) o su nombre exacto: [Gasto Real]. Textos entre comillas dobles:
   "Sí". Números con punto decimal: 1.5.
@@ -67,7 +69,7 @@ Gramática:
 Ejemplos:
 - % de ejecución: SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100
 - Saldo por fila: [Presupuesto_Asignado] - [Gasto_Real]
-- % de respuestas «Sí»: AVG(IF([Respuesta] = "Sí", 1, 0)) * 100
+- % de respuestas «Sí»: SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100
 - Participación de Hogar: SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100
 - Nivel por grado: IF([grado] <= 6, "A", IF([grado] <= 10, "B", "C"))
 
@@ -108,6 +110,7 @@ def build_prompt(prompt: str, df: pd.DataFrame) -> str:
         return " ".join(o["op"] for o in ops)
     return FORMULA_PROMPT.format(
         columns=_columns_text(df),
+        data_rules=BI_DATA_RULES,
         arithmetic=symbols(BUILDER_CATALOG["arithmetic"]),
         compare=symbols(BUILDER_CATALOG["compare"]),
         functions=", ".join(f"{f['name']} ({f['title']})" for f in BUILDER_CATALOG["functions"]),

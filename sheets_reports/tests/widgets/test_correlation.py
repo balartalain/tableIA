@@ -95,13 +95,38 @@ class ScalesTests(SimpleTestCase):
         self.assertTrue(all(t["a"].split(":")[0] != t["b"].split(":")[0] for t in out["top"]))
 
     def test_una_dicotomica_es_una_sola_fila_la_del_si(self):
-        df = pd.DataFrame({"becado": ["No", "Sí", "No", "Sí", "No aplica", None],
+        df = pd.DataFrame({"becado": ["No", "Sí", "No", "Sí", None, None],
                            "nota": [60.5, 90.5, 65.5, 95.5, 99.5, 10.5]})
         out = correlation(df, ("becado", "nota"))
         self.assertEqual([v["label"] for v in out["variables"]], ["Becado: Sí", "Nota"])
         # Separa perfecto, pero los empates del 0/1 dejan a Spearman por debajo de 1.
         self.assertGreater(out["matrix"][0][1], 0.85)
-        # «No aplica» y el vacío no cuentan.
+        # Solo los vacíos no cuentan.
+        self.assertEqual(out["n"][0][1], 4)
+
+    def test_no_aplica_es_una_categoria_y_solo_sale_con_filtro_explicito(self):
+        df = pd.DataFrame({"becado": ["No", "Sí", "No", "Sí", "No aplica", None],
+                           "nota": [60.5, 90.5, 65.5, 95.5, 99.5, 10.5]})
+        out = correlation(df, ("becado", "nota"))
+        self.assertEqual([v["label"] for v in out["variables"]],
+                         ["Becado: No", "Becado: Sí", "Becado: No aplica", "Nota"])
+        self.assertEqual([out["n"][i][3] for i in range(3)], [5, 5, 5])
+        self.assertIsNotNone(out["matrix"][2][3])
+        filtered = correlation(df, ("becado", "nota"),
+                               filters=[{"field": "becado", "op": "ne", "value": "No aplica"}])
+        self.assertEqual([v["label"] for v in filtered["variables"]], ["Becado: Sí", "Nota"])
+        self.assertEqual(filtered["n"][0][1], 4)
+
+    def test_no_aplica_fuera_de_un_orden_guardado_se_informa(self):
+        df = pd.DataFrame({"nivel": ["Bajo", "Medio", "Alto", "No aplica"],
+                           "monto": [1.5, 2.5, 3.5, 9.5]})
+        df.attrs["column_scales"] = {"nivel": {"scale": "ordinal", "order": ["Bajo", "Medio", "Alto"]}}
+        out = correlation(df, ("nivel", "monto"))
+        self.assertEqual(out["variables"][0]["unmatched"], 1)
+        self.assertEqual(out["n"][0][1], 3)
+        df.attrs["column_scales"]["nivel"]["order"].append("No aplica")
+        out = correlation(df, ("nivel", "monto"))
+        self.assertNotIn("unmatched", out["variables"][0])
         self.assertEqual(out["n"][0][1], 4)
 
     def test_la_ordinal_se_ordena_por_su_escala(self):
@@ -131,6 +156,16 @@ class ScalesTests(SimpleTestCase):
 
 
 class CorrelationValidationTests(SimpleTestCase):
+    def test_la_ia_no_puede_omitir_no_aplica_del_orden(self):
+        from sheets_reports.engine.context import SheetContext
+        df = pd.DataFrame({"nivel": ["Bajo", "Alto", "No aplica"], "monto": [1.5, 2.5, 3.5]})
+        ctx = SheetContext.from_dataframe(df, "0")
+        data = {"widget_type": "correlation", "title": "x", "fields": table_fields(("nivel", "monto")),
+                "style": {}, "column_scales": [{"field": "nivel", "scale": "ordinal", "order": ["Bajo", "Alto"]}]}
+        self.assertTrue(any("no incluye: No aplica" in e for e in form_errors(data, ctx, "correlation")))
+        data["column_scales"][0]["order"].append("No aplica")
+        self.assertEqual(form_errors(data, ctx, "correlation"), [])
+
     def test_admite_numeros_y_ordinales(self):
         self.assertEqual(errors_for("correlation", table_fields(columns=("ventas", "anio"))), [])
         self.assertEqual(errors_for("correlation", table_fields(columns=("mes", "ventas"))), [])

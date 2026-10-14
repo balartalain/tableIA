@@ -15,7 +15,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from sheets_reports.utils.scales import normalize_text, not_applicable
+from sheets_reports.utils.scales import normalize_text
 
 MIN_ROWS = 3
 # Escalas que entran en una correlación (una nominal, como sus dummies).
@@ -30,10 +30,9 @@ def _round(value) -> Optional[float]:
 
 def encode_ordinal(series: pd.Series, order: list) -> tuple[pd.Series, int]:
     """La posición de cada valor en `order` (0 el menor); vacío si no está en `order`.
-    → (posiciones, cuántas filas con valor no estaban en `order`). Las de «no aplica» son
-    vacías sin más: no se informan."""
+    → (posiciones, cuántas filas con valor no estaban en `order`)."""
     rank = {normalize_text(v): i for i, v in enumerate(order or [])}
-    filled = series.notna() & ~series.map(lambda v: pd.notna(v) and not_applicable(v)).astype(bool)
+    filled = series.notna()
     codes = series.map(lambda v: rank.get(normalize_text(v)) if pd.notna(v) else None)
     codes = pd.to_numeric(codes, errors="coerce")
     return codes, int((filled & codes.isna()).sum())
@@ -77,19 +76,18 @@ def cramers_v(s1: pd.Series, s2: pd.Series) -> tuple[Optional[float], int]:
 
 
 def _category(value) -> str | None:
-    """El valor de una categoría como texto comparable (2026.0 = 2026); None si está vacío o
-    dice que no aplica."""
+    """El valor de una categoría como texto comparable (2026.0 = 2026); None si está vacío."""
     if pd.isna(value):
         return None
     if isinstance(value, float) and value.is_integer():
         value = int(value)
     text = str(value).strip()
-    return None if not text or not_applicable(text) else text
+    return text or None
 
 
 def one_hot(series: pd.Series) -> list[tuple[str, pd.Series]]:
     """Las dummies de una nominal: [(categoría, serie 0/1)], de la más a la menos frecuente.
-    Una fila vacía o de «no aplica» queda vacía en todas. Una dicotómica (2 categorías) da una
+    Una fila vacía queda vacía en todas. Una dicotómica (2 categorías) da una
     sola dummy, la del «sí» (o la menos frecuente): la otra sería su espejo."""
     text = series.map(_category)
     keys = text.map(lambda v: normalize_text(v) if v is not None else None)

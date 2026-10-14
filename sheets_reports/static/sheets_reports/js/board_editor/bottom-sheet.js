@@ -35,17 +35,30 @@ document.addEventListener('alpine:init', () => {
       const handle = e.currentTarget;
       const area = document.getElementById('board-body').getBoundingClientRect();
       let pct = this.heightPct;
+      let rafId = null;
       handle.setPointerCapture(e.pointerId);
 
       const onMove = (ev) => {
-        pct = ((area.bottom - ev.clientY) / area.height) * 100;
-        this.heightPct = Math.min(100, Math.max(BOTTOM_SHEET_MIN_PCT, pct));
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          pct = ((area.bottom - ev.clientY) / area.height) * 100;
+          this.heightPct = Math.min(100, Math.max(BOTTOM_SHEET_MIN_PCT, pct));
+        });
       };
       const onUp = () => {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
         handle.removeEventListener('pointercancel', onUp);
-        if (pct < BOTTOM_SHEET_MIN_PCT && this.dismissible) this.close();
+        if (pct < BOTTOM_SHEET_MIN_PCT && this.dismissible) {
+          this.close();
+        } else {
+          window.dispatchEvent(new CustomEvent('bottom-sheet:resized'));
+        }
       };
       handle.addEventListener('pointermove', onMove);
       handle.addEventListener('pointerup', onUp);

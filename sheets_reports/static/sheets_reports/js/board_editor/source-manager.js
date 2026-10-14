@@ -39,6 +39,11 @@ function sourceManager() {
       window.addEventListener('sources:open', () => this.open());
       window.addEventListener('sources:back', () => { this.view = 'list'; });
       window.addEventListener('sources:changed', () => this.afterChange());
+      window.addEventListener('bottom-sheet:resized', () => {
+        if (this.view === 'data' && this._previewTable) {
+          this._previewTable.redraw(true);
+        }
+      });
     },
 
     open() {
@@ -194,12 +199,13 @@ function sourceManager() {
       // toda la fuente: al cambiarlo se vuelve a empezar desde el primer bloque.
       const rowsUrl = apiUrl(`/api/sources/${this.previewSource.id}/rows/`);
       this._previewTable = new Tabulator(container, {
+        autoResize: false,
         nestedFieldSeparator: false,
         columns,
         layout: 'fitDataStretch',
         resizableColumnGuide: true,
         progressiveLoad: 'scroll',
-        progressiveLoadScrollMargin: 300,
+        progressiveLoadScrollMargin: 200,
         sortMode: 'remote',
         paginationSize: 100,
         ajaxURL: rowsUrl,

@@ -30,6 +30,8 @@
     { from: 1.5, to: 2.5, color: '#ffffff', name: ' ' },
     { from: 2.5, to: 3.5, color: '#e4e2dc', name: 'Sin datos' },
   ];
+  // La medida de cada par (`measures`): el método elegido, o Spearman con una ordinal.
+  const MEASURE_LABELS = { pearson: 'Pearson', spearman: 'Spearman' };
 
   // La fuerza de la relación en palabras, con los cortes de SCALE.
   function strength(r) {
@@ -43,18 +45,20 @@
       icon: 'ti-chart-grid-dots',
       category: 'stats',
       label: 'Matriz de correlación',
-      description: 'Qué tan relacionadas están varias columnas numéricas',
+      description: 'Qué tan relacionadas están varias columnas (números, escalas o categorías)',
     };
     static defaults = { title: 'Matriz de correlación', width: 'md:col-span-6', height: 380 };
 
     static mockData() {
       return {
         method: 'pearson',
-        variables: [{ field: 'a', label: 'Ventas' }, { field: 'b', label: 'Costo' }, { field: 'c', label: 'Descuento' }],
+        variables: [{ field: 'a', label: 'Ventas', scale: 'continuous' }, { field: 'b', label: 'Costo', scale: 'continuous' },
+                    { field: 'c', label: 'Región: Norte', scale: 'nominal', value: 'Norte', group: 'c' }],
         matrix: [[1, 0.82, -0.35], [0.82, 1, -0.12], [-0.35, -0.12, 1]],
+        measures: [['pearson', 'pearson', 'spearman'], ['pearson', 'pearson', 'spearman'], ['spearman', 'spearman', 'spearman']],
         n: [[120, 120, 120], [120, 120, 120], [120, 120, 120]],
         rows: 120,
-        top: [{ a: 'Ventas', b: 'Costo', r: 0.82, n: 120 }, { a: 'Ventas', b: 'Descuento', r: -0.35, n: 120 }],
+        top: [{ a: 'Ventas', b: 'Costo', r: 0.82, n: 120, measure: 'pearson' }, { a: 'Ventas', b: 'Región: Norte', r: -0.35, n: 120, measure: 'spearman' }],
       };
     }
 
@@ -79,6 +83,8 @@
       const variables = payload.variables || [];
       const matrix = payload.matrix || [];
       const counts = payload.n || [];
+      const measures = payload.measures || [];
+      const measureAt = (i, j) => (measures[i] ? measures[i][j] : null) || payload.method || 'pearson';
       const size = variables.length;
       const lowerOnly = this.style.lowerOnly === true;
       const showValues = this.style.showValues !== false;
@@ -90,7 +96,7 @@
       const container = this.getContentContainer();
       container.className = 'flex flex-col h-full min-h-0';
       if (size < 2) {
-        container.innerHTML = '<p class="m-auto text-xs text-ink/40">Elige al menos dos columnas numéricas.</p>';
+        container.innerHTML = '<p class="m-auto text-xs text-ink/40">Elige al menos dos variables.</p>';
         return;
       }
       // ApexCharts mide el 100 % de alto contra el padre del elemento donde se monta: la caja
@@ -153,8 +159,18 @@
             const r = matrix[i] ? matrix[i][j] : null;
             const n = counts[i] ? counts[i][j] : 0;
             const pair = `${esc(variables[i].label)} × ${esc(variables[j].label)}`;
+            const measure = measureAt(i, j);
+            // Una dummy (categoría de una nominal) vale 1 si la fila es de esa categoría y 0 si no.
+            const dummies = [variables[i], variables[j]].filter(v => v.group)
+              .map(v => `${esc(v.label)}: 1 si es «${esc(v.value)}», 0 si no`);
+            // Filas cuyo valor no está en el orden de una ordinal: no cuentan.
+            const unmatched = [variables[i], variables[j]].filter(v => v.unmatched)
+              .map(v => `${esc(v.label)}: ${v.unmatched} ${v.unmatched === 1 ? 'fila' : 'filas'} con valores fuera de su orden`);
             if (r == null) {
-              const body = `Sin datos suficientes${n < 3 ? ` (${n} ${n === 1 ? 'fila' : 'filas'})` : ' (una de las columnas no varía)'}`;
+              // Dos categorías de la misma nominal: son excluyentes, no se comparan.
+              const body = measure === 'same_variable'
+                ? 'Categorías de la misma variable: no se comparan'
+                : `Sin datos suficientes${n < 3 ? ` (${n} ${n === 1 ? 'fila' : 'filas'})` : ' (una de las columnas no varía)'}`;
               return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug"><div class="font-semibold text-ink/80 mb-0.5">${pair}</div><div class="text-ink/60">${body}</div></div>`;
             }
             return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug">
@@ -163,7 +179,9 @@
                 <span class="font-bold text-sm text-ink">${formatNumber(r, { decimals: 2 })}</span>
                 <span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-paper border border-line text-ink/80">${strength(r)}</span>
               </div>
-              <div class="text-[11px] text-ink/50">${n} filas analizadas</div>
+              <div class="text-[11px] text-ink/50">${MEASURE_LABELS[measure] || measure} · ${n} filas analizadas</div>
+              ${dummies.map(text => `<div class="text-[11px] text-ink/50">${text}</div>`).join('')}
+              ${unmatched.map(text => `<div class="text-[11px] text-amber-700">${text}</div>`).join('')}
             </div>`;
           },
         },

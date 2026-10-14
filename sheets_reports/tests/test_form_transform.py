@@ -248,7 +248,7 @@ class TidySourceIntegrationTests(TestCase):
         # La IA la ve como texto con sus dos valores, escritos una sola vez para todas las opciones.
         context = columns_context(SheetContext.from_dataframe(df, "0", samples=get_field_samples(df)))
         self.assertEqual(context.count('["Sí", "No"]'), 1)
-        self.assertIn(f'"{column}" (texto) — valores de ejemplo: los de V', context)
+        self.assertIn(f'"{column}" (texto, nominal) — valores de ejemplo: los de V', context)
 
     def test_la_hoja_se_lee_de_google_una_vez_por_version(self):
         with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=form_df()) as fetch:

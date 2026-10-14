@@ -4,51 +4,14 @@ sobre las filas que cumplen los filtros. Las variables viven en `fields.columns`
 """
 from typing import Any, ClassVar, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
+from sheets_reports.engine.steps.association import MIN_ROWS, cramers_v
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
 from sheets_reports.widgets.presentation import humanize
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
-MIN_ROWS = 3
 TOP_PAIRS = 3
-
-
-def _value(value) -> Optional[float]:
-    return None if pd.isna(value) else round(float(value), 4)
-
-
-def _cramers_v(s1: pd.Series, s2: pd.Series) -> tuple[Optional[float], int]:
-    """Calcula la V de Cramér entre dos series categóricas y devuelve (v, n_filas)."""
-    valid = s1.notna() & s2.notna()
-    n = int(valid.sum())
-    if n < MIN_ROWS:
-        return None, n
-
-    v1 = s1[valid].astype(str)
-    v2 = s2[valid].astype(str)
-
-    ct = pd.crosstab(v1, v2)
-    r, c = ct.shape
-    if r < 2 or c < 2:
-        return None, n
-
-    k = min(r - 1, c - 1)
-    if k <= 0:
-        return None, n
-
-    obs = ct.values.astype(float)
-    r_sum = obs.sum(axis=1, keepdims=True)
-    c_sum = obs.sum(axis=0, keepdims=True)
-    exp = (r_sum @ c_sum) / n
-
-    with np.errstate(divide="ignore", invalid="ignore"):
-        chi2 = np.where(exp > 0, ((obs - exp) ** 2) / exp, 0.0).sum()
-
-    v = np.sqrt((chi2 / n) / k)
-    v = float(np.clip(v, 0.0, 1.0))
-    return round(v, 4), n
 
 
 @WIDGETS.register
@@ -121,7 +84,7 @@ class CramerWidget(BaseWidget):
                         matrix[i][j] = None
                     n[i][j] = len(col_data)
                 elif j > i:
-                    v, count = _cramers_v(frame[columns[i]], frame[columns[j]])
+                    v, count = cramers_v(frame[columns[i]], frame[columns[j]])
                     matrix[i][j] = v
                     matrix[j][i] = v
                     n[i][j] = count

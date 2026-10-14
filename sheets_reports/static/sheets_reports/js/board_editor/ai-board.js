@@ -216,6 +216,7 @@ function aiBoard() {
       let fields = item.fields;
       let style = item.style || {};
       let calculatedFields = item.calculated_fields || [];
+      let columnScales = item.column_scales || [];
 
       // Si el widget no trae fields ya resueltos (ej. filter), consulta al asistente con IA
       if (!fields) {
@@ -230,9 +231,12 @@ function aiBoard() {
         fields = data.fields;
         style = data.style || style;
         calculatedFields = data.calculated_fields || [];
+        columnScales = data.column_scales || [];
       }
 
       if (calculatedFields.length) await this._addCalculated(calculatedFields);
+      // Las escalas que corrige la IA (matriz de correlación) van a la fuente antes del widget.
+      if (columnScales.length) await this.store.saveScales(this.source, this.store._scalesMap(columnScales));
       const result = await this.store.createWidgetFromProposal({
         type: item.widget_type,
         source: this.source,

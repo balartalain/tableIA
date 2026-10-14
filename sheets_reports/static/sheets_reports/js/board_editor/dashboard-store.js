@@ -90,6 +90,16 @@ const METRIC_FORMAT_OPTIONS = [
 let CONDITION_SEQ = 0;
 
 // Nombre visible sin «Nombre a mostrar»: el mismo texto que arma el backend (`humanize`).
+// Escalas de medida de una columna (utils/scales.py): de ellas depende cómo la matriz de
+// correlación mide cada par.
+const SCALE_LABELS = {
+  continuous: 'Continua',
+  discrete: 'Discreta',
+  ordinal: 'Ordinal',
+  nominal: 'Nominal',
+  none: 'No se analiza',
+};
+
 function humanizeName(name) {
   const text = String(name || '').replace(/_/g, ' ').trim();
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
@@ -713,6 +723,8 @@ document.addEventListener('alpine:init', () => {
       this.drawerAskOpen = false;
       this.drawerSaveError = '';
       this.drawerSaving = false;
+      this.scaleEditor = null;
+      this.scaleProposal = null;
       const manifest = this.widgetManifest[w.type] || {};
       const title = w.title || manifest.label || 'Nuevo Widget';
       this.drawerDraft = {
@@ -781,6 +793,8 @@ document.addEventListener('alpine:init', () => {
       this.drawerAskOpen = false;
       this.drawerSaveError = '';
       this.drawerTab = 'data';
+      this.scaleEditor = null;
+      this.scaleProposal = null;
       this.destroyListSortables();
     },
 
@@ -853,19 +867,27 @@ document.addEventListener('alpine:init', () => {
     },
 
     // Columnas que el widget puede elegir: todas, o solo las numéricas si calcula con ellas
-    // (`columns_numeric`, la correlación).
+    // (`columns_numeric`, la dispersión). Con `columns_scaled` (la matriz de correlación), las
+    // que se correlacionan: numéricas, ordinales y nominales (una fila 0/1 por categoría).
     get columnFields() {
+      if (this.drawerCapabilities.columns_scaled) {
+        return (this.schema.all_fields || []).filter(f => this.isCorrelatable(f));
+      }
       return (this.drawerCapabilities.columns_numeric ? this.schema.numeric_fields : this.schema.all_fields) || [];
     },
 
     // Un widget nuevo de columnas arranca con las primeras de la hoja (la Tabla, 8; la
-    // correlación, 4 numéricas que no sean de tiempo ni identificadores: un año o un ID no se
-    // correlacionan).
+    // correlación, 4 variables que no sean de tiempo ni identificadores, con las numéricas y
+    // ordinales primero: un año o un ID no se correlacionan).
     _autoPickColumns() {
-      const numeric = this.drawerCapabilities.columns_numeric;
+      const scaled = this.drawerCapabilities.columns_scaled;
+      const numeric = this.drawerCapabilities.columns_numeric || scaled;
       const time = this.schema.time_fields || [];
       const isId = f => /(^|[_\s-])(id|codigo|código)([_\s-]|$)/i.test(f);
-      const fields = numeric ? this.columnFields.filter(f => !time.includes(f) && !isId(f)) : this.columnFields;
+      let fields = numeric ? this.columnFields.filter(f => !time.includes(f) && !isId(f)) : this.columnFields;
+      // La matriz: su escala ya deja fuera fechas e IDs (`time_fields` incluye cualquier número);
+      // arranca con numéricas y ordinales (una nominal suma una fila por categoría).
+      if (scaled) fields = this.columnFields.filter(f => this.columnScale(f) !== 'nominal');
       const max = Math.min(this.maxColumns || 0, numeric ? 4 : 8);
       this.drawerDraft.fields.columns = fields.slice(0, max).map(field => ({ field }));
     },
@@ -937,6 +959,155 @@ document.addEventListener('alpine:init', () => {
     // Nombre que se muestra en la tabla: el «Nombre a mostrar» o la columna tal cual.
     columnLabel(column) {
       return (column && column.label) || humanizeName((column && column.field) || '');
+    },
+
+    // ---- escala de medida de las columnas (matriz de correlación)
+    // La escala vive en la fuente: la guardada o, sin ella, la detectada (`schema.scales`).
+    columnProfile(field) {
+      return (this.schema.scales || {})[field] || null;
+    },
+
+    columnScale(field) {
+      const profile = this.columnProfile(field);
+      return profile ? profile.scale : null;
+    },
+
+    // ¿Entra en una correlación? Numéricas, ordinales y nominales (como dummies 0/1).
+    isCorrelatable(field) {
+      return ['continuous', 'discrete', 'ordinal', 'nominal'].includes(this.columnScale(field));
+    },
+
+    scaleLabel(scale) {
+      return SCALE_LABELS[scale] || '';
+    },
+
+    // Escalas que admite una columna: una numérica no es ordinal por texto (sus valores ya
+    // tienen orden: discreta); una categoría no es continua ni discreta.
+    scaleOptions(field) {
+      const numeric = (this.schema.numeric_fields || []).includes(field);
+      const keys = numeric ? ['continuous', 'discrete', 'nominal', 'none'] : ['nominal', 'ordinal', 'none'];
+      return keys.map(value => ({ value, label: SCALE_LABELS[value] }));
+    },
+
+    // Editor de la escala de una variable: { field, scale, order, saving, error } o null.
+    scaleEditor: null,
+
+    openScaleEditor(field) {
+      const profile = this.columnProfile(field);
+      if (!profile) return;
+      if (this.scaleEditor && this.scaleEditor.field === field) {
+        this.scaleEditor = null;
+        return;
+      }
+      const values = (profile.stats && profile.stats.values) || [];
+      this.scaleEditor = { field, scale: profile.scale, order: [...(profile.order || values)], saving: false, error: '' };
+    },
+
+    // Al pasar a ordinal, arranca con el orden detectado o con los valores de la columna.
+    onScaleEditorChange(scale) {
+      const editor = this.scaleEditor;
+      if (!editor) return;
+      editor.scale = scale;
+      if (scale === 'ordinal' && !editor.order.length) {
+        const profile = this.columnProfile(editor.field) || {};
+        editor.order = [...(profile.order || (profile.stats && profile.stats.values) || [])];
+      }
+    },
+
+    moveOrderValue(index, delta) {
+      const order = this.scaleEditor && this.scaleEditor.order;
+      const to = index + delta;
+      if (!order || to < 0 || to >= order.length) return;
+      const [value] = order.splice(index, 1);
+      order.splice(to, 0, value);
+    },
+
+    async saveScaleEditor() {
+      const editor = this.scaleEditor;
+      if (!editor || editor.saving) return;
+      editor.saving = true;
+      editor.error = '';
+      try {
+        const item = editor.scale === 'ordinal' ? { scale: 'ordinal', order: editor.order } : { scale: editor.scale };
+        await this.saveScales(this.drawerDraft.source, { [editor.field]: item });
+        this.scaleEditor = null;
+        // Una variable que ya no se correlaciona («no se analiza») sale de la matriz.
+        if (!this.isCorrelatable(editor.field)) {
+          this.drawerDraft.fields.columns = this.drawerDraft.fields.columns.filter(c => c.field !== editor.field);
+        }
+      } catch (e) {
+        editor.error = e.message;
+      } finally {
+        editor.saving = false;
+      }
+    },
+
+    // Guarda en la fuente la escala de esas columnas ({columna: {scale, order?}}) y relee su
+    // schema (cambian `scales`). Lanza con el mensaje del servidor si falla.
+    async saveScales(source, scales) {
+      const r = await fetch(apiUrl(`/api/sources/${source}/scales/`), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scales }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
+      delete this.schemas[source];
+      if (String(this.drawerDraft.source) === String(source)) await this.loadSchema(source);
+    },
+
+    // «Clasificar con IA»: la IA propone la escala de las variables elegidas; el panel muestra
+    // solo las que cambian y las guarda si el usuario las acepta.
+    scaleProposal: null,   // { loading, error, items: [{field, scale, order?, reason}] }
+
+    async classifyScales() {
+      const columns = this.drawerDraft.fields.columns.map(c => c.field).filter(Boolean);
+      if (!columns.length || (this.scaleProposal && this.scaleProposal.loading)) return;
+      this.scaleProposal = { loading: true, error: '', items: [] };
+      try {
+        const { r, data } = await fetchJsonSafe(apiUrl(`/api/sources/${this.drawerDraft.source}/scales/ai/`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ columns }),
+        });
+        if (!r.ok || !data) throw new Error((data && data.error) || 'El servidor no respondió correctamente.');
+        const items = Object.entries(data.scales || {})
+          .map(([field, p]) => ({ field, ...p }))
+          .filter(p => {
+            const current = this.columnProfile(p.field) || {};
+            return p.scale !== current.scale
+              || JSON.stringify(p.order || null) !== JSON.stringify(current.scale === 'ordinal' ? current.order || null : null);
+          });
+        this.scaleProposal = { loading: false, error: '', items };
+      } catch (e) {
+        this.scaleProposal = {
+          loading: false, items: [],
+          error: e.name === 'AbortError' ? 'La IA tardó demasiado en responder. Intenta de nuevo.' : e.message,
+        };
+      }
+    },
+
+    async acceptScaleProposal() {
+      const proposal = this.scaleProposal;
+      if (!proposal || !proposal.items.length || proposal.loading) return;
+      const scales = Object.fromEntries(proposal.items.map(p => [p.field, p.order ? { scale: p.scale, order: p.order } : { scale: p.scale }]));
+      proposal.loading = true;
+      try {
+        await this.saveScales(this.drawerDraft.source, scales);
+        const dropped = proposal.items.filter(p => !this.isCorrelatable(p.field)).map(p => p.field);
+        if (dropped.length) {
+          this.drawerDraft.fields.columns = this.drawerDraft.fields.columns.filter(c => !dropped.includes(c.field));
+        }
+        this.scaleProposal = null;
+      } catch (e) {
+        proposal.loading = false;
+        proposal.error = e.message;
+      }
+    },
+
+    // Escalas que propone la IA con su widget ([{field, scale, order?}]) → {columna: {scale, order?}}.
+    _scalesMap(items) {
+      return Object.fromEntries((items || []).map(p => [p.field, p.order && p.order.length ? { scale: p.scale, order: p.order } : { scale: p.scale }]));
     },
 
     // ---- métricas
@@ -1333,6 +1504,11 @@ document.addEventListener('alpine:init', () => {
         steps.push({ title: 'Campos calculados (se crean en la fuente)',
                      details: a.calculated_fields.map(cf => `«${cf.name}» = ${cf.formula}`) });
       }
+      // Escalas que la IA corrige en la fuente (las usa la matriz de correlación).
+      if ((a.column_scales || []).length) {
+        steps.push({ title: 'Escala de las variables (se guarda en la fuente)',
+                     details: a.column_scales.map(p => `${p.field}: ${this.scaleLabel(p.scale).toLowerCase()}${p.order && p.order.length ? ` (${p.order.join(' < ')})` : ''}`) });
+      }
       const columns = (f.columns || []).map(c => (typeof c === 'string' ? c : c.label ? `${c.field} («${c.label}»)` : c.field));
       if (columns.length) steps.push({ title: this.columnsLabel, detail: `Muestra, en este orden: ${list(columns)}` });
       if ((f.dimensions || []).length) {
@@ -1422,6 +1598,14 @@ document.addEventListener('alpine:init', () => {
       // Los campos calculados que propone la IA se crean primero en la fuente: las métricas
       // de la propuesta los usan.
       if ((a.calculated_fields || []).length && !await this._createCalculatedFields(a.calculated_fields)) return;
+      if ((a.column_scales || []).length) {
+        try {
+          await this.saveScales(this.drawerDraft.source, this._scalesMap(a.column_scales));
+        } catch (e) {
+          this.drawerSaveError = `No se pudo guardar la escala de las variables: ${e.message}`;
+          return;
+        }
+      }
       const before = this._draftPayload(this.editingWidget ? this.editingWidget.title : '');
       const draft = this.drawerDraft;
       draft.fields = { ...EMPTY_FIELDS(), ...JSON.parse(JSON.stringify(a.fields || {})) };

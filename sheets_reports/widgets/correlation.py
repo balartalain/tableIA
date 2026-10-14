@@ -1,29 +1,36 @@
 """
-Matriz de correlación: qué tan relacionadas están entre sí varias columnas numéricas, sobre las
-filas que cumplen los filtros. Las variables viven en `fields.columns` (como en la Tabla, pero
-solo numéricas: `columns_numeric`); el método (Pearson o Spearman) en `style.method`.
+Matriz de correlación: qué tan relacionadas están entre sí varias columnas, sobre las filas que
+cumplen los filtros. Las variables viven en `fields.columns` (como en la Tabla) y son numéricas
+(continuas o discretas), ordinales o nominales (`columns_scaled`).
 
-Cada par usa sus filas completas (una fila sin valor se descarta solo para los pares de esa
-columna) y guarda cuántas usó (`n`). Con menos de MIN_ROWS filas, o con una columna constante,
-no hay correlación: la celda va vacía (None), no un 0 engañoso.
+Una nominal entra como variables dummy (one-hot): una fila 0/1 por categoría («Recinto:
+Santiago», ¿pertenece o no?), hasta `nominal_max_categories`; una dicotómica (Sí/No), una sola
+fila, la del «sí». Las dummies se crean aquí, sobre las filas filtradas, y no se guardan en
+ningún lado. Entre dos dummies de la misma variable no hay medida (son excluyentes por
+construcción: la celda va vacía, `same_variable`).
+
+La escala de cada columna es la guardada en la fuente o, sin ella, la detectada
+(`utils/scales.effective_scales`). Cada par se mide con `engine/steps/association.py`: el método
+de `style.method` (Pearson o Spearman) entre numéricas, y Spearman si una es ordinal (por la
+posición de su valor en el orden de la escala) o una dummy. De -1 a 1.
+
+Cada par usa sus filas completas y guarda cuántas usó (`n`). Con menos de MIN_ROWS filas, o con
+una columna constante, no hay medida: la celda va vacía (None), no un 0 engañoso.
 """
 from typing import Any, ClassVar, Dict, List, Optional
 
 import pandas as pd
 
+from sheets_reports.engine.steps.association import CORRELATED_SCALES, associate, prepare
+from sheets_reports.utils.data import date_fields
+from sheets_reports.utils.scales import effective_scales
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
 from sheets_reports.widgets.presentation import humanize
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
 
-# Menos filas que esto en un par no dicen nada de la relación.
-MIN_ROWS = 3
 # Pares en «lo más relacionado».
 TOP_PAIRS = 3
 METHODS = ("pearson", "spearman")
-
-
-def _value(value) -> Optional[float]:
-    return None if pd.isna(value) else round(float(value), 4)
 
 
 @WIDGETS.register
@@ -31,19 +38,31 @@ class CorrelationWidget(BaseWidget):
     key = "correlation"
     type_key = "correlation"
     label = "Matriz de correlación"
-    ai_doc = ('qué tan relacionadas están entre sí varias columnas numéricas (si cuando sube una '
-              'sube o baja la otra), como mapa de calor. Las variables van en columns.')
+    ai_doc = ('qué tan relacionadas están entre sí varias columnas, como mapa de calor. Las '
+              'variables van en columns y son numéricas, ordinales o nominales (ver la escala de '
+              'cada columna); una nominal se muestra como una fila 0/1 por categoría (hasta 10 '
+              'categorías), así que úsala solo si tiene pocas. Para «los principales indicadores» '
+              'elige de 4 a 10 columnas que midan resultados o evaluaciones (montos, notas, '
+              'escalas de satisfacción o acuerdo), sin IDs, fechas ni texto libre.')
     ai_examples = [
         (   'qué relación hay entre ventas, costo y plan',
             {   'widget_type': 'correlation',
                 'title': 'Relación entre ventas, costo y plan',
                 'fields': {'columns': [{'field': 'ventas'}, {'field': 'costo'}, {'field': 'plan'}]},
                 'style': {'method': 'pearson'}}),
+        (   'cómo se relacionan las ventas con la categoría',
+            {   'widget_type': 'correlation',
+                'title': 'Ventas por categoría',
+                'fields': {'columns': [{'field': 'ventas'}, {'field': 'costo'}, {'field': 'categoria'}]},
+                'style': {'method': 'spearman'}}),
     ]
 
     capabilities: ClassVar[dict] = {
         "columns": [2, 12],
-        "columns_numeric": True,
+        "columns_scaled": True,
+        # Una nominal es una fila por categoría: tope de categorías por nominal y de filas.
+        "nominal_max_categories": 10,
+        "matrix_max_rows": 30,
         "columns_label": "Variables a correlacionar",
         # Sin texto de ayuda bajo las variables («Cómo se lee» ya explica la escala).
         "columns_hint": "",
@@ -67,12 +86,16 @@ class CorrelationWidget(BaseWidget):
     ]
 
     def process_query(self, df: pd.DataFrame, fields: WidgetFields) -> WidgetResult:
-        """Las filas que pasan los filtros (sin agrupar), solo con las variables pedidas."""
+        """Las filas que pasan los filtros (sin agrupar), solo con las variables pedidas, y la
+        escala de cada una (sobre la hoja entera: la escala es de la columna, no del filtro)."""
+        keep = [c["field"] for c in (fields.columns or []) if c["field"] in df.columns]
+        scales = effective_scales(df, df.attrs.get("column_scales"), only=keep,
+                                  date_columns=date_fields(df[keep]),
+                                  submission=df.attrs.get("submission_field"))
         result = super().process_query(df, fields)
-        frame = result.rows
-        keep = [c["field"] for c in (fields.columns or []) if c["field"] in frame.columns]
-        frame = frame[keep]
-        return WidgetResult(data=None, metadata=result.metadata, fields=fields, type="rows", frame=frame)
+        frame = result.rows[[c for c in keep if c in result.rows.columns]]
+        metadata = {**result.metadata, "scales": scales}
+        return WidgetResult(data=None, metadata=metadata, fields=fields, type="rows", frame=frame)
 
     def compile(
         self,
@@ -84,27 +107,61 @@ class CorrelationWidget(BaseWidget):
         style_dict = style.to_dict()
         method = style_dict.get("method") if style_dict.get("method") in METHODS else "pearson"
         labels = {c["field"]: c.get("label") or humanize(c["field"]) for c in ((fields.columns if fields else None) or [])}
+        scales = (metadata or {}).get("scales") or {}
 
-        frame = result.rows.apply(pd.to_numeric, errors="coerce")
-        columns = list(frame.columns)
-        corr = frame.corr(method=method, min_periods=MIN_ROWS)
-        present = frame.notna().astype(int)
-        counts = present.T @ present
+        frame = result.rows
+        # Las filas de la matriz: una por variable, o una por dummy en una nominal.
+        rows = []
+        for column in frame.columns:
+            profile = scales.get(column) or {"scale": "continuous"}
+            label = labels.get(column, humanize(column))
+            for ready in prepare(frame[column], profile["scale"], profile.get("order")):
+                row = {**ready, "field": column, "label": label}
+                if "value" in ready:
+                    row["label"] = f"{label}: {ready['value']}"
+                rows.append(row)
 
-        matrix = [[_value(corr.at[a, b]) for b in columns] for a in columns]
-        n = [[int(counts.at[a, b]) for b in columns] for a in columns]
+        size = len(rows)
+        matrix = [[None] * size for _ in range(size)]
+        measures = [[None] * size for _ in range(size)]
+        n = [[0] * size for _ in range(size)]
+        for i in range(size):
+            for j in range(i, size):
+                a, b = rows[i], rows[j]
+                if not {a["scale"], b["scale"]} <= set(CORRELATED_SCALES):
+                    continue
+                if i != j and "value" in a and a["field"] == b["field"]:
+                    # Dos categorías de la misma variable: excluyentes, no se comparan.
+                    measures[i][j] = measures[j][i] = "same_variable"
+                    continue
+                value, count, measure = associate(a, b, method)
+                matrix[i][j] = matrix[j][i] = value
+                measures[i][j] = measures[j][i] = measure
+                n[i][j] = n[j][i] = count
 
-        pairs = [(i, j) for i in range(len(columns)) for j in range(i + 1, len(columns))
+        pairs = [(i, j) for i in range(size) for j in range(i + 1, size)
                  if matrix[i][j] is not None]
         pairs.sort(key=lambda p: (-abs(matrix[p[0]][p[1]]), p))
-        top = [{"a": labels.get(columns[i], columns[i]), "b": labels.get(columns[j], columns[j]),
-                "r": matrix[i][j], "n": n[i][j]} for i, j in pairs[:TOP_PAIRS]]
+        top = [{"a": rows[i]["label"], "b": rows[j]["label"],
+                "r": matrix[i][j], "n": n[i][j], "measure": measures[i][j]}
+               for i, j in pairs[:TOP_PAIRS]]
+
+        variables = []
+        for row in rows:
+            variable = {"field": row["field"], "label": row["label"], "scale": row["scale"]}
+            if "value" in row:
+                variable.update(value=row["value"], group=row["field"])
+            if row["unmatched"]:
+                # Filas cuyo valor no está en el orden de la ordinal: cuentan como vacías.
+                variable["unmatched"] = row["unmatched"]
+            variables.append(variable)
 
         return {
             "type": "correlation",
             "method": method,
-            "variables": [{"field": c, "label": labels.get(c, humanize(c))} for c in columns],
+            "variables": variables,
             "matrix": matrix,
+            "measures": measures,
             "n": n,
             "rows": len(frame),
             "top": top,

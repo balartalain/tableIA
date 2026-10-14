@@ -679,8 +679,11 @@ function sourcePicker({ mode = 'create' } = {}) {
     },
 
     _payload() {
-      const columns = this.columns.map(({ name, type, include, label, format, alias }) =>
-        ({ name, type, include, alias: alias || '', label: (label || '').trim(), format: type === 'number' ? (format || '') : '' }));
+      // La escala de medida (y el orden de una ordinal) se edita desde la matriz de
+      // correlación: aquí solo se conserva.
+      const columns = this.columns.map(({ name, type, include, label, format, alias, scale, order }) =>
+        ({ name, type, include, alias: alias || '', label: (label || '').trim(), format: type === 'number' ? (format || '') : '',
+           ...(scale ? { scale, ...(scale === 'ordinal' && order && order.length ? { order } : {}) } : {}) }));
       const body = { columns, first_row_headers: this.headers };
       // ¿Respuestas de Google Forms? (null en edición directa no debería
       // pasar: arranca con el valor guardado de la fuente).

@@ -4,6 +4,7 @@ import pandas as pd
 
 from sheets_reports.engine.formulas import aggregated_fields, row_fields
 from sheets_reports.utils.data import date_fields, time_fields
+from sheets_reports.utils.scales import effective_scales
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,9 @@ class SheetContext:
     (no agrupan ni filtran), solo métricas con agregación «auto».
     `calculated` son todos los campos calculados de la fuente con lo que calculan
     ({nombre: {formula, kind: "row"|"aggregated", format}}), para el contexto de la IA.
+    `scales` es la escala de medida de cada columna (continua, discreta, ordinal, nominal o
+    `none`), la guardada en la fuente o la detectada, con su perfil
+    (`utils/scales.effective_scales`): la usan la matriz de correlación y el contexto de la IA.
     """
     source: str
     fields: tuple[str, ...]
@@ -32,6 +36,7 @@ class SheetContext:
     aggregated_fields: frozenset[str] = frozenset()
     calculated: dict = field(default_factory=dict, compare=False)
     aliases: dict = field(default_factory=dict, compare=False)
+    scales: dict = field(default_factory=dict, compare=False)
 
     def __post_init__(self):
         if not self.aliases and self.fields:
@@ -45,14 +50,16 @@ class SheetContext:
         for i, col in enumerate(df.columns):
             alias = attr_aliases.get(col) or f"col_{i + 1}"
             aliases[alias.lower()] = col
+        dates = frozenset(date_fields(df))
+        submission = df.attrs.get("submission_field")
         return cls(
             source=str(source),
             fields=tuple(df.columns),
             numeric_fields=frozenset(df.select_dtypes(include="number").columns),
             samples=samples or {},
             time_fields=frozenset(time_fields(df)),
-            date_fields=frozenset(date_fields(df)),
-            submission_field=df.attrs.get("submission_field"),
+            date_fields=dates,
+            submission_field=submission,
             aggregated_fields=frozenset(aggregated_fields(df)),
             calculated={
                 **{name: {"formula": text, "kind": "row", "format": "number"}
@@ -61,6 +68,8 @@ class SheetContext:
                    for name, f in aggregated_fields(df).items()},
             },
             aliases=aliases,
+            scales=effective_scales(df, df.attrs.get("column_scales"), date_columns=dates,
+                                    submission=submission),
         )
 
     def alias_for(self, field: str) -> str:
@@ -84,6 +93,16 @@ class SheetContext:
 
     def is_date(self, column) -> bool:
         return column in self.date_fields
+
+    def scale_of(self, column) -> str | None:
+        """La escala de medida de la columna (None si no es una columna de la hoja)."""
+        profile = self.scales.get(column)
+        return profile["scale"] if profile else None
+
+    def order_of(self, column) -> list | None:
+        """El orden de los valores de una ordinal, de menor a mayor."""
+        profile = self.scales.get(column)
+        return profile.get("order") if profile else None
 
     @property
     def ordered_numeric_fields(self) -> list[str]:

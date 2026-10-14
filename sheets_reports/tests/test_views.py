@@ -344,7 +344,7 @@ class ViewsTests(TestCase):
         self.assertEqual(ai.call_args.args[:2], ("ventas por categoría", None))
         self.assertEqual(r.json(), {"widget_type": "dynamic_table", "title": "Ventas por categoría",
                                     "fields": fields(pivots=["mes"]), "style": {"showTotals": True},
-                                    "calculated_fields": calculated})
+                                    "calculated_fields": calculated, "column_scales": []})
         self.assertEqual(Widget.objects.count(), widgets_before)
 
     def test_asistente_recibe_el_borrador_y_el_historial(self, _df):

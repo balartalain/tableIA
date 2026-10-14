@@ -11,6 +11,7 @@ from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from sheets_reports.engine.context import SheetContext
 from sheets_reports.models import Dashboard, DataSource, Widget
 from sheets_reports.services import google_drive, sheets
 from sheets_reports.services.sheets import (
@@ -44,6 +45,7 @@ from sheets_reports.utils.data import (
     to_key,
     to_python,
 )
+from sheets_reports.utils.scales import SCALES, order_gaps, scale_errors
 from sheets_reports.widgets import WIDGETS as WIDGET_REGISTRY
 from sheets_reports.utils.validation import SpecValidationError
 from sheets_reports.services.widget_service import WidgetService, clean_position
@@ -169,6 +171,11 @@ def _clean_columns(columns: list) -> list[dict]:
         # Formato (moneda, %): solo en las numéricas; sin él se muestran como número.
         if c["type"] == "number" and c.get("format") in COLUMN_FORMATS:
             column["format"] = c["format"]
+        # Escala de medida confirmada (y el orden de una ordinal); sin ella se detecta al cargar.
+        if c.get("scale") in SCALES:
+            column["scale"] = c["scale"]
+            if c["scale"] == "ordinal" and c.get("order"):
+                column["order"] = [str(v).strip() for v in c["order"]]
         out.append(column)
     return out
 
@@ -192,6 +199,10 @@ def _columns_errors(columns) -> list[str]:
             return [f"El nombre a mostrar de '{c['name']}' debe ser texto"]
         if c.get("format") not in (None, "", "number", *COLUMN_FORMATS):
             return [f"Formato no válido para '{c['name']}': usa number, {', '.join(COLUMN_FORMATS)}"]
+        if c.get("scale") is not None:
+            errors = scale_errors(c["name"], c["scale"], c.get("order"))
+            if errors:
+                return errors
         names.add(c["name"])
     included = [c for c in columns if c.get("include", True)]
     if not included:
@@ -652,6 +663,7 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
                     "include": stored.get("include", True) if stored else True,
                     "label": (stored or {}).get("label", ""),
                     "format": (stored or {}).get("format", ""),
+                    **{k: stored[k] for k in ("scale", "order") if stored and stored.get(k)},
                     "readonly": is_id_column(column["name"])})
     return out
 
@@ -879,11 +891,111 @@ def source_schema(request, source_id):
               # Solo métricas, con agregación «auto»: no son columnas de la hoja.
               "aggregated_fields": [{"name": f.name, "format": f.format}
                                     for f in aggregated_fields(df).values()]}
+    ctx = SheetContext.from_dataframe(df, source.gid)
     return JsonResponse({
         **schema, "sample_values": get_field_samples(frame),
         "row_id": row_id,
+        # Escala de medida de cada columna (guardada o detectada) con su perfil.
+        "scales": {name: profile for name, profile in ctx.scales.items() if name != row_id},
         "widget_manifest": _widget_manifest(),
     })
+
+
+def _scales_errors(df, scales) -> list[str]:
+    """Las escalas a guardar: de columnas de la hoja (no de campos calculados ni del ID) y,
+    en una ordinal, con un orden que cubre todos los valores de la columna."""
+    if not isinstance(scales, dict) or not scales:
+        return ["'scales' debe ser un objeto {columna: {scale, order?}}"]
+    calculated = set(df.attrs.get("row_fields") or {})
+    errors = []
+    for name, item in scales.items():
+        if name not in df.columns or name in calculated or is_id_column(name):
+            errors.append(f"'{name}' no es una columna de la hoja")
+            continue
+        if not isinstance(item, dict):
+            errors.append(f"La escala de '{name}' debe ser un objeto")
+            continue
+        errors += scale_errors(name, item.get("scale"), item.get("order"))
+        if not errors and item.get("scale") == "ordinal":
+            missing = order_gaps(df[name], item.get("order"))
+            if missing:
+                errors.append(f"El orden de '{name}' no incluye: {', '.join(missing[:5])}")
+    return errors
+
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def source_scales(request, source_id):
+    """
+    PUT {scales: {columna: {scale, order?}}}: guarda la escala de medida confirmada de esas
+    columnas (por su nombre a mostrar) en `DataSource.columns`. Una fuente sin configuración
+    de columnas la crea con los tipos que trae la hoja. → la fuente serializada, o {error}.
+    """
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    try:
+        data = _json_body(request)
+        df = sheets.load_source(source)
+    except ValueError as e:
+        return _error(str(e))
+    except SheetError as e:
+        return _error(str(e), status=502)
+    scales = data.get("scales")
+    errors = _scales_errors(df, scales)
+    if errors:
+        return _error(" ".join(errors))
+
+    calculated = set(df.attrs.get("row_fields") or {})
+    columns = [dict(c) for c in source.columns]
+    by_display = {sheets.column_display_name(c): c for c in columns}
+    types = infer_column_types(df)
+    for name in df.columns:
+        if name not in by_display and name not in calculated and not is_id_column(name):
+            column = {"name": name, "type": types[name], "include": True}
+            columns.append(column)
+            by_display[name] = column
+    for name, item in scales.items():
+        column = by_display[name]
+        column["scale"] = item["scale"]
+        column.pop("order", None)
+        if item["scale"] == "ordinal" and item.get("order"):
+            column["order"] = [str(v).strip() for v in item["order"]]
+    source.columns = columns
+    source.save(update_fields=["columns"])
+    return JsonResponse(_serialize_source(source))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def source_scales_ai(request, source_id):
+    """
+    «Clasificar con IA»: POST {columns: [nombre, ...]} → {scales: {columna: {scale, order?,
+    reason}}}, la escala que propone la IA para cada columna. NO guarda nada: el panel la
+    muestra y, si el usuario la acepta, la guarda con el PUT de `scales`.
+    """
+    source = _owned_source(request, source_id)
+    if not source:
+        return _error("Fuente no encontrada", status=404)
+    try:
+        data = _json_body(request)
+        df = sheets.load_source(source)
+    except ValueError as e:
+        return _error(str(e))
+    except SheetError as e:
+        return _error(str(e), status=502)
+    columns = data.get("columns")
+    if not isinstance(columns, list) or not columns:
+        return _error("Elige al menos una columna para clasificar.")
+
+    from sheets_reports.services.ai_scales import classify_scales
+    from sheets_reports.services.ai_spec import SpecGenerationError
+    try:
+        ctx = SheetContext.from_dataframe(df, source.gid)
+        proposal = classify_scales(df, [str(c) for c in columns], ctx.scales)
+    except SpecGenerationError as e:
+        return _error(str(e), status=422)
+    return JsonResponse({"scales": proposal})
 
 
 def _serialize_widget(widget):
@@ -1114,6 +1226,8 @@ def table_assistant(request, dashboard_id):
         "title": proposal.get("title", ""),
         # Los campos que la IA propone crear en la fuente: sus métricas los usan (agg "auto").
         "calculated_fields": proposal.get("calculated_fields", []),
+        # Las escalas que la IA corrige en la fuente (matriz de correlación): se guardan al aplicar.
+        "column_scales": proposal.get("column_scales", []),
     })
 
 

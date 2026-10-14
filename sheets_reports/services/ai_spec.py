@@ -23,6 +23,8 @@ from sheets_reports.engine.context import SheetContext
 from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula, formula_tree, rename_columns
 from sheets_reports.services.source_columns import map_columns
 from sheets_reports.utils.data import is_id_column
+from sheets_reports.utils.scales import (SCALES, describe as describe_scale, dummy_count,
+                                         normalize_text, not_applicable, scale_errors)
 from sheets_reports.utils.validation import MAX_IN_VALUES
 from sheets_reports.engine import AGGREGATIONS
 from sheets_reports.engine.steps.aggregation import METRIC_FORMATS
@@ -36,7 +38,7 @@ audit_logger = logging.getLogger("tableia.ai_audit")
 GEMINI_TIMEOUT_MS = 120_000
 # Tokens de razonamiento del modelo por tipo de llamada: 0 = responde sin razonar; None = sin
 # límite (lo que decida el modelo). El reintento de una propuesta inválida razona sin límite.
-THINKING_BUDGETS = {"suggestions": 0, "widget": 512, "formula": 512, "board_plan": 1024}
+THINKING_BUDGETS = {"suggestions": 0, "widget": 512, "formula": 512, "board_plan": 1024, "scales": 512}
 CREATE_TOOL = "create_widget"
 REJECT_TOOL = "reject_request"
 
@@ -223,6 +225,10 @@ def capabilities_text(widget) -> str:
             parts.append(f"columnas de {low} a {high}")
         if caps.get("columns_numeric"):
             parts.append("solo columnas numéricas")
+        if caps.get("columns_scaled"):
+            parts.append("columnas numéricas, ordinales (con su orden) o nominales (cada categoría "
+                         f"de una nominal es una fila 0/1, hasta {caps.get('nominal_max_categories')} "
+                         "por variable); en column_scales puedes corregir la escala de una columna")
     if caps.get("ungrouped_min_metrics"):
         parts.append(f"sin dimensión: al menos {caps['ungrouped_min_metrics']} métricas "
                      "(una barra por total)")
@@ -625,6 +631,21 @@ def build_tool_parameters(ctx: SheetContext, widget_type: str | None) -> dict:
             "fields": {"type": "object", "additionalProperties": False,
                        "properties": fields_properties},
             "style": style,
+            **({"column_scales": {
+                "type": "array",
+                "description": "Solo para corregir la escala de una columna de `columns` cuando la "
+                               "indicada en la lista de columnas no es la correcta (ej. una nominal "
+                               "cuyos valores tienen un orden natural: ordinal). Omitir si no hace falta.",
+                "items": {"type": "object", "additionalProperties": False,
+                          "required": ["field", "scale"],
+                          "properties": {
+                              "field": _column_schema("Columna cuya escala se corrige."),
+                              "scale": {"enum": [s for s in SCALES if s != "none"]},
+                              "order": {"type": "array", "items": {"type": "string"},
+                                        "description": "Solo en ordinal: TODOS sus valores, de "
+                                                       "menor a mayor, escritos como en la hoja."},
+                          }},
+            }} if any((w.capabilities or {}).get("columns_scaled") for w in widgets) else {}),
         },
     })
 
@@ -710,6 +731,11 @@ def columns_context(ctx: SheetContext, only=None) -> str:
     for field in fields:
         alias = ctx.alias_for(field)
         kind = "numérica" if ctx.is_numeric(field) else "fecha" if ctx.is_date(field) else "texto"
+        profile = ctx.scales.get(field)
+        if profile and not is_id_column(field) and field != ctx.submission_field and not ctx.is_date(field):
+            # La escala de medida y un perfil corto (rango, orden, texto libre): lo que la IA ve
+            # de los valores de una columna además de los ejemplos.
+            kind += f", {describe_scale(field, profile, ctx.is_numeric(field))}"
         line = f"- {alias}: {json.dumps(field, ensure_ascii=False)} ({kind})"
         if is_id_column(field):
             line += " — columna de sistema: una por fila, de solo lectura"
@@ -902,6 +928,42 @@ def _column_errors(column, index: int, ctx, seen_columns) -> list[str]:
     return errors
 
 
+def _column_scales_errors(items, ctx: SheetContext, caps: dict) -> tuple[dict, list[str]]:
+    """Las escalas que propone la IA (`column_scales`: [{field, scale, order?}]).
+    → ({columna: {scale, order?}} válidas, errores)."""
+    if not items:
+        return {}, []
+    if not isinstance(items, list):
+        return {}, ["column_scales debe ser una lista."]
+    if not caps.get("columns_scaled"):
+        return {}, ["column_scales: este widget no usa la escala de las columnas."]
+    valid, errors = {}, []
+    for i, item in enumerate(items):
+        path = f"column_scales[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{path}: debe ser un objeto {{field, scale, order?}}.")
+            continue
+        name, scale, order = item.get("field"), item.get("scale"), item.get("order") or None
+        if name not in ctx.fields:
+            errors.append(f"{path}: la columna '{name}' no existe en la hoja.")
+            continue
+        found = scale_errors(name, scale, order)
+        if not found and scale == "ordinal":
+            values = (ctx.scales.get(name) or {}).get("stats", {}).get("values")
+            if not order:
+                found = [f"'{name}': una ordinal necesita `order`, sus valores de menor a mayor"]
+            elif values:
+                known = {normalize_text(v) for v in order}
+                missing = [v for v in values if normalize_text(v) not in known and not not_applicable(v)]
+                if missing:
+                    found = [f"el orden de '{name}' no incluye: {', '.join(missing[:5])}"]
+        if found:
+            errors += [f"{path}: {e}" for e in found]
+            continue
+        valid[name] = {"scale": scale, **({"order": order} if scale == "ordinal" else {})}
+    return valid, errors
+
+
 def _same_formula(text: str, ctx: SheetContext) -> str | None:
     """El campo calculado de la fuente con la misma fórmula (mismo árbol: da igual cómo esté
     escrita), o None."""
@@ -981,6 +1043,14 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
     if new_fields:
         ctx = dataclasses.replace(ctx, aggregated_fields=ctx.aggregated_fields | set(new_fields))
 
+    # Las escalas que propone la IA para las variables: válidas contra la hoja, y desde aquí
+    # la validación de las columnas las usa en vez de las detectadas.
+    proposed, scale_errs = _column_scales_errors(data.get("column_scales"), ctx, caps)
+    errors += scale_errs
+    if proposed:
+        ctx = dataclasses.replace(ctx, scales={**ctx.scales, **{
+            name: {**ctx.scales.get(name, {}), **item} for name, item in proposed.items()}})
+
     for key in fields:
         if key not in {"dimensions", "pivots", "metrics", "columns", "filters",
                        "sort_by", "limit", "trend_by"}:
@@ -1035,6 +1105,7 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
     if "columns" in caps and not caps["columns"][0] <= len(columns) <= caps["columns"][1]:
         errors.append(f"fields.columns: {_range_label('columnas', caps['columns'])}.")
     seen_columns: list[str] = []
+    matrix_rows = 0
     for i, column in enumerate(columns):
         errors += _column_errors(column, i, ctx, seen_columns)
         # Widgets que calculan con las columnas (correlación): solo numéricas.
@@ -1042,6 +1113,25 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
         if caps.get("columns_numeric") and name in ctx.fields and not ctx.is_numeric(name):
             errors.append(f"fields.columns[{i}]: '{name}' no es numérica: este widget solo usa "
                           "columnas con números.")
+        # Widgets que miden la asociación según la escala (matriz de correlación).
+        if caps.get("columns_scaled") and name in ctx.fields:
+            if ctx.scale_of(name) == "none":
+                errors.append(f"fields.columns[{i}]: '{name}' no se puede relacionar (es un "
+                              "identificador, una fecha o texto libre).")
+            elif ctx.scale_of(name) == "ordinal" and not ctx.order_of(name):
+                errors.append(f"fields.columns[{i}]: '{name}' es ordinal y le falta el orden de "
+                              "sus valores.")
+            # Una nominal es una fila 0/1 por categoría (una sola si es Sí/No).
+            dummies = dummy_count(ctx.scales.get(name)) if ctx.scale_of(name) == "nominal" else 1
+            limit = caps.get("nominal_max_categories")
+            if limit and dummies > limit:
+                errors.append(f"fields.columns[{i}]: '{name}' tiene {dummies} categorías y la matriz "
+                              f"admite hasta {limit} por variable: usa la V de Cramér o agrúpalas "
+                              "con un campo calculado.")
+            matrix_rows += dummies
+    if caps.get("matrix_max_rows") and matrix_rows > caps["matrix_max_rows"]:
+        errors.append(f"fields.columns: la matriz tendría {matrix_rows} filas (cada categoría de una "
+                      f"nominal es una fila); el máximo es {caps['matrix_max_rows']}.")
 
     metrics = fields.get("metrics") or []
     if not isinstance(metrics, list):
@@ -1168,6 +1258,13 @@ def _normalize(args: dict) -> dict:
         ],
         "fields": {k: v for k, v in fields.items() if v is not None},
         "style": {k: v for k, v in style.items() if k not in NOT_AI_STYLE_KEYS},
+        "column_scales": [
+            {"field": str(c.get("field") or "").strip(), "scale": c.get("scale"),
+             **({"order": [str(v).strip() for v in c["order"]]}
+                if c.get("scale") == "ordinal" and isinstance(c.get("order"), list) else {})}
+            for c in (data.get("column_scales") if isinstance(data.get("column_scales"), list) else [])
+            if isinstance(c, dict)
+        ],
     }
 
 
@@ -1209,6 +1306,10 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
     data["fields"] = fields
     if "style" in data:
         data["style"] = style
+
+    for item in data.get("column_scales") or []:
+        if isinstance(item, dict) and isinstance(item.get("field"), str):
+            item["field"] = resolve(item["field"])
 
     if "calculated_fields" in data and isinstance(data["calculated_fields"], list):
         alias_map = dict(ctx.aliases)

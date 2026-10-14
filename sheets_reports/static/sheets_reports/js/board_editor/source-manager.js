@@ -236,12 +236,19 @@ function sourceManager() {
       try {
         const colComponent = this._previewTable.getColumn(colName);
         if (colComponent) {
-          try {
-            this._previewTable.scrollToColumn(colComponent, 'center', false);
-          } catch (e) {}
+          const scrollPromise = this._previewTable.scrollToColumn(colComponent, 'center', false);
+          if (scrollPromise && typeof scrollPromise.then === 'function') {
+            scrollPromise.then(() => {
+              const holder = this._previewTable && this._previewTable.rowManager && this._previewTable.rowManager.element;
+              const header = this._previewTable && this._previewTable.columnManager && this._previewTable.columnManager.headersElement;
+              if (holder && header && header.scrollLeft !== holder.scrollLeft) {
+                header.scrollLeft = holder.scrollLeft;
+              }
+            }).catch(() => {});
+          }
+
           const headerEle = colComponent.getElement();
           if (headerEle) {
-            headerEle.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
             headerEle.style.transition = 'all 0.3s ease';
             headerEle.style.backgroundColor = '#dcfce7';
             headerEle.style.boxShadow = 'inset 0 0 0 2px #4d7c0f';

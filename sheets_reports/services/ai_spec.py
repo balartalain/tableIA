@@ -539,8 +539,17 @@ def generate_with_code_execution(file_path: str, prompt: str, system_instruction
 
     texts, images, codes = [], [], []
     if response.candidates and response.candidates[0].content:
-        for part in response.candidates[0].content.parts:
+        parts = response.candidates[0].content.parts
+        last_code_idx = -1
+        for i, part in enumerate(parts):
+            if getattr(part, "executable_code", None) or getattr(part, "code_execution_result", None):
+                last_code_idx = i
+
+        for i, part in enumerate(parts):
             if getattr(part, "text", None):
+                # Omitir fragmentos de texto preliminares que ocurren antes de la ejecución de código
+                if last_code_idx != -1 and i < last_code_idx:
+                    continue
                 texts.append(part.text)
             if getattr(part, "inline_data", None) and part.inline_data.data:
                 b64 = base64.b64encode(part.inline_data.data).decode("ascii")
@@ -548,9 +557,20 @@ def generate_with_code_execution(file_path: str, prompt: str, system_instruction
             if getattr(part, "executable_code", None) and part.executable_code.code:
                 codes.append(part.executable_code.code)
 
+        if not texts and parts:
+            for part in parts:
+                if getattr(part, "text", None):
+                    texts.append(part.text)
+
     full_text = "\n\n".join(t.strip() for t in texts if t.strip()) or "No se pudo generar una respuesta."
+    # Limpiar líneas de preámbulo residuales ("Para X, ejecutaré el siguiente código...", etc.)
+    full_text = re.sub(
+        r"(?mi)^.*(?:ejecutar[ée]|cargar[ée]|proceder[ée]|escribir[ée]|utilizar[ée]|correr[ée]).*$\n*",
+        "",
+        full_text,
+    ).strip()
     return {
-        "text": full_text,
+        "text": full_text or "No se pudo generar una respuesta.",
         "images": images,
         "code": codes,
     }

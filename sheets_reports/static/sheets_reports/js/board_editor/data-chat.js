@@ -2,6 +2,7 @@
 function dataChat() {
   return {
     open: false,
+    maximized: false,
     minimized: false,
     prompt: '',
     loading: false,

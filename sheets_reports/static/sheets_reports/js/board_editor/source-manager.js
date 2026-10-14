@@ -183,6 +183,10 @@ function sourceManager() {
         field: col,
         headerHozAlign: 'left',
         hozAlign: 'left',
+        minWidth: 100,
+        maxInitialWidth: 300,
+        resizable: true,
+        tooltip: true,
       }));
 
       // La tabla pide al servidor un bloque de filas y, al llegar con el scroll al final, el
@@ -193,6 +197,7 @@ function sourceManager() {
         nestedFieldSeparator: false,
         columns,
         layout: 'fitDataStretch',
+        resizableColumnGuide: true,
         progressiveLoad: 'scroll',
         progressiveLoadScrollMargin: 300,
         sortMode: 'remote',

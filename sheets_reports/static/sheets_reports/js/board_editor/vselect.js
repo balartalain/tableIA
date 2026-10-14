@@ -90,6 +90,7 @@ document.addEventListener('alpine:init', () => {
         options: [],
         search: true,
         multiple: false,
+        alwaysShowSelectedOptionsLabel: true,
         hideClearButton: true,
         maxWidth: '100%',
         dropboxWrapper: 'body',

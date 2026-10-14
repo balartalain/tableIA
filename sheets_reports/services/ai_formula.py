@@ -53,6 +53,10 @@ Gramática:
 - IF(condición, valor si se cumple, valor si no) va fila a fila; se pueden anidar.
 - EMPTY deja la celda vacía y solo va como resultado de un IF: las sumas y promedios la
   ignoran y COUNT no la cuenta. Ej.: AVG(IF([sede] = "Norte", [nota], EMPTY)) promedia solo Norte.
+- De texto, fila a fila: CONCAT(a, b, …) une textos (una parte vacía cuenta como texto vacío);
+  LOWER, UPPER y TRIM dan vacío si la celda está vacía; CONTAINS(texto, parte) va en una
+  condición y distingue mayúsculas, igual que «=»: para ignorarlas, LOWER en el texto.
+  Ej.: IF(CONTAINS(LOWER([comentario]), "plataforma"), 1, 0).
 - Sin agregaciones la fórmula es por fila (una columna nueva, ej. una categoría o una resta).
   Con agregaciones es un cálculo entre totales: cada columna va dentro de una agregación
   (SUM([a]) / [b] no vale) y una agregación no va dentro de otra.

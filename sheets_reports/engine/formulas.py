@@ -12,8 +12,9 @@ Sintaxis: columnas por nombre (`Ventas`) o entre corchetes si tienen espacios o 
 (`[Gasto Real]`); números (`1.5`), textos entre comillas (`"Sí"`); `+ - * /`, paréntesis,
 comparaciones `= != <> > >= < <=`, `AND OR NOT`; funciones `IF(condición, sí, no)` y las
 agregaciones `SUM AVG COUNT COUNT_DISTINCT MIN MAX`. `EMPTY` deja la celda vacía y solo va
-como resultado de un IF: `IF([Recinto] = "Santiago", 1, EMPTY)`. Un parser propio: nunca se
-ejecuta código.
+como resultado de un IF: `IF([Recinto] = "Santiago", 1, EMPTY)`. De texto, fila a fila:
+`CONCAT(a, b)`, `LOWER(t)`, `UPPER(t)`, `TRIM(t)` y `CONTAINS(texto, parte)`. Un parser
+propio: nunca se ejecuta código.
 """
 from __future__ import annotations
 
@@ -34,7 +35,16 @@ AGGREGATE_FUNCTIONS = {
     "MIN": "min",
     "MAX": "max",
 }
-ROW_FUNCTIONS = {"IF"}
+# Funciones fila a fila, con cuántas partes lleva cada una.
+ROW_FUNCTIONS = {"IF": 3, "CONCAT": 2, "LOWER": 1, "UPPER": 1, "TRIM": 1, "CONTAINS": 2}
+_ROW_FUNCTION_USAGE = {
+    "IF": "IF lleva tres partes: IF(condición, valor si se cumple, valor si no).",
+    "CONCAT": "CONCAT lleva dos o más partes: CONCAT(texto, texto).",
+    "LOWER": "LOWER lleva un solo texto: LOWER([Columna]).",
+    "UPPER": "UPPER lleva un solo texto: UPPER([Columna]).",
+    "TRIM": "TRIM lleva un solo texto: TRIM([Columna]).",
+    "CONTAINS": "CONTAINS lleva dos partes: CONTAINS(texto, parte).",
+}
 FORMATS = ("number", "percent")
 MAX_FORMULA_LENGTH = 1000
 
@@ -274,8 +284,14 @@ class _Parser:
                 self.take()
                 args.append(self.or_())
         self.expect(")")
-        if name == "IF" and len(args) != 3:
-            raise FormulaError("IF lleva tres partes: IF(condición, valor si se cumple, valor si no).")
+        if name == "CONCAT" and len(args) > 2:
+            # CONCAT(a, b, c) = CONCAT(CONCAT(a, b), c): el árbol siempre lleva dos partes.
+            folded = args[0]
+            for arg in args[1:]:
+                folded = Node("func", name, (folded, arg))
+            return folded
+        if name in ROW_FUNCTIONS and len(args) != ROW_FUNCTIONS[name]:
+            raise FormulaError(_ROW_FUNCTION_USAGE[name])
         if name in AGGREGATE_FUNCTIONS and len(args) != 1:
             raise FormulaError(f"{name} lleva una sola columna o expresión: {name}([Columna]).")
         return Node("func", name, tuple(args))
@@ -460,7 +476,7 @@ def formula_text(tree: dict | None) -> str:
     if kind == "func":
         if value not in AGGREGATE_FUNCTIONS and value not in ROW_FUNCTIONS:
             raise FormulaError(f"La función {value} no existe.")
-        arity(3 if value == "IF" else 1)
+        arity(ROW_FUNCTIONS.get(value, 1))
         return f"{value}({', '.join(formula_text(a) for a in args)})"
     if kind == "bin":
         if value not in (*_COMPARISONS, *_ARITHMETIC_OPS, *_LOGIC_OPS):
@@ -480,6 +496,11 @@ def formula_text(tree: dict | None) -> str:
 # que el parser y `formula_text`, así una función nueva se agrega una sola vez.
 _FUNCTION_TITLES = {
     "IF": "SI(condición, valor si se cumple, valor si no): fila a fila",
+    "CONCAT": "Une dos textos; una parte vacía cuenta como texto vacío",
+    "LOWER": "Pasa el texto a minúsculas",
+    "UPPER": "Pasa el texto a mayúsculas",
+    "TRIM": "Quita los espacios del inicio y del final y deja uno solo entre palabras",
+    "CONTAINS": "Verdadero si el texto contiene la parte (distingue mayúsculas); va en una condición",
     "SUM": "Suma", "AVG": "Promedio", "COUNT": "Conteo (filas distintas)",
     "COUNT_DISTINCT": "Valores distintos", "MIN": "Mínimo", "MAX": "Máximo",
 }
@@ -489,6 +510,14 @@ BUILDER_CATALOG = {
          "slots": ["condición", "si se cumple", "si no"]},
         *({"name": name, "label": name, "title": _FUNCTION_TITLES.get(name, name), "slots": [""]}
           for name in AGGREGATE_FUNCTIONS),
+        # De texto: un grupo aparte en la paleta.
+        *({"name": name, "label": label, "title": _FUNCTION_TITLES[name], "slots": slots, "group": "texto"}
+          for name, label, slots in (
+              ("CONCAT", "CONCATENAR", ["texto", "texto"]),
+              ("LOWER", "MINÚSCULAS", [""]),
+              ("UPPER", "MAYÚSCULAS", [""]),
+              ("TRIM", "QUITAR ESPACIOS", [""]),
+              ("CONTAINS", "CONTIENE", ["texto", "contiene"]))),
     ],
     "empty": {"label": "Vacío", "title": "Deja la celda vacía; solo como resultado de un SI"},
     "compare": [{"op": op, "symbol": {"!=": "≠", ">=": "≥", "<=": "≤"}.get(op, op), "title": "Comparación"}
@@ -619,6 +648,46 @@ def _if(condition, yes, no, index=None):
     return yes if _truthy(condition) else no
 
 
+def _missing(value) -> bool:
+    return value is None or (not isinstance(value, str) and pd.isna(value))
+
+
+def _plain(value) -> str:
+    """Un valor como texto, tal cual (sin recortar espacios): 5.0 → «5»."""
+    if isinstance(value, (float, np.floating)) and float(value).is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _concat(left, right):
+    if _missing(left) and _missing(right):
+        return np.nan
+    return ("" if _missing(left) else _plain(left)) + ("" if _missing(right) else _plain(right))
+
+
+def _on_text(change: Callable) -> Callable:
+    return lambda value: np.nan if _missing(value) else change(_plain(value))
+
+
+_TEXT_FUNCTIONS: dict[str, Callable] = {
+    "CONCAT": _concat,
+    "LOWER": _on_text(str.lower),
+    "UPPER": _on_text(str.upper),
+    "TRIM": _on_text(lambda text: " ".join(text.split())),
+    "CONTAINS": lambda text, part: not _missing(text) and not _missing(part) and _plain(part) in _plain(text),
+}
+
+
+def _text_function(name: str, values: list):
+    """Una función de texto sobre valores sueltos o, celda a celda, sobre columnas."""
+    func = _TEXT_FUNCTIONS[name]
+    series = next((v for v in values if isinstance(v, pd.Series)), None)
+    if series is None:
+        return func(*values)
+    columns = [v.reindex(series.index) if isinstance(v, pd.Series) else [v] * len(series) for v in values]
+    return pd.Series([func(*cells) for cells in zip(*columns)], index=series.index, dtype=object).infer_objects()
+
+
 def _broadcast(value, like: pd.Series):
     return value.reindex(like.index) if isinstance(value, pd.Series) else value
 
@@ -640,6 +709,8 @@ def _eval_row(node: Node, df: pd.DataFrame):
         return _binary(node.value, _eval_row(node.args[0], df), _eval_row(node.args[1], df))
     if node.value == "IF":
         return _if(*(_eval_row(a, df) for a in node.args), index=df.index)
+    if node.value in _TEXT_FUNCTIONS:
+        return _text_function(node.value, [_eval_row(a, df) for a in node.args])
     raise FormulaError(f"{node.value} es una agregación: no va en un campo por fila.")
 
 
@@ -670,6 +741,8 @@ def _eval_aggregate(node: Node, rows: pd.DataFrame):
         return _binary(node.value, _eval_aggregate(node.args[0], rows), _eval_aggregate(node.args[1], rows))
     if node.value == "IF":
         return _if(*(_eval_aggregate(a, rows) for a in node.args))
+    if node.value in _TEXT_FUNCTIONS:
+        return _text_function(node.value, [_eval_aggregate(a, rows) for a in node.args])
     raise FormulaError("Fórmula agregada inválida.")
 
 

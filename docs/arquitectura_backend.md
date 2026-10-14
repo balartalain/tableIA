@@ -851,6 +851,20 @@ filas. Se evalúa como NaN, igual que una celda en blanco de la hoja: las sumas 
 ignoran y el conteo no la cuenta. Solo se admite como resultado de un `IF` (`_check_empty`):
 en una comparación o una cuenta se rechaza, para que `[x] = EMPTY` no parezca preguntar si
 la columna está vacía. Una columna que se llame «Empty» sigue siendo una columna.
+
+Funciones de texto, fila a fila (`ROW_FUNCTIONS` da cuántas partes lleva cada una;
+`_text_function` las evalúa celda a celda) y utilizables dentro de una agregación:
+
+| Función | Qué hace |
+|---|---|
+| `CONCAT(a, b)` | Une dos textos. `CONCAT(a, b, c)` se pliega en `CONCAT(CONCAT(a, b), c)`: el árbol siempre lleva dos partes. Una parte vacía cuenta como texto vacío; con todas vacías, la celda queda vacía. |
+| `LOWER(t)` / `UPPER(t)` | Minúsculas / mayúsculas. Vacío si la celda está vacía. |
+| `TRIM(t)` | Quita los espacios del inicio y del final y deja uno solo entre palabras. |
+| `CONTAINS(texto, parte)` | Verdadero si `texto` contiene `parte`; falso si la celda está vacía. Distingue mayúsculas y acentos, como `=`: para ignorarlas, `CONTAINS(LOWER([x]), "santiago")`. |
+
+Un número entra como se ve en la hoja (`5`, no `5.0`). En el constructor de bloques se llaman
+CONCATENAR, MINÚSCULAS, MAYÚSCULAS, QUITAR ESPACIOS y CONTIENE (`BUILDER_CATALOG`, con
+`group: "texto"`).
 El constructor de bloques del editor trabaja con árboles; la gramática está solo aquí:
 - `formula_tree(texto)`: el árbol tal como está escrito (`{kind, value, args}`, sin resolver
   columnas; `None` si no se entiende). Las fuentes lo entregan en `calculated_fields[].tree`.

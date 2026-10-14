@@ -390,7 +390,9 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Columnas</h4>
                 <input type="search" x-model="columnQuery" placeholder="Buscar columna" aria-label="Buscar columna"
                        class="w-full text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
-                <div class="flex flex-wrap gap-1">
+                <!-- Con su propio scroll: una hoja con muchas columnas no empuja fuera de la vista a
+                     las secciones de abajo. -->
+                <div class="flex flex-wrap gap-1 max-h-28 overflow-y-auto pr-1">
                   <template x-for="col in filteredBuilderColumns" :key="col">
                     <button type="button" x-bind:data-fb-piece="JSON.stringify(columnPiece(col))" x-on:click="clickPiece(columnPiece(col))"
                             x-bind:title="col"
@@ -428,6 +430,19 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 </div>
               </section>
 
+              <!-- Operadores: soltados sobre un bloque, lo envuelven ([ventas] → [ventas] + [ ]). -->
+              <section class="space-y-1.5">
+                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Operadores</h4>
+                <div class="flex flex-wrap gap-1">
+                  <template x-for="p in OPERATOR_PIECES" :key="p.label">
+                    <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                            x-bind:aria-label="p.title"
+                            class="w-8 h-7 rounded-lg border border-line bg-white text-sm font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
+                            x-text="p.label"></button>
+                  </template>
+                </div>
+              </section>
+
               <section class="space-y-1.5">
                 <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Condición</h4>
                 <div class="flex flex-wrap gap-1">
@@ -439,17 +454,19 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 </div>
               </section>
 
-              <section class="space-y-1.5">
-                <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Funciones</h4>
-                <div class="flex flex-wrap gap-1">
-                  <template x-for="p in FUNCTION_PIECES" :key="p.label">
-                    <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
-                            x-bind:class="p.label === 'SI' ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-sky-200 bg-sky-50 text-sky-700'"
-                            class="rounded-lg border px-2 py-1 font-mono font-semibold cursor-grab"
-                            x-text="p.label"></button>
-                  </template>
-                </div>
-              </section>
+              <template x-for="g in FUNCTION_GROUPS" :key="g.title">
+                <section class="space-y-1.5">
+                  <h4 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50" x-text="g.title"></h4>
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="p in g.pieces" :key="p.label">
+                      <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                              x-bind:class="p.tall ? 'border-violet-200 bg-violet-50 text-violet-700' : 'border-sky-200 bg-sky-50 text-sky-700'"
+                              class="rounded-lg border px-2 py-1 font-mono font-semibold cursor-grab"
+                              x-text="p.label"></button>
+                    </template>
+                  </div>
+                </section>
+              </template>
             </aside>
 
             <div class="sm:min-h-0 flex flex-col gap-2">
@@ -479,16 +496,6 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                   <button type="button" x-on:click.stop="_setTree(f, null)" class="font-medium underline cursor-pointer">Empezar de nuevo</button>
                 </div>
                 <div x-effect="renderCanvas($el)"></div>
-              </div>
-              <!-- Operadores: soltados sobre un bloque, lo envuelven ([ventas] → [ventas] + [ ]). -->
-              <div class="flex flex-wrap items-center gap-1.5">
-                <span class="text-[11px] font-semibold uppercase tracking-wider text-ink/50 mr-1">Operadores</span>
-                <template x-for="p in OPERATOR_PIECES" :key="p.label">
-                  <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
-                          x-bind:aria-label="p.title"
-                          class="w-8 h-8 rounded-lg border border-line bg-white text-sm font-semibold text-ink/70 hover:border-moss-500 cursor-grab"
-                          x-text="p.label"></button>
-                </template>
               </div>
               <p x-show="isIncomplete(f)" class="text-xs text-ink/50">Completa los huecos para ver el resultado.</p>
               <p x-show="f._checking" class="text-xs text-ink/40">

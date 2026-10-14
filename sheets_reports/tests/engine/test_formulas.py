@@ -150,7 +150,7 @@ class FormulaLanguageTests(SimpleTestCase):
         self.assertRaisesRegex(FormulaError, "huecos", formula_text, None)
 
     def test_el_catalogo_trae_todas_las_funciones(self):
-        self.assertEqual({f["name"] for f in BUILDER_CATALOG["functions"]}, set(AGGREGATE_FUNCTIONS) | ROW_FUNCTIONS)
+        self.assertEqual({f["name"] for f in BUILDER_CATALOG["functions"]}, set(AGGREGATE_FUNCTIONS) | set(ROW_FUNCTIONS))
         self.assertEqual(next(f for f in BUILDER_CATALOG["functions"] if f["name"] == "IF")["slots"],
                          ["condición", "si se cumple", "si no"])
         self.assertEqual({o["op"] for o in BUILDER_CATALOG["arithmetic"]}, {"+", "-", "*", "/"})
@@ -194,6 +194,65 @@ class FormulaLanguageTests(SimpleTestCase):
         df = budget_df().rename(columns={"Campus": "Empty"})
         self.assertEqual(compile_formula("[Empty]", df.columns).columns, ("Empty",))
         self.assertEqual(compile_formula('IF(Empty = "Nagua", 1, 0)', df.columns).evaluate_rows(df).sum(), 2)
+
+    def text_df(self) -> pd.DataFrame:
+        return pd.DataFrame({
+            "ID": range(1, 6),
+            "Sede": ["Santiago", " santiago ", "NAGUA", None, "Santo  Domingo"],
+            "Aula": [5.0, 12.0, None, None, 7.5],
+            "Nota": ["ok", None, "Sin  acceso", None, "ok"],
+        })
+
+    def rows(self, text: str) -> list:
+        df = self.text_df()
+        return [None if pd.isna(v) else v for v in compile_formula(text, df.columns).evaluate_rows(df)]
+
+    def test_minusculas_mayusculas_y_quitar_espacios(self):
+        self.assertEqual(self.rows("LOWER(Sede)"), ["santiago", " santiago ", "nagua", None, "santo  domingo"])
+        self.assertEqual(self.rows("upper(Sede)"), ["SANTIAGO", " SANTIAGO ", "NAGUA", None, "SANTO  DOMINGO"])
+        self.assertEqual(self.rows("TRIM(Sede)"), ["Santiago", "santiago", "NAGUA", None, "Santo Domingo"])
+        self.assertEqual(self.rows("TRIM(LOWER(Sede))")[:2], ["santiago", "santiago"])
+        # Un número entra como se ve en la hoja.
+        self.assertEqual(self.rows("LOWER(Aula)"), ["5", "12", None, None, "7.5"])
+
+    def test_concatenar(self):
+        self.assertEqual(self.rows('CONCAT(Sede, CONCAT(" - ", Aula))'),
+                         ["Santiago - 5", " santiago  - 12", "NAGUA - ", " - ", "Santo  Domingo - 7.5"])
+        # Una parte vacía cuenta como texto vacío; con las dos vacías, la celda queda vacía.
+        self.assertEqual(self.rows("CONCAT(Sede, Nota)"),
+                         ["Santiagook", " santiago ", "NAGUASin  acceso", None, "Santo  Domingook"])
+        # Con más de dos partes se pliega en anidados, y el texto vuelve al mismo árbol.
+        tree = formula_tree('CONCAT(Sede, " ", Aula)')
+        self.assertEqual((tree["value"], len(tree["args"]), tree["args"][0]["value"]), ("CONCAT", 2, "CONCAT"))
+        self.assertEqual(formula_text(tree), 'CONCAT(CONCAT([Sede], " "), [Aula])')
+        self.assertEqual(formula_tree(formula_text(tree)), tree)
+        self.assertEqual(self.rows('CONCAT(Sede, " ", Aula)')[0], "Santiago 5")
+
+    def test_contiene_va_en_una_condicion(self):
+        self.assertEqual(self.rows('IF(CONTAINS(Sede, "antiago"), 1, 0)'), [1, 1, 0, 0, 0])
+        self.assertEqual(self.rows('IF(CONTAINS(LOWER(Sede), "santo"), "SD", EMPTY)'), [None, None, None, None, "SD"])
+        # Distingue mayúsculas, como «=»; con LOWER deja de hacerlo.
+        self.assertEqual(self.rows('IF(CONTAINS(Sede, "nagua"), 1, 0)'), [0, 0, 0, 0, 0])
+        self.assertEqual(self.rows('IF(TRIM(LOWER(Sede)) = "santiago", 1, 0)'), [1, 1, 0, 0, 0])
+
+    def test_funciones_de_texto_dentro_de_una_agregacion(self):
+        df = self.text_df()
+        self.assertEqual(compile_formula("COUNT_DISTINCT(Sede)", df.columns).aggregate(df), 4.0)
+        distinct = compile_formula("COUNT_DISTINCT(TRIM(LOWER(Sede)))", df.columns)
+        self.assertTrue(distinct.aggregated)
+        self.assertEqual(distinct.aggregate(df), 3.0)
+        self.assertEqual(compile_formula('SUM(IF(CONTAINS(LOWER(Sede), "santiago"), 1, 0))', df.columns).aggregate(df), 2.0)
+
+    def test_cuantas_partes_lleva_cada_funcion_de_texto(self):
+        df = self.text_df()
+        for text, message in (("CONCAT(Sede)", "CONCAT lleva dos o más partes"), ("LOWER(Sede, Nota)", "LOWER lleva un solo texto"),
+                              ("UPPER()", "UPPER lleva un solo texto"), ("TRIM(Sede, 1)", "TRIM lleva un solo texto"),
+                              ("CONTAINS(Sede)", "CONTAINS lleva dos partes")):
+            with self.assertRaisesRegex(FormulaError, message, msg=text):
+                compile_formula(text, df.columns)
+        labels = {f["name"]: (f["label"], f.get("group")) for f in BUILDER_CATALOG["functions"]}
+        self.assertEqual(labels["TRIM"], ("QUITAR ESPACIOS", "texto"))
+        self.assertEqual(labels["IF"], ("SI", None))
 
     def test_division_entre_cero_queda_vacia(self):
         df = budget_df()

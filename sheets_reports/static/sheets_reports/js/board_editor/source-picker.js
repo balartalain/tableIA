@@ -131,8 +131,13 @@ function sourcePicker({ mode = 'create' } = {}) {
         label: op === 'NOT' ? `${symbol} [ ]` : `[ ] ${symbol} [ ]`, title, piece: FormulaBlocks.pieces.operator(op),
       })),
     ],
-    FUNCTION_PIECES: FormulaBlocks.catalog.functions.map(({ name, label, title }) =>
-      ({ label, title, piece: FormulaBlocks.pieces.func(name) })),
+    // Las funciones del catálogo en sus grupos de la paleta: SI y las agregaciones, y las de texto.
+    // `tall`: las de varios huecos, que se dibujan como bloque vertical (el color de SI).
+    FUNCTION_GROUPS: [['Funciones', undefined], ['Texto', 'texto']].map(([title, group]) => ({
+      title,
+      pieces: FormulaBlocks.catalog.functions.filter(f => f.group === group).map(({ name, label, title, slots }) =>
+        ({ label, title, tall: slots.length > 1, piece: FormulaBlocks.pieces.func(name) })),
+    })),
     OPERATOR_PIECES: FormulaBlocks.catalog.arithmetic.map(({ op, symbol, title }) =>
       ({ label: symbol, title, piece: FormulaBlocks.pieces.operator(op) })),
     // Nombre a mostrar de cada columna la última vez que se miraron las fórmulas (para renombrar).

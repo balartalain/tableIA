@@ -439,12 +439,16 @@ solo en el servidor: el JS no escribe ni lee texto de fórmulas. Las piezas (fun
 huecos y rótulos, operadores con su símbolo y título) vienen de `BUILDER_CATALOG`
 (`engine/formulas.py`), publicado en la página como `#formula-catalog` (`FormulaBlocks.catalog`).
 
-- **Panel izquierdo** (`aside[data-fb-trash]`): *Columnas* (`builderColumns`: las incluidas con
-  su nombre a mostrar y los campos por fila anteriores, con buscador) y su subpanel *Valores*
-  (Número/Texto → `valuePiece`, y la ficha «Vacío» → `EMPTY_PIECE`, que deja la celda en
-  blanco y solo vale como resultado de un SI: el servidor rechaza cualquier otro lugar con
-  su mensaje); *Condición* (comparación, Y, O, NO); *Funciones* (SI y las
-  agregaciones). Bajo el canvas, la barra de operadores `+ − × ÷`.
+- **Panel izquierdo** (`aside[data-fb-trash]`), con todas las piezas, de arriba abajo:
+  *Columnas* (`builderColumns`: las incluidas con su nombre a mostrar y los campos por fila
+  anteriores, con buscador; la lista tiene su propio scroll y poca altura para que una hoja
+  con muchas columnas no empuje fuera de la vista a las secciones de abajo); su subpanel
+  *Valores* (Número/Texto → `valuePiece`, y la ficha «Vacío» → `EMPTY_PIECE`, que deja la
+  celda en blanco y solo vale como resultado de un SI: el servidor rechaza cualquier otro
+  lugar con su mensaje); *Operadores* (`+ − × ÷`); *Condición* (comparación, Y, O, NO);
+  *Funciones* (SI y las agregaciones) y *Texto* (CONCATENAR, MINÚSCULAS, MAYÚSCULAS, QUITAR
+  ESPACIOS, CONTIENE). Los dos últimos grupos salen del catálogo (`FUNCTION_GROUPS`, por el
+  campo `group` de cada función). El panel tiene scroll propio.
 - **Canvas**: `FormulaBlocks.render` dibuja el árbol (Alpine no tiene templates recursivos)
   desde un `x-effect`. SI es un bloque vertical con tres huecos rotulados; las agregaciones,
   `SUM( [ ] )`; comparaciones, aritmética y Y/O, `[ ] op [ ]` con el operador en un `select`

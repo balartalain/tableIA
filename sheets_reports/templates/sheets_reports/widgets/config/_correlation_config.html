@@ -2,7 +2,7 @@
    numéricas, ordinales o nominales) con su escala, que se guarda en la fuente, el método,
    cómo se lee la escala y la condición; en «Personalizar», cómo se ve. #}
 {% with B="sheets_reports/widgets/config/blocks/" %}
-<div>
+<div x-data="{ correlationHelp: false }">
   <div x-show="$store.dashboard.drawerTab === 'data'" class="space-y-5">
     {% include B|add:"_source.html" %}
     {% include B|add:"_title.html" %}
@@ -180,5 +180,7 @@
     {% include B|add:"_style_checkbox.html" with key="showValues" label="Mostrar valores" %}
     {% include B|add:"_style_checkbox.html" with key="lowerOnly" label="Solo la mitad inferior" %}
   </div>
+
+  {% include B|add:"_help_modal.html" with flag="correlationHelp" title="Matriz de correlación" icon="ti-grid-dots" body="sheets_reports/widgets/config/blocks/_correlation_help.html" %}
 </div>
 {% endwith %}

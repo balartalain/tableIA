@@ -1,8 +1,15 @@
 <!-- Columnas (tabla simple): las columnas visibles, en el orden en que se muestran -->
 <div class="space-y-2">
   <div class="flex items-center justify-between">
-    <label class="block text-xs font-semibold text-ink/70"
-           x-text="$store.dashboard.columnsLabel"></label>
+    <div class="flex items-center gap-1">
+      <label class="block text-xs font-semibold text-ink/70"
+             x-text="$store.dashboard.columnsLabel"></label>
+      <button type="button" x-show="$store.dashboard.drawerCapabilities.columns_scaled"
+              x-on:click="correlationHelp = true" aria-label="Ayuda de la matriz de correlación" title="¿Cómo funciona la matriz de correlación?"
+              class="p-0.5 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+        <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
+      </button>
+    </div>
     <button type="button" x-on:click="$store.dashboard.addColumn()"
             x-bind:disabled="$store.dashboard.drawerDraft.fields.columns.length >= $store.dashboard.maxColumns"
             class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">

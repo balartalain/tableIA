@@ -117,6 +117,21 @@ class ScalesTests(SimpleTestCase):
         self.assertEqual([v["label"] for v in filtered["variables"]], ["Becado: Sí", "Nota"])
         self.assertEqual(filtered["n"][0][1], 4)
 
+    def test_ignorar_respuestas_no_evaluables_es_insensible_a_mayusculas(self):
+        df = pd.DataFrame({
+            "satisfaccion": ["Insatisfecho", "Satisfecho", "no aplica", " NO APLICA ", "Satisfecho"],
+            "monto": [10.0, 20.0, 30.0, 40.0, 50.0],
+            "facil": ["Bajo", "Alto", "Alto", "no tengo vehículo", "Alto"],
+        })
+        style = {
+            "ignoreNonApplicable": True,
+            "ignoredValues": "No Aplica, NO TENGO VEHÍCULO",
+        }
+        out = correlation(df, ("satisfaccion", "monto", "facil"), style=style)
+        self.assertEqual(out["variables"][0]["scale"], "ordinal")
+        self.assertEqual(out["n"][0][1], 3)
+        self.assertEqual(out["n"][1][2], 4)
+
     def test_no_aplica_fuera_de_un_orden_guardado_se_informa(self):
         df = pd.DataFrame({"nivel": ["Bajo", "Medio", "Alto", "No aplica"],
                            "monto": [1.5, 2.5, 3.5, 9.5]})

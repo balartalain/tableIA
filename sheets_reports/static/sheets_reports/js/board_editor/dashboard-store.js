@@ -164,7 +164,7 @@ document.addEventListener('alpine:init', () => {
     // panel de un widget. `schema` es siempre el de la fuente del widget que se edita.
     sources: [],
     schemas: {},
-    schema: { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], sample_values: {} },
+    schema: { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], calculated_fields: [], aggregated_fields: [], sample_values: {} },
     widgetManifest: window.WIDGET_MANIFEST || {},
     schemaError: '',
     _nextId: -1,
@@ -172,7 +172,7 @@ document.addEventListener('alpine:init', () => {
 
     // Schema de una fuente (cacheado por id). Lo deja en `schema` para el panel.
     async loadSchema(sourceId) {
-      const empty = { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], aggregated_fields: [], sample_values: {} };
+      const empty = { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], calculated_fields: [], aggregated_fields: [], sample_values: {} };
       if (!sourceId) {
         this.schema = empty;
         this.schemaError = 'Elige la fuente de datos del widget.';
@@ -905,6 +905,18 @@ document.addEventListener('alpine:init', () => {
       return this._dimensionColumns().filter(c => list[idx] === c || !list.includes(c));
     },
 
+    dimensionSheetOptions(idx) {
+      const available = this.dimensionOptions(idx);
+      const calc = new Set(this.calculatedFieldNames);
+      return available.filter(c => !calc.has(c));
+    },
+
+    dimensionCalculatedOptions(idx) {
+      const available = this.dimensionOptions(idx);
+      const calc = new Set(this.calculatedFieldNames);
+      return available.filter(c => calc.has(c));
+    },
+
     pivotOptions(idx) {
       const list = this.drawerDraft.fields.pivots;
       return (this.schema.all_fields || []).filter(c => list[idx] === c || !list.includes(c));
@@ -935,6 +947,18 @@ document.addEventListener('alpine:init', () => {
       const list = this.drawerDraft.fields.columns;
       const current = (list[idx] || {}).field;
       return this.columnFields.filter(c => c === current || !list.some(x => x.field === c));
+    },
+
+    columnSheetOptions(idx) {
+      const available = this.columnOptions(idx);
+      const calc = new Set(this.calculatedFieldNames);
+      return available.filter(c => !calc.has(c));
+    },
+
+    columnCalculatedOptions(idx) {
+      const available = this.columnOptions(idx);
+      const calc = new Set(this.calculatedFieldNames);
+      return available.filter(c => calc.has(c));
     },
 
     addColumn() {
@@ -1202,6 +1226,21 @@ document.addEventListener('alpine:init', () => {
     // Campos calculados agregados de la fuente (`schema.aggregated_fields`): solo métricas.
     get aggregatedFields() { return (this.schema.aggregated_fields || []).map(f => f.name); },
     isAggregatedField(name) { return !!name && this.aggregatedFields.includes(name); },
+
+    // Todos los nombres de campos calculados (por fila y agregados) de la fuente
+    get calculatedFieldNames() {
+      const fromSource = this.schema.calculated_fields || [];
+      const agg = this.aggregatedFields;
+      return Array.from(new Set([...fromSource, ...agg]));
+    },
+    isCalculatedField(name) { return !!name && this.calculatedFieldNames.includes(name); },
+
+    // Columnas de la hoja (excluyendo los campos calculados por fila que están en all_fields)
+    get sheetColumns() {
+      const all = this.schema.all_fields || [];
+      const calc = new Set(this.calculatedFieldNames);
+      return all.filter(f => !calc.has(f));
+    },
     // Agregaciones del select de una métrica: con un campo agregado, solo «Automática».
     metricAggOptions(metric) {
       if (metric && metric.agg === 'auto') return [{ value: 'auto', label: 'Automática' }];

@@ -27,14 +27,28 @@
           <div class="space-y-1.5">
             <select x-vselect x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
                     class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
-              <option value="" x-show="metric.agg === 'count' || !metric.field" x-text="metric.agg === 'count' ? 'Todas las filas' : '— elegir —'"></option>
-              <template x-for="col in $store.dashboard.schema.all_fields || []" :key="col">
-                <option x-bind:value="col" x-text="col" x-bind:selected="metric.field === col"></option>
+              <template x-if="metric.agg === 'count'">
+                <option value="">Todas las filas</option>
               </template>
-              <!-- Campos calculados agregados de la fuente: traen su agregación («Automática»). -->
-              <template x-if="$store.dashboard.aggregatedFields.length">
-                <optgroup label="Campos calculados agregados">
-                  <template x-for="name in $store.dashboard.aggregatedFields" :key="name">
+              <template x-if="metric.agg !== 'count' && !metric.field">
+                <option value="">— elegir —</option>
+              </template>
+              <template x-if="$store.dashboard.calculatedFieldNames.length">
+                <optgroup label="Columnas">
+                  <template x-for="col in $store.dashboard.sheetColumns" :key="col">
+                    <option x-bind:value="col" x-text="col" x-bind:selected="metric.field === col"></option>
+                  </template>
+                </optgroup>
+              </template>
+              <template x-if="!$store.dashboard.calculatedFieldNames.length">
+                <template x-for="col in $store.dashboard.sheetColumns" :key="col">
+                  <option x-bind:value="col" x-text="col" x-bind:selected="metric.field === col"></option>
+                </template>
+              </template>
+              <!-- Campos calculados (por fila y agregados) de la fuente -->
+              <template x-if="$store.dashboard.calculatedFieldNames.length">
+                <optgroup label="Campos calculados">
+                  <template x-for="name in $store.dashboard.calculatedFieldNames" :key="name">
                     <option x-bind:value="name" x-text="name" x-bind:selected="metric.field === name"></option>
                   </template>
                 </optgroup>

@@ -28,8 +28,25 @@
                   aria-label="Dimensión"
                   class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
             <option value="" x-show="!col" x-text="'— elegir —'"></option>
-            <template x-for="c in $store.dashboard.dimensionOptions(idx)" :key="c">
-              <option x-bind:value="c" x-text="c"></option>
+            <template x-if="$store.dashboard.dimensionCalculatedOptions(idx).length">
+              <optgroup label="Columnas">
+                <template x-for="c in $store.dashboard.dimensionSheetOptions(idx)" :key="c">
+                  <option x-bind:value="c" x-text="c"></option>
+                </template>
+              </optgroup>
+            </template>
+            <template x-if="!$store.dashboard.dimensionCalculatedOptions(idx).length">
+              <template x-for="c in $store.dashboard.dimensionSheetOptions(idx)" :key="c">
+                <option x-bind:value="c" x-text="c"></option>
+              </template>
+            </template>
+            <!-- Campos calculados disponibles -->
+            <template x-if="$store.dashboard.dimensionCalculatedOptions(idx).length">
+              <optgroup label="Campos calculados">
+                <template x-for="c in $store.dashboard.dimensionCalculatedOptions(idx)" :key="c">
+                  <option x-bind:value="c" x-text="c"></option>
+                </template>
+              </optgroup>
             </template>
           </select>
           <!-- La última dimensión obligatoria (barras, tabla dinámica…) no se puede quitar. -->

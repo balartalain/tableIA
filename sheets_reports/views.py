@@ -912,7 +912,11 @@ def source_schema(request, source_id):
               "time_fields": time_fields(frame),
               # Solo métricas, con agregación «auto»: no son columnas de la hoja.
               "aggregated_fields": [{"name": f.name, "format": f.format}
-                                    for f in aggregated_fields(df).values()]}
+                                    for f in aggregated_fields(df).values()],
+              # Todos los nombres de campos calculados (por fila y agregados) de la fuente.
+              "calculated_fields": [str(f.get("name") or "").strip()
+                                    for f in (source.calculated_fields or [])
+                                    if str(f.get("name") or "").strip()]}
     ctx = SheetContext.from_dataframe(df, source.gid)
     return JsonResponse({
         **schema, "sample_values": get_field_samples(frame),

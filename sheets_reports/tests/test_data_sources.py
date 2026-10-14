@@ -345,6 +345,7 @@ class CalculatedFieldsTests(TestCase):
         schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
         self.assertIn("Doble", schema["all_fields"])                   # por fila: una columna más
         self.assertEqual(schema["aggregated_fields"], [{"name": "Participación", "format": "percent"}])
+        self.assertEqual(schema["calculated_fields"], ["Doble", "Participación"])
         Widget.objects.create(dashboard=self.dashboard, source=self.source, type="bar", fields=fields(
             metrics=[{"field": "Participación", "agg": "auto", "alias": "p"}]), style={})
         data = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/").json()["widgets"][0]

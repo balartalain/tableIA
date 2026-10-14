@@ -29,7 +29,10 @@ document.addEventListener('alpine:init', () => {
     const option = (o) => ({ label: o.textContent.trim(), value: toVs(o.value) });
     // Las opciones del select, con sus <optgroup> como grupos.
     const readOptions = () => Array.from(el.children).flatMap(child => {
-      if (child.tagName === 'OPTGROUP') return [{ label: child.label, options: Array.from(child.children).map(option) }];
+      if (child.tagName === 'OPTGROUP') {
+        const opts = Array.from(child.children).filter(c => c.tagName === 'OPTION').map(option);
+        return opts.length ? [{ label: child.label, options: opts }] : [];
+      }
       return child.tagName === 'OPTION' ? [option(child)] : [];
     });
 

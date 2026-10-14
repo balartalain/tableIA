@@ -20,8 +20,25 @@
                   aria-label="Columna"
                   class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
             <option value="" x-show="!col.field" x-text="'— elegir —'"></option>
-            <template x-for="c in $store.dashboard.columnOptions(idx)" :key="c">
-              <option x-bind:value="c" x-text="c"></option>
+            <template x-if="$store.dashboard.columnCalculatedOptions(idx).length">
+              <optgroup label="Columnas">
+                <template x-for="c in $store.dashboard.columnSheetOptions(idx)" :key="c">
+                  <option x-bind:value="c" x-text="c"></option>
+                </template>
+              </optgroup>
+            </template>
+            <template x-if="!$store.dashboard.columnCalculatedOptions(idx).length">
+              <template x-for="c in $store.dashboard.columnSheetOptions(idx)" :key="c">
+                <option x-bind:value="c" x-text="c"></option>
+              </template>
+            </template>
+            <!-- Campos calculados disponibles -->
+            <template x-if="$store.dashboard.columnCalculatedOptions(idx).length">
+              <optgroup label="Campos calculados">
+                <template x-for="c in $store.dashboard.columnCalculatedOptions(idx)" :key="c">
+                  <option x-bind:value="c" x-text="c"></option>
+                </template>
+              </optgroup>
             </template>
           </select>
           <!-- Escala de la variable (matriz de correlación): abre su editor. -->

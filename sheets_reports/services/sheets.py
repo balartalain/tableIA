@@ -346,7 +346,8 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
     Sin configuración devuelve la hoja tal cual. Las columnas que ya no existen en la hoja se
     ignoran; las nuevas se incluyen tal cual vienen. El formato de las numéricas (moneda, %)
     queda en `df.attrs["column_formats"]` ({nombre a mostrar: formato}) para el motor. Los alias
-    quedan en `df.attrs["column_aliases"]` ({nombre a mostrar: alias}) para la IA."""
+    quedan en `df.attrs["column_aliases"]` ({nombre a mostrar: alias}) para la IA, y la escala de
+    medida guardada en `df.attrs["column_scales"]` ({nombre a mostrar: {scale, order?}})."""
     if not columns:
         df.attrs.setdefault("column_aliases", {col: f"col_{i + 1}" for i, col in enumerate(df.columns)})
         return df
@@ -371,6 +372,12 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
         column_display_name(c): c["format"] for c in columns
         if c.get("include", True) and c.get("type") == "number" and c.get("format") in COLUMN_FORMATS
         and column_display_name(c) in df.columns
+    }
+    # Escala de medida confirmada por el usuario o la IA (la detectada no se guarda).
+    df.attrs["column_scales"] = {
+        column_display_name(c): {"scale": c["scale"], **({"order": c["order"]} if c.get("order") else {})}
+        for c in columns
+        if c.get("include", True) and c.get("scale") and column_display_name(c) in df.columns
     }
     column_aliases = {}
     for i, c in enumerate(columns):

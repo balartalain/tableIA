@@ -24,6 +24,17 @@
               <option x-bind:value="c" x-text="c"></option>
             </template>
           </select>
+          <!-- Escala de la variable (matriz de correlación): abre su editor. -->
+          <button type="button" x-show="$store.dashboard.drawerCapabilities.columns_scaled && col.field"
+                  x-on:click="$store.dashboard.openScaleEditor(col.field)"
+                  x-bind:title="$store.dashboard.columnProfile(col.field) && $store.dashboard.columnProfile(col.field).uncertain
+                    ? 'Escala detectada: puede que sus valores tengan un orden. Revísala.' : 'Cambiar la escala de la variable'"
+                  class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded border cursor-pointer"
+                  x-bind:class="$store.dashboard.columnProfile(col.field) && $store.dashboard.columnProfile(col.field).uncertain
+                    ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-line bg-white text-ink/60 hover:text-ink'">
+            <span x-text="$store.dashboard.scaleLabel($store.dashboard.columnScale(col.field))"></span><span
+                  x-show="$store.dashboard.columnProfile(col.field) && $store.dashboard.columnProfile(col.field).uncertain"> ?</span>
+          </button>
           <button type="button" x-on:click="$store.dashboard.removeColumn(idx)"
                   class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
                   title="Quitar columna" aria-label="Quitar columna">×</button>

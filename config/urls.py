@@ -44,6 +44,8 @@ urlpatterns = [
     path('api/sources/<int:source_id>/rows/', views.source_rows, name='source_rows'),
     path('api/sources/<int:source_id>/formula/', views.source_formula, name='source_formula'),
     path('api/sources/<int:source_id>/formula/ai/', views.source_formula_ai, name='source_formula_ai'),
+    path('api/sources/<int:source_id>/scales/', views.source_scales, name='source_scales'),
+    path('api/sources/<int:source_id>/scales/ai/', views.source_scales_ai, name='source_scales_ai'),
     path('api/sources/<int:source_id>/calculated-fields/', views.source_add_calculated,
          name='source_add_calculated'),
     path('api/widget/<int:widget_id>/', views.widget_detail, name='widget_detail'),

@@ -287,9 +287,12 @@ def _ranking(data, fields) -> list[str]:
 
 def _correlation(data, fields) -> list[str]:
     problems = []
-    matrix, size = data["matrix"], len(fields["columns"])
+    # Una fila por variable, o una por categoría (dummy) en una nominal.
+    matrix, size = data["matrix"], len(data["variables"])
     if len(matrix) != size or any(len(row) != size for row in matrix):
         return [f"la matriz no es de {size}×{size}"]
+    if {v["field"] for v in data["variables"]} != {c["field"] for c in fields["columns"]}:
+        problems.append("las filas no son las variables elegidas")
     for i in range(size):
         if matrix[i][i] not in (1.0, None):
             problems.append(f"la diagonal {i} vale {matrix[i][i]}")
@@ -327,9 +330,12 @@ def _scatter(data, fields) -> list[str]:
 
 def _cramer(data, fields) -> list[str]:
     problems = []
-    matrix, size = data["matrix"], len(fields["columns"])
+    # Una fila por variable, o una por categoría (dummy) en una nominal.
+    matrix, size = data["matrix"], len(data["variables"])
     if len(matrix) != size or any(len(row) != size for row in matrix):
         return [f"la matriz no es de {size}×{size}"]
+    if {v["field"] for v in data["variables"]} != {c["field"] for c in fields["columns"]}:
+        problems.append("las filas no son las variables elegidas")
     for i in range(size):
         if matrix[i][i] not in (1.0, None):
             problems.append(f"la diagonal {i} vale {matrix[i][i]}")

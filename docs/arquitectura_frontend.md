@@ -176,7 +176,28 @@ get hasMetricFilters()    // maxMetrics > 1: cada métrica admite sus propias co
 get metricWindowOptions() // «Mostrar como»: capabilities.windows válidas con los pivotes del borrador
 get trendOptions()    // dimension_fields (fallback: all_fields)
 metricRoleOptions(base)   // opciones fijas del partial + las métricas del borrador (roles del KPI)
+get columnFields()        // columnas elegibles: las numéricas con columns_numeric; con columns_scaled, las que se correlacionan (isCorrelatable: numéricas, ordinales y nominales)
 ```
+
+### Escala de las variables (matriz de correlación)
+
+Con `capabilities.columns_scaled`, cada fila de `_columns.html` muestra la escala de la columna
+(`columnScale(field)`, de `schema.scales`, con aviso si es `uncertain`). La escala vive en la
+fuente, no en el widget:
+
+- `openScaleEditor(field)` abre el editor (`scaleEditor: {field, scale, order, saving, error}`)
+  en el panel de la matriz. `scaleOptions(field)` ofrece continua, discreta, nominal o «no se
+  analiza» a una numérica, y nominal, ordinal o «no se analiza» a una categoría. Al pasar a
+  ordinal, el orden arranca con el detectado o con los valores de la columna;
+  `moveOrderValue(i, ±1)` lo reordena.
+- `saveScaleEditor()` → `saveScales(source, {columna: {scale, order?}})`: `PUT
+  /api/sources/{id}/scales/`, descarta el schema cacheado y lo recarga.
+- «Clasificar con IA» (`classifyScales()`): `POST /api/sources/{id}/scales/ai/` con las
+  variables elegidas. `scaleProposal.items` son solo las que cambian, con su motivo;
+  `acceptScaleProposal()` las guarda con `saveScales`.
+- `_autoPickColumns()` arranca con 4 variables numéricas u ordinales (una nominal suma una fila
+  por categoría). Una variable que pasa a «no se analiza» (con el editor o con la IA) sale de
+  la matriz.
 
 ### Asistente IA (chat del panel)
 
@@ -193,10 +214,11 @@ recargar; borrar el widget borra su hilo; un widget nuevo lo conserva al recibir
   **ajusta** en vez de crear desde cero.
 - `history` = los mensajes previos del hilo (pedidos y propuestas; los errores no viajan).
 
-La respuesta (`{widget_type, calculated_fields, fields, style}`; `title` va vacío: el título de la tarjeta lo
+La respuesta (`{widget_type, calculated_fields, column_scales, fields, style}`; `title` va vacío: el título de la tarjeta lo
 pone el usuario, la IA no lo genera) se agrega al hilo y **no** toca el borrador.
 `adviceSteps(proposal, baseStyle)` la convierte en pasos legibles en el orden del panel
-y con el nombre de cada bloque (los campos calculados que propone crear, `columnsLabel`,
+y con el nombre de cada bloque (los campos calculados que propone crear, las escalas que
+corrige en la fuente, `columnsLabel`,
 «Dimensiones» o `dimensions_label` (con etiqueta propia, el detalle es solo la lista de columnas, sin «Agrupa»),
 «Pivotes», «Filtros», «Métricas», tendencia, orden y límite). Del
 `style` solo lista lo que **cambia** respecto a `baseStyle` (el estilo del panel al pedir,
@@ -207,8 +229,8 @@ registró con `registerStyleGroup(grupo, claves)` (ej. `_kpi_config.html` → «
 «Personalizar». El grupo es maquetación: vive en el partial (`styleGroups[tipo]`), no en el
 `style_schema`, que solo declara datos. Cada propuesta lleva su botón «Aplicar y guardar»:
 `applyAdvice(message)` primero crea en la fuente los `calculated_fields` propuestos
-(`_createCalculatedFields`: `POST /api/sources/{id}/calculated-fields/` y recarga el schema),
-luego copia `fields` al borrador, **suma** el `style` propuesto al actual
+(`_createCalculatedFields`: `POST /api/sources/{id}/calculated-fields/` y recarga el schema)
+y guarda las `column_scales` (`saveScales`), luego copia `fields` al borrador, **suma** el `style` propuesto al actual
 (el título no cambia) y guarda con `saveDrawer({fromAssistant: true})`, así el widget se
 redibuja al momento. El mensaje guarda en `undo` el `_draftPayload()` previo: «Deshacer»
 (`undoAdvice(message)`) lo restaura en el borrador y lo guarda. Solo la última propuesta
@@ -345,6 +367,17 @@ Renderiza: gráfico de líneas con curva suave, markers, data labels y líneas d
 Renderiza: gráfico de dispersión (ApexCharts mixto): una serie `scatter` por grupo de `payload.groups` (color `CHART_COLORS[i]`) y, con `style.showTrend`, una serie `line` discontinua con la recta de cada grupo en su mismo color (sin color por categoría, la recta va en el color de las referencias). Sin animación (ApexCharts deja a medias el trazo discontinuo). Ejes numéricos con el nombre de cada columna; tooltip con el grupo, su `r` y los dos valores. Pie con las filas dibujadas («Muestra de N de M filas» si el backend muestreó) y la `r` global.
 
 - Leyenda solo con color y solo con los grupos (`customLegendItems`); `_wireLegend()` oculta o muestra a la vez los puntos y la recta del grupo pulsado (listener delegado en el contenedor: ApexCharts rehace la leyenda en cada `toggleSeries`).
+
+### CorrelationWidget
+
+Renderiza: mapa de calor (ApexCharts) de `payload.matrix`. Cada celda se colorea por la fuerza
+de la relación (`CORRELATION_SCALE`, la misma escala que «Cómo se lee» del panel), con una
+gama para positiva y otra para negativa. Las celdas sin valor usan centinelas fuera de rango.
+Cada fila es una de `payload.variables`: una variable o una categoría de una nominal (dummy,
+con `value` y `group`). El tooltip nombra el par, la fuerza, la medida (`measures[i][j]`:
+Pearson o Spearman), las filas usadas y qué significa el 0/1 de una dummy, y avisa de las filas
+de una ordinal con valores fuera de su orden (`variables[i].unmatched`). Entre dos categorías de
+la misma variable (`same_variable`) dice que no se comparan.
 
 ### DonutWidget
 

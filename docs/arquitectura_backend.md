@@ -154,6 +154,7 @@ sheets_reports/
       aggregation.py        # Paso 2 apply_aggregation + AGGREGATIONS, MAX_PIVOT_CELLS
       window.py             # Paso 3 apply_window_functions
       sort.py               # Paso 4 apply_sort_limit
+      association.py        # Medidas de asociación: correlación (Pearson, Spearman con ordinales) y V de Cramér
 
   services/
     __init__.py
@@ -163,11 +164,13 @@ sheets_reports/
     widget_service.py       # WidgetService: CRUD, validación, render
     ai_spec.py              # WidgetForm vía Gemini: crea, o ajusta el borrador actual (current) con el historial del chat
     ai_suggestions.py       # 2 pedidos sugeridos para el chat del panel, por tipo de widget y hoja (cacheados)
+    ai_scales.py            # «Clasificar con IA»: escala de medida y orden de las ordinales que propone la IA
 
   utils/                    # Helpers sin conocer widgets
     registry.py             # Registry genérico + UnknownKeyError
     validation.py           # SpecValidationError, schema_errors, límites y piezas de JSON Schema
     data.py                 # to_python, to_key, sort_key, percent, is_number (también numpy), time_order, time_fields, chronological…
+    scales.py               # Escala de medida de cada columna (detectada o guardada) y su perfil para la IA
 
   tests/                    # Ver §15
 ```
@@ -200,11 +203,14 @@ Una pestaña (`gid`) de una hoja de Google Sheets conectada a un tablero.
 | `sheet_name` / `tab_name` | `CharField(255)` | Nombres al conectarla: forman `original_label` |
 | `name` | `CharField(255, blank)` | Nombre propio opcional; `label` = `name` o `original_label` |
 | `first_row_headers` | `BooleanField(default=True)` | La fila 1 son los encabezados; si no, «Columna A»… |
-| `columns` | `JSONField` | `[{name, label?, type: text\|number\|date, include}]` |
+| `columns` | `JSONField` | `[{name, label?, type: text\|number\|date, include, scale?, order?}]` |
 | `calculated_fields` | `JSONField` | `[{id, name, formula, format: number\|percent}]` (ver §10.4) |
 
 - `name` de cada columna es el encabezado de la hoja; `label`, el **nombre a mostrar**, que la
   reemplaza en todo el tablero (schema, motor, filtros, IA). Los widgets guardan ese nombre.
+- `scale` es la escala de medida **confirmada** por el usuario o la IA (`continuous`,
+  `discrete`, `ordinal`, `nominal` o `none`) y `order`, en una ordinal, sus valores de menor a
+  mayor. Sin `scale` se detecta al cargar (§10.5).
 - `label` (property): `name` o `original_label` («Documento · Pestaña»).
 
 ### 4.2 `Widget` (`models.py`)
@@ -403,7 +409,10 @@ class BaseWidget(ABC):
 | `pivots` | `[min, max]` | Rango de pivotes |
 | `metrics` | `[min, max]` | Rango de métricas. Con `max > 1` cada métrica admite además sus propias condiciones (`metric.filters`); con una sola métrica equivaldrían a `filters` y se rechazan |
 | `pivot_max_metrics` | int? | Máximo de métricas cuando hay pivote (barras y líneas: 1, porque cada serie es un valor del pivote); ausente = sin tope extra (tabla dinámica) |
-| `columns` | `[min, max]` | Rango de columnas (solo «Tabla»); ausente = no admite |
+| `columns` | `[min, max]` | Rango de columnas (Tabla, dispersión, matriz de correlación, V de Cramér); ausente = no admite |
+| `columns_numeric` | bool | Solo columnas numéricas (dispersión) |
+| `columns_scaled` | bool | Columnas continuas, discretas, ordinales (con su orden) o nominales (matriz de correlación, §10.5) |
+| `nominal_max_categories`, `matrix_max_rows` | int | Con `columns_scaled`: categorías máximas de una nominal (cada una es una fila) y filas máximas de la matriz |
 | `sort` | bool | Admite `sort_by` |
 | `limit` | bool | Admite `limit` |
 | `filters` | bool | Admite filtros propios |
@@ -442,10 +451,12 @@ from sheets_reports.widgets import kpi, bar, line, donut, dynamic_table, table, 
 
 Importar el paquete registra los 10 tipos (`ranking`: el top N de los grupos de una columna,
 los mejores o los peores, ver `widgets/ranking.py`; `correlation`: la matriz de correlación de
-varias columnas numéricas, ver `widgets/correlation.py`; `scatter`: el gráfico de dispersión de
+varias columnas numéricas, ordinales o nominales, ver `widgets/correlation.py`; `cramer`: la V de Cramér
+entre columnas categóricas, ver `widgets/cramer.py`; `scatter`: el gráfico de dispersión de
 dos columnas numéricas, ver `widgets/scatter.py`). Un widget que calcula con columnas
-sueltas declara `columns_numeric: True` en sus capacidades: `form_errors` rechaza las de texto
-y el panel solo ofrece las numéricas. Un widget nuevo son dos piezas:
+sueltas declara qué columnas admite: `columns_numeric: True` (solo numéricas: `form_errors`
+rechaza las de texto y el panel solo ofrece las numéricas) o `columns_scaled: True` (las
+que tienen escala analizable: numéricas, ordinales y nominales, §10.5). Un widget nuevo son dos piezas:
 1. un módulo en `widgets/` con su subclase decorada con `@WIDGETS.register`, importado en
    `widgets/__init__.py`;
 2. su panel `templates/sheets_reports/widgets/config/_<key>_config.html` (las dos pestañas,
@@ -485,10 +496,13 @@ y el panel solo ofrece las numéricas. Un widget nuevo son dos piezas:
 | `dynamic_table` | `DynamicTableWidget` | Tabla Dinámica | [0,3] | [0,2] | [1,5] | — | ✓ | ✗ | ✓ | ✗ | total, fila | — | ✓ |
 | `ranking` | `RankingWidget` | Ranking | [1,1] | [0,0] | [1,1] | — | ✓ | ✓³ | ✓ | ✗ | — | — | ✓ |
 | `scatter` | `ScatterWidget` | Gráfico de dispersión | [0,1]⁵ | [0,0] | [0,0] | [2,2]⁴ | ✗ | ✗ | ✓ | ✗ | — | — | ✓ |
+| `correlation` | `CorrelationWidget` | Matriz de correlación | [0,0] | [0,0] | [0,0] | [2,12]⁶ | ✗ | ✗ | ✓ | ✗ | — | — | ✓ |
+| `cramer` | `CramerWidget` | V de Cramér | [0,0] | [0,0] | [0,0] | [2,12] | ✗ | ✗ | ✓ | ✗ | — | — | ✓ |
 | `filter` | `FilterWidget` | Filtros | [0,50]¹ | [0,0] | [0,0] | — | ✗ | ✗ | ✗ | ✗ | — | **1** | **✗** |
 
 ¹ En «Filtros», `dimensions` son las **columnas expuestas como controles** (vacío = todas).
 ⁴ Solo numéricas (`columns_numeric`), en orden: eje X, eje Y.
+⁶ Numéricas, ordinales o nominales (`columns_scaled`, §10.5); una nominal es una fila por categoría.
 ⁵ En la dispersión `dimensions` no agrupa: es la columna de categorías que reparte los puntos en grupos de color («Agrupar por»).
 ³ Solo el ranking recorta filas: `limit` es su N. El resto trabaja siempre con toda la data.
 ² `percent_of_total` (total), `percent_of_row` (fila), `running_total` (acum.), `pct_change`
@@ -562,6 +576,47 @@ Los tres usan `chart_series()` para `(categories, pairs)` y `percent_aliases()`.
   (`slope`, `intercept`, `from`/`to` = rango de X) y su `r` de Pearson; `None` si X no varía,
   `r = None` si Y no varía. Salida `type: "scatter"` con `x`/`y` = `{field, label}` y
   `color` = `{field, label}` o `None`.
+
+#### `correlation` — `widgets/correlation.py`
+
+Qué tan relacionadas están entre sí las variables de `fields.columns`, sobre las filas que
+pasan los filtros. Las variables son numéricas (continuas o discretas), ordinales o nominales.
+`process_query` toma la escala de cada variable de la hoja entera (`effective_scales`, con las
+guardadas en `df.attrs["column_scales"]`) y `compile` arma las filas de la matriz:
+
+- una por variable numérica u ordinal;
+- una por categoría de una nominal: una variable dummy (`one_hot`) que vale 1 si la fila es de
+  esa categoría y 0 si no («Recinto: Santiago»), de la más a la menos frecuente. Una dicotómica
+  (Sí/No, 0/1) da una sola, la del «sí» (o la categoría menos frecuente). Las filas vacías o de
+  «no aplica» quedan vacías en todas sus dummies.
+
+Las dummies se crean al calcular, sobre las filas filtradas, y no se guardan (ni en la fuente
+ni en la caché); el widget guarda solo la columna original. Para una dummy permanente está el
+campo calculado por fila (`IF([Recinto] = "Santiago", 1, 0)`).
+
+Cada par se mide con `engine/steps/association.py`:
+
+| Par | Medida |
+|---|---|
+| numérica × numérica | `style.method` (Pearson o Spearman) |
+| con una ordinal o una dummy | Spearman (la ordinal, por la posición de su valor en `order`) |
+| dos dummies de la misma nominal | ninguna: son excluyentes por construcción (`same_variable`, celda vacía) |
+
+Todas van de −1 a 1. Spearman es Pearson sobre los rangos (sin scipy). Una variable que no se
+correlaciona (si su escala cambió en la fuente después de guardar el widget) deja su fila
+vacía. Cada par usa sus filas completas; con menos
+de 3, o con una columna constante, la celda va vacía. En una ordinal, un valor que no está en
+`order` cuenta como vacío y se informa (`variables[i].unmatched`); los de «no aplica» son vacíos
+sin aviso.
+
+`form_errors` rechaza una columna `none`, una ordinal sin orden, una nominal con más de
+`nominal_max_categories` categorías (10; sin contar las de «no aplica») y una matriz de más de
+`matrix_max_rows` filas (30).
+
+Salida: `{type, method, variables, matrix, measures, n, rows, top: [{a, b, r, n, measure}],
+style}`. `variables` son las filas: `{field, label, scale, unmatched?}` y, en una dummy,
+`value` (su categoría) y `group` (la columna). `measures[i][j]` es `pearson`, `spearman` o
+`same_variable`; `top` son los 3 pares de mayor |valor|.
 
 #### `table` — `widgets/table.py`
 
@@ -790,7 +845,8 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
   el alias de cada columna: el guardado o, si no tiene (la de sistema ID, una nueva de la
   hoja), el de `free_alias`: el de su posición en la hoja, o el siguiente libre. El editor
   de la fuente (`_merge_saved_columns`) usa esa misma función, así que ambos coinciden y
-  ningún alias se repite.
+  ningún alias se repite. La escala confirmada de cada columna queda en
+  `df.attrs["column_scales"]` (`{nombre a mostrar: {scale, order?}}`).
 - `service_account_email()`: el email con el que se comparten las hojas (se muestra en el
   selector).
 
@@ -817,7 +873,9 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 | `PUT /api/sources/{id}/` | Columnas (tipo, incluir, nombre a mostrar), `name`, `first_row_headers`, `calculated_fields` (cada uno con `formula` o `tree`; el árbol se guarda como texto) y, con `sheet_id`, otra hoja (los widgets siguen en la fuente). Reescribe los widgets por los renombres. `dry_run` → solo `{impact}` |
 | `DELETE /api/sources/{id}/` | Borra la fuente (sus widgets quedan sin fuente). `?dry_run=1` → `{impact}` con todos sus widgets |
 | `GET /api/sources/{id}/columns/?headers=&refresh=` | Columnas actuales de la hoja con lo guardado de cada una. `refresh=1` («Actualizar datos») la relee de Google y pisa el caché; no guarda nada |
-| `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget; `aggregated_fields` lista los campos agregados (`{name, format}`) |
+| `GET /api/sources/{id}/schema/` | Schema de la fuente para el panel de un widget; `aggregated_fields` lista los campos agregados (`{name, format}`) y `scales` la escala de cada columna con su perfil (`{scale, order?, uncertain, saved, stats}`, §10.5) |
+| `PUT /api/sources/{id}/scales/` | `{scales: {columna: {scale, order?}}}`: guarda la escala confirmada en `columns` (por nombre a mostrar). Solo columnas de la hoja (no campos calculados ni el ID) y, en una ordinal, un orden que cubre sus valores. Una fuente sin configuración de columnas la crea con los tipos detectados |
+| `POST /api/sources/{id}/scales/ai/` | «Clasificar con IA»: `{columns}` → `{scales: {columna: {scale, order?, reason}}}`. No guarda nada (`services/ai_scales.py`) |
 | `POST /api/sources/{id}/refresh/` | «Actualizar» de la tabla de fuentes: relee la hoja de Google (pisa el caché) → la fuente serializada y su `status`, o `{error, status}` |
 | `GET /api/sources/{id}/status/` | Si la cuenta de servicio todavía llega a la pestaña (`google_drive.tab_status`, sin caché): `ok`, `no_access` (403/404), `tab_missing` (la hoja abre pero el gid ya no está) o `null` si no se pudo saber |
 | `POST /api/sources/{id}/formula/` | Vista previa de una fórmula (`formula` o `tree`, el árbol del constructor) con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{formula, kind, values}` o `{error}` |
@@ -879,6 +937,55 @@ agregados; `_calculated_fields_errors` los valida y el resto del form los puede 
 `agg: "auto"`). Al aplicar la propuesta, el panel los crea con
 `POST /api/sources/{id}/calculated-fields/` (un campo igual ya existente se deja; mismo nombre
 con otra fórmula es un error) y luego guarda el widget.
+
+### 10.5 Escala de medida de las columnas (`utils/scales.py`)
+
+Cada columna tiene una escala: `continuous`, `discrete`, `ordinal`, `nominal` o `none` (no se
+analiza). De ella depende cómo entra cada variable en la matriz de correlación y cómo mide cada par
+(§7.2), y es parte de lo
+que la IA ve de cada columna. `SheetContext.scales` la tiene para todas las columnas
+(`scale_of`, `order_of`).
+
+**Detección** (`profile_column`), cuando la fuente no guardó una:
+
+| Columna | Escala |
+|---|---|
+| El ID, un nombre de identificador (`id`, `código`, `matrícula`), fechas completas, la fecha de envío de un formulario | `none` |
+| Numérica con valores 0/1 | `nominal` (dicotómica) |
+| Numérica entera con hasta 20 valores distintos en un rango de hasta 100 | `discrete` |
+| Otra numérica | `continuous` |
+| Texto con muchos valores (más de 15, salvo que se repitan mucho) o casi uno por fila | `none` (texto libre) |
+| Texto con pocos valores, todos de una escala conocida | `ordinal`, con su orden |
+| Texto con pocos valores que empiezan con un número («1 - Malo») | `ordinal`, por ese número |
+| Meses por nombre | `ordinal`, en orden cronológico |
+| Otro texto con pocos valores | `nominal`; con más de 2 valores, `uncertain` (podría tener un orden) |
+
+Las escalas conocidas (`ORDINAL_SCALES`) son niveles con sinónimos: acuerdo, satisfacción,
+frecuencia, nivel, calidad, importancia, probabilidad, dificultad y cantidad. Se comparan sin
+acentos, mayúsculas ni género («Satisfecha» = «satisfecho»). Las respuestas de «no aplica»
+(«No aplica», «N/A», «No utilizo este medio», «No he recibido este servicio») no son un nivel:
+no impiden reconocer la escala, no van en el orden y cuentan como vacías.
+
+**Escala efectiva** (`effective_scales`): la guardada en la fuente manda sobre la detectada
+(`saved: true`). El perfil trae `stats`: vacíos (%), valores distintos, mínimo y máximo de las
+numéricas, los valores de las categorías y los más frecuentes del texto libre.
+
+**Contexto de la IA**: `columns_context` agrega a cada columna su escala y un perfil corto
+(`describe`): «numérica, continua: 18 a 64, 47 valores distintos», «texto, ordinal: Bajo <
+Medio < Alto», «texto libre, no se analiza; los más frecuentes: …». Es lo que la IA sabe de los
+valores además de los ejemplos de las categorías; no recibe filas.
+
+**La IA corrige escalas** de dos formas:
+- Con su widget: `create_widget` admite `column_scales: [{field, scale, order?}]` en los
+  widgets con `columns_scaled`. `form_errors` las valida (escala válida, orden que cubre los
+  valores de la columna) y valida las columnas con ellas superpuestas; `table_assistant` las
+  devuelve y el editor las guarda en la fuente al aplicar la propuesta.
+- «Clasificar con IA» (`services/ai_scales.classify_scales`): la IA ve el perfil detectado y
+  los valores de las columnas elegidas y propone escala, orden y motivo. Una propuesta cuyo
+  orden no cubre los valores de la columna se descarta; el orden se reescribe como está en la
+  hoja.
+
+---
 
 ## 11. Envío de correos
 

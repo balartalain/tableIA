@@ -146,8 +146,8 @@ class GenerateWidgetFormTests(SimpleTestCase):
 
         # El mensaje que ve la IA incluye los alias
         message = ai_spec._user_message("algo", None, ctx)
-        self.assertIn('- col_1: "Sede / Departamento" (texto)', message)
-        self.assertIn('- col_2: "¿Qué tan satisfecho estás? [Atención al cliente]" (numérica)', message)
+        self.assertIn('- col_1: "Sede / Departamento" (texto, nominal)', message)
+        self.assertIn('- col_2: "¿Qué tan satisfecho estás? [Atención al cliente]" (numérica, discreta', message)
 
         # La IA responde usando los alias col_1 y col_2
         args = {"widget_type": "bar", "fields": {
@@ -196,7 +196,7 @@ class GenerateWidgetFormTests(SimpleTestCase):
     def test_la_ia_ve_la_formula_de_los_campos_calculados(self, _audit):
         """Aunque el nombre no lo diga («KPI 1»), la IA sabe qué calcula cada campo."""
         message = ai_spec._user_message("algo", None, calculated_ctx())
-        self.assertIn('"Doble" (numérica) — campo calculado por fila: [ventas] * 2', message)
+        self.assertIn('"Doble" (numérica, continua: 50 a 600, 6 valores distintos) — campo calculado por fila: [ventas] * 2', message)
         self.assertIn('"KPI 1" (porcentaje): ' + HOGAR, message)
 
     def test_no_acepta_un_campo_igual_a_uno_que_ya_existe(self, _audit):
@@ -405,13 +405,13 @@ class ToolSchemaTests(SimpleTestCase):
                                  columns=["categoria", "ventas", "no_existe"])
         first, retry = (attempt.args[0] for attempt in call.call_args_list)
         self.assertIn("usa solo estas", first)
-        self.assertIn('"categoria" (texto)', first)
-        self.assertIn('"ventas" (numérica)', first)
+        self.assertIn('"categoria" (texto, nominal)', first)
+        self.assertIn('"ventas" (numérica, continua', first)
         self.assertIn('"ID" (numérica)', first)   # la de sistema siempre está
         self.assertNotIn('"mes"', first)
         self.assertNotIn('"anio"', first)
         # Si el plan omitió una columna, el reintento la tiene.
-        self.assertIn('"mes" (texto)', retry)
+        self.assertIn('"mes" (texto, ordinal', retry)
         self.assertNotIn("usa solo estas", retry)
 
     def test_con_el_tipo_fijado_el_prompt_solo_trae_ese_widget(self):
@@ -434,9 +434,9 @@ class ToolSchemaTests(SimpleTestCase):
         context = columns_context(ctx)
         self.assertEqual(context.count('"Satisfecho"'), 1)
         self.assertIn('- V1: ["Satisfecho", "Insatisfecho"]', context)
-        self.assertIn('"Aulas" (texto) — valores de ejemplo: los de V1', context)
-        self.assertIn('"Biblioteca" (texto) — valores de ejemplo: los de V1', context)
-        self.assertIn('"Sede" (texto) — valores de ejemplo: ["Norte", "Sur"]', context)
+        self.assertIn('"Aulas" (texto, ordinal: Insatisfecho < Satisfecho) — valores de ejemplo: los de V1', context)
+        self.assertIn('"Biblioteca" (texto, ordinal: Insatisfecho < Satisfecho) — valores de ejemplo: los de V1', context)
+        self.assertIn('"Sede" (texto, nominal) — valores de ejemplo: ["Norte", "Sur"]', context)
 
     def test_sin_tipo_el_estilo_es_objeto_abierto(self):
         params = build_tool_parameters(sales_ctx(), widget_type=None)

@@ -55,10 +55,13 @@ class DataSource(models.Model):
     columns = models.JSONField(
         default=list, blank=True,
         help_text='Columnas elegidas al conectar la hoja: [{"name", "label"?, "type": '
-                  '"text"|"number"|"date", "include"}]. `name` es el encabezado '
+                  '"text"|"number"|"date", "include", "scale"?, "order"?}]. `name` es el encabezado '
                   '(o columna del modelo tidy, en respuestas de formulario), '
                   '`label` el nombre a mostrar que lo reemplaza en todo el '
-                  'tablero. Vacío = todas, con el tipo que trae la hoja.',
+                  'tablero. `scale` (continuous|discrete|ordinal|nominal|none) es la escala '
+                  'de medida confirmada y `order` el orden de los valores de una ordinal; '
+                  'sin ella se detecta (utils/scales.py). '
+                  'Vacío = todas, con el tipo que trae la hoja.',
     )
     calculated_fields = models.JSONField(
         default=list, blank=True,

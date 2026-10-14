@@ -27,7 +27,7 @@ venv/bin/coverage report --sort=cover
 | `tests/test_architecture.py` | Capas que no se mezclan y el contrato de cada widget registrado: claves, capabilities, `style_schema`, manifiesto, ejemplos de la IA válidos, partial del panel y **sus tests** (entrada en `INVARIANTS` y `tests/widgets/test_<tipo>.py`). |
 
 ### Widgets (lo que cada uno le devuelve al frontend)
-Un archivo por widget en `tests/widgets/test_<tipo>.py`: `test_bar`, `test_line`, `test_donut`, `test_kpi` (roles del número, meta, tendencia), `test_dynamic_table` (filas, columnas del pivote, totales, formatos), `test_table` (filas tal cual, API), `test_filter` (caja de filtros y filtros del tablero). Además:
+Un archivo por widget en `tests/widgets/test_<tipo>.py`: `test_bar`, `test_line`, `test_donut`, `test_kpi` (roles del número, meta, tendencia), `test_dynamic_table` (filas, columnas del pivote, totales, formatos), `test_table` (filas tal cual, API), `test_filter` (caja de filtros y filtros del tablero), `test_correlation` (Pearson entre números y Spearman con una ordinal o una dummy, nominales como una fila por categoría y dicotómicas como una, celdas de la misma variable, ordinales por su escala, escala guardada, valores fuera del orden, topes de categorías y filas). Además:
 - `test_compile.py`: contrato común de `render` (render_data + widget_form, o error sin tumbar el form).
 - `test_styles_chema.py`: el `style_schema` como contrato del estilo.
 
@@ -50,6 +50,7 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 | `tests/test_sources.py` | Conectar una hoja: Drive, pestañas, tipos de columna, caché de la hoja. |
 | `tests/test_data_sources.py` | Fuentes del tablero: CRUD, renombrar/reemplazar/actualizar con aviso de impacto, campos calculados, formato de columnas (moneda, %), varios widgets por fuente. |
 | `tests/test_source_columns.py` | Las columnas que usa cada widget (para renombrar y avisar qué se rompe). |
+| `tests/test_column_scales.py` | Escala de medida de las columnas: reglas de detección (escalas conocidas, «no aplica», identificadores, discreta y continua), la guardada en la fuente manda, el PUT de escalas con su validación y «Clasificar con IA» (modelo simulado). |
 | `tests/test_views.py` | Las vistas como adaptadores HTTP: render, guardar widgets, asistente de IA, tableros. |
 
 ### IA

@@ -4,7 +4,7 @@ Tabla (filas de la hoja tal cual): las columnas a mostrar viven en `fields.colum
 """
 from typing import Any, ClassVar, Dict, List, Optional
 
-from sheets_reports.utils.data import column_formats
+from sheets_reports.utils.data import column_formats, to_python
 from sheets_reports.widgets.base import WIDGETS, BaseWidget, WidgetResult
 from sheets_reports.widgets.presentation import humanize
 from sheets_reports.widgets.schemas import WidgetFields, WidgetStyle
@@ -92,7 +92,9 @@ class TableWidget(BaseWidget):
         return {
             "type": "tabulator",
             "columns": columns,
-            "rows": frame.to_dict(orient="records"),
+            # NaN/NaT e infinitos no son JSON válido para el navegador.
+            "rows": [{key: to_python(value) for key, value in row.items()}
+                     for row in frame.to_dict(orient="records")],
             "truncated": truncated,
             "total_rows": total_rows,
             "formats": {col: fmt for col, fmt in ((metadata or {}).get("column_formats") or {}).items()

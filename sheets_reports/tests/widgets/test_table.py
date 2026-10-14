@@ -1,6 +1,8 @@
 import json
 from unittest import mock
 
+import pandas as pd
+
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
@@ -31,6 +33,32 @@ class RowsExecutionTests(SimpleTestCase):
 
 
 class CompileTests(SimpleTestCase):
+    def test_vacios_y_no_finitos_se_serializan_como_null(self):
+        df = sales_df()
+        df["ventas"] = [100.0, float("nan"), float("inf"), float("-inf"), 0.0, -2.5]
+        out = compiled("table", table_fields(["ventas"]), df=df)
+
+        json.dumps(out, allow_nan=False)
+        self.assertEqual(out["rows"], [
+            {"ventas": 100.0}, {"ventas": None}, {"ventas": None},
+            {"ventas": None}, {"ventas": 0.0}, {"ventas": -2.5},
+        ])
+        self.assertTrue(out["columns"][0]["numeric"])
+
+    def test_fechas_y_nulos_de_pandas_son_json_valido(self):
+        df = pd.DataFrame({
+            "ID": [1, 2],
+            "fecha": [pd.Timestamp("2026-10-14 12:30:00"), pd.NaT],
+            "texto": ["Dato", pd.NA],
+        })
+        out = compiled("table", table_fields(["fecha", "texto"]), df=df)
+
+        json.dumps(out, allow_nan=False)
+        self.assertEqual(out["rows"], [
+            {"fecha": "2026-10-14T12:30:00", "texto": "Dato"},
+            {"fecha": None, "texto": None},
+        ])
+
     def test_columnas_con_tipo(self):
         out = compiled("table", table_fields(["categoria", "ventas"]))
         self.assertEqual(out["columns"], [
@@ -90,6 +118,33 @@ class ApiTests(TestCase):
         widget = Widget.objects.get()
         self.assertEqual(widget.fields["columns"], [{"field": "categoria"}, {"field": "ventas"}])
         self.assertEqual(widget.style["pageSize"], 25)
+
+    def test_crear_y_recargar_tablas_con_vacios_y_no_finitos(self, _df):
+        df = sales_df()
+        df["ventas"] = [100.0, float("nan"), float("inf"), float("-inf"), 0.0, -2.5]
+        _df.side_effect = lambda *a, **k: df.copy()
+        expected = [100.0, None, None, None, 0.0, -2.5]
+        widget_ids = []
+
+        for columns in (["ventas"], ["categoria", "ventas"]):
+            with self.subTest(columns=columns):
+                response = self.post_widget({"type": "table", "fields": table_fields(columns)})
+                self.assertEqual(response.status_code, 201, response.content)
+                created = json.loads(response.content, parse_constant=self.fail)
+                self.assertIsNone(created.get("error"))
+                self.assertEqual([r["ventas"] for r in created["data"]["rows"]], expected)
+                widget_ids.append(created["id"])
+
+        # F5 vuelve a pedir todos los widgets guardados, no la respuesta de creación.
+        for _ in range(2):
+            response = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/")
+            self.assertEqual(response.status_code, 200, response.content)
+            loaded = json.loads(response.content, parse_constant=self.fail)
+            by_id = {w["id"]: w for w in loaded["widgets"]}
+            self.assertEqual(set(by_id), set(widget_ids))
+            for widget_id in widget_ids:
+                self.assertIsNone(by_id[widget_id]["error"])
+                self.assertEqual([r["ventas"] for r in by_id[widget_id]["data"]["rows"]], expected)
 
     def test_el_nombre_a_mostrar_llega_a_la_cabecera(self, _df):
         r = self.post_widget({

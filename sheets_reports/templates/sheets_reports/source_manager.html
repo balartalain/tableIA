@@ -137,6 +137,17 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
           <p x-show="previewSource && previewSource.name" class="text-xs text-ink/50 truncate" x-text="previewSource ? previewSource.original_label : ''"></p>
         </div>
       </div>
+      <!-- Buscador para saltar a una columna en la tabla -->
+      <div x-show="!loadingData && !dataError && previewColumns.length" class="w-64 max-w-xs shrink-0">
+        <select x-vselect="selectedColumnJump" x-model="selectedColumnJump" x-on:change="jumpToColumn($event.target.value)"
+                aria-label="Ir a columna" placeholder="Ir a columna…"
+                class="w-full text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+          <option value="">Ir a columna…</option>
+          <template x-for="c in previewColumns" :key="c">
+            <option x-bind:value="c" x-text="c"></option>
+          </template>
+        </select>
+      </div>
       <!-- Las filas se van cargando al llegar con el scroll al final de la tabla. -->
       <p x-show="!loadingData && !dataError" role="status" class="shrink-0 text-xs text-ink/50"
          x-text="totalRows ? `Mostrando ${loadedRows.toLocaleString('es')} de ${totalRows.toLocaleString('es')} filas` : 'Sin filas'"></p>

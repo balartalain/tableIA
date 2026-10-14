@@ -33,6 +33,7 @@ function sourceManager() {
     loadedRows: 0,
     isFormResponse: false,
     _previewTable: null,
+    selectedColumnJump: '',
 
     init() {
       window.addEventListener('sources:open', () => this.open());
@@ -224,11 +225,41 @@ function sourceManager() {
       });
     },
 
+    // Salta horizontalmente a la columna elegida y la resalta temporalmente
+    jumpToColumn(colName) {
+      if (!colName || !this._previewTable) return;
+      try {
+        const colComponent = this._previewTable.getColumn(colName);
+        if (colComponent) {
+          try {
+            this._previewTable.scrollToColumn(colComponent, 'center', false);
+          } catch (e) {}
+          const headerEle = colComponent.getElement();
+          if (headerEle) {
+            headerEle.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            headerEle.style.transition = 'all 0.3s ease';
+            headerEle.style.backgroundColor = '#dcfce7';
+            headerEle.style.boxShadow = 'inset 0 0 0 2px #4d7c0f';
+            setTimeout(() => {
+              headerEle.style.backgroundColor = '';
+              headerEle.style.boxShadow = '';
+            }, 2000);
+          }
+        }
+      } catch (e) {
+        console.error('Error al saltar a la columna:', e);
+      }
+      setTimeout(() => {
+        this.selectedColumnJump = '';
+      }, 50);
+    },
+
     closeDataView() {
       if (this._previewTable) {
         this._previewTable.destroy();
         this._previewTable = null;
       }
+      this.selectedColumnJump = '';
       this.previewSource = null;
       this.view = 'list';
     },

@@ -98,7 +98,7 @@ document.addEventListener('alpine:init', () => {
         maxWidth: '100%',
         dropboxWrapper: 'body',
         zIndex: VSELECT_Z_INDEX,
-        placeholder: '',
+        placeholder: el.getAttribute('placeholder') || '',
         ariaLabelText: el.getAttribute('aria-label') || '',
         ...VSELECT_TEXTS,
       });

@@ -103,9 +103,12 @@
 </div>
 {% endif %}
 
+{% if dashboard %}{% include "sheets_reports/data_chat.html" %}{% endif %}
+
 <script>
   window.DASHBOARD_ID = {{ dashboard.id }};
 </script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@6.4.0/dist/apexcharts.min.js"></script>
 <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
 <link href="{% static 'sheets_reports/css/tabulator.css' %}" rel="stylesheet">
@@ -132,6 +135,7 @@
 
 <script src="{% static 'sheets_reports/js/board_editor/board-view-init.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
+{% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/data-chat.js' %}"></script>{% endif %}
 {% if email_enabled %}<script src="{% static 'sheets_reports/js/board_editor/email-report.js' %}"></script>{% endif %}
 
 {% endblock %}

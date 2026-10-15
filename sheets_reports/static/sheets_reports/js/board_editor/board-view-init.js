@@ -11,6 +11,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.store('dashboard', {
     dashboardId: window.DASHBOARD_ID,
     widgets: [],
+    sources: [],
 
     _renderUrl() {
       const url = apiUrl(`/api/dashboard/${this.dashboardId}/render/`);
@@ -30,6 +31,7 @@ document.addEventListener('alpine:init', () => {
           return null;
         }
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
+        if (data.dashboard && data.dashboard.sources) store.sources = data.dashboard.sources;
         this.widgets.forEach(w => w.applyRender(byId[w.id]));
         return data;
       } catch (e) {
@@ -61,6 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  store.sources = (data.dashboard && data.dashboard.sources) || [];
   store.widgets = data.widgets
     .map(w => BaseWidget.fromServer(w))
     .filter(Boolean)

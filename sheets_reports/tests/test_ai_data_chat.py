@@ -152,3 +152,21 @@ class DashboardDataChatViewTests(TestCase):
         mock_delete_file.assert_called_once_with(self.source)
         self.source.refresh_from_db()
         self.assertEqual(self.source.gemini_file_id, "")
+
+    def test_board_view_renders_chatbot(self):
+        r = self.client.get(reverse("board_view", kwargs={"dashboard_id": self.dashboard.id}))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "data-chat.js")
+        self.assertContains(r, "dataChat()")
+
+    def test_endpoint_funciona_sin_autenticacion(self):
+        self.client.logout()
+        fake_res = {"text": "Respuesta pública", "images": [], "code": []}
+        with mock.patch("sheets_reports.services.ai_data_chat.ask_data_chat", return_value=fake_res):
+            r = self.client.post(
+                reverse("dashboard_data_chat", kwargs={"dashboard_id": self.dashboard.id}),
+                data={"prompt": "¿Ventas totales?"},
+                content_type="application/json",
+            )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), fake_res)

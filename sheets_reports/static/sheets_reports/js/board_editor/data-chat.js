@@ -1,4 +1,20 @@
 // Chatbot analítico sobre la fuente de datos del tablero (Gemini + Code Execution).
+const DATA_CHAT_FETCH_TIMEOUT_MS = 120000;
+async function fetchJsonSafeDataChat(url, options = {}, timeoutMs = DATA_CHAT_FETCH_TIMEOUT_MS) {
+  if (typeof window.fetchJsonSafe === 'function') {
+    return window.fetchJsonSafe(url, options, timeoutMs);
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { ...options, signal: controller.signal });
+    const data = await r.json().catch(() => null);
+    return { r, data };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function dataChat() {
   return {
     open: false,
@@ -65,7 +81,7 @@ function dataChat() {
           body.source_id = this.selectedSourceId;
         }
 
-        const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${window.DASHBOARD_ID}/data-chat/`), {
+        const { r, data } = await fetchJsonSafeDataChat(apiUrl(`/api/dashboard/${window.DASHBOARD_ID}/data-chat/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),

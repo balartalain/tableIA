@@ -1283,7 +1283,7 @@ def dashboard_data_chat(request, dashboard_id):
     Chatbot analítico sobre la fuente de datos del tablero:
     POST {prompt, source_id?} → {text, images: [...], code: [...]}
     """
-    dashboard = _owned_dashboard(request, dashboard_id)
+    dashboard = Dashboard.objects.filter(id=dashboard_id).first()
     if not dashboard:
         return _error("Dashboard no encontrado", status=404)
     try:

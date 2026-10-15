@@ -739,7 +739,10 @@ document.addEventListener('alpine:init', () => {
       this._normalizeDraft();
       // Las columnas por defecto salen del schema de la fuente: se eligen cuando llega.
       this.loadSchema(this.drawerDraft.source).then(() => {
-        if (this.editingId === id) this._prefillDraft();
+        if (this.editingId === id) {
+          this._prefillDraft();
+          this._checkCorrelationMethod();
+        }
       });
       // Sin esperar: los tags del chat aparecen cuando llegan.
       this.loadSuggestions(w.type);
@@ -968,10 +971,12 @@ document.addEventListener('alpine:init', () => {
       if (list.length >= this.maxColumns) return;
       const field = this.columnFields.find(c => !list.some(x => x.field === c));
       if (field) list.push({ field });
+      this._checkCorrelationMethod();
     },
 
     removeColumn(index) {
       this.drawerDraft.fields.columns.splice(index, 1);
+      this._checkCorrelationMethod();
     },
 
     // Al cambiar la columna elegida, el «Nombre a mostrar» de esa fila deja de servir.
@@ -980,6 +985,7 @@ document.addEventListener('alpine:init', () => {
       if (!column) return;
       if (field != null && column.field !== field) column.field = field;
       column.label = '';
+      this._checkCorrelationMethod();
     },
 
     // Nombre que se muestra en la tabla: el «Nombre a mostrar» o la columna tal cual.
@@ -1001,6 +1007,20 @@ document.addEventListener('alpine:init', () => {
     // ¿Entra en una correlación? Numéricas, ordinales y nominales (como dummies 0/1).
     isCorrelatable(field) {
       return ['continuous', 'discrete', 'ordinal', 'nominal'].includes(this.columnScale(field));
+    },
+
+    // ¿El método de correlación está forzado a Spearman?
+    // Si alguna variable seleccionada es ordinal o nominal, el motor estadístico fuerza Spearman.
+    get isCorrelationLockedToSpearman() {
+      if (this.editingType !== 'correlation') return false;
+      const cols = (this.drawerDraft?.fields?.columns || []).map(c => typeof c === 'object' ? c.field : c).filter(Boolean);
+      return cols.some(f => ['ordinal', 'nominal'].includes(this.columnScale(f)));
+    },
+
+    _checkCorrelationMethod() {
+      if (this.isCorrelationLockedToSpearman && this.drawerDraft && this.drawerDraft.style) {
+        this.drawerDraft.style.method = 'spearman';
+      }
     },
 
     scaleLabel(scale) {
@@ -1109,6 +1129,7 @@ document.addEventListener('alpine:init', () => {
       if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
       delete this.schemas[source];
       if (String(this.drawerDraft.source) === String(source)) await this.loadSchema(source);
+      this._checkCorrelationMethod();
     },
 
     // «Clasificar con IA»: la IA propone la escala de las variables elegidas; el panel muestra

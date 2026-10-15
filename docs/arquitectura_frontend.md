@@ -37,6 +37,8 @@ static/sheets_reports/js/board_editor/
   source-manager.js           # sourceManager(): fuentes del tablero, actualizar datos, eliminar
   source-picker.js            # sourcePicker(): elegir/editar/reemplazar la hoja de una fuente
   formula-builder.js          # FormulaBlocks: árbol ↔ texto, bloques y arrastre de los campos calculados
+  ai-board.js                 # aiBoard(): modal «Generar con IA» (planificación y compilación batch)
+  data-chat.js                # dataChat(): chatbot analítico de datos (Gemini + Code Execution)
   board-editor-init.js        # Bootstrap: palette, drag-drop, Sortable, resize
   email-campaign.js           # emailCampaign(): configurar el envío de correos del tablero
   board-view-init.js          # Bootstrap read-only: store mínimo + mount
@@ -252,6 +254,23 @@ si no llegan nuevas se quedan las actuales. Mientras carga, el ícono gira
 (`askSuggestion(text)`) lo envía con `askAssistant()`.
 
 Mientras la IA responde, el icono de «Enviar» es un spinner (`drawerAsking`).
+
+### Modal «Generar con IA» (`ai-board.js`)
+
+El componente Alpine `aiBoard()` gestiona la creación completa de un tablero en dos llamadas eficientes:
+1. **Plan (`propose()`)**: `POST /api/dashboard/{id}/board-plan/` envía el pedido y la fuente seleccionada. La IA devuelve la lista de widgets propuesta con títulos, descripciones y anchos (`width`). El usuario pasa al paso `'plan'`, donde puede revisar los widgets sugeridos, desmarcar los que no desee y confirmar la creación.
+2. **Construcción en lote (`build()`)**: Al confirmar, el frontend envía los widgets seleccionados a `POST /api/dashboard/{id}/board-build/`. Esta llamada resuelve de una sola vez los `fields`, `style`, `calculated_fields` y `column_scales` de todos los widgets. Los widgets listos se agregan al canvas inmediatamente con `createWidgetFromProposal()`, creando los campos calculados y escalas necesarias. Si algún widget puntual requiere resolución individual, `_buildOne(item)` recurre al asistente individual como mecanismo de resguardo (fallback).
+
+### Chatbot analítico sobre los datos (`data-chat.js`)
+
+Componente Alpine `dataChat()` (`data_chat.html`), presente tanto en el editor (`board_editor.html`) como en la vista compartida (`board_view.html`):
+- Se abre mediante un botón flotante en la esquina inferior derecha.
+- Envía las consultas a `POST /api/dashboard/{id}/data-chat/` con `{prompt, source_id?}`.
+- La respuesta incluye:
+  - **Texto explicativo**: Formateado en Markdown y parseado mediante `marked.js` (o fallback nativo).
+  - **Gráficos**: Imágenes PNG en Base64 generadas por `matplotlib`/`seaborn` durante la ejecución de código en Gemini Sandbox.
+  - **Código ejecutado**: Acordeón desplegable con los bloques de código Python utilizados para derivar los resultados.
+- La fuente de datos se sube una sola vez a Gemini Files API (`gemini_file_id`), garantizando consultas rápidas sin resubida repetitiva de datos.
 
 ## Widget registry
 

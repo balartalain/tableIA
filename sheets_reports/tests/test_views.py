@@ -259,6 +259,20 @@ class ViewsTests(TestCase):
         self.widget.refresh_from_db()
         self.assertEqual(self.widget.position, new_pos)
 
+    def test_widget_ai_insight_success(self, _df):
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_insight", return_value="Insight test") as mock_gen:
+            r = self.client.get(f"/api/widget/{self.widget.id}/ai-insight/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["text"], "Insight test")
+        self.assertEqual(r.json()["title"], self.widget.title)
+        mock_gen.assert_called_once()
+
+    def test_widget_ai_insight_filter_rejected(self, _df):
+        filter_w = Widget.objects.create(dashboard=self.dashboard, source=self.source, type="filter", title="Filtro")
+        r = self.client.get(f"/api/widget/{filter_w.id}/ai-insight/")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("filtros", r.json()["error"].lower())
+
     def test_el_editor_incluye_el_panel_de_cada_tipo(self, _df):
         from sheets_reports.widgets import WIDGETS
         r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")

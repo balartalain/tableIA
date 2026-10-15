@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import uuid
+from typing import Any
 
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
@@ -1482,3 +1483,95 @@ def widget_detail(request, widget_id):
     rendered = service.render(widget)
     return JsonResponse({**_serialize_widget(widget), "data": rendered.get("data"),
                          "error": rendered.get("error")})
+
+
+def _format_render_data_for_insight(render_data: Any) -> str:
+    if not render_data:
+        return "Sin datos disponibles."
+    if isinstance(render_data, dict):
+        if "categories" in render_data and "series" in render_data:
+            cats = render_data["categories"]
+            series = render_data["series"]
+            lines = ["Datos por serie y categoría:"]
+            for s in series:
+                s_name = s.get("name", "Serie")
+                s_data = s.get("data", [])
+                pairs = [f"{cat}: {val}" for cat, val in zip(cats, s_data) if val is not None]
+                lines.append(f"- {s_name}: " + ", ".join(pairs[:40]))
+            return "\n".join(lines)
+        if "matrix" in render_data and "variables" in render_data:
+            vars_list = [v.get("label", v.get("field", "")) for v in render_data.get("variables", [])]
+            top_pairs = render_data.get("top", [])
+            lines = [f"Variables analizadas: {', '.join(vars_list)}", "Pares con mayor correlación:"]
+            for p in top_pairs[:10]:
+                lines.append(f"- {p.get('a')} x {p.get('b')}: r = {p.get('r')} ({p.get('measure')}, n={p.get('n')})")
+            return "\n".join(lines)
+        if "data" in render_data and isinstance(render_data["data"], list):
+            return json.dumps(render_data["data"][:40], ensure_ascii=False, default=str)
+        return json.dumps(render_data, ensure_ascii=False, default=str)
+    if isinstance(render_data, list):
+        return json.dumps(render_data[:40], ensure_ascii=False, default=str)
+    return str(render_data)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def widget_ai_insight(request, widget_id):
+    """
+    GET/POST ?filters=[...]&refresh=0|1
+    Devuelve un análisis interpretativo en Markdown con IA para los datos actuales del widget.
+    Caché persistente: solo llama a Gemini la primera vez (o con refresh=1).
+    """
+    widget = get_object_or_404(Widget, id=widget_id)
+    if widget.type == "filter":
+        return _error("Los filtros de control no admiten análisis de datos.")
+    if not widget.source:
+        return _error("El widget no tiene una fuente de datos conectada.")
+
+    raw_filters = request.GET.get("filters")
+    if not raw_filters and request.method == "POST":
+        try:
+            body_data = _json_body(request)
+            raw_filters = body_data.get("filters")
+            if isinstance(raw_filters, list):
+                raw_filters = json.dumps(raw_filters)
+        except Exception:
+            pass
+
+    error = _board_filters_error(raw_filters)
+    if error:
+        return _error(error)
+
+    refresh = request.GET.get("refresh") == "1"
+
+    from django.core.cache import caches
+    import hashlib
+    source_stamp = sheets.fetched_at(widget.source)
+    stamp_str = source_stamp.isoformat() if source_stamp else "initial"
+    filter_hash = hashlib.md5((raw_filters or "").encode("utf-8")).hexdigest()[:12]
+    cache_key = f"widget_insight:{widget.id}:{stamp_str}:{filter_hash}"
+
+    cache_backend = caches["sheets"]
+    if not refresh:
+        cached_text = cache_backend.get(cache_key)
+        if cached_text:
+            return JsonResponse({"text": cached_text, "cached": True, "title": widget.title})
+
+    try:
+        df = sheets.load_source(widget.source)
+        service = WidgetService(widget.dashboard, df, widget.source)
+        filters, _ = service.parse_board_filters(raw_filters)
+        rendered = service.render(widget, filters)
+        if rendered.get("error"):
+            return _error(rendered["error"])
+
+        data_text = _format_render_data_for_insight(rendered.get("data"))
+        from sheets_reports.services.ai_spec import generate_widget_insight, SpecGenerationError
+        insight_text = generate_widget_insight(widget.title or widget.type, widget.type, data_text)
+        cache_backend.set(cache_key, insight_text, 86400 * 7)
+        return JsonResponse({"text": insight_text, "cached": False, "title": widget.title})
+    except SpecGenerationError as e:
+        return _error(str(e), status=422)
+    except Exception as e:
+        logger.exception("Error generando análisis de widget con IA")
+        return _error(f"Error al generar el análisis: {e}", status=500)

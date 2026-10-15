@@ -418,6 +418,7 @@
 
 {% if dashboard %}{% include "sheets_reports/ai_board.html" %}{% endif %}
 {% if dashboard %}{% include "sheets_reports/data_chat.html" %}{% endif %}
+{% if dashboard %}{% include "sheets_reports/widget_ai_insight_modal.html" %}{% endif %}
 
 {{ widget_manifest|json_script:"widget-manifest" }}
 {{ formula_catalog|json_script:"formula-catalog" }}

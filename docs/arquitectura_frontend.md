@@ -272,6 +272,15 @@ Componente Alpine `dataChat()` (`data_chat.html`), presente tanto en el editor (
   - **Código ejecutado**: Acordeón desplegable con los bloques de código Python utilizados para derivar los resultados.
 - La fuente de datos se sube una sola vez a Gemini Files API (`gemini_file_id`), garantizando consultas rápidas sin resubida repetitiva de datos.
 
+### Modal de Insight IA por Widget (`widget_ai_insight_modal.html`)
+
+Componente Alpine `widgetAiInsightModal()`, disponible en el editor y en la vista compartida:
+- En cada tarjeta de widget (construida en `base-widget.js`), se renderiza un botón con icono ✨ en la esquina superior izquierda (salvo widgets de tipo `filter`).
+- Al hacer clic, dispara el evento global `widget:ai-insight` con `{id, title, type}`.
+- El modal se abre y consulta bajo demanda `GET /api/widget/{id}/ai-insight/?filters=...`, enviando los filtros activos del tablero.
+- Mientras carga, muestra un indicador animado; al recibir la respuesta, renderiza el análisis en Markdown formateado con `marked.js` (negritas, viñetas y destacados).
+- Incluye botón para copiar el texto al portapapeles y botón para cerrar la ventana.
+
 ## Widget registry
 
 ```javascript

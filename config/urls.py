@@ -53,4 +53,5 @@ urlpatterns = [
     path('api/sources/<int:source_id>/calculated-fields/', views.source_add_calculated,
          name='source_add_calculated'),
     path('api/widget/<int:widget_id>/', views.widget_detail, name='widget_detail'),
+    path('api/widget/<int:widget_id>/ai-insight/', views.widget_ai_insight, name='widget_ai_insight'),
 ]

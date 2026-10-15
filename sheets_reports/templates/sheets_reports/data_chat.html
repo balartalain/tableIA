@@ -183,7 +183,7 @@ gráficos con matplotlib/seaborn.
       <div class="relative flex items-center rounded-xl border border-line bg-paper/40 focus-within:border-violet-500 focus-within:bg-white transition-all">
         <textarea x-model="prompt" rows="2" maxlength="2000"
                   x-bind:disabled="loading"
-                  x-on:keydown.enter.exact.prevent="send()"
+                  x-on:keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); send(); }"
                   placeholder="Escribe tu pregunta sobre los datos…"
                   aria-label="Pregunta sobre la fuente"
                   class="w-full bg-transparent px-3 py-2 text-xs text-ink placeholder:text-ink/40 focus:outline-none resize-none disabled:opacity-60"></textarea>

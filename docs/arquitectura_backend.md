@@ -869,6 +869,14 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
   (si la IA falla, la caché anterior sigue). `avoid` (hasta 10) son las que el usuario ya ve:
   el prompt pide no repetirlas y `_clean` descarta las que coincidan.
 
+### 9.5 Análisis interpretativo de widgets — Insight IA (`services/ai_spec.generate_widget_insight`)
+
+Permite a los usuarios obtener una interpretación ejecutiva en Markdown sobre los datos de cualquier gráfico, tabla o indicador:
+- Cada tarjeta muestra un botón ✨ en su esquina superior izquierda (salvo filtros de control).
+- Al hacer clic, se abre una ventana modal con el análisis interpretativo: hallazgos clave en negrita, viñetas de patrones/anomalías y recomendaciones de negocio.
+- `GET/POST /api/widget/{id}/ai-insight/?filters=...`: calcula los datos actuales del widget con `WidgetService` y los envía a Gemini (`generate_widget_insight`, con `thinking_budget = 0`).
+- **Caché persistente bajo demanda**: Los resultados se guardan en `caches["sheets"]` (`widget_insight:{widget.id}:{stamp}:{filter_hash}`). Consultas posteriores responden de inmediato (<10 ms) sin re-consultar a la IA.
+
 ## 10. Fuentes de datos (`services/sheets.py`, `services/source_columns.py`)
 
 ### 10.1 Lectura y caché
@@ -928,6 +936,7 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 | `POST /api/dashboard/{id}/board-build/` | Compilación en lote (Llamada 2): `{items: [...]}` → especificaciones técnicas completas `{items: [{widget_type, fields, style, calculated_fields, column_scales}, ...]}` (`services/ai_board.py`) |
 | `POST /api/dashboard/{id}/table-assistant/` | Asistente IA de configuración de un widget: `{prompt, widget_type, current, history}` → `{widget_type, fields, style, calculated_fields}` (`services/ai_spec.py`) |
 | `POST /api/dashboard/{id}/data-chat/` | Chatbot analítico sobre la fuente con ejecución de código Python: `{prompt, source_id?}` → `{text, images, code}` (`services/ai_data_chat.py`) |
+| `GET/POST /api/widget/{id}/ai-insight/` | Insight IA de un widget: `{filters?}` → `{text, cached, title}` (`services/ai_spec.generate_widget_insight`) |
 
 ### 10.4 Campos calculados (`engine/formulas.py`)
 

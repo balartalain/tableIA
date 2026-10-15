@@ -724,3 +724,15 @@ class ColumnResolutionTests(SimpleTestCase):
         # Debe haber descartado el lienzo en blanco preliminar y conservado solo la imagen con datos
         self.assertEqual(len(res["images"]), 1)
         self.assertEqual(res["images"][0], f"data:image/png;base64,{base64.b64encode(chart_png).decode()}")
+
+    @mock.patch("sheets_reports.services.ai_spec.gemini_client")
+    def test_generate_widget_insight(self, mock_client_fn):
+        mock_client = mock.Mock()
+        mock_client_fn.return_value = mock_client
+        mock_response = mock.Mock(text="### Hallazgos clave\n- Las ventas aumentaron un **25%**.", usage_metadata=None)
+        mock_client.models.generate_content.return_value = mock_response
+
+        res = ai_spec.generate_widget_insight("Ventas por Región", "bar", "Norte: 100, Sur: 200")
+        self.assertIn("Hallazgos clave", res)
+        self.assertIn("25%", res)
+        mock_client.models.generate_content.assert_called_once()

@@ -553,6 +553,45 @@ def _is_blank_image(data_uri: str) -> bool:
         return False
 
 
+WIDGET_INSIGHT_SYSTEM_PROMPT = """\
+Eres un consultor analítico de inteligencia de negocios experto.
+Tu objetivo es analizar los datos calculados de un gráfico o indicador de un tablero y redactar una interpretación ejecutiva en español para la toma de decisiones.
+
+Instrucciones:
+1. Formato: Escribe en Markdown estructurado (con subtítulos cortos ### si amerita, negritas para cifras y porcentajes clave, y viñetas).
+2. Estilo: Sé directo, profesional y conciso. NO uses saludos ni frases introductorias tipo "A continuación presento...". Empieza de inmediato con los hallazgos principales.
+3. Contenido:
+   - Resalta los valores más altos, más bajos y las proporciones o variaciones más significativas.
+   - Identifica tendencias, concentraciones o anomalías observables en las cifras.
+   - Concluye con 1 o 2 observaciones clave o recomendaciones prácticas de negocio.
+"""
+
+
+def generate_widget_insight(widget_title: str, widget_type: str, data_text: str) -> str:
+    """Genera un análisis interpretativo en Markdown a partir de los datos calculados de un widget."""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
+    client = gemini_client(api_key)
+    prompt = (
+        f"Widget: '{widget_title}' (Tipo de gráfico: {widget_type})\n\n"
+        f"Datos calculados del widget:\n{data_text}\n\n"
+        "Redacta el análisis interpretativo en Markdown:"
+    )
+    started = time.monotonic()
+    response = client.models.generate_content(
+        model=settings.GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=WIDGET_INSIGHT_SYSTEM_PROMPT,
+            temperature=0.2,
+            thinking_config=_thinking_config(0),
+        ),
+    )
+    _log_usage(f"widget_insight:{widget_type}", response, started)
+    return (response.text or "No se pudo generar el análisis.").strip()
+
+
 def gemini_upload_file(file_path: str, display_name: str | None = None) -> Any:
     """Sube un archivo a Gemini Files API."""
     api_key = settings.GEMINI_API_KEY

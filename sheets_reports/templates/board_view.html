@@ -104,6 +104,7 @@
 {% endif %}
 
 {% if dashboard %}{% include "sheets_reports/data_chat.html" %}{% endif %}
+{% if dashboard %}{% include "sheets_reports/widget_ai_insight_modal.html" %}{% endif %}
 
 <script>
   window.DASHBOARD_ID = {{ dashboard.id }};

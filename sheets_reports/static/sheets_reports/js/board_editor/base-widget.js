@@ -291,8 +291,9 @@
       el.dataset.type = this.chart_type;
       el.innerHTML = `
         ${BaseWidget.dragHandleHTML()}
-        <div class="flex justify-between items-center border-line pb-2 mb-2 select-none">
-          <span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40">${BaseWidget.escapeHTML(this.title)}</span>
+        <div class="flex justify-between items-center border-line pb-2 mb-2 select-none gap-2">
+          <span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40 truncate">${BaseWidget.escapeHTML(this.title)}</span>
+          ${this.aiInsightButtonHTML()}
         </div>
         <div id="chart-${this.id}" class="flex-1 w-full min-h-0"></div>
         ${this.loaderOverlayHTML()}
@@ -334,8 +335,8 @@
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       const titleHTML = this.title
-        ? `<div class="flex items-center border-line pb-2 mb-2"><span class="text-[10px] font-bold uppercase tracking-wider text-ink/40">${BaseWidget.escapeHTML(this.title)}</span></div>`
-        : '';
+        ? `<div class="flex justify-between items-center border-line pb-2 mb-2 select-none gap-2 min-w-0"><span class="text-[10px] font-bold uppercase tracking-wider text-ink/40 truncate">${BaseWidget.escapeHTML(this.title)}</span>${this.aiInsightButtonHTML()}</div>`
+        : (this.chart_type !== 'filter' ? `<div class="flex justify-end pb-2 mb-2">${this.aiInsightButtonHTML()}</div>` : '');
       el.innerHTML = `${titleHTML}<div id="chart-${this.id}" class="flex-1 w-full min-h-0"></div>${this.loaderOverlayHTML()}
         <div class="actions-slot absolute top-2 right-2 z-30 flex items-center gap-1"></div>`;
       return el;
@@ -344,6 +345,7 @@
     mountReadOnly() {
       this._readOnly = true;
       this.el = this.buildReadOnlyElement();
+      this._attachInsightEvent();
       this.setLoading(true);
       return this.el;
     }
@@ -460,9 +462,31 @@
       }
     }
 
+    aiInsightButtonHTML() {
+      if (this.chart_type === 'filter' || !this.id || this.id <= 0) return '';
+      return `<button type="button" class="widget-ai-insight-btn p-1 rounded-md text-ink/35 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer shrink-0" title="Ver análisis con IA" aria-label="Ver análisis con IA">
+        <i class="ti ti-bulb text-base" aria-hidden="true"></i>
+      </button>`;
+    }
+
+    _attachInsightEvent() {
+      if (!this.el) return;
+      const btn = this.el.querySelector('.widget-ai-insight-btn');
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent('widget:ai-insight', {
+            detail: { id: this.id, title: this.title || this.constructor.label || 'Widget', type: this.chart_type }
+          }));
+        });
+      }
+    }
+
     _attachCommonEvents() {
       const el = this.el;
       if (!el) return;
+      this._attachInsightEvent();
       const editBtn = el.querySelector('.edit-widget-btn');
       const deleteBtn = el.querySelector('.delete-widget-btn');
       if (editBtn) {

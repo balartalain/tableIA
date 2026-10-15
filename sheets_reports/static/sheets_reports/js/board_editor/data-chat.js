@@ -60,7 +60,7 @@ function dataChat() {
     },
 
     async send(customText = null) {
-      const text = (customText || this.prompt || '').trim();
+      const text = (typeof customText === 'string' ? customText : this.prompt || '').trim();
       if (!text || this.loading || !window.DASHBOARD_ID) return;
 
       this.messages.push({

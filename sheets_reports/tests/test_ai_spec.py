@@ -216,6 +216,25 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertIn("ya existe el campo 'KPI 1' con esa fórmula", call.call_args_list[1].args[0])
         self.assertEqual(result["fields"]["metrics"][0]["field"], "KPI 1")
 
+    def test_admite_hasta_diez_campos_calculados(self, _audit):
+        fields = [
+            {"name": f"Satisfacción {i}", "format": "percent",
+             "formula": 'SUM(IF(categoria = "Hogar", ventas, 0)) / SUM(ventas) * 100'}
+            for i in range(1, 6)
+        ]
+        names, errors = ai_spec._calculated_fields_errors(fields, sales_ctx())
+        self.assertEqual(errors, [])
+        self.assertEqual(len(names), 5)
+
+        # Exceder el límite de 10
+        demasiados = [
+            {"name": f"Campo {i}", "format": "percent",
+             "formula": 'SUM(IF(categoria = "Hogar", ventas, 0)) / SUM(ventas) * 100'}
+            for i in range(1, 12)
+        ]
+        _, errors_demasiados = ai_spec._calculated_fields_errors(demasiados, sales_ctx())
+        self.assertIn("como mucho 10", errors_demasiados[0])
+
     def test_dos_propuestas_invalidas_dan_error_legible(self, _audit):
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", INVALID_ARGS)) as call:
             with self.assertRaises(SpecGenerationError) as ctx:

@@ -63,7 +63,7 @@ ALIAS_RE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
 
 MAX_LIMIT = 500
 # Campos calculados nuevos que la IA puede proponer en una respuesta.
-MAX_NEW_CALCULATED = 3
+MAX_NEW_CALCULATED = 10
 
 
 class SpecGenerationError(Exception):

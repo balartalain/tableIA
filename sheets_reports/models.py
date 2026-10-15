@@ -69,6 +69,10 @@ class DataSource(models.Model):
                   'Sin agregaciones son por fila (una columna más); con SUM, AVG… son agregados '
                   '(solo métricas). Ver engine/formulas.py.',
     )
+    gemini_file_id = models.CharField(
+        max_length=255, blank=True, default="",
+        help_text="Id del archivo subido a Gemini Files API para el chatbot de datos.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

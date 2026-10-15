@@ -1,7 +1,8 @@
 """
 Chatbot analítico sobre la fuente de datos del tablero usando Gemini y ejecución de código Python.
-Sube la fuente de datos a Google y permite hacer preguntas analíticas, ejecutar cálculos en pandas
-y generar gráficos con matplotlib/seaborn.
+Sube la fuente de datos a Google una sola vez, reutiliza el identificador de archivo en consultas
+subsecuentes, permite hacer preguntas analíticas, ejecutar cálculos en pandas y generar gráficos
+con matplotlib/seaborn.
 """
 from __future__ import annotations
 
@@ -10,7 +11,15 @@ import os
 import tempfile
 from typing import Any
 
-from sheets_reports.services.ai_spec import SpecGenerationError, generate_with_code_execution
+from django.conf import settings
+
+from sheets_reports.services.ai_spec import (
+    SpecGenerationError,
+    gemini_delete_file,
+    gemini_get_file,
+    gemini_upload_file,
+    generate_with_code_execution,
+)
 from sheets_reports.services.sheets import load_source
 
 logger = logging.getLogger(__name__)
@@ -28,9 +37,57 @@ Instrucciones:
 """
 
 
+def get_or_upload_source_file(source, df) -> Any:
+    """
+    Obtiene la referencia del archivo en Gemini Files API para la fuente dada.
+    Reutiliza `source.gemini_file_id` si el archivo existe y sigue activo en Gemini.
+    Si no existe o expiró, exporta el DataFrame a CSV temporal, lo sube y guarda el nuevo ID en la fuente.
+    """
+    file_id = getattr(source, "gemini_file_id", "")
+    if isinstance(file_id, str) and file_id.strip():
+        existing = gemini_get_file(file_id.strip())
+        if existing:
+            return existing
+
+    # Subir DataFrame a Gemini Files API
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            df.to_csv(f, index=False)
+            tmp_path = f.name
+
+        display_name = f"source_{getattr(source, 'id', 'data')}.csv"
+        file_ref = gemini_upload_file(tmp_path, display_name=display_name)
+        new_file_id = getattr(file_ref, "name", "")
+        if new_file_id and hasattr(source, "save") and getattr(source, "pk", None):
+            source.gemini_file_id = new_file_id
+            source.save(update_fields=["gemini_file_id"])
+        return file_ref
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+def delete_source_gemini_file(source) -> None:
+    """Elimina el archivo asociado a la fuente en Gemini Files API si existe y limpia su ID."""
+    file_id = getattr(source, "gemini_file_id", "")
+    if not (isinstance(file_id, str) and file_id.strip()):
+        return
+
+    gemini_delete_file(file_id.strip())
+
+    if hasattr(source, "save") and getattr(source, "pk", None):
+        source.gemini_file_id = ""
+        source.save(update_fields=["gemini_file_id"])
+
+
 def ask_data_chat(source, prompt: str) -> dict[str, Any]:
     """
     Ejecuta una consulta al chatbot sobre la fuente de datos usando ejecución de código en Gemini.
+    Sube el archivo CSV a Gemini únicamente si no se ha subido previamente o si expiró.
     Devuelve:
       {
         "text": "...",
@@ -42,27 +99,16 @@ def ask_data_chat(source, prompt: str) -> dict[str, Any]:
     if df.empty:
         return {"text": "La fuente de datos está vacía.", "images": [], "code": []}
 
-    tmp_path = None
-    try:
-        # Guardar DataFrame como CSV temporal
-        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
-            df.to_csv(f, index=False)
-            tmp_path = f.name
+    file_ref = get_or_upload_source_file(source, df)
 
-        cols_preview = ", ".join(list(df.columns)[:40])
-        full_prompt = (
-            f"Conjunto de datos: '{source.label}'. Total filas: {len(df)}. Columnas: {cols_preview}.\n\n"
-            f"Pregunta del usuario:\n{prompt}"
-        )
+    cols_preview = ", ".join(list(df.columns)[:40])
+    full_prompt = (
+        f"Conjunto de datos: '{getattr(source, 'label', 'Datos')}'. Total filas: {len(df)}. Columnas: {cols_preview}.\n\n"
+        f"Pregunta del usuario:\n{prompt}"
+    )
 
-        return generate_with_code_execution(
-            file_path=tmp_path,
-            prompt=full_prompt,
-            system_instruction=SYSTEM_INSTRUCTION,
-        )
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
+    return generate_with_code_execution(
+        prompt=full_prompt,
+        file_ref=file_ref,
+        system_instruction=SYSTEM_INSTRUCTION,
+    )

@@ -16,6 +16,7 @@ import struct
 import time
 import unicodedata
 import zlib
+from typing import Any
 
 from django.conf import settings
 from google import genai
@@ -543,13 +544,64 @@ def _is_blank_image(data_uri: str) -> bool:
         return False
 
 
-def generate_with_code_execution(file_path: str, prompt: str, system_instruction: str = "") -> dict:
-    """Ejecuta una consulta analítica en Gemini subiendo un archivo y activando la tool de code_execution."""
+def gemini_upload_file(file_path: str, display_name: str | None = None) -> Any:
+    """Sube un archivo a Gemini Files API."""
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
     client = gemini_client(api_key)
-    file_ref = client.files.upload(file=file_path)
+    config = types.UploadFileConfig(display_name=display_name) if display_name else None
+    return client.files.upload(file=file_path, config=config)
+
+
+def gemini_get_file(file_id: str) -> Any:
+    """Obtiene un archivo de Gemini Files API o None si no existe o expiró."""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key or not file_id:
+        return None
+    client = gemini_client(api_key)
+    try:
+        f = client.files.get(name=file_id)
+        state = getattr(f, "state", None)
+        state_str = str(getattr(state, "name", state) or "").upper()
+        if "ACTIVE" in state_str or state_str in ("", "STATE_UNSPECIFIED"):
+            return f
+        return None
+    except Exception:
+        return None
+
+
+def gemini_delete_file(file_id: str) -> bool:
+    """Elimina un archivo de Gemini Files API si existe."""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key or not file_id:
+        return False
+    client = gemini_client(api_key)
+    try:
+        client.files.delete(name=file_id)
+        return True
+    except Exception as e:
+        logger.info("No se pudo eliminar el archivo %s de Gemini: %s", file_id, e)
+        return False
+
+
+def generate_with_code_execution(
+    file_path: str | None = None,
+    prompt: str = "",
+    system_instruction: str = "",
+    file_ref: Any = None,
+    client: genai.Client | None = None,
+) -> dict:
+    """Ejecuta una consulta analítica en Gemini subiendo un archivo o reutilizando file_ref, y activando la tool de code_execution."""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        raise SpecGenerationError("GEMINI_API_KEY no está configurado.")
+    if client is None:
+        client = gemini_client(api_key)
+    if file_ref is None:
+        if not file_path:
+            raise SpecGenerationError("Se requiere file_path o file_ref.")
+        file_ref = client.files.upload(file=file_path)
     contents = [file_ref, prompt]
 
     config = types.GenerateContentConfig(

@@ -652,3 +652,56 @@ class ColumnResolutionTests(SimpleTestCase):
         self.assertEqual(res["code"], ["print(123)"])
         self.assertEqual(len(res["images"]), 1)
         self.assertTrue(res["images"][0].startswith("data:image/png;base64,"))
+
+    @mock.patch("sheets_reports.services.ai_spec.gemini_client")
+    def test_generate_with_code_execution_deduplicate_images_and_clean_markdown_images(self, mock_client_fn):
+        mock_client = mock.Mock()
+        mock_client_fn.return_value = mock_client
+        mock_part_img1 = mock.Mock(text=None, inline_data=mock.Mock(mime_type="image/png", data=b"same_bytes"), executable_code=None)
+        mock_part_img2 = mock.Mock(text=None, inline_data=mock.Mock(mime_type="image/png", data=b"same_bytes"), executable_code=None)
+        mock_part_text = mock.Mock(text="Aquí el gráfico:\n![Gráfico](data:image/png;base64,123)\nConclusión final.", inline_data=None, executable_code=None)
+        mock_candidate = mock.Mock(content=mock.Mock(parts=[mock_part_img1, mock_part_img2, mock_part_text]))
+        mock_client.models.generate_content.return_value = mock.Mock(candidates=[mock_candidate], usage_metadata=None)
+
+        res = ai_spec.generate_with_code_execution("fake.csv", "grafico de pastel")
+        # Verifica desduplicación de imágenes
+        self.assertEqual(len(res["images"]), 1)
+        # Verifica que la sintaxis de imagen markdown se eliminó del texto
+        self.assertNotIn("![Gráfico]", res["text"])
+        self.assertIn("Aquí el gráfico:", res["text"])
+        self.assertIn("Conclusión final.", res["text"])
+
+    @mock.patch("sheets_reports.services.ai_spec.gemini_client")
+    def test_generate_with_code_execution_filters_blank_canvas_images(self, mock_client_fn):
+        import base64, struct, zlib
+        def make_png(solid=True):
+            ihdr = struct.pack('>IIBBBBB', 10, 10, 8, 2, 0, 0, 0)
+            ihdr_crc = zlib.crc32(b'IHDR' + ihdr)
+            ihdr_chunk = struct.pack('>I', 13) + b'IHDR' + ihdr + struct.pack('>I', ihdr_crc)
+            raw = bytearray()
+            for y in range(10):
+                raw.append(0)
+                for x in range(10):
+                    raw.extend([255, 255, 255] if solid else [x * 20, y * 20, (x + y) * 10])
+            comp = zlib.compress(bytes(raw))
+            idat_crc = zlib.crc32(b'IDAT' + comp)
+            idat_chunk = struct.pack('>I', len(comp)) + b'IDAT' + comp + struct.pack('>I', idat_crc)
+            iend_crc = zlib.crc32(b'IEND')
+            iend_chunk = struct.pack('>I', 0) + b'IEND' + struct.pack('>I', iend_crc)
+            return b'\x89PNG\r\n\x1a\n' + ihdr_chunk + idat_chunk + iend_chunk
+
+        blank_png = make_png(solid=True)
+        chart_png = make_png(solid=False)
+
+        mock_client = mock.Mock()
+        mock_client_fn.return_value = mock_client
+        mock_part_blank = mock.Mock(text=None, inline_data=mock.Mock(mime_type="image/png", data=blank_png), executable_code=None)
+        mock_part_chart = mock.Mock(text=None, inline_data=mock.Mock(mime_type="image/png", data=chart_png), executable_code=None)
+        mock_part_text = mock.Mock(text="Aquí está el gráfico de pastel.", inline_data=None, executable_code=None)
+        mock_candidate = mock.Mock(content=mock.Mock(parts=[mock_part_blank, mock_part_chart, mock_part_text]))
+        mock_client.models.generate_content.return_value = mock.Mock(candidates=[mock_candidate], usage_metadata=None)
+
+        res = ai_spec.generate_with_code_execution("fake.csv", "grafico de pastel")
+        # Debe haber descartado el lienzo en blanco preliminar y conservado solo la imagen con datos
+        self.assertEqual(len(res["images"]), 1)
+        self.assertEqual(res["images"][0], f"data:image/png;base64,{base64.b64encode(chart_png).decode()}")

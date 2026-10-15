@@ -12,8 +12,10 @@ import functools
 import json
 import logging
 import re
+import struct
 import time
 import unicodedata
+import zlib
 
 from django.conf import settings
 from google import genai
@@ -513,6 +515,34 @@ def generate_json(contents: str, schema: dict, temperature: float = 0, call: str
     return json.loads(response.text or "null")
 
 
+def _is_blank_image(data_uri: str) -> bool:
+    """Detecta si una imagen en formato data URI PNG es un lienzo en blanco / sin contenido."""
+    if not data_uri.startswith("data:image/png;base64,"):
+        return False
+    try:
+        b64_str = data_uri.split(",", 1)[1]
+        png_bytes = base64.b64decode(b64_str)
+        if not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+            return False
+        idat_data = bytearray()
+        offset = 8
+        while offset < len(png_bytes):
+            if offset + 8 > len(png_bytes):
+                break
+            length, chunk_type = struct.unpack(">I4s", png_bytes[offset : offset + 8])
+            offset += 8
+            if chunk_type == b"IDAT":
+                idat_data.extend(png_bytes[offset : offset + length])
+            offset += length + 4
+        if not idat_data:
+            return False
+        decompressed = zlib.decompress(bytes(idat_data))
+        # Un lienzo completamente en blanco/sólido tiene <= 4 valores de byte únicos en su stream
+        return len(set(decompressed)) <= 4
+    except Exception:
+        return False
+
+
 def generate_with_code_execution(file_path: str, prompt: str, system_instruction: str = "") -> dict:
     """Ejecuta una consulta analítica en Gemini subiendo un archivo y activando la tool de code_execution."""
     api_key = settings.GEMINI_API_KEY
@@ -537,7 +567,7 @@ def generate_with_code_execution(file_path: str, prompt: str, system_instruction
     )
     _log_usage("code_execution", response, started)
 
-    texts, images, codes = [], [], []
+    texts, raw_images, codes = [], [], []
     if response.candidates and response.candidates[0].content:
         parts = response.candidates[0].content.parts
         last_code_idx = -1
@@ -553,7 +583,9 @@ def generate_with_code_execution(file_path: str, prompt: str, system_instruction
                 texts.append(part.text)
             if getattr(part, "inline_data", None) and part.inline_data.data:
                 b64 = base64.b64encode(part.inline_data.data).decode("ascii")
-                images.append(f"data:{part.inline_data.mime_type or 'image/png'};base64,{b64}")
+                img_url = f"data:{part.inline_data.mime_type or 'image/png'};base64,{b64}"
+                if img_url not in raw_images:
+                    raw_images.append(img_url)
             if getattr(part, "executable_code", None) and part.executable_code.code:
                 codes.append(part.executable_code.code)
 
@@ -562,7 +594,15 @@ def generate_with_code_execution(file_path: str, prompt: str, system_instruction
                 if getattr(part, "text", None):
                     texts.append(part.text)
 
+    # Filtrar imágenes vacías o lienzos en blanco
+    images = [img for img in raw_images if not _is_blank_image(img)]
+    if not images and raw_images:
+        images = raw_images
+
     full_text = "\n\n".join(t.strip() for t in texts if t.strip()) or "No se pudo generar una respuesta."
+    # Limpiar sintaxis de imágenes markdown o HTML para evitar renderizarlas duplicadas (ya se devuelven en images)
+    full_text = re.sub(r"!\[.*?\]\([^)]*\)", "", full_text)
+    full_text = re.sub(r"<img[^>]*>", "", full_text, flags=re.IGNORECASE)
     # Limpiar líneas de preámbulo residuales ("Para X, ejecutaré el siguiente código...", etc.)
     full_text = re.sub(
         r"(?mi)^.*(?:ejecutar[ée]|cargar[ée]|proceder[ée]|escribir[ée]|utilizar[ée]|correr[ée]).*$\n*",

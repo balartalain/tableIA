@@ -91,15 +91,17 @@ function dataChat() {
 
     renderContent(text) {
       if (!text) return '';
+      // Eliminar sintaxis de imágenes markdown e HTML para evitar renderizado doble (ya se muestra en m.images)
+      const cleanText = text.replace(/!\[.*?\]\([^)]*\)/g, '').replace(/<img[^>]*>/gi, '').trim();
       if (window.marked && typeof window.marked.parse === 'function') {
         try {
-          return window.marked.parse(text);
+          return window.marked.parse(cleanText);
         } catch (e) {
           // fallback si falla el parser
         }
       }
       // Reemplazo básico de saltos de línea y negritas si marked no está disponible
-      return text
+      return cleanText
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')

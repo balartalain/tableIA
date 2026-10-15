@@ -56,6 +56,8 @@ editor visual), y el backend calcula los números con pandas y devuelve JSON lis
                     │   sheets.py          lectura de la hoja + caché     │
                     │   source_columns.py  columnas que usa cada widget   │
                     │   ai_spec.py         propuesta de WidgetForm (IA)   │
+                    │   ai_board.py        plan y compilación batch (IA)  │
+                    │   ai_data_chat.py    chatbot analítico de datos     │
                     │   ai_suggestions.py  pedidos sugeridos del chat     │
                     └───────────────┬─────────────────────────────────────┘
                                     ▼
@@ -162,7 +164,9 @@ sheets_reports/
     source_columns.py       # Columnas que usa cada widget: renombrar, impacto de un cambio, IA
     google_drive.py         # Hojas y pestañas visibles para la cuenta de servicio
     widget_service.py       # WidgetService: CRUD, validación, render
-    ai_spec.py              # WidgetForm vía Gemini: crea, o ajusta el borrador actual (current) con el historial del chat
+    ai_spec.py              # WidgetForm vía Gemini (Function Calling): compila o ajusta campos y estilo
+    ai_board.py             # Generación de tableros con IA en 2 llamadas: plan (propose_board) y lote (build_board_batch)
+    ai_data_chat.py         # Chatbot analítico sobre la fuente con ejecución de código Python en Gemini
     ai_suggestions.py       # 2 pedidos sugeridos para el chat del panel, por tipo de widget y hoja (cacheados)
     ai_scales.py            # «Clasificar con IA»: escala de medida y orden de las ordinales que propone la IA
 
@@ -205,6 +209,7 @@ Una pestaña (`gid`) de una hoja de Google Sheets conectada a un tablero.
 | `first_row_headers` | `BooleanField(default=True)` | La fila 1 son los encabezados; si no, «Columna A»… |
 | `columns` | `JSONField` | `[{name, label?, type: text\|number\|date, include, scale?, order?}]` |
 | `calculated_fields` | `JSONField` | `[{id, name, formula, format: number\|percent}]` (ver §10.4) |
+| `gemini_file_id` | `CharField(255, blank)` | Identificador del archivo en Gemini Files API (se reutiliza en el chat analítico) |
 
 - `name` de cada columna es el encabezado de la hoja; `label`, el **nombre a mostrar**, que la
   reemplaza en todo el tablero (schema, motor, filtros, IA). Los widgets guardan ese nombre.
@@ -796,7 +801,46 @@ Decide la forma final según lo que dejó la agregación en `metadata`:
 `pivot_column`, `pivot_values`, `dimension_values`, `totals`, `row_totals`,
 `column_totals`, `nested`.
 
-## 9. Sugerencias del chat (`services/ai_suggestions.py`)
+## 9. Servicios de Inteligencia Artificial
+
+Toda interacción con el SDK de Google Gemini vive aislada en `services/ai_spec.py`. El cliente `gemini_client` mantiene en memoria una instancia singleton para reutilizar la conexión HTTP/TLS persistente (Keep-Alive), reduciendo la latencia de red.
+
+### 9.1 Generación de tableros completos (`services/ai_board.py`)
+
+La creación de un tablero a partir de un pedido en lenguaje natural se ejecuta mediante una arquitectura eficiente de **dos llamadas**:
+
+1. **Llamada 1 — Planificación (`propose_board`)**:
+   - `POST /api/dashboard/{id}/board-plan/` recibe `{prompt, source}`.
+   - Envía el catálogo de widgets con sus capacidades, el contexto de columnas (`columns_context`) y las reglas de negocio (`BI_DATA_RULES`).
+   - Devuelve `{items: [{widget_type, title, description, request, width}], note}` con la lista conceptual de widgets (entre 2 y 15).
+   - El usuario visualiza la propuesta en el modal, donde puede revisar, ordenar o desmarcar widgets antes de construirlos.
+
+2. **Llamada 2 — Compilación en lote (`build_board_batch`)**:
+   - `POST /api/dashboard/{id}/board-build/` recibe la lista de widgets seleccionados `{items: [...]}`.
+   - En una única llamada a Gemini bajo el esquema estructurado `BATCH_BUILD_SCHEMA`, compila las especificaciones técnicas completas (`fields`, `style`, `calculated_fields` y `column_scales`) de todos los widgets a la vez.
+   - El backend normaliza y valida cada widget con `form_errors()`:
+     - Los widgets válidos se devuelven con sus `fields` resueltos para montarse directamente en el canvas.
+     - Admite hasta `MAX_NEW_CALCULATED = 10` campos calculados nuevos propuestos en el lote.
+     - Si un widget individual no supera la validación en lote, se marca con `fields: null`, activando de forma transparente la compilación individual de respaldo (fallback) mediante `table_assistant`.
+
+### 9.2 Asistente y compilación de widgets (`services/ai_spec.py`)
+
+Genera o ajusta el `WidgetForm` (`fields` + `style`) de un widget individual mediante Function Calling forzado (`create_widget` o `reject_request`):
+- `POST /api/dashboard/{id}/table-assistant/` recibe `{prompt, widget_type, current, history, columns}`.
+- Con `current` (`_draftPayload`) ajusta el estado actual en vez de crear desde cero; `history` conserva el contexto conversacional.
+- Utiliza `thinking_budget = 0` para una respuesta rápida (1.5s - 2s).
+- Valida exhaustivamente con `form_errors()`. Si hay errores, reintenta hasta una vez pasándole a la IA los motivos exactos para su corrección.
+- Los campos calculados nuevos propuestos se validan sintácticamente y se compilan en la fuente al aplicar la propuesta (hasta `MAX_NEW_CALCULATED = 10`).
+
+### 9.3 Chatbot analítico sobre la fuente (`services/ai_data_chat.py`)
+
+Permite realizar consultas analíticas libres en lenguaje natural sobre los datos del tablero, disponible tanto en el editor como en la vista compartida (`board_view`):
+- `POST /api/dashboard/{id}/data-chat/` recibe `{prompt, source_id?}`.
+- **Ejecución de código Python**: Sube el DataFrame a Google Gemini Files API y activa la herramienta `code_execution` para cálculos numéricos exactos (`pandas`, `numpy`) y generación de gráficos (`matplotlib`, `seaborn`).
+- **Subida única y reutilización**: La referencia del archivo en Gemini se almacena en el campo `gemini_file_id` del modelo `DataSource`. Las siguientes consultas reutilizan el mismo archivo ya presente en Google (válido por 48 h) sin resubirlo por red.
+- **Invalidación**: Al actualizar la fuente (`source_refresh`) o alterar su estructura de columnas/fórmulas, el archivo remoto se elimina (`gemini_delete_file`) y el identificador se limpia automáticamente para regenerarse en la siguiente consulta.
+
+### 9.4 Sugerencias del chat (`services/ai_suggestions.py`)
 
 `GET /api/dashboard/{id}/widget-suggestions/?widget_type=kpi[&refresh=1&avoid=…]` →
 `{"suggestions": [texto, texto]}`
@@ -880,6 +924,10 @@ el usuario, para ese tipo de widget a partir de una vista previa de la hoja:
 | `GET /api/sources/{id}/status/` | Si la cuenta de servicio todavía llega a la pestaña (`google_drive.tab_status`, sin caché): `ok`, `no_access` (403/404), `tab_missing` (la hoja abre pero el gid ya no está) o `null` si no se pudo saber |
 | `POST /api/sources/{id}/formula/` | Vista previa de una fórmula (`formula` o `tree`, el árbol del constructor) con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{formula, kind, values}` o `{error}` |
 | `POST /api/sources/{id}/formula/ai/` | «Generar con IA» del constructor: `{prompt}` + lo mismo que la vista previa → `{formula, tree, name, kind}` o `{error}` con el motivo si la IA no pudo (`services/ai_formula.py`) |
+| `POST /api/dashboard/{id}/board-plan/` | «Generar con IA» (Llamada 1): `{prompt, source}` → lista conceptual de widgets `{items: [{widget_type, title, description, request, width}], note}` (`services/ai_board.py`) |
+| `POST /api/dashboard/{id}/board-build/` | Compilación en lote (Llamada 2): `{items: [...]}` → especificaciones técnicas completas `{items: [{widget_type, fields, style, calculated_fields, column_scales}, ...]}` (`services/ai_board.py`) |
+| `POST /api/dashboard/{id}/table-assistant/` | Asistente IA de configuración de un widget: `{prompt, widget_type, current, history}` → `{widget_type, fields, style, calculated_fields}` (`services/ai_spec.py`) |
+| `POST /api/dashboard/{id}/data-chat/` | Chatbot analítico sobre la fuente con ejecución de código Python: `{prompt, source_id?}` → `{text, images, code}` (`services/ai_data_chat.py`) |
 
 ### 10.4 Campos calculados (`engine/formulas.py`)
 

@@ -42,7 +42,7 @@ audit_logger = logging.getLogger("tableia.ai_audit")
 GEMINI_TIMEOUT_MS = 120_000
 # Tokens de razonamiento del modelo por tipo de llamada: 0 = responde sin razonar; None = sin
 # límite (lo que decida el modelo). El reintento de una propuesta inválida razona sin límite.
-THINKING_BUDGETS = {"suggestions": 0, "widget": 512, "formula": 512, "board_plan": 1024, "scales": 512, "column_labels": 256}
+THINKING_BUDGETS = {"suggestions": 0, "widget": 0, "formula": 256, "board_plan": 512, "scales": 256, "column_labels": 256, "board_batch_build": 0}
 CREATE_TOOL = "create_widget"
 REJECT_TOOL = "reject_request"
 
@@ -462,14 +462,23 @@ def system_prompt_for(widget_type: str | None) -> str:
     return build_system_prompt([w for w in _widgets_for(widget_type) if w])
 
 
+_cached_client: genai.Client | None = None
+_cached_api_key: str | None = None
+
+
 def gemini_client(api_key: str) -> genai.Client:
-    return genai.Client(
+    global _cached_client, _cached_api_key
+    if _cached_client is not None and _cached_api_key == api_key:
+        return _cached_client
+    _cached_client = genai.Client(
         api_key=api_key,
         http_options=types.HttpOptions(
             timeout=GEMINI_TIMEOUT_MS,
             retry_options=types.HttpRetryOptions(attempts=2),
         ),
     )
+    _cached_api_key = api_key
+    return _cached_client
 
 
 def _log_usage(call: str, response, started: float) -> None:

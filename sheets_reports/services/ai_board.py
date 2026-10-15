@@ -10,8 +10,18 @@ import logging
 import re
 
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.services.ai_spec import (BI_DATA_RULES, THINKING_BUDGETS, SpecGenerationError, capabilities_text,
-                                             columns_context, generate_json)
+from sheets_reports.services.ai_spec import (
+    BI_DATA_RULES,
+    THINKING_BUDGETS,
+    SpecGenerationError,
+    _normalize,
+    _omit_unchanged_scales,
+    _resolve_columns,
+    capabilities_text,
+    columns_context,
+    form_errors,
+    generate_json,
+)
 from sheets_reports.utils.data import is_id_column
 from sheets_reports.widgets import WIDGETS
 
@@ -178,3 +188,207 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=()) -> dict:
                         thinking_budget=THINKING_BUDGETS["board_plan"])
     logger.info("Plan de tablero con IA: %s", json.dumps(raw, ensure_ascii=False)[:2000])
     return clean_plan(raw, existing_types, ctx=ctx)
+
+
+BATCH_BUILD_PROMPT = """\
+Eres el compilador técnico de widgets para un tablero de control sobre una hoja de cálculo.
+Tu tarea es compilar las especificaciones técnicas completas (`fields` y `style`) de cada uno de los widgets solicitados a continuación.
+
+Widgets disponibles (widget_type: para qué sirve. Admite: …):
+{catalog}
+
+{columns}
+
+{data_rules}
+
+Instrucciones:
+1. Devuelve la lista `items` con exactamente los widgets pedidos, en el mismo orden.
+2. Cada elemento debe incluir:
+   - "widget_type": el tipo del widget solicitado.
+   - "fields": dimensiones, métricas (con agg y alias en snake_case; opcional label, filters y window), pivotes, orden (sort_by), límite (limit).
+   - "style": diccionario con opciones de apariencia según el widget.
+   - "calculated_fields": si el pedido requiere un cálculo entre totales (ej. % de cumplimiento, diferencia, margen), defínelo aquí y úsalo con agg="auto" en las métricas.
+   - "column_scales": correcciones de escalas (ej. ordinal) solo si aplica.
+3. Usa SIEMPRE los nombres y alias reales de las columnas indicadas en la lista de columnas.
+4. Para campos calculados, la fórmula debe ser agregada: SUM([Columna]), AVG([Columna]), COUNT([Columna]), IF(condición, sí, no).
+
+Widgets solicitados a compilar:
+{widgets_requested}
+"""
+
+BATCH_ITEM_SCHEMA = {
+    "type": "object",
+    "required": ["widget_type", "fields"],
+    "properties": {
+        "widget_type": {"type": "string"},
+        "fields": {
+            "type": "object",
+            "properties": {
+                "dimensions": {"type": "array", "items": {"type": "string"}},
+                "metrics": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["agg", "alias"],
+                        "properties": {
+                            "agg": {"type": "string"},
+                            "field": {"type": "string"},
+                            "alias": {"type": "string"},
+                            "label": {"type": "string"},
+                            "filters": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "required": ["field", "op"],
+                                    "properties": {
+                                        "field": {"type": "string"},
+                                        "op": {"type": "string"},
+                                        "value": {},
+                                        "relative": {"type": "string"},
+                                    },
+                                },
+                            },
+                            "window": {
+                                "type": "object",
+                                "properties": {"type": {"type": "string"}},
+                            },
+                        },
+                    },
+                },
+                "pivots": {"type": "array", "items": {"type": "string"}},
+                "filters": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["field", "op"],
+                        "properties": {
+                            "field": {"type": "string"},
+                            "op": {"type": "string"},
+                            "value": {},
+                            "relative": {"type": "string"},
+                        },
+                    },
+                },
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "field": {"type": "string"},
+                            "label": {"type": "string"},
+                        },
+                    },
+                },
+                "sort_by": {"type": "string"},
+                "limit": {"type": "integer"},
+                "trend_by": {"type": "string"},
+            },
+        },
+        "style": {"type": "object"},
+        "calculated_fields": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["name", "formula", "format"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "formula": {"type": "string"},
+                    "format": {"type": "string"},
+                },
+            },
+        },
+        "column_scales": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["field", "scale"],
+                "properties": {
+                    "field": {"type": "string"},
+                    "scale": {"type": "string"},
+                    "order": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+}
+
+BATCH_BUILD_SCHEMA = {
+    "type": "object",
+    "required": ["items"],
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": BATCH_ITEM_SCHEMA,
+        },
+    },
+}
+
+
+def build_board_batch(items: list[dict], ctx: SheetContext) -> list[dict]:
+    """Compila en una sola llamada a la IA las especificaciones técnicas (fields, style) de todos los widgets."""
+    if not items:
+        return []
+    if not ctx.fields:
+        raise SpecGenerationError("La hoja no tiene columnas.")
+
+    widgets_lines = []
+    for idx, item in enumerate(items, 1):
+        w_type = item.get("widget_type") or "bar"
+        title = item.get("title") or f"Widget {idx}"
+        req = item.get("request") or title
+        cols = ", ".join(item.get("columns") or [])
+        line = f"{idx}. Tipo: '{w_type}'. Título: '{title}'. Pedido: '{req}'."
+        if cols:
+            line += f" Columnas sugeridas: {cols}."
+        widgets_lines.append(line)
+
+    prompt = BATCH_BUILD_PROMPT.format(
+        catalog=_catalog(),
+        columns=columns_context(ctx),
+        data_rules=BI_DATA_RULES,
+        widgets_requested="\n".join(widgets_lines),
+    )
+
+    raw = generate_json(
+        prompt, BATCH_BUILD_SCHEMA, call="board_batch_build",
+        thinking_budget=THINKING_BUDGETS.get("board_batch_build", 0),
+    )
+
+    raw_items = raw.get("items") or []
+    compiled_results = []
+    current_ctx = ctx
+    for idx, req_item in enumerate(items):
+        compiled = raw_items[idx] if idx < len(raw_items) and isinstance(raw_items[idx], dict) else {}
+        w_type = req_item.get("widget_type") or compiled.get("widget_type")
+        normalized = _resolve_columns(_normalize(compiled), current_ctx)
+        errors = form_errors(normalized, current_ctx, w_type, require_title=False)
+        if not errors:
+            _omit_unchanged_scales(normalized, current_ctx)
+            new_calcs = normalized.get("calculated_fields") or []
+            if new_calcs:
+                import dataclasses
+                current_ctx = dataclasses.replace(
+                    current_ctx,
+                    aggregated_fields=current_ctx.aggregated_fields | {f["name"] for f in new_calcs if f.get("name")}
+                )
+            compiled_results.append({
+                "widget_type": w_type,
+                "title": req_item.get("title", ""),
+                "width": req_item.get("width"),
+                "fields": normalized.get("fields"),
+                "style": normalized.get("style", {}),
+                "calculated_fields": normalized.get("calculated_fields", []),
+                "column_scales": normalized.get("column_scales", []),
+            })
+        else:
+            logger.info("Widget batch %s (%s) requiere compilación individual por errores: %s", idx + 1, w_type, errors)
+            compiled_results.append({
+                "widget_type": w_type,
+                "title": req_item.get("title", ""),
+                "width": req_item.get("width"),
+                "fields": None,
+                "style": {},
+                "calculated_fields": [],
+                "column_scales": [],
+            })
+    return compiled_results

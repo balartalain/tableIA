@@ -1222,6 +1222,45 @@ def board_ai_plan(request, dashboard_id):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+def board_ai_build(request, dashboard_id):
+    """
+    POST {items: [{widget_type, title, request, columns?, width?}], source?}
+    → {items: [{widget_type, title, width, fields, style, calculated_fields, column_scales}, ...]}
+    Compila en bloque (en 1 sola llamada a Gemini) los fields y styles de todos los widgets del plan.
+    """
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    try:
+        data = _json_body(request)
+    except ValueError as e:
+        return _error(str(e))
+    items = data.get("items") or []
+    if not items:
+        return _error("No hay widgets para compilar.")
+    source, error = _require_source(dashboard, data.get("source"))
+    if error:
+        return error
+    try:
+        df = sheets.load_source(source)
+    except SheetError as e:
+        return _error(str(e), status=502)
+
+    try:
+        from sheets_reports.services.ai_board import build_board_batch
+        from sheets_reports.services.ai_spec import SpecGenerationError
+        ctx = SheetContext.from_dataframe(df, source.gid, samples=get_field_samples(df))
+        compiled = build_board_batch(items, ctx)
+        return JsonResponse({"items": compiled})
+    except SpecGenerationError as e:
+        return _error(str(e), status=422)
+    except Exception:
+        logger.exception("Falló la compilación en bloque del tablero")
+        return _error("No se pudo compilar el tablero con IA. Se continuará con compilación individual.", status=502)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
 def table_assistant(request, dashboard_id):
     """
     POST {prompt, source?, widget_type?, current?, history?, columns?}

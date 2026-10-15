@@ -442,6 +442,25 @@ class ViewsTests(TestCase):
         self.assertEqual(failed.json()["error"], "La IA no propuso widgets.")
         self.assertEqual(propose.call_count, 1)
 
+    def test_board_ai_build_success(self, _df):
+        compiled = [{"widget_type": "bar", "title": "Ventas", "fields": {"dimensions": ["mes"]}}]
+        with mock.patch("sheets_reports.services.ai_board.build_board_batch", return_value=compiled):
+            r = self.client.post(
+                f"/api/dashboard/{self.dashboard.id}/board-build/",
+                json.dumps({"items": [{"widget_type": "bar", "title": "Ventas", "request": "ventas"}]}),
+                content_type="application/json",
+            )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"items": compiled})
+
+    def test_board_ai_build_empty_items(self, _df):
+        r = self.client.post(
+            f"/api/dashboard/{self.dashboard.id}/board-build/",
+            json.dumps({"items": []}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 400)
+
     # -------------------------------------------------------------- páginas
     def test_paginas_renderizan(self, _df):
         for url in ("/", f"/tableros/{self.dashboard.id}/edit/", f"/tableros/{self.dashboard.id}/view/"):

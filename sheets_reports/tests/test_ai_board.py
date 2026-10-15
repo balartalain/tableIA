@@ -122,3 +122,44 @@ class ProposeBoardTests(SimpleTestCase):
         with mock.patch.object(ai_board, "generate_json") as model, self.assertRaises(SpecGenerationError):
             propose_board("  ", sales_ctx())
         model.assert_not_called()
+
+    def test_build_board_batch_success(self):
+        ctx = sales_ctx()
+        req_items = [
+            {"widget_type": "bar", "title": "Ventas por categoría", "request": "suma ventas por categoria"},
+            {"widget_type": "kpi", "title": "Total ventas", "request": "total de ventas"},
+        ]
+        mock_compiled = {
+            "items": [
+                {
+                    "widget_type": "bar",
+                    "fields": {
+                        "dimensions": ["categoria"],
+                        "metrics": [{"agg": "sum", "field": "ventas", "alias": "total_ventas"}],
+                    },
+                    "style": {"stacked": False},
+                },
+                {
+                    "widget_type": "kpi",
+                    "fields": {
+                        "metrics": [{"agg": "sum", "field": "ventas", "alias": "kpi_ventas"}],
+                    },
+                    "style": {},
+                },
+            ]
+        }
+        with mock.patch.object(ai_board, "generate_json", return_value=mock_compiled) as mock_gen:
+            compiled = ai_board.build_board_batch(req_items, ctx)
+
+        self.assertEqual(len(compiled), 2)
+        self.assertEqual(compiled[0]["widget_type"], "bar")
+        self.assertEqual(compiled[0]["fields"]["dimensions"], ["categoria"])
+        self.assertEqual(compiled[1]["widget_type"], "kpi")
+        self.assertEqual(compiled[1]["fields"]["metrics"][0]["alias"], "kpi_ventas")
+        mock_gen.assert_called_once()
+
+    def test_build_board_batch_empty_items(self):
+        with mock.patch.object(ai_board, "generate_json") as mock_gen:
+            res = ai_board.build_board_batch([], sales_ctx())
+        self.assertEqual(res, [])
+        mock_gen.assert_not_called()

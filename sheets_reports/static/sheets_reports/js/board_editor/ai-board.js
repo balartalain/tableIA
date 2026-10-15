@@ -170,6 +170,41 @@ function aiBoard() {
         item._order = firstOrder + index;
         item._rowId = await this._rowFor(item);
       }
+
+      // Compilación en bloque (Llamada 2): resuelve fields y estilos de todos los widgets en 1 sola llamada a la IA
+      const needCompile = queue.filter(i => !i.fields);
+      if (needCompile.length > 0) {
+        try {
+          const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.store.dashboardId}/board-build/`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              items: needCompile.map(i => ({
+                widget_type: i.widget_type,
+                title: i.title,
+                request: i.request,
+                columns: i.columns || [],
+                width: i.width,
+              })),
+              source: this.source,
+            }),
+          });
+          if (r && r.ok && data && Array.isArray(data.items)) {
+            for (let idx = 0; idx < needCompile.length; idx++) {
+              const compiled = data.items[idx];
+              if (compiled && compiled.fields) {
+                needCompile[idx].fields = compiled.fields;
+                needCompile[idx].style = compiled.style || needCompile[idx].style || {};
+                needCompile[idx].calculated_fields = compiled.calculated_fields || [];
+                needCompile[idx].column_scales = compiled.column_scales || [];
+              }
+            }
+          }
+        } catch (e) {
+          // Fallback a compilación individual en los workers
+        }
+      }
+
       let next = 0;
       const worker = async () => {
         while (next < queue.length) {

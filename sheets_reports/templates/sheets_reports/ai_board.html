@@ -8,7 +8,7 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
       <div role="dialog" aria-modal="true" aria-labelledby="ai-board-title"
            class="bg-white rounded w-full max-w-2xl max-h-[85vh] flex flex-col border border-line shadow-xl">
         <div class="flex items-center gap-2.5 px-5 py-3 border-b border-line">
-          <i class="ti ti-sparkles text-base text-moss-600" aria-hidden="true"></i>
+          <i class="ti ti-sparkles text-base text-violet-600" aria-hidden="true"></i>
           <h2 id="ai-board-title" class="flex-1 text-sm font-semibold text-ink">Generar tablero con IA</h2>
           <button type="button" x-on:click="close()" aria-label="Cerrar"
                   class="p-1 rounded-md text-ink/50 hover:text-ink hover:bg-paper cursor-pointer">
@@ -23,12 +23,12 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
             <textarea id="ai-board-prompt" x-ref="prompt" x-model="prompt" rows="5" maxlength="2000"
                       x-on:keydown.meta.enter.prevent="propose()" x-on:keydown.ctrl.enter.prevent="propose()"
                       placeholder="Describe qué quieres ver: los números clave, las comparaciones, la evolución en el tiempo…"
-                      class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500 resize-y"></textarea>
+                      class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-violet-500 resize-y"></textarea>
           </div>
           <div x-show="sources.length > 1">
             <label for="ai-board-source" class="block text-xs font-semibold text-ink/70 mb-1">Fuente de datos</label>
             <select x-vselect id="ai-board-source" x-model.number="source"
-                    class="w-full text-sm border border-line rounded-md px-3 py-2 bg-white focus:outline-none focus:border-moss-500">
+                    class="w-full text-sm border border-line rounded-md px-3 py-2 bg-white focus:outline-none focus:border-violet-500">
               <template x-for="s in sources" :key="s.id">
                 <option x-bind:value="s.id" x-text="s.label" x-bind:selected="s.id === source"></option>
               </template>
@@ -51,11 +51,11 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
                   x-bind:class="step === 'plan' && !item.include ? 'opacity-50' : ''">
                 <input type="checkbox" x-show="step === 'plan'" x-model="item.include"
                        x-bind:aria-label="`Incluir ${item.title}`"
-                       class="mt-1 h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500 cursor-pointer">
+                       class="mt-1 h-4 w-4 rounded border-line text-violet-600 focus:ring-violet-500 cursor-pointer">
                 <span x-show="step === 'build'" class="mt-0.5 w-4 shrink-0 text-center" aria-hidden="true">
                   <i x-show="item.status === 'pending'" class="ti ti-clock text-sm text-ink/30"></i>
-                  <i x-show="item.status === 'working'" class="ti ti-loader-2 text-sm text-moss-600 animate-spin"></i>
-                  <i x-show="item.status === 'done'" class="ti ti-circle-check text-sm text-moss-600"></i>
+                  <i x-show="item.status === 'working'" class="ti ti-loader-2 text-sm text-violet-600 animate-spin"></i>
+                  <i x-show="item.status === 'done'" class="ti ti-circle-check text-sm text-violet-600"></i>
                   <i x-show="item.status === 'failed'" class="ti ti-alert-circle text-sm text-red-600"></i>
                 </span>
                 <i class="ti text-lg text-ink/50 mt-px shrink-0" x-bind:class="icon(item.widget_type)"
@@ -63,7 +63,7 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
                 <div class="min-w-0 flex-1 space-y-0.5">
                   <input type="text" x-model="item.title" x-bind:disabled="step !== 'plan'" maxlength="80"
                          aria-label="Título del widget"
-                         class="w-full text-sm font-medium text-ink bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded px-1 -mx-1 disabled:hover:border-transparent">
+                         class="w-full text-sm font-medium text-ink bg-transparent border border-transparent hover:border-line focus:border-violet-500 focus:outline-none rounded px-1 -mx-1 disabled:hover:border-transparent">
                   <p class="text-xs text-ink/60" x-text="item.description"></p>
                   <p x-show="item.error" x-text="item.error" role="alert" class="text-xs text-red-600"></p>
                 </div>
@@ -79,7 +79,7 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
               <button type="button" x-on:click="close()"
                       class="text-sm font-medium text-ink/60 bg-paper hover:bg-line rounded-md px-4 py-2 cursor-pointer">Cerrar</button>
               <button type="button" x-on:click="propose()" x-bind:disabled="!prompt.trim() || loading"
-                      class="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer">
+                      class="inline-flex items-center gap-1.5 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer">
                 <i class="ti text-base" x-bind:class="loading ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
                 <span x-text="loading ? 'Pensando el tablero…' : 'Generar'"></span>
               </button>
@@ -92,7 +92,7 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
                 <i class="ti ti-arrow-left text-base" aria-hidden="true"></i> Cambiar pedido
               </button>
               <button type="button" x-on:click="build()" x-bind:disabled="!selected.length"
-                      class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer"
+                      class="text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-md px-4 py-2 cursor-pointer"
                       x-text="selected.length === 1 ? 'Crear 1 widget' : `Crear ${selected.length} widgets`"></button>
             </div>
           </template>
@@ -107,7 +107,7 @@ widgets que propone la IA y la creación, con el estado de cada uno. Se abre con
               </button>
               <button type="button" x-on:click="close()"
                       class="text-sm font-medium rounded-md px-4 py-2 cursor-pointer"
-                      x-bind:class="finished ? 'text-white bg-moss-500 hover:bg-moss-600' : 'text-ink/60 bg-paper hover:bg-line'"
+                      x-bind:class="finished ? 'text-white bg-violet-600 hover:bg-violet-700' : 'text-ink/60 bg-paper hover:bg-line'"
                       x-text="finished ? 'Listo' : 'Cerrar'"></button>
             </div>
           </template>

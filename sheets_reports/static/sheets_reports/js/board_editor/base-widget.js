@@ -9,7 +9,7 @@
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;
-    static CHART_COLORS = ['#4285F4', '#f59e52', '#ad7fe6', '#b5c665', '#2bb8ca', '#4CC38A', '#E36BB3', '#EF6E6E'];
+    static CHART_COLORS = ['#0284C7', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1', '#EF4444'];
 
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
 

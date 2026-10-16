@@ -40,7 +40,12 @@ document.addEventListener('alpine:init', () => {
         window.dispatchEvent(new CustomEvent('email-campaign:open'));
       }
     },
+    _dragCleanup: null,
+
     close() {
+      if (this._dragCleanup) {
+        this._dragCleanup();
+      }
       if (!this.dismissible) {
         window.location.href = window.HOME_URL || '/';
         return;
@@ -51,11 +56,22 @@ document.addEventListener('alpine:init', () => {
 
     // Arrastre del asa: la altura se mide contra #board-body (el área bajo el header).
     startDrag(e) {
+      if (this._dragCleanup) {
+        this._dragCleanup();
+      }
+
       const handle = e.currentTarget;
-      const area = document.getElementById('board-body').getBoundingClientRect();
+      const pointerId = e.pointerId;
+      const boardBody = document.getElementById('board-body');
+      const area = boardBody ? boardBody.getBoundingClientRect() : { bottom: window.innerHeight, height: window.innerHeight };
       let pct = this.heightPct;
       let rafId = null;
-      handle.setPointerCapture(e.pointerId);
+
+      try {
+        if (handle.setPointerCapture) {
+          handle.setPointerCapture(pointerId);
+        }
+      } catch (err) {}
 
       const onMove = (ev) => {
         if (rafId !== null) return;
@@ -65,23 +81,41 @@ document.addEventListener('alpine:init', () => {
           this.heightPct = Math.min(100, Math.max(BOTTOM_SHEET_MIN_PCT, pct));
         });
       };
-      const onUp = () => {
+
+      const cleanup = (shouldFinish = true) => {
         if (rafId !== null) {
           cancelAnimationFrame(rafId);
           rafId = null;
         }
-        handle.removeEventListener('pointermove', onMove);
-        handle.removeEventListener('pointerup', onUp);
-        handle.removeEventListener('pointercancel', onUp);
-        if (pct < BOTTOM_SHEET_MIN_PCT && this.dismissible) {
-          this.close();
-        } else {
-          window.dispatchEvent(new CustomEvent('bottom-sheet:resized'));
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        handle.removeEventListener('lostpointercapture', onUp);
+
+        try {
+          if (handle.hasPointerCapture && handle.hasPointerCapture(pointerId)) {
+            handle.releasePointerCapture(pointerId);
+          }
+        } catch (err) {}
+
+        this._dragCleanup = null;
+
+        if (shouldFinish) {
+          if (pct < BOTTOM_SHEET_MIN_PCT && this.dismissible) {
+            this.close();
+          } else {
+            window.dispatchEvent(new CustomEvent('bottom-sheet:resized'));
+          }
         }
       };
-      handle.addEventListener('pointermove', onMove);
-      handle.addEventListener('pointerup', onUp);
-      handle.addEventListener('pointercancel', onUp);
+
+      const onUp = () => cleanup(true);
+      this._dragCleanup = () => cleanup(false);
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+      handle.addEventListener('lostpointercapture', onUp);
     },
   });
 

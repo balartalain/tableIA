@@ -1,4 +1,4 @@
-"""Ejecuta los envíos de correos a los que les toca (services/mailing.py). Lo llama el crontab:
+"""Ejecuta los Envio de correoss a los que les toca (services/mailing.py). Lo llama el crontab:
 
     */5 * * * * cd /ruta/TableIA && venv/bin/python manage.py send_campaign_emails
 """

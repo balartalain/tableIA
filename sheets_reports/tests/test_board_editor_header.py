@@ -52,6 +52,6 @@ class BoardEditorHeaderTests(TestCase):
         self.assertIn("switchSettingsTab('board')", html)
         self.assertIn("switchSettingsTab('email')", html)
         self.assertIn("Configuración del tablero", html)
-        self.assertIn("Envíos de correo", html)
+        self.assertIn("Envio de correos", html)
         self.assertIn('id="settings-board-name"', html)
         self.assertIn("Eliminar tablero definitivamente", html)

@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 'verbose_name': 'Envío de correos',
-                'verbose_name_plural': 'Envíos de correos',
+                'verbose_name_plural': 'Envio de correoss',
             },
         ),
         migrations.CreateModel(

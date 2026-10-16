@@ -52,6 +52,17 @@ class BoardEditorHeaderTests(TestCase):
         self.assertIn("switchSettingsTab('board')", html)
         self.assertIn("switchSettingsTab('email')", html)
         self.assertIn("Configuración del tablero", html)
-        self.assertIn("Envio de correos", html)
+        self.assertIn("Envíos de correo", html)
         self.assertIn('id="settings-board-name"', html)
         self.assertIn("Eliminar tablero definitivamente", html)
+
+    def test_bottom_sheet_backdrop(self):
+        r = self.client.get(reverse("board_editor", kwargs={"dashboard_id": self.dashboard.id}))
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode("utf-8")
+
+        # Telón de fondo a pantalla completa
+        self.assertIn('id="bottom-sheet-backdrop"', html)
+        self.assertIn("fixed inset-0", html)
+        self.assertIn("z-[35]", html)
+        self.assertIn("bg-ink/40", html)

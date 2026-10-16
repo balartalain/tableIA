@@ -178,8 +178,19 @@ function boardHeaderMenu() {
       }
     },
 
-    saveTemplate() {
-      showToast('Tablero guardado como plantilla');
+    async saveTemplate() {
+      if (!window.DASHBOARD_ID) return;
+      try {
+        const r = await fetch(apiUrl(`/api/dashboards/${window.DASHBOARD_ID}/template/`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo guardar la plantilla');
+        showToast('Plantilla guardada. Disponible en el menú Plantillas.');
+      } catch (e) {
+        showToast(e.message || 'Error al guardar la plantilla');
+      }
     },
   };
 }

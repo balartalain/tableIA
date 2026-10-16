@@ -18,6 +18,10 @@ class Dashboard(models.Model):
     )
     last_opened_at = models.DateTimeField(null=True, blank=True,
                                           help_text="Última vez que se abrió en el editor.")
+    is_template = models.BooleanField(
+        default=False,
+        help_text="Indica si este tablero actúa como plantilla de solo lectura.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

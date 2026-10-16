@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import re
@@ -116,7 +117,13 @@ def dashboard_list(request):
         return _error("No hay usuarios creados. Crea uno con: python manage.py createsuperuser",
                       status=401)
     if request.method == "GET":
-        dashboards = Dashboard.objects.filter(owner=user).prefetch_related("sources")
+        is_tpl = request.GET.get("is_template")
+        if is_tpl in ("1", "true", "True"):
+            dashboards = Dashboard.objects.filter(owner=user, is_template=True).prefetch_related("sources")
+        elif is_tpl in ("all", "both"):
+            dashboards = Dashboard.objects.filter(owner=user).prefetch_related("sources")
+        else:
+            dashboards = Dashboard.objects.filter(owner=user, is_template=False).prefetch_related("sources")
         return JsonResponse([_serialize_dashboard(d) for d in dashboards], safe=False)
     try:
         data = _json_body(request)
@@ -248,21 +255,27 @@ def dashboard_detail(request, dashboard_id):
     return JsonResponse(_serialize_dashboard(dashboard))
 
 
-@csrf_exempt
-@require_http_methods(["POST"])
-def dashboard_duplicate(request, dashboard_id):
-    """Duplica un tablero con sus fuentes y sus widgets (cada uno con la copia de su fuente)."""
-    dashboard = _owned_dashboard(request, dashboard_id)
-    if not dashboard:
-        return _error("Dashboard no encontrado", status=404)
-    new_dashboard = Dashboard.objects.create(owner=_get_user(request), nombre=f"{dashboard.nombre} (copia)")
+def _clone_dashboard(dashboard, owner, name, is_template=False):
+    new_dashboard = Dashboard.objects.create(
+        owner=owner,
+        nombre=name,
+        is_template=is_template,
+    )
     copies = {}
     for source in dashboard.sources.all():
         copies[source.id] = DataSource.objects.create(
-            dashboard=new_dashboard, kind=source.kind, sheet_id=source.sheet_id, gid=source.gid,
-            sheet_name=source.sheet_name, tab_name=source.tab_name, name=source.name,
-            first_row_headers=source.first_row_headers, columns=source.columns,
+            dashboard=new_dashboard,
+            kind=source.kind,
+            sheet_id=source.sheet_id,
+            gid=source.gid,
+            sheet_name=source.sheet_name,
+            tab_name=source.tab_name,
+            name=source.name,
+            first_row_headers=source.first_row_headers,
+            columns=copy.deepcopy(source.columns or []),
+            calculated_fields=copy.deepcopy(source.calculated_fields or []),
             is_form_response=source.is_form_response,
+            gemini_file_id=source.gemini_file_id,
         )
     for widget in dashboard.widgets.all():
         Widget.objects.create(
@@ -270,11 +283,58 @@ def dashboard_duplicate(request, dashboard_id):
             source=copies.get(widget.source_id),
             type=widget.type,
             title=widget.title,
-            position=widget.position,
-            fields=widget.fields,
-            style=widget.style,
+            position=copy.deepcopy(widget.position or {}),
+            fields=copy.deepcopy(widget.fields or {}),
+            style=copy.deepcopy(widget.style or {}),
             source_prompt=widget.source_prompt,
         )
+    return new_dashboard
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dashboard_duplicate(request, dashboard_id):
+    """Duplica un tablero con sus fuentes y sus widgets."""
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    new_dashboard = _clone_dashboard(
+        dashboard, _get_user(request), f"{dashboard.nombre} (copia)", is_template=False
+    )
+    return JsonResponse(_serialize_dashboard(new_dashboard), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dashboard_save_as_template(request, dashboard_id):
+    """Guarda una copia del tablero como plantilla de solo lectura."""
+    dashboard = _owned_dashboard(request, dashboard_id)
+    if not dashboard:
+        return _error("Dashboard no encontrado", status=404)
+    user = _get_user(request)
+    name = dashboard.nombre
+    if not re.search(r"\(plantilla\)$", name, re.IGNORECASE):
+        name = f"{name} (plantilla)"
+    template_board = _clone_dashboard(dashboard, user, name, is_template=True)
+    return JsonResponse(_serialize_dashboard(template_board), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dashboard_use_template(request, dashboard_id):
+    """
+    Crea un nuevo tablero editable en base a una plantilla existente.
+    """
+    user = _get_user(request)
+    if user is None:
+        return _error("Usuario no autenticado", status=401)
+    dashboard = Dashboard.objects.filter(id=dashboard_id).first()
+    if not dashboard:
+        return _error("Plantilla no encontrada", status=404)
+    clean_name = re.sub(r"\s*\((?:plantilla|copia)\)\s*$", "", dashboard.nombre, flags=re.IGNORECASE).strip()
+    if not clean_name:
+        clean_name = dashboard.nombre
+    new_dashboard = _clone_dashboard(dashboard, user, clean_name, is_template=False)
     return JsonResponse(_serialize_dashboard(new_dashboard), status=201)
 
 
@@ -339,6 +399,7 @@ def _serialize_dashboard(dashboard):
     return {
         "id": dashboard.id,
         "nombre": dashboard.nombre,
+        "is_template": getattr(dashboard, "is_template", False),
         "sources": [s.label for s in dashboard.sources.all()],
         "cardCount": dashboard.widgets.count(),
         "created_at": dashboard.created_at.isoformat(),

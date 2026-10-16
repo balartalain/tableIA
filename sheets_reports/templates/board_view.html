@@ -6,9 +6,21 @@
 {% block header %}
 <header class="border-b border-moss-600 bg-moss-500 text-white">
   <div class="mx-auto px-6 h-16 flex items-center justify-between">
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3">
       <span class="font-sans font-semibold text-lg tracking-tight">{{ dashboard.nombre }}</span>
+      {% if dashboard.is_template %}
+      <span class="text-[11px] font-semibold bg-white/20 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">Plantilla</span>
+      {% endif %}
     </div>
+    {% if dashboard.is_template %}
+    <div class="flex items-center gap-2">
+      <button id="use-template-btn" type="button" onclick="useTemplate({{ dashboard.id }})"
+              class="bg-white hover:bg-paper text-moss-700 font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-md transition shadow flex items-center gap-1.5 cursor-pointer">
+        <i class="ti ti-pencil text-base" aria-hidden="true"></i>
+        <span>Editar</span>
+      </button>
+    </div>
+    {% endif %}
   </div>
 </header>
 {% endblock %}
@@ -108,6 +120,28 @@
 
 <script>
   window.DASHBOARD_ID = {{ dashboard.id }};
+  async function useTemplate(id) {
+    const btn = document.getElementById('use-template-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="ti ti-loader-2 text-base animate-spin" aria-hidden="true"></i><span>Creando tablero…</span>';
+    }
+    try {
+      const r = await fetch(apiUrl(`/api/dashboards/${id}/use-template/`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok || !data || !data.id) throw new Error((data && data.error) || 'No se pudo crear el tablero');
+      window.location.href = apiUrl(`/tableros/${data.id}/edit/`);
+    } catch (e) {
+      alert(e.message || 'Error al usar la plantilla');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-pencil text-base" aria-hidden="true"></i><span>Editar</span>';
+      }
+    }
+  }
 </script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@6.4.0/dist/apexcharts.min.js"></script>

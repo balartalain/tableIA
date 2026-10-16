@@ -255,12 +255,13 @@ def dashboard_detail(request, dashboard_id):
     return JsonResponse(_serialize_dashboard(dashboard))
 
 
-def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=None):
+def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=""):
+    # La miniatura solo aplica a las plantillas: al clonar a un tablero editable queda vacía.
     new_dashboard = Dashboard.objects.create(
         owner=owner,
         nombre=name,
         is_template=is_template,
-        thumbnail=thumbnail if thumbnail is not None else getattr(dashboard, "thumbnail", ""),
+        thumbnail=thumbnail,
     )
     copies = {}
     for source in dashboard.sources.all():
@@ -320,7 +321,7 @@ def dashboard_save_as_template(request, dashboard_id):
         body = _json_body(request)
     except Exception:
         body = {}
-    thumbnail = body.get("thumbnail") or getattr(dashboard, "thumbnail", "")
+    thumbnail = body.get("thumbnail") or ""
     template_board = _clone_dashboard(dashboard, user, name, is_template=True, thumbnail=thumbnail)
     return JsonResponse(_serialize_dashboard(template_board), status=201)
 
@@ -402,18 +403,21 @@ def _dashboard_source(dashboard, raw_id, default=None):
 
 
 def _serialize_dashboard(dashboard):
-    return {
+    data = {
         "id": dashboard.id,
         "nombre": dashboard.nombre,
         "is_template": getattr(dashboard, "is_template", False),
-        "thumbnail": getattr(dashboard, "thumbnail", "") or "",
-        "owner": dashboard.owner.username if getattr(dashboard, "owner", None) else "admin",
+        "owner": dashboard.owner.username,
         "sources": [s.label for s in dashboard.sources.all()],
         "cardCount": dashboard.widgets.count(),
         "created_at": dashboard.created_at.isoformat(),
         "updated": timesince(dashboard.created_at, now()),
         "last_opened_at": dashboard.last_opened_at.isoformat() if dashboard.last_opened_at else None,
     }
+    # La miniatura solo interesa para la galería de plantillas: no se envía en los demás tableros.
+    if data["is_template"]:
+        data["thumbnail"] = getattr(dashboard, "thumbnail", "") or ""
+    return data
 
 
 def _serialize_source(source):

@@ -143,7 +143,7 @@
             <div class="p-3.5 bg-white flex flex-col justify-between flex-1 min-w-0 rounded-b">
               <h3 class="font-semibold text-xs text-ink truncate group-hover:text-moss-600 transition" x-text="t.nombre"></h3>
               <p class="text-[11px] text-ink/40 mt-1 truncate">
-                Creado por: <span class="font-medium text-ink/60" x-text="t.owner || 'admin'"></span>
+                Creado por: <span class="font-medium text-ink/60" x-text="t.owner"></span>
               </p>
             </div>
           </a>
@@ -272,20 +272,6 @@
 
       templateViewUrl(t) {
         return apiUrl(`/tableros/${t.id}/view/`);
-      },
-
-      async useTemplate(id) {
-        try {
-          const r = await fetch(apiUrl(`/api/dashboards/${id}/use-template/`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          const data = await r.json().catch(() => null);
-          if (!r.ok || !data || !data.id) throw new Error((data && data.error) || 'No se pudo crear el tablero');
-          window.location.href = apiUrl(`/tableros/${data.id}/edit/`);
-        } catch (e) {
-          alert(e.message || 'Error al usar la plantilla');
-        }
       },
 
       async deleteTemplate(id) {

@@ -25,7 +25,7 @@ class Dashboard(models.Model):
     thumbnail = models.TextField(
         blank=True,
         default="",
-        help_text="Miniatura del tablero en base64/data-URL.",
+        help_text="Miniatura del tablero (data-URL de un SVG) para la galería de plantillas.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 

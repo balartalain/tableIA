@@ -836,7 +836,10 @@ Genera o ajusta el `WidgetForm` (`fields` + `style`) de un widget individual med
 
 Permite realizar consultas analíticas libres en lenguaje natural sobre los datos del tablero, disponible tanto en el editor como en la vista compartida (`board_view`):
 - `POST /api/dashboard/{id}/data-chat/` recibe `{prompt, source_id?}`.
-- **Ejecución de código Python**: Sube el DataFrame a Google Gemini Files API y activa la herramienta `code_execution` para cálculos numéricos exactos (`pandas`, `numpy`) y generación de gráficos (`matplotlib`, `seaborn`).
+- **Perfilado e identificación de columnas (`SheetContext`)**: Incluye en el prompt de la IA el perfil de las columnas generado por `columns_context(ctx)` (tipos, muestras y escala de medida: `continuous`, `discrete`, `ordinal`, `nominal` o `texto libre` / respuestas abiertas).
+- **Enfoque híbrido (cuantitativo y cualitativo)**:
+  - **Consultas cuantitativas/estadísticas**: Activa la herramienta `code_execution` para cálculos numéricos exactos (`pandas`, `numpy`) y generación de gráficos (`matplotlib`, `seaborn`).
+  - **Consultas cualitativas/texto libre**: Utiliza Python para extraer las respuestas abiertas de la columna y combina la comprensión de lenguaje natural de Gemini (LLM) para analizar semánticamente aspectos negativos/positivos, temas de quejas o sugerencias.
 - **Subida única y reutilización**: La referencia del archivo en Gemini se almacena en el campo `gemini_file_id` del modelo `DataSource`. Las siguientes consultas reutilizan el mismo archivo ya presente en Google (válido por 48 h) sin resubirlo por red.
 - **Invalidación**: Al actualizar la fuente (`source_refresh`) o alterar su estructura de columnas/fórmulas, el archivo remoto se elimina (`gemini_delete_file`) y el identificador se limpia automáticamente para regenerarse en la siguiente consulta.
 

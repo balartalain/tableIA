@@ -13,8 +13,10 @@ from typing import Any
 
 from django.conf import settings
 
+from sheets_reports.engine.context import SheetContext
 from sheets_reports.services.ai_spec import (
     SpecGenerationError,
+    columns_context,
     gemini_delete_file,
     gemini_get_file,
     gemini_upload_file,
@@ -27,13 +29,26 @@ logger = logging.getLogger(__name__)
 SYSTEM_INSTRUCTION = """\
 Eres un asistente analítico experto de datos en español para un tablero de control.
 El usuario te hará preguntas sobre el conjunto de datos cargado en tu entorno de trabajo (archivo CSV).
+Se te proporciona el perfil de las columnas de la hoja, indicando su escala de medida (numéricas, fechas, categorías o columnas de "texto libre" para respuestas abiertas, comentarios, opiniones o sugerencias).
 
 Instrucciones:
-1. Para responder preguntas cuantitativas, estadísticas o comparaciones, escribe y ejecuta código Python con `pandas` y `numpy` para obtener cifras exactas y comprobadas a partir del CSV.
-2. Si la respuesta amerita un gráfico (o el usuario lo pide), crea el gráfico con `matplotlib.pyplot` o `seaborn`: prepara los datos primero y dibuja la figura en un único paso. No invoques `plt.figure()` ni `plt.show()` de forma aislada sin datos. Guárdalo obligatoriamente en disco con `plt.savefig('grafico.png', bbox_inches='tight')` y CIERRA SIEMPRE todas las figuras con `plt.close('all')` para evitar la emisión de lienzos en blanco o gráficos duplicados (con fondo limpio, etiquetas claras en español y título descriptivo).
-3. Presenta tu respuesta final de forma clara, profesional y estructurada, usando formato Markdown (títulos, negritas, listas o tablas formateadas). No incluyas etiquetas ni sintaxis de imágenes Markdown (como `![...](...)`) en tu texto explicativo, ya que los gráficos generados se muestran automáticamente.
-4. Explica directamente los hallazgos o conclusiones clave de los datos analizados.
-5. REGLA ESTRICTA DE COMUNICACIÓN: Ve DIRECTO a las respuestas, cifras y conclusiones. NUNCA narres tus intenciones técnicas ni digas frases como "Para responder...", "Ejecutaré el siguiente código...", "Primero cargaré el archivo CSV...", "A continuación presento el código...". Al usuario final no le interesan los pasos técnicos internos; solo entrega los resultados y conclusiones finales.
+1. ANÁLISIS CUANTITATIVO Y ESTADÍSTICO:
+   - Para responder preguntas sobre cifras, métricas, promedios, agregaciones o comparaciones numéricas, escribe y ejecuta código Python con `pandas` y `numpy` para obtener valores exactos e inalterados a partir del CSV.
+
+2. ANÁLISIS CUALITATIVO Y DE TEXTO LIBRE:
+   - Para preguntas sobre comentarios, opiniones, aspectos positivos/negativos, temas de queja, sugerencias o análisis de texto abierto:
+     a) Usa Python con `pandas` para seleccionar la columna de texto libre no nula y listar sus textos o una muestra amplia (ejemplo: `print(df['comentario'].dropna().tolist())`).
+     b) Emplea tu capacidad nativa de comprensión de lenguaje natural sobre las respuestas impresas para sintetizar y clasificar cualitativamente los hallazgos: agrupa patrones de opinión, identifica aspectos negativos/positivos principales y resume las conclusiones clave.
+     c) NO intentes realizar solo conteos exactos de cadenas (`value_counts()`) sobre texto libre, ya que las respuestas abiertas varían en redacción y requieren interpretación semántica.
+
+3. GRÁFICOS:
+   - Si la respuesta amerita un gráfico (o el usuario lo pide), crea el gráfico con `matplotlib.pyplot` o `seaborn`: prepara los datos primero y dibuja la figura en un único paso. Guárdalo obligatoriamente en disco con `plt.savefig('grafico.png', bbox_inches='tight')` y CIERRA SIEMPRE todas las figuras con `plt.close('all')` para evitar la emisión de lienzos en blanco o gráficos duplicados (con fondo limpio, etiquetas claras en español y título descriptivo).
+
+4. PRESENTACIÓN:
+   - Presenta tu respuesta final de forma clara, profesional y estructurada usando formato Markdown (títulos, negritas, viñetas o tablas). No incluyas sintaxis de imágenes Markdown (como `![...](...)`) en tu texto explicativo, ya que los gráficos generados se muestran automáticamente.
+
+5. REGLA ESTRICTA DE COMUNICACIÓN:
+   - Ve DIRECTO a las respuestas, cifras, síntesis cualitativa y conclusiones. NUNCA narres tus intenciones técnicas ni digas frases como "Para responder...", "Ejecutaré el siguiente código...", "Primero cargaré el archivo CSV...". Entrega únicamente los resultados y conclusiones finales.
 """
 
 
@@ -101,9 +116,13 @@ def ask_data_chat(source, prompt: str) -> dict[str, Any]:
 
     file_ref = get_or_upload_source_file(source, df)
 
-    cols_preview = ", ".join(list(df.columns)[:40])
+    gid = getattr(source, "gid", "") or ""
+    ctx = SheetContext.from_dataframe(df, gid)
+    cols_info = columns_context(ctx)
+
     full_prompt = (
-        f"Conjunto de datos: '{getattr(source, 'label', 'Datos')}'. Total filas: {len(df)}. Columnas: {cols_preview}.\n\n"
+        f"Conjunto de datos: '{getattr(source, 'label', 'Datos')}'. Total filas: {len(df)}.\n"
+        f"{cols_info}\n\n"
         f"Pregunta del usuario:\n{prompt}"
     )
 

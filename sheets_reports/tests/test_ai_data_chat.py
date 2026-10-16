@@ -96,6 +96,30 @@ class AskDataChatServiceTests(SimpleTestCase):
         self.assertIn("vacía", res["text"])
         self.assertEqual(res["images"], [])
 
+    @mock.patch("sheets_reports.services.ai_data_chat.gemini_upload_file")
+    @mock.patch("sheets_reports.services.ai_data_chat.load_source")
+    @mock.patch("sheets_reports.services.ai_data_chat.generate_with_code_execution")
+    def test_ask_data_chat_includes_column_scales(self, mock_gen, mock_load_source, mock_upload):
+        mock_file = mock.Mock()
+        mock_file.name = "files/test_scales"
+        mock_upload.return_value = mock_file
+
+        comments = [f"Comentario sobre la experiencia {i}: la atención fue {'buena' if i % 2 == 0 else 'mala y lenta'}" for i in range(20)]
+        df = pd.DataFrame({
+            "comentario": comments,
+            "ventas": list(range(10, 210, 10))
+        })
+        mock_load_source.return_value = df
+        mock_gen.return_value = {"text": "Análisis cualitativo", "images": [], "code": []}
+
+        mock_source = mock.Mock(label="Encuesta", gemini_file_id="", pk=1, gid="0")
+        ai_data_chat.ask_data_chat(mock_source, "¿Aspectos negativos?")
+
+        called_prompt = mock_gen.call_args[1]["prompt"]
+        self.assertIn("comentario", called_prompt)
+        self.assertIn("texto libre", called_prompt)
+        self.assertIn("ventas", called_prompt)
+
 
 class DashboardDataChatViewTests(TestCase):
     def setUp(self):

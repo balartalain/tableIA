@@ -1211,8 +1211,9 @@ def board_ai_plan(request, dashboard_id):
         from sheets_reports.services.ai_board import propose_board
         from sheets_reports.services.ai_spec import SpecGenerationError
         ctx = SheetContext.from_dataframe(df, source.gid, samples=get_field_samples(df))
-        existing = list(dashboard.widgets.values_list("type", flat=True))
-        plan = propose_board(prompt, ctx, existing_types=existing)
+        existing_widgets = [{"type": w.type, "title": w.title} for w in dashboard.widgets.all()]
+        existing = [w["type"] for w in existing_widgets]
+        plan = propose_board(prompt, ctx, existing_types=existing, existing_widgets=existing_widgets)
     except SpecGenerationError as e:
         return _error(str(e), status=422)
     except Exception:

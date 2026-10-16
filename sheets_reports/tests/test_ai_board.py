@@ -118,6 +118,17 @@ class ProposeBoardTests(SimpleTestCase):
         self.assertTrue(contents.rstrip().endswith("tablero de ventas"))
         self.assertEqual(plan["items"][0]["widget_type"], "bar")
 
+    def test_propose_board_con_widgets_existentes(self):
+        existing = [{"type": "bar", "title": "Ventas por región"}, {"type": "kpi", "title": "Ventas totales"}]
+        with mock.patch.object(ai_board, "generate_json", return_value={"items": [item()]}) as model:
+            plan = propose_board("agrega distribución por vendedor", sales_ctx(), existing_types=["bar", "kpi"], existing_widgets=existing)
+        contents = model.call_args.args[0]
+        self.assertIn("Widgets ya presentes en el tablero:", contents)
+        self.assertIn("Ventas por región (bar)", contents)
+        self.assertIn("Ventas totales (kpi)", contents)
+        self.assertIn("No dupliques gráficos ni métricas idénticas por iniciativa propia", contents)
+        self.assertEqual(len(plan["items"]), 1)
+
     def test_pedido_vacio(self):
         with mock.patch.object(ai_board, "generate_json") as model, self.assertRaises(SpecGenerationError):
             propose_board("  ", sales_ctx())

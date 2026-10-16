@@ -34,7 +34,7 @@ MAX_TEXT_CHARS = 400
 
 BOARD_PROMPT = """\
 Eres el asistente de un constructor de tableros sobre una hoja de cálculo. El usuario describe
-el tablero que quiere; tú propones la lista de widgets que lo forman.
+el tablero que quiere o los widgets que desea añadir; tú propones la lista de widgets que lo forman.
 
 Widgets disponibles (widget_type: para qué sirve. Admite: …):
 {catalog}
@@ -44,7 +44,7 @@ Widgets disponibles (widget_type: para qué sirve. Admite: …):
 {data_rules}
 
 Reglas:
-- Entre 2 y {max_items} widgets, en el orden en que se verán (los números clave arriba).
+- Entre 1 y {max_items} widgets, en el orden en que se verán (los números clave arriba). Si el usuario pide algo puntual (ej. un gráfico específico), propón únicamente lo solicitado; si pide un tablero completo, propón un conjunto balanceado (entre 3 y 8 widgets).
 - Solo los widget_type de la lista. Si el usuario pide un tipo que no existe (ej. gráfico de
   área), usa el más parecido y dilo en "note".
 - Cada widget usa columnas reales de la hoja. Si algo del pedido no se puede con estas columnas,
@@ -62,6 +62,7 @@ Reglas:
   columnas por las que filtrar.
 - note: vacío si se pudo todo; si no, qué cambiaste y por qué, en una frase.
 {singletons}
+{existing_context}
 Pedido del usuario:
 {prompt}
 """
@@ -170,7 +171,7 @@ def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
     return {"items": items, "note": _text(raw.get("note"), MAX_TEXT_CHARS)}
 
 
-def propose_board(prompt: str, ctx: SheetContext, existing_types=()) -> dict:
+def propose_board(prompt: str, ctx: SheetContext, existing_types=(), existing_widgets=()) -> dict:
     """`{items: [{widget_type, title, description, request, width}], note}` para el pedido."""
     prompt = str(prompt or "").strip()[:MAX_PROMPT_CHARS]
     if not prompt:
@@ -179,9 +180,22 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=()) -> dict:
         raise SpecGenerationError("La hoja no tiene columnas.")
     singles = [w.key for w in _widgets() if w.max_per_dashboard == 1]
     taken = [k for k in singles if k in set(existing_types)]
+
+    existing_text = ""
+    if existing_widgets:
+        lines = [f"  * {w.get('title') or w.get('type')} ({w.get('type')})" for w in existing_widgets if isinstance(w, dict)]
+        if lines:
+            existing_text = (
+                "- Widgets ya presentes en el tablero:\n"
+                + "\n".join(lines)
+                + "\n  * Regla sobre lo existente: No dupliques gráficos ni métricas idénticas por iniciativa propia al complementar el tablero. "
+                "Sin embargo, si el usuario pide EXPLÍCITAMENTE un gráfico similar, variante o con diferente enfoque de algo que ya existe, atiende su petición.\n"
+            )
+
     contents = BOARD_PROMPT.format(
         catalog=_catalog(), columns=columns_context(ctx), data_rules=BI_DATA_RULES, max_items=MAX_ITEMS,
         singletons=(f"- El tablero ya tiene: {', '.join(taken)}. No los propongas.\n" if taken else ""),
+        existing_context=existing_text,
         prompt=prompt,
     )
     raw = generate_json(contents, SCHEMA, call="board_plan",

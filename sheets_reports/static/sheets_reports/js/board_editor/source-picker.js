@@ -92,6 +92,12 @@ function sourcePicker({ mode = 'create' } = {}) {
     generatingLabels: false,
     saving: false,
     sheetsError: '',
+    // Login de Google y Google Picker: lo llena la plantilla (window.TABLEIA_GOOGLE) desde la
+    // app google_auth. Sin configurar, el selector sigue usando la cuenta de servicio.
+    google: window.TABLEIA_GOOGLE || { configured: false, connected: false, email: '',
+                                       picker_api_key: '', picker_app_id: '' },
+    googleError: '',
+    _pickerSdk: null,
     tabsError: '',
     columnsError: '',
     generateLabelsError: '',
@@ -225,7 +231,7 @@ function sourcePicker({ mode = 'create' } = {}) {
           _kind: null, _values: null, _error: '', _checking: false,
         })),
         fbSelected: null, valueInput: '', columnQuery: '',
-        sheetsError: '', tabsError: '', columnsError: '', createError: '', saving: false,
+        sheetsError: '', googleError: '', tabsError: '', columnsError: '', createError: '', saving: false,
       });
       this.selectedId = this.calculated.length ? this.calculated[0].id : null;
       // Cambiar de hoja parte de las columnas guardadas: se espera a tenerlas.
@@ -361,6 +367,83 @@ function sourcePicker({ mode = 'create' } = {}) {
       } finally {
         if (request === this._sheetsRequest) this.loadingSheets = false;
       }
+    },
+
+    // --------------------------------------------- Google: login y selector nativo de Drive
+    // Conectar la cuenta de Google: al terminar, el callback redirige de vuelta aquí.
+    connectGoogle() {
+      const next = window.location.pathname + window.location.search;
+      window.location.href = apiUrl(`/auth/google/login/?next=${encodeURIComponent(next)}`);
+    },
+
+    // Abre el Google Picker con el token del usuario; al elegir una hoja se sigue con sus pestañas.
+    async openGooglePicker() {
+      this.googleError = '';
+      if (!this.google.configured) {
+        this.googleError = 'Google no está configurado en el servidor.';
+        return;
+      }
+      this.loadingSheets = true;
+      try {
+        const status = await this._get('/auth/google/status/');
+        if (!status.access_token) {
+          this.connectGoogle();
+          return;
+        }
+        this.google = { ...this.google, connected: true, email: status.email || this.google.email };
+        await this._loadPickerSdk();
+        const picker = new window.google.picker.PickerBuilder()
+          .setOAuthToken(status.access_token)
+          .setDeveloperKey(this.google.picker_api_key)
+          .setAppId(this.google.picker_app_id)
+          .setOrigin(window.location.protocol + '//' + window.location.host)
+          .addView(window.google.picker.ViewId.SPREADSHEETS)
+          .setCallback((data) => this.onGooglePicked(data))
+          .build();
+        picker.setVisible(true);
+      } catch (e) {
+        this.googleError = e.message || 'No se pudo abrir Google Drive.';
+      } finally {
+        this.loadingSheets = false;
+      }
+    },
+
+    // El Picker devuelve el documento elegido: se trata igual que una hoja del listado.
+    onGooglePicked(data) {
+      const action = (window.google && window.google.picker && window.google.picker.Action) || {};
+      if (!data || data.action !== action.PICKED) return;
+      const doc = (data.docs || [])[0];
+      if (!doc) return;
+      this.selectSpreadsheet({
+        id: doc.id,
+        name: doc.name || '',
+        modified: doc.lastEditedUtc ? new Date(doc.lastEditedUtc).toISOString() : null,
+      });
+    },
+
+    // Carga la librería del Picker una sola vez (apis.google.com/js/api.js + gapi.load('picker')).
+    _loadPickerSdk() {
+      if (window.google && window.google.picker) return Promise.resolve();
+      if (!this._pickerSdk) {
+        this._pickerSdk = new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://apis.google.com/js/api.js';
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('No se pudo cargar el selector de Google.'));
+          document.head.appendChild(script);
+        }).then(() => new Promise((resolve, reject) => {
+          window.gapi.load('picker', { callback: resolve, onerror: reject });
+        }));
+      }
+      return this._pickerSdk;
+    },
+
+    // Olvida la cuenta conectada (el servidor borra los tokens guardados).
+    async disconnectGoogle() {
+      try {
+        await fetch(apiUrl('/auth/google/disconnect/'), { method: 'POST' });
+      } catch (e) { /* sin conexión: igual se limpia el estado local */ }
+      this.google = { ...this.google, connected: false, email: '' };
     },
 
     async selectSpreadsheet(s) {

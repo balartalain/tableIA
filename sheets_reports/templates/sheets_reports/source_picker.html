@@ -14,8 +14,9 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
         <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
       </button>
       {% if service_account_email %}
-      <!-- Para ver una hoja aquí hay que compartirla con la cuenta de servicio. -->
-      <p class="mr-auto min-w-0 flex items-center gap-1.5 text-xs text-ink/50">
+      <!-- Para ver una hoja aquí hay que compartirla con la cuenta de servicio (salvo que el
+           usuario conecte su cuenta de Google). -->
+      <p x-show="!google.connected" class="mr-auto min-w-0 flex items-center gap-1.5 text-xs text-ink/50">
         <i class="ti ti-share text-sm shrink-0" aria-hidden="true"></i>
         <span class="shrink-0">Comparte tus hojas con</span>
         <span class="font-medium text-ink/70 truncate">{{ service_account_email }}</span>
@@ -66,7 +67,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <div class="min-h-0 flex flex-col border border-line rounded overflow-hidden">
         <div class="flex items-center gap-2 px-3 py-2 border-b border-line">
           <p class="text-[10px] font-bold uppercase tracking-wider text-ink/40 shrink-0">Documentos</p>
-          <label x-show="source" class="relative flex-1">
+          <label x-show="source && !google.configured" class="relative flex-1">
             <span class="sr-only">Buscar documento</span>
             <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink/40" aria-hidden="true"></i>
             <input type="search" x-model="query" x-on:input.debounce.300ms="loadSpreadsheets()"
@@ -75,8 +76,22 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           </label>
         </div>
         <div class="flex-1 overflow-y-auto p-2">
+          <!-- Google: conectar la cuenta y elegir la hoja con el selector nativo de Drive. -->
+          <div x-show="source && google.configured" class="mb-2 space-y-1">
+            <button type="button" x-on:click="openGooglePicker()" x-bind:disabled="loadingSheets"
+                    class="w-full inline-flex items-center justify-center gap-2 h-9 px-3 text-sm font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer disabled:opacity-50">
+              <i class="ti ti-brand-google-drive text-base" aria-hidden="true"></i>
+              <span x-text="loadingSheets ? 'Abriendo Drive…' : (google.connected ? 'Elegir en mi Drive' : 'Conectar con Google')"></span>
+            </button>
+            <p x-show="google.connected" class="px-1 flex items-center gap-1.5 text-[11px] text-ink/40">
+              <span class="truncate" x-text="google.email || 'Cuenta de Google conectada'"></span>
+              <button type="button" x-on:click="disconnectGoogle()"
+                      class="shrink-0 underline hover:text-ink cursor-pointer">Desconectar</button>
+            </p>
+            <p x-show="googleError" x-text="googleError" role="alert" class="px-1 text-[11px] text-red-600"></p>
+          </div>
           <p x-show="!source" class="px-2 py-6 text-center text-xs text-ink/50">Elige una fuente para ver sus documentos.</p>
-          <p x-show="source && loadingSheets" class="px-2 py-6 text-center text-xs text-ink/50">
+          <p x-show="source && loadingSheets && !google.configured" class="px-2 py-6 text-center text-xs text-ink/50">
             <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando documentos…
           </p>
           <div x-show="sheetsError" class="px-2 py-3 space-y-2">
@@ -87,12 +102,12 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               <span>Volver a conectar</span>
             </button>
           </div>
-          <p x-show="source && !loadingSheets && !sheetsError && !spreadsheets.length"
+          <p x-show="source && !loadingSheets && !sheetsError && !spreadsheets.length && !google.configured"
              class="px-2 py-6 text-center text-xs text-ink/50">
             No hay hojas visibles. Comparte la hoja de cálculo con
             {% if service_account_email %}<span class="font-medium text-ink/70 break-all">{{ service_account_email }}</span>{% else %}el email de la cuenta de servicio{% endif %}.
           </p>
-          <ul x-show="!loadingSheets" class="space-y-0.5">
+          <ul x-show="!loadingSheets && !google.configured" class="space-y-0.5">
             <template x-for="s in spreadsheets" :key="s.id">
               <li>
                 <button type="button" x-on:click="selectSpreadsheet(s)"

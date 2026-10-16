@@ -13,6 +13,11 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 from decouple import config
 import dj_database_url
+import os
+
+# google-auth-oauthlib exige HTTPS salvo en desarrollo; en local la app va por http://localhost.
+# OAUTHLIB_RELAX_TOKEN_SCOPE: Google puede devolver un subconjunto de los scopes pedidos.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'sheets_reports',
+    'google_auth',
 ]
 
 MIDDLEWARE = [
@@ -52,6 +58,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'google_auth.middleware.GoogleAuthMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -169,6 +176,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Google Sheets
 GOOGLE_SHEETS_CREDENTIALS_PATH = config("GOOGLE_SHEETS_CREDENTIALS_PATH", default="")
+
+# Google OAuth (login del usuario para leer SU Drive con el Google Picker; app google_auth).
+# El cliente OAuth de Google Cloud, de tipo «Web»; sin él el selector sigue usando la cuenta de
+# servicio de arriba. GOOGLE_PICKER_API_KEY y GOOGLE_PICKER_APP_ID (el número de proyecto) son
+# para el diálogo nativo del Picker en el navegador.
+GOOGLE_OAUTH_CLIENT_ID = config("GOOGLE_OAUTH_CLIENT_ID", default="")
+GOOGLE_OAUTH_CLIENT_SECRET = config("GOOGLE_OAUTH_CLIENT_SECRET", default="")
+# Debe coincidir con un «Authorized redirect URI» del cliente OAuth. Vacío: se arma con el request.
+GOOGLE_OAUTH_REDIRECT_URI = config("GOOGLE_OAUTH_REDIRECT_URI", default="")
+GOOGLE_PICKER_API_KEY = config("GOOGLE_PICKER_API_KEY", default="")
+GOOGLE_PICKER_APP_ID = config("GOOGLE_PICKER_APP_ID", default="")
+# Clave con la que se cifran los tokens de Google guardados; vacía, se deriva de SECRET_KEY.
+GOOGLE_TOKEN_ENCRYPTION_KEY = config("GOOGLE_TOKEN_ENCRYPTION_KEY",
+                                     default=config("EMAIL_ENCRYPTION_KEY", default=""))
+if DEBUG and not GOOGLE_OAUTH_REDIRECT_URI.startswith("https"):
+    os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
 
 # Gemini (generación de specs JSON de widgets vía IA; ver services/ai_spec.py)
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")

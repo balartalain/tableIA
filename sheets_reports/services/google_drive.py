@@ -16,10 +16,20 @@ MAX_SPREADSHEETS = 100
 CACHE_TTL_SECONDS = 60
 
 
-def _service(name: str, version: str):
-    creds = service_account_credentials()
+def _preferred_credentials():
+    """Las credenciales del usuario que conectó su cuenta de Google (app google_auth) o, sin
+    conexión, las de la cuenta de servicio."""
+    from google_auth.services import active_credentials
+
+    return active_credentials() or service_account_credentials()
+
+
+def _service(name: str, version: str, credentials=None):
+    creds = credentials or _preferred_credentials()
     if creds is None:
-        raise SheetError("Configura GOOGLE_SHEETS_CREDENTIALS_PATH para listar las hojas de Google Drive.")
+        raise SheetError(
+            "Conecta tu cuenta de Google o configura GOOGLE_SHEETS_CREDENTIALS_PATH para listar "
+            "las hojas de Google Drive.")
     from googleapiclient.discovery import build
 
     return build(name, version, credentials=creds, cache_discovery=False)
@@ -90,7 +100,7 @@ def tab_status(spreadsheet_id: str, gid: str) -> str | None:
     borró), "tab_missing" (la abre, pero la pestaña ya no está) o None si no se pudo saber (sin
     credenciales, red)."""
     try:
-        response = _service("sheets", "v4").spreadsheets().get(
+        response = _service("sheets", "v4", credentials=service_account_credentials()).spreadsheets().get(
             spreadsheetId=spreadsheet_id, fields="sheets.properties.sheetId",
         ).execute()
     except SheetError:

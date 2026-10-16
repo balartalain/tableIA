@@ -62,6 +62,32 @@ def _access_token() -> str | None:
     return creds.token
 
 
+def _read_attempts() -> list[str | None]:
+    """Tokens con los que intentar leer la hoja, sin repetir: primero el del usuario que conectó
+    su cuenta de Google (app google_auth) y después el de la cuenta de servicio (una hoja puede
+    estar compartida con esta y no con el usuario). Sin ninguno se intenta igual, por si la hoja
+    es pública por enlace."""
+    from google_auth.services import active_access_token
+
+    tokens = [active_access_token(), _access_token()]
+    unique = [token for i, token in enumerate(tokens) if token and token not in tokens[:i]]
+    return unique or [None]
+
+
+def _request_csv(sheet_id: str, gid: str, token: str | None):
+    """Pide la exportación CSV de la pestaña con (o sin) token Bearer."""
+    request_headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        return requests.get(
+            EXPORT_URL.format(sheet_id=sheet_id),
+            params={"format": "csv", "gid": gid},
+            headers=request_headers,
+            timeout=REQUEST_TIMEOUT_S,
+        )
+    except requests.RequestException as e:
+        raise SheetError(f"No se pudo conectar con Google Sheets: {e}") from e
+
+
 def _coerce_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Convierte a número las columnas de texto cuyos valores no vacíos son todos numéricos
     (gviz a veces las exporta como texto si la columna tiene celdas vacías o mezcladas)."""
@@ -96,25 +122,17 @@ def fetch_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True,
     las columnas de texto numérico: lo usan la detección y el tidy de
     respuestas de formulario, que deben ver el crudo (p. ej. «1, 2» de una
     casilla son dos opciones, no el número 12)."""
-    request_headers = {}
-    token = _access_token()
-    if token:
-        request_headers["Authorization"] = f"Bearer {token}"
-    try:
-        response = requests.get(
-            EXPORT_URL.format(sheet_id=sheet_id),
-            params={"format": "csv", "gid": gid},
-            headers=request_headers,
-            timeout=REQUEST_TIMEOUT_S,
-        )
-    except requests.RequestException as e:
-        raise SheetError(f"No se pudo conectar con Google Sheets: {e}") from e
-
-    content_type = response.headers.get("Content-Type", "")
-    if response.status_code != 200 or "text/csv" not in content_type:
+    response = None
+    for token in _read_attempts():
+        response = _request_csv(sheet_id, gid, token)
+        content_type = response.headers.get("Content-Type", "")
+        if response.status_code == 200 and "text/csv" in content_type:
+            break
+    else:
         raise SheetError(
             "No se pudo leer la hoja. Verifica que la pestaña exista y que la hoja esté "
-            "compartida con la cuenta de servicio (o sea pública por enlace)."
+            "compartida con la cuenta de servicio (o sea pública por enlace), o vuelve a "
+            "conectar tu cuenta de Google."
         )
 
     df = pd.read_csv(io.StringIO(response.text), keep_default_na=False, na_values=[""],

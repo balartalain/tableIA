@@ -5,7 +5,6 @@ import re
 import uuid
 from typing import Any
 
-from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.timesince import timesince
@@ -16,6 +15,7 @@ from django.views.decorators.http import require_http_methods
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.models import Dashboard, DataSource, Widget
 from sheets_reports.services import google_drive, sheets
+from google_auth.services import current_app_user, template_context as google_oauth_context
 from sheets_reports.services.sheets import (
     COLUMN_FORMATS,
     COLUMN_TYPES,
@@ -85,6 +85,7 @@ def board_editor(request, dashboard_id):
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "widget_manifest": _widget_manifest(),
         "service_account_email": sheets.service_account_email(), "formula_catalog": BUILDER_CATALOG,
+        "google_oauth": google_oauth_context(request),
     })
 
 
@@ -94,6 +95,7 @@ def board_new(request):
     return render(request, "board_editor.html", {
         "dashboard": None, "widget_manifest": _widget_manifest(),
         "service_account_email": sheets.service_account_email(), "formula_catalog": BUILDER_CATALOG,
+        "google_oauth": google_oauth_context(request),
     })
 
 
@@ -353,10 +355,9 @@ def home(request):
 
 
 def _get_user(request):
-    if request.user.is_authenticated:
-        return request.user
-    User = get_user_model()
-    return User.objects.filter(is_superuser=True).first() or User.objects.first()
+    """El usuario de la sesión o, sin login, el superusuario (la app todavía no tiene login
+    propio). Misma regla que `google_auth.services.current_app_user`."""
+    return current_app_user(request)
 
 
 def _json_body(request) -> dict:

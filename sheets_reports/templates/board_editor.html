@@ -538,8 +538,11 @@
 
 {{ widget_manifest|json_script:"widget-manifest" }}
 {{ formula_catalog|json_script:"formula-catalog" }}
+{{ google_oauth|json_script:"google-oauth" }}
 <script>
   window.WIDGET_MANIFEST = JSON.parse(document.getElementById('widget-manifest').textContent);
+  // Login de Google y Google Picker (lo llena la app google_auth en el contexto).
+  window.TABLEIA_GOOGLE = JSON.parse(document.getElementById('google-oauth').textContent);
   window.HOME_URL = "{% url 'home' %}";
   window.BOARD_EDITOR_URL = "{% url 'board_editor' dashboard_id=0 %}";
 {% if dashboard %}

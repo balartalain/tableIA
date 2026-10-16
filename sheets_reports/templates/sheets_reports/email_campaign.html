@@ -68,10 +68,17 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
           </button>
         </div>
       </template>
-      <button type="button" x-on:click="addSender()"
-              class="text-sm font-medium text-moss-700 hover:text-moss-600 inline-flex items-center gap-1 cursor-pointer">
-        <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar remitente
-      </button>
+      <div class="flex items-center gap-2 pt-1">
+        <button type="button" x-on:click="addSender()"
+                class="text-sm font-medium text-moss-700 hover:text-moss-600 inline-flex items-center gap-1 cursor-pointer">
+          <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar remitente
+        </button>
+        <button type="button" x-on:click="showPasswordHelp = true"
+                title="¿Cómo obtener la contraseña de aplicación?" aria-label="Ayuda para contraseña de aplicación"
+                class="text-ink/40 hover:text-moss-700 p-0.5 rounded-md transition cursor-pointer inline-flex items-center justify-center">
+          <i class="ti ti-help-circle text-lg" aria-hidden="true"></i>
+        </button>
+      </div>
     </section>
 
     <!-- Programación -->
@@ -155,4 +162,96 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
       <span x-text="saving ? 'Guardando…' : 'Guardar'"></span>
     </button>
   </div>
+
+  <!-- Modal de ayuda: Cómo obtener la contraseña de aplicación de Google -->
+  <template x-teleport="body">
+    <div x-show="showPasswordHelp" x-cloak
+         x-on:keydown.escape.window="showPasswordHelp = false"
+         class="fixed inset-0 z-50 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0">
+
+      <div x-on:click.outside="showPasswordHelp = false"
+           role="dialog" aria-modal="true" aria-labelledby="sender-help-title"
+           class="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col border border-line shadow-2xl overflow-hidden"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0 scale-95 translate-y-2"
+           x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+           x-transition:leave-end="opacity-0 scale-95 translate-y-2">
+
+        <!-- Cabecera -->
+        <div class="px-5 py-3.5 bg-paper/60 border-b border-line flex items-center justify-between gap-3 shrink-0">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <i class="ti ti-key text-xl" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <h3 id="sender-help-title" class="text-sm font-bold text-ink truncate">Contraseña de Aplicación de Google</h3>
+              <p class="text-[11px] text-ink/50 truncate">Instrucciones de configuración para remitentes de correo</p>
+            </div>
+          </div>
+          <button type="button" x-on:click="showPasswordHelp = false"
+                  title="Cerrar" aria-label="Cerrar"
+                  class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer shrink-0">
+            <i class="ti ti-x text-base" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <!-- Contenido -->
+        <div class="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 text-xs text-ink/80 leading-relaxed">
+
+          <!-- Advertencia importante -->
+          <div class="p-3.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 flex items-start gap-2.5">
+            <i class="ti ti-alert-triangle text-lg text-amber-600 shrink-0 mt-0.5" aria-hidden="true"></i>
+            <div class="space-y-1">
+              <p class="font-bold text-xs">No es la contraseña personal de tu correo</p>
+              <p class="text-[11px] leading-normal text-amber-800">
+                Por seguridad, Google no permite usar la contraseña habitual con la que inicias sesión.
+                Debes generar una <strong>Contraseña de Aplicación</strong> de 16 caracteres.
+              </p>
+            </div>
+          </div>
+
+          <!-- Pasos detallados -->
+          <div class="space-y-2.5">
+            <h4 class="font-bold text-ink text-xs uppercase tracking-wider">¿Cómo obtenerla en Google / Google Cloud?</h4>
+
+            <ol class="space-y-2.5 list-decimal list-inside text-ink/90">
+              <li class="pl-1">
+                <strong>Verificación en 2 pasos:</strong> Asegúrate de tener activada la <em>Verificación en dos pasos</em> en la seguridad de tu cuenta de Google.
+              </li>
+              <li class="pl-1">
+                <strong>Ingresar a Contraseñas de aplicaciones:</strong> Ve a tu <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" class="text-moss-700 underline font-semibold hover:text-moss-800">Cuenta de Google &rarr; Seguridad &rarr; Contraseñas de aplicaciones</a> (o búscala en la barra de búsqueda de tu cuenta de Google).
+              </li>
+              <li class="pl-1">
+                <strong>Crear nombre:</strong> Asigna un nombre a la aplicación (ejemplo: <code class="bg-paper px-1.5 py-0.5 rounded text-moss-800 font-mono">TableIA</code>) y haz clic en <strong>Crear</strong>.
+              </li>
+              <li class="pl-1">
+                <strong>Obtener clave de 16 letras:</strong> Google generará una contraseña única de 16 caracteres (ejemplo: <code class="bg-paper px-1.5 py-0.5 rounded font-mono font-bold text-ink">abcd efgh ijkl mnop</code>).
+              </li>
+              <li class="pl-1">
+                <strong>Copiar e ingresar:</strong> Copia esa clave de 16 letras (sin espacios) y pégala en el campo de contraseña del remitente.
+              </li>
+            </ol>
+          </div>
+
+          <!-- Botón de acceso directo -->
+          <div class="pt-2 border-t border-line flex items-center justify-between">
+            <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-lg transition cursor-pointer">
+              <i class="ti ti-external-link text-sm" aria-hidden="true"></i>
+              <span>Abrir Contraseñas de Aplicaciones en Google</span>
+            </a>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </template>
 </div>

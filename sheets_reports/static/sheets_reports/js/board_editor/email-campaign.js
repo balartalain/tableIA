@@ -22,6 +22,7 @@ function emailCampaign() {
     // Resultado de la última carga del CSV: {added, duplicates, invalid, invalid_count}.
     uploadResult: null,
     confirmClear: false,
+    showPasswordHelp: false,
     testTo: '',
     testing: false,
     testMessage: '',

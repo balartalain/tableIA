@@ -9,6 +9,16 @@
 <link href="{% static 'sheets_reports/css/tabulator.css' %}" rel="stylesheet">
 <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
 
+<style>
+  /* Altura aumentada para el encabezado y las filas de la tabla de tableros */
+  #dashboards-table .tabulator-header .tabulator-col .tabulator-col-content {
+    padding: 14px 16px;
+  }
+  #dashboards-table .tabulator-row .tabulator-cell {
+    padding: 14px 16px 0;
+  }
+</style>
+
 <script>
   window.URLS = {
     boardEditor: "{% url 'board_editor' dashboard_id=0 %}",
@@ -71,7 +81,7 @@
 
       <!-- Visible desde el inicio: Tabulator mide su contenedor al construirse (oculto mediría 0). -->
       <div x-show="!(loaded && dashboards.length === 0)" class="bg-white border border-line rounded overflow-hidden">
-        <div x-ref="table"></div>
+        <div x-ref="table" id="dashboards-table"></div>
       </div>
     </section>
 
@@ -218,7 +228,7 @@
               sorter: (a, b) => (a || '').localeCompare(b || ''),
               formatter: c => esc(new Date(c.getValue()).toLocaleDateString('es')) },
             { title: '', field: 'id', width: 120, headerSort: false, hozAlign: 'right',
-              formatter: () => `<div class="flex justify-end gap-0.5 -my-1.5">
+              formatter: () => `<div class="flex items-center justify-end gap-1">
                   ${action('rename', 'ti-pencil', 'Renombrar')}
                   ${action('duplicate', 'ti-copy', 'Duplicar')}
                   ${action('delete', 'ti-trash', 'Eliminar', 'hover:text-red-600 hover:bg-red-50')}

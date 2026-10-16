@@ -33,6 +33,9 @@ document.addEventListener('alpine:init', () => {
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
         if (data.dashboard && data.dashboard.sources) store.sources = data.dashboard.sources;
         this.widgets.forEach(w => w.applyRender(byId[w.id]));
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event('resize'));
+        });
         return data;
       } catch (e) {
         this.widgets.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
@@ -90,7 +93,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
   const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
-  requestAnimationFrame(() => store.widgets.forEach(w => w.applyRender(byId[w.id])));
+  requestAnimationFrame(() => {
+    store.widgets.forEach(w => w.applyRender(byId[w.id]));
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+  });
 
   window.addEventListener('dashboard:filters-changed', () => store.refreshData());
 });

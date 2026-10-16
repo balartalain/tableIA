@@ -87,6 +87,8 @@
         // La tabla va en un hijo con alto máximo = el del contenedor: mide lo que sus filas (el
         // «Total general» queda pegado a la última) y solo con muchas llega al fondo y hace scroll.
         const host = document.createElement('div');
+        host.className = 'w-full';
+        host.style.width = '100%';
         container.appendChild(host);
 
         // «Mostrar totales» por nivel (estilo del widget): la columna «Total general» y las
@@ -158,6 +160,7 @@
         const table = this._table;
         // Hasta que la tabla está construida no hay anchos que medir.
         table.on('tableBuilt', () => { this._fillReady = table; this._fillWidth(); });
+        table.on('renderComplete', () => { if (this._fillReady) this._fillWidth(); });
         if (typeof ResizeObserver === 'undefined') return;
         let frame = null;
         this._fillObserver = new ResizeObserver(() => {
@@ -183,19 +186,26 @@
         const leaves = table.getColumns().filter(c => c.getField() && c.isVisible());
         if (!leaves.length) return;
         leaves.forEach(c => {
-          if (!this._naturalWidths.has(c.getField())) this._naturalWidths.set(c.getField(), c.getWidth());
+          const w = c.getWidth();
+          if (w > 0 && (!this._naturalWidths.has(c.getField()) || this._naturalWidths.get(c.getField()) <= 0)) {
+            this._naturalWidths.set(c.getField(), w);
+          }
         });
-        const natural = leaves.map(c => this._naturalWidths.get(c.getField()));
+        const natural = leaves.map(c => this._naturalWidths.get(c.getField()) || c.getWidth());
         const total = natural.reduce((sum, w) => sum + w, 0);
-        const available = holder.clientWidth;
+        const container = this.getContentContainer();
+        const holderWidth = holder.clientWidth;
+        // holder.clientWidth ya descuenta la barra de scroll vertical si está presente.
+        // Se aplica un margen de seguridad de 2px para evitar recortes de subpíxeles en la última columna.
+        const available = Math.max(0, (holderWidth > 0 ? holderWidth : (container ? container.clientWidth : 0)) - 2);
         if (!total || !available) return;
         const factor = Math.max(1, available / total);
         let used = 0;
         leaves.forEach((c, i) => {
-          // La última se queda con el resto del redondeo.
+          // La última columna toma el espacio restante sin ser menor a su ancho natural.
           const width = i < leaves.length - 1 || factor === 1
             ? Math.floor(natural[i] * factor)
-            : available - used;
+            : Math.max(natural[i], available - used);
           used += width;
           if (c.getWidth() !== width) c.setWidth(width);
         });

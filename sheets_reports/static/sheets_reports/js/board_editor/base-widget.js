@@ -525,13 +525,23 @@
       this._interactable = interact(el).resizable({
         edges: { bottom: '.resize-handle', right: '.resize-handle' },
         listeners: {
-          start: () => { document.body.style.userSelect = 'none'; },
+          start: () => {
+            document.body.style.userSelect = 'none';
+            window.dispatchEvent(new CustomEvent('board:ruler:highlight', {
+              detail: { isResizing: true, element: el }
+            }));
+          },
           move: (event) => {
             moved = true;
             this._onResizeMove(event);
+            const target = this.el || event.target;
+            window.dispatchEvent(new CustomEvent('board:ruler:highlight', {
+              detail: { isResizing: true, element: target, cols: this.position?.w }
+            }));
           },
           end: (event) => {
             document.body.style.userSelect = '';
+            window.dispatchEvent(new CustomEvent('board:ruler:clear'));
             if (!moved) return;
             moved = false;
             // El ancho en px solo hace que el borde siga al cursor: al soltar manda la clase

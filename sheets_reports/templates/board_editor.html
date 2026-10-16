@@ -101,28 +101,6 @@
     min-height: 10px !important;
     grid-column: span var(--ghost-span, 6) / span var(--ghost-span, 6) !important;
   }
-  /* Fija arriba al hacer scroll vertical. Es un bloque del mismo contenedor que el lienzo:
-     mide lo mismo que él y, con el mismo padding, sus 12 pistas coinciden con las del grid. */
-  .grid-numbers-header {
-    position: sticky;
-    top: 0;
-    display: grid;
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 1rem;
-    /* Mismo padding que el p-4 del lienzo: las pistas miden (ancho - 32px) con los mismos
-       gutters, así que cada número cae en el centro de su columna. */
-    padding: 0 16px;
-    pointer-events: none;
-    font-family: monospace;
-    font-size: 11px;
-    font-weight: bold;
-    line-height: 24px;
-    color: rgba(239, 68, 68, 0.8);
-    background: rgba(255, 255, 255, 0.9);
-    border-bottom: 1px dashed rgba(239, 68, 68, 0.4);
-    text-align: center;
-    z-index: 10;
-  }
   /* En vez de calcular el alto del header (h-14 + el 1px de su border-b) se deja que flexbox
      lo mida de verdad. */
   html body {
@@ -193,21 +171,8 @@
   </aside>
 
   <main id="board-main" class="relative flex-1 min-w-0 min-h-0 overflow-hidden">
-    <div id="board-scroll" class="h-full w-full overflow-auto flex flex-col">
-      <div class="grid-numbers-header">
-        <span>1</span>
-        <span>2</span>
-        <span>3</span>
-        <span>4</span>
-        <span>5</span>
-        <span>6</span>
-        <span>7</span>
-        <span>8</span>
-        <span>9</span>
-        <span>10</span>
-        <span>11</span>
-        <span>12</span>
-      </div>
+    <div id="board-scroll" class="relative h-full w-full overflow-auto flex flex-col">
+      {% include "sheets_reports/board_ruler.html" %}
       <!-- Caja de filtros (widgets con placement 'header'): arriba del grid, bajo la regla.
            En un tablero sin widgets no se muestra: no hay nada que filtrar todavía. -->
       <div id="dashboard-filters" x-data x-cloak x-show="$store.dashboard.widgets.length > 0" class="relative group shrink-0 px-4 pt-3 pb-3 flex flex-wrap items-center gap-2.5 min-h-[44px]">
@@ -468,6 +433,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/bottom-sheet.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/board-ruler.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/formula-builder.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/source-picker.js' %}"></script>
 {% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/source-manager.js' %}"></script>{% endif %}

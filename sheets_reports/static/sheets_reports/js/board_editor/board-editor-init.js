@@ -248,6 +248,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     fallbackTolerance: 3,
     fallbackOnBody: true,
     ...noTextSelection,
+    onStart: function (evt) {
+      const wUnits = getWidgetWidth(evt.item);
+      window._activeDragSpan = wUnits;
+      window.dispatchEvent(new CustomEvent('board:ruler:highlight', {
+        detail: { isDragging: true, span: wUnits, start: 1, end: wUnits }
+      }));
+    },
+    onEnd: function () {
+      window._activeDragSpan = null;
+      window.dispatchEvent(new CustomEvent('board:ruler:clear'));
+    },
   });
 
   // Sortable para la franja de controles/filtros superiores
@@ -347,7 +358,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       fallbackOnBody: true,
       ...noTextSelection,
 
+      onStart: function (evt) {
+        const wUnits = getWidgetWidth(evt.item);
+        window._activeDragSpan = wUnits;
+        window.dispatchEvent(new CustomEvent('board:ruler:highlight', {
+          detail: { isDragging: true, element: evt.item, span: wUnits }
+        }));
+      },
+
       onAdd: function (evt) {
+        window._activeDragSpan = null;
+        window.dispatchEvent(new CustomEvent('board:ruler:clear'));
         const toRowId = evt.to.getAttribute('data-row-id');
         const isNewFromSidebar = !evt.item.hasAttribute('data-widget-id');
         if (isNewFromSidebar) {
@@ -380,6 +401,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       },
 
       onEnd: function (evt) {
+        window._activeDragSpan = null;
+        window.dispatchEvent(new CustomEvent('board:ruler:clear'));
         store.reorderWidgets();
       },
     });

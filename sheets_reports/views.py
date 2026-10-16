@@ -1549,7 +1549,15 @@ def widget_ai_insight(request, widget_id):
     source_stamp = sheets.fetched_at(widget.source)
     stamp_str = source_stamp.isoformat() if source_stamp else "initial"
     filter_hash = hashlib.md5((raw_filters or "").encode("utf-8")).hexdigest()[:12]
-    cache_key = f"widget_insight:{widget.id}:{stamp_str}:{filter_hash}"
+    config_payload = json.dumps({
+        "title": widget.title,
+        "type": widget.type,
+        "fields": widget.fields,
+        "style": widget.style,
+        "source_id": widget.source_id,
+    }, sort_keys=True)
+    config_hash = hashlib.md5(config_payload.encode("utf-8")).hexdigest()[:12]
+    cache_key = f"widget_insight:{widget.id}:{stamp_str}:{filter_hash}:{config_hash}"
 
     cache_backend = caches["sheets"]
     if not refresh:

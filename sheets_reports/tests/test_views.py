@@ -267,6 +267,25 @@ class ViewsTests(TestCase):
         self.assertEqual(r.json()["title"], self.widget.title)
         mock_gen.assert_called_once()
 
+    def test_widget_ai_insight_invalidated_on_config_change(self, _df):
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_insight", return_value="First insight") as mock_gen:
+            r1 = self.client.get(f"/api/widget/{self.widget.id}/ai-insight/")
+        self.assertEqual(r1.json()["text"], "First insight")
+        self.assertFalse(r1.json()["cached"])
+
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_insight", return_value="Cached insight") as mock_gen:
+            r2 = self.client.get(f"/api/widget/{self.widget.id}/ai-insight/")
+        self.assertEqual(r2.json()["text"], "First insight")
+        self.assertTrue(r2.json()["cached"])
+
+        self.widget.title = "Título modificado"
+        self.widget.save()
+
+        with mock.patch("sheets_reports.services.ai_spec.generate_widget_insight", return_value="Second insight") as mock_gen:
+            r3 = self.client.get(f"/api/widget/{self.widget.id}/ai-insight/")
+        self.assertEqual(r3.json()["text"], "Second insight")
+        self.assertFalse(r3.json()["cached"])
+
     def test_widget_ai_insight_filter_rejected(self, _df):
         filter_w = Widget.objects.create(dashboard=self.dashboard, source=self.source, type="filter", title="Filtro")
         r = self.client.get(f"/api/widget/{filter_w.id}/ai-insight/")

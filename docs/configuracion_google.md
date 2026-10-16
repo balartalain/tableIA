@@ -1,5 +1,7 @@
 # Conectar Google (login del usuario y Google Picker)
 
+> Documentación completa (implementación + credenciales): [`docs/google_auth.md`](google_auth.md).
+
 La app `google_auth` permite que cada usuario **conecte su cuenta de Google** y elija la hoja de
 cálculo directamente en su Drive con el **selector nativo de Google** (Google Picker), en vez de
 tener que compartirla con la cuenta de servicio.
@@ -12,7 +14,8 @@ cuenta de servicio (`GOOGLE_SHEETS_CREDENTIALS_PATH`).
 - `GET /auth/google/login/?next=…` → redirige al consentimiento de Google (Authorization Code con
   `access_type=offline`, para recibir un `refresh_token`).
 - `GET /auth/google/callback/` → guarda los tokens **cifrados** en `GoogleCredential` y vuelve a
-  `next`.
+  `next` agregando `?google=connected`: el editor detecta ese parámetro y **abre el Google Picker
+  solo**.
 - `GET /auth/google/status/` → JSON con `configured`, `connected`, `email` y un `access_token`
   vigente que el frontend usa para abrir el Picker.
 - `POST /auth/google/disconnect/` → olvida los tokens guardados.

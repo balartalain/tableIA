@@ -134,13 +134,19 @@ class EndpointTests(TestCase):
         with mock.patch("google_auth.services.exchange_code", return_value=credentials()):
             r = self.client.get("/auth/google/callback/", {"code": "abc", "state": "st"})
         self.assertEqual(r.status_code, 302)
-        self.assertEqual(r["Location"], "/tableros/nuevo/")
+        self.assertEqual(r["Location"], "/tableros/nuevo/?google=connected")
         self.assertTrue(GoogleCredential.objects.filter(user=self.user).exists())
 
     @override_settings(**CLIENT)
     def test_callback_con_estado_invalido(self):
         r = self.client.get("/auth/google/callback/", {"code": "abc", "state": "otro"})
         self.assertEqual(r.status_code, 400)
+
+    def test_marca_la_vuelta_para_abrir_el_picker(self):
+        from google_auth.views import _mark_connected
+
+        self.assertEqual(_mark_connected("/tableros/nuevo/"), "/tableros/nuevo/?google=connected")
+        self.assertEqual(_mark_connected("/tableros/5/edit/?a=1"), "/tableros/5/edit/?a=1&google=connected")
 
     @override_settings(**CLIENT)
     def test_disconnect_borra_la_conexion(self):

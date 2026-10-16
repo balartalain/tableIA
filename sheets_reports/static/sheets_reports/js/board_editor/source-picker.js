@@ -152,6 +152,23 @@ function sourcePicker({ mode = 'create' } = {}) {
     // Nombre a mostrar de cada columna la última vez que se miraron las fórmulas (para renombrar).
     _columnNames: {},
 
+    // Al volver de conectar la cuenta de Google (`?google=connected`), el Picker se abre solo:
+    // el callback agrega ese parámetro a la URL de vuelta. Se quita de la URL enseguida para que
+    // un refresco no lo vuelva a abrir.
+    init() {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('google') !== 'connected') return;
+      url.searchParams.delete('google');
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+      if (!this.google.configured) return;
+      this.google = { ...this.google, connected: true };
+      this.source = 'google';
+      if (this.mode !== 'create') {
+        Alpine.store('bottomSheet').open({ title: 'Gestionar fuente de datos', view: 'sources' });
+      }
+      setTimeout(() => this.openGooglePicker(), 0);
+    },
+
     get includedCount() {
       return this.columns.filter(c => c.include).length;
     },

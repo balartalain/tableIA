@@ -29,6 +29,12 @@ def _safe_next(value: str) -> str:
     return ""
 
 
+def _mark_connected(url: str) -> str:
+    """Marca la vuelta para que el editor abra el Google Picker solo (`?google=connected`)."""
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}google=connected"
+
+
 @require_http_methods(["GET"])
 def login(request):
     if not services.is_configured():
@@ -63,7 +69,7 @@ def callback(request):
         logger.exception("OAuth callback de Google")
         return JsonResponse({"error": "No se pudo conectar con Google."}, status=502)
     services.save_credentials(user, credentials, email=services.credentials_email(credentials))
-    return redirect(next_url)
+    return redirect(_mark_connected(next_url))
 
 
 @require_http_methods(["GET"])

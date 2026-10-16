@@ -392,7 +392,7 @@
            x-transition:leave-start="translate-y-0"
            x-transition:leave-end="translate-y-full"
            x-bind:style="`height: ${$store.bottomSheet.heightPct}%`"
-           class="absolute inset-x-0 bottom-0 z-30 flex flex-col bg-white border-t border-line rounded-t shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
+           class="absolute inset-x-0 bottom-0 z-40 flex flex-col bg-white border-t border-line rounded-t shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
     <div class="bottom-sheet-handle h-5 shrink-0 flex items-center justify-center cursor-ns-resize"
          role="separator" aria-orientation="horizontal" aria-label="Ajustar altura"
          x-on:pointerdown.prevent="$store.bottomSheet.startDrag($event)">

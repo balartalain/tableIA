@@ -291,7 +291,7 @@
       el.dataset.type = this.chart_type;
       el.innerHTML = `
         ${BaseWidget.dragHandleHTML()}
-        <div class="flex justify-between items-center border-line pb-2 mb-2 select-none gap-2">
+        <div class="flex items-center border-line pb-2 mb-2 select-none gap-1 min-w-0">
           <span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40 truncate">${BaseWidget.escapeHTML(this.title)}</span>
           ${this.aiInsightButtonHTML()}
         </div>
@@ -335,8 +335,8 @@
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       const titleHTML = this.title
-        ? `<div class="flex justify-between items-center border-line pb-2 mb-2 select-none gap-2 min-w-0"><span class="text-[10px] font-bold uppercase tracking-wider text-ink/40 truncate">${BaseWidget.escapeHTML(this.title)}</span>${this.aiInsightButtonHTML()}</div>`
-        : (this.chart_type !== 'filter' ? `<div class="flex justify-end pb-2 mb-2">${this.aiInsightButtonHTML()}</div>` : '');
+        ? `<div class="flex items-center border-line pb-2 mb-2 select-none gap-1 min-w-0"><span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40 truncate">${BaseWidget.escapeHTML(this.title)}</span>${this.aiInsightButtonHTML()}</div>`
+        : (this.chart_type !== 'filter' ? `<div class="flex pb-2 mb-2">${this.aiInsightButtonHTML()}</div>` : '');
       el.innerHTML = `${titleHTML}<div id="chart-${this.id}" class="flex-1 w-full min-h-0"></div>${this.loaderOverlayHTML()}
         <div class="actions-slot absolute top-2 right-2 z-30 flex items-center gap-1"></div>`;
       return el;
@@ -464,8 +464,8 @@
 
     aiInsightButtonHTML() {
       if (this.chart_type === 'filter' || !this.id || this.id <= 0) return '';
-      return `<button type="button" class="widget-ai-insight-btn p-1 rounded-md text-ink/35 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer shrink-0" title="Ver análisis con IA" aria-label="Ver análisis con IA">
-        <i class="ti ti-bulb text-base" aria-hidden="true"></i>
+      return `<button type="button" class="widget-ai-insight-btn p-0.5 rounded-md text-ink/35 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer shrink-0 inline-flex items-center justify-center" title="Ver análisis con IA" aria-label="Ver análisis con IA">
+        <i class="ti ti-bulb text-lg" aria-hidden="true"></i>
       </button>`;
     }
 

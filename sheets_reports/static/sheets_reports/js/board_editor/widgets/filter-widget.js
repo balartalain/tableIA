@@ -55,6 +55,15 @@
       return this._buildBar(false);
     }
 
+    // Miniatura: la caja de un filtro (aunque los filtros van en la cabecera, no en el lienzo).
+    thumbnailContent(ctx) {
+      const { x, y, w, primary } = ctx;
+      const bw = Math.min(Math.max(20, w - 12), 60);
+      return `
+        <rect x="${x + 6}" y="${y + 14}" width="${bw}" height="12" rx="2" fill="#FFFFFF" stroke="#E3E5DE"/>
+        <rect x="${x + 10}" y="${y + 18}" width="${Math.max(6, bw - 20)}" height="3" rx="1.5" fill="${primary}" opacity="0.4"/>`;
+    }
+
     updateChrome() {
     }
 

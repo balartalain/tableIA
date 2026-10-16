@@ -156,6 +156,113 @@ function boardTitle() {
   };
 }
 
+// Miniatura del tablero: mide la geometría REAL del DOM (#dashboard-canvas) y delega el
+// contenido de cada tarjeta en su widget (widget.thumbnailContent → BaseWidget). Sin
+// dependencias ni rasterizado: los gráficos incrustan su SVG real de ApexCharts.
+async function generateRealBoardThumbnail() {
+  const totalW = 340;
+  const padding = 8;
+  const availableW = totalW - (padding * 2);
+
+  const canvasEl = document.getElementById('dashboard-canvas');
+  const widgetEls = canvasEl
+    ? Array.from(canvasEl.querySelectorAll('.canvas-row-body > [data-widget-id]'))
+    : [];
+
+  if (!widgetEls.length) {
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} 190" width="${totalW}" height="190">
+        <rect width="${totalW}" height="190" fill="#F7F8F4"/>
+        <rect x="12" y="12" width="${totalW - 24}" height="166" rx="4" fill="#FFFFFF" stroke="#E3E5DE" stroke-dasharray="4 4"/>
+        <circle cx="${totalW / 2}" cy="82" r="16" fill="#EAF3EC"/>
+        <path d="M${totalW / 2 - 8} 82 h16 M${totalW / 2} 74 v16" stroke="#1F8A5F" stroke-width="2" stroke-linecap="round"/>
+        <text x="${totalW / 2}" y="118" font-family="system-ui, -apple-system, sans-serif" font-size="9" fill="#14171F" opacity="0.45" text-anchor="middle">Tablero sin widgets</text>
+      </svg>`
+    );
+  }
+
+  const store = window.Alpine && Alpine.store('dashboard');
+  const findWidget = el => (store && store.widgets ? store.widgets.find(w => w.el === el) : null) || null;
+
+  // Medir la geometría real ANTES de cualquier await (el layout no cambia durante la espera).
+  const measured = widgetEls.map((el, idx) => {
+    const apexEl = el.querySelector('svg.apexcharts-svg');
+    return {
+      el,
+      idx,
+      widget: findWidget(el),
+      wr: el.getBoundingClientRect(),
+      apexEl,
+      apexRect: apexEl ? apexEl.getBoundingClientRect() : null,
+    };
+  });
+
+  let minTop = Infinity;
+  let maxBottom = -Infinity;
+  let minLeft = Infinity;
+  let maxRight = -Infinity;
+  measured.forEach(m => {
+    minTop = Math.min(minTop, m.wr.top);
+    maxBottom = Math.max(maxBottom, m.wr.bottom);
+    minLeft = Math.min(minLeft, m.wr.left);
+    maxRight = Math.max(maxRight, m.wr.right);
+  });
+
+  const contentW = Math.max(1, maxRight - minLeft);
+  const contentH = Math.max(1, maxBottom - minTop);
+  const scale = availableW / contentW;
+  const totalH = Math.max(120, Math.round(contentH * scale) + padding * 2);
+
+  let innerSvg = '';
+
+  for (const m of measured) {
+    const { el, idx, widget, wr, apexEl, apexRect } = m;
+    const x = padding + Math.round((wr.left - minLeft) * scale);
+    const y = padding + Math.round((wr.top - minTop) * scale);
+    const w = Math.max(18, Math.round(wr.width * scale));
+    const h = Math.max(18, Math.round(wr.height * scale));
+
+    const rawTitle = (el.querySelector('.title-display')?.textContent || (widget && widget.title) || '').trim();
+    const title = BaseWidget.escapeHTML(rawTitle.length > 26 ? rawTitle.slice(0, 25) + '…' : rawTitle);
+
+    // Tarjeta base (mismo look que los widgets: blanco, borde line, radio 4).
+    innerSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="#FFFFFF" stroke="#E3E5DE" stroke-width="1"/>`;
+    if (title) {
+      innerSvg += `<text x="${x + 5}" y="${y + 9}" font-family="system-ui, -apple-system, sans-serif" font-size="6" font-weight="700" fill="#14171F" opacity="0.45">${title}</text>`;
+    }
+
+    // La paleta sale del propio widget (su "Paleta"); el color principal, por posición.
+    const palette = (widget && typeof widget.thumbnailPalette === 'function')
+      ? widget.thumbnailPalette()
+      : BaseWidget.THUMB_PALETTES.default;
+    const primary = palette[idx % palette.length];
+
+    // Caja real del gráfico (para incrustar su SVG de ApexCharts), si la hay.
+    const content = apexRect ? {
+      x: padding + Math.round((apexRect.left - minLeft) * scale),
+      y: padding + Math.round((apexRect.top - minTop) * scale),
+      w: Math.max(12, Math.round(apexRect.width * scale)),
+      h: Math.max(12, Math.round(apexRect.height * scale)),
+    } : null;
+
+    const ctx = { x, y, w, h, scale, el, apexEl, content, colors: palette, primary };
+
+    // Cada widget dibuja su propio contenido; si no implementa nada, barras genéricas.
+    let contentSvg = '';
+    if (widget && typeof widget.thumbnailContent === 'function') {
+      try {
+        contentSvg = (await widget.thumbnailContent(ctx)) || '';
+      } catch (e) {
+        console.warn(`Miniatura: fallo al dibujar el widget "${widget && widget.type}"`, e);
+      }
+    }
+    innerSvg += contentSvg || BaseWidget.thumbBars(ctx);
+  }
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}"><rect width="${totalW}" height="${totalH}" fill="#F7F8F4"/>${innerSvg}</svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
 function boardHeaderMenu() {
   return {
     open: false,
@@ -180,10 +287,15 @@ function boardHeaderMenu() {
 
     async saveTemplate() {
       if (!window.DASHBOARD_ID) return;
+      // Espera a que el lienzo esté pintado y las animaciones de los gráficos hayan terminado.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const thumbnail = await generateRealBoardThumbnail();
+
       try {
         const r = await fetch(apiUrl(`/api/dashboards/${window.DASHBOARD_ID}/template/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ thumbnail }),
         });
         const data = await r.json().catch(() => null);
         if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo guardar la plantilla');

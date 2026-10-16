@@ -255,11 +255,12 @@ def dashboard_detail(request, dashboard_id):
     return JsonResponse(_serialize_dashboard(dashboard))
 
 
-def _clone_dashboard(dashboard, owner, name, is_template=False):
+def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=None):
     new_dashboard = Dashboard.objects.create(
         owner=owner,
         nombre=name,
         is_template=is_template,
+        thumbnail=thumbnail if thumbnail is not None else getattr(dashboard, "thumbnail", ""),
     )
     copies = {}
     for source in dashboard.sources.all():
@@ -315,7 +316,12 @@ def dashboard_save_as_template(request, dashboard_id):
     name = dashboard.nombre
     if not re.search(r"\(plantilla\)$", name, re.IGNORECASE):
         name = f"{name} (plantilla)"
-    template_board = _clone_dashboard(dashboard, user, name, is_template=True)
+    try:
+        body = _json_body(request)
+    except Exception:
+        body = {}
+    thumbnail = body.get("thumbnail") or getattr(dashboard, "thumbnail", "")
+    template_board = _clone_dashboard(dashboard, user, name, is_template=True, thumbnail=thumbnail)
     return JsonResponse(_serialize_dashboard(template_board), status=201)
 
 
@@ -400,6 +406,8 @@ def _serialize_dashboard(dashboard):
         "id": dashboard.id,
         "nombre": dashboard.nombre,
         "is_template": getattr(dashboard, "is_template", False),
+        "thumbnail": getattr(dashboard, "thumbnail", "") or "",
+        "owner": dashboard.owner.username if getattr(dashboard, "owner", None) else "admin",
         "sources": [s.label for s in dashboard.sources.all()],
         "cardCount": dashboard.widgets.count(),
         "created_at": dashboard.created_at.isoformat(),

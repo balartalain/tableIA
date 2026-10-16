@@ -25,6 +25,21 @@
       return this.buildStandardCardElement();
     }
 
+    // Miniatura: el valor real de la tarjeta (o uno de reserva) y su subrayado.
+    thumbnailContent(ctx) {
+      const { x, y, w, h, primary, el } = ctx;
+      let val = '';
+      if (el) {
+        const v = el.querySelector('.text-2xl, .text-3xl, .text-4xl, .kpi-value');
+        if (v) val = v.textContent.trim();
+      }
+      const display = BaseWidget.escapeHTML((val || '1.250').slice(0, 12));
+      const fs = Math.min(16, Math.max(9, Math.round(h * 0.28)));
+      return `
+        <text x="${x + 8}" y="${y + Math.max(24, h - 10)}" font-family="system-ui, -apple-system, sans-serif" font-size="${fs}" font-weight="800" fill="${primary}">${display}</text>
+        <rect x="${x + 8}" y="${y + Math.max(26, h - 6)}" width="${Math.min(w - 16, 34)}" height="2.5" rx="1.25" fill="${primary}" opacity="0.3"/>`;
+    }
+
     getProperties() {
       return { ...super.getProperties() };
     }

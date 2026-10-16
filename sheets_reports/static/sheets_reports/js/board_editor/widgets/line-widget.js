@@ -24,6 +24,21 @@
       return this.buildStandardCardElement();
     }
 
+    // Miniatura: el SVG real del gráfico y, si no se puede, una línea esquemática.
+    async thumbnailContent(ctx) {
+      const svg = await this.apexThumbnail(ctx);
+      if (svg) return svg;
+      const { x, y, w, h, primary } = ctx;
+      const p1 = y + h - 8;
+      const p2 = y + 14;
+      const p3 = y + h - 16;
+      const p4 = y + 12;
+      return `
+        <path d="M${x + 6} ${p1} Q${x + w * 0.35} ${p2} ${x + w * 0.65} ${p3} T${x + w - 6} ${p4}" fill="none" stroke="${primary}" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="${x + w * 0.65}" cy="${p3}" r="2" fill="${primary}"/>
+        <circle cx="${x + w - 6}" cy="${p4}" r="2" fill="${primary}"/>`;
+    }
+
     getProperties() {
       return { ...super.getProperties() };
     }

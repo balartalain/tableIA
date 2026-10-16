@@ -182,6 +182,166 @@
       URL.revokeObjectURL(url);
     }
 
+    // --- Miniaturas del tablero (modo plantilla) -----------------------------
+    // Cada widget sabe dibujarse en la miniatura: el generador mide la geometría real
+    // (generateRealBoardThumbnail) y le pasa un `ctx`; el widget devuelve el SVG interior de
+    // su tarjeta (el cromo y el título los pinta el generador). Datos de reserva permitidos.
+    static THUMB_PALETTES = {
+      default: ['#0284C7', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1', '#EF4444'],
+      ocean: ['#0284C7', '#38BDF8', '#0EA5E9', '#7DD3FC', '#0369A1'],
+      sunset: ['#F97316', '#FB923C', '#EA580C', '#FDBA74', '#C2410C'],
+      forest: ['#15803D', '#22C55E', '#16A34A', '#86EFAC', '#14532D'],
+    };
+
+    // Paleta de la miniatura según la "Paleta" del widget (style.color_scheme).
+    thumbnailPalette() {
+      const scheme = (this.style && this.style.color_scheme) || 'default';
+      return BaseWidget.THUMB_PALETTES[scheme] || BaseWidget.THUMB_PALETTES.default;
+    }
+
+    // Contenido interior de la miniatura. Por defecto, nada (el generador dibuja barras).
+    // ctx = { x, y, w, h, scale, el, content, colors, primary } (coordenadas absolutas).
+    thumbnailContent(ctx) {
+      return '';
+    }
+
+    // Barras verticales genéricas (reserva del generador y base de algunos esquemáticos).
+    static thumbBars({ x, y, w, h, colors }) {
+      const palette = colors && colors.length ? colors : BaseWidget.CHART_COLORS;
+      const count = Math.min(6, Math.max(2, Math.floor(w / 12)));
+      const bw = Math.max(2.5, (w - 16 - (count - 1) * 3) / count);
+      const heights = [0.4, 0.85, 0.3, 0.7, 0.55, 0.65];
+      const maxBarH = Math.max(6, h - 24);
+      let barX = x + 8;
+      let bars = '';
+      for (let b = 0; b < count; b++) {
+        const bh = Math.max(3, maxBarH * heights[b % heights.length]);
+        const by = y + h - 8 - bh;
+        bars += `<rect x="${barX}" y="${by}" width="${bw}" height="${bh}" rx="1" fill="${palette[b % palette.length]}"/>`;
+        barX += bw + 3;
+      }
+      return bars;
+    }
+
+    // Rejilla tipo heatmap (matriz de correlación / V de Cramér) con la diagonal marcada.
+    static thumbGrid({ x, y, w, h }, shades, { rows = 4, cols = 4 } = {}) {
+      const gx = x + 6;
+      const gy = y + 15;
+      const gw = Math.max(8, w - 12);
+      const gh = Math.max(10, h - 20);
+      const cw = gw / cols;
+      const ch = gh / rows;
+      let cells = '';
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const fill = r === c ? shades[0] : shades[(r + c) % shades.length];
+          cells += `<rect x="${(gx + c * cw).toFixed(1)}" y="${(gy + r * ch).toFixed(1)}" width="${(cw - 0.8).toFixed(1)}" height="${(ch - 0.8).toFixed(1)}" rx="1" fill="${fill}"/>`;
+        }
+      }
+      return cells;
+    }
+
+    // Reescribe ids y url(#id) para que varios SVG ApexCharts anidados no colisionen.
+    static thumbNamespaceSvgIds(root, suffix) {
+      const map = new Map();
+      root.querySelectorAll('[id]').forEach(node => {
+        const old = node.getAttribute('id');
+        const nid = `${old}__${suffix}`;
+        map.set(old, nid);
+        node.setAttribute('id', nid);
+      });
+      if (!map.size) return;
+      const rewrite = v => v.replace(/#([A-Za-z0-9_\-:.]+)/g, (m, id) => (map.has(id) ? `#${map.get(id)}` : m));
+      const attrNames = ['fill', 'stroke', 'clip-path', 'mask', 'filter', 'marker-start', 'marker-mid', 'marker-end', 'href', 'xlink:href'];
+      root.querySelectorAll('*').forEach(node => {
+        attrNames.forEach(a => {
+          const v = node.getAttribute(a);
+          if (v && v.indexOf('#') !== -1) node.setAttribute(a, rewrite(v));
+        });
+        const style = node.getAttribute('style');
+        if (style && style.indexOf('url(#') !== -1) {
+          node.setAttribute('style', style.replace(/url\(#([^)]+)\)/g, (m, id) => (map.has(id) ? `url(#${map.get(id)})` : m)));
+        }
+      });
+    }
+
+    // Devuelve el markup SVG autocontenido del gráfico ApexCharts (sin width/height, con
+    // viewBox), o '' si no se puede obtener.
+    static async thumbApexSvgMarkup(widget, suffix) {
+      try {
+        if (!widget || !widget._chart || typeof widget._chart.dataURI !== 'function') return '';
+        const res = await widget._chart.dataURI({ type: 'svg' });
+        const uri = res && typeof res === 'string' ? res : (res && res.imgURI);
+        if (!uri) return '';
+        let svgStr;
+        if (/^\s*</.test(uri)) {
+          // Ya es markup SVG en crudo.
+          svgStr = uri;
+        } else {
+          const comma = uri.indexOf(',');
+          if (comma < 0) return '';
+          const meta = uri.slice(0, comma);
+          const payload = uri.slice(comma + 1);
+          if (/base64/i.test(meta)) {
+            const bin = atob(payload);
+            // base64 -> UTF-8 (preserva acentos en las etiquetas)
+            svgStr = decodeURIComponent(Array.prototype.map.call(bin, ch => '%' + ('00' + ch.charCodeAt(0).toString(16)).slice(-2)).join(''));
+          } else {
+            svgStr = decodeURIComponent(payload);
+          }
+        }
+        const doc = new DOMParser().parseFromString(svgStr, 'image/svg+xml');
+        const svgEl = doc.documentElement;
+        if (!svgEl || svgEl.nodeName.toLowerCase() !== 'svg') return '';
+        BaseWidget.thumbNamespaceSvgIds(svgEl, suffix);
+        svgEl.removeAttribute('class');
+        // Guardar las dimensiones naturales ANTES de quitarlas (por si no hay viewBox).
+        const ow = parseFloat(svgEl.getAttribute('width')) || 0;
+        const oh = parseFloat(svgEl.getAttribute('height')) || 0;
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        if (!svgEl.getAttribute('viewBox') && ow && oh) {
+          svgEl.setAttribute('viewBox', `0 0 ${ow} ${oh}`);
+        }
+        return new XMLSerializer().serializeToString(svgEl);
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // Reserva: clona el <svg> real montado en el DOM (puede perder el CSS que ApexCharts
+    // inyecta en <head>).
+    static thumbCloneLiveApexSvg(apexEl, suffix) {
+      try {
+        if (!apexEl) return '';
+        const rect = apexEl.getBoundingClientRect();
+        const clone = apexEl.cloneNode(true);
+        BaseWidget.thumbNamespaceSvgIds(clone, suffix);
+        clone.removeAttribute('class');
+        clone.removeAttribute('width');
+        clone.removeAttribute('height');
+        if (!clone.getAttribute('viewBox')) {
+          clone.setAttribute('viewBox', `0 0 ${Math.round(rect.width) || 100} ${Math.round(rect.height) || 100}`);
+        }
+        return new XMLSerializer().serializeToString(clone);
+      } catch (e) {
+        return '';
+      }
+    }
+
+    // Miniatura de un gráfico: incrusta su SVG real de ApexCharts escalado a su caja
+    // (ctx.content). Devuelve '' si no hay gráfico o no se puede exportar.
+    async apexThumbnail(ctx) {
+      const box = ctx && ctx.content;
+      if (!box || !this.el) return '';
+      const apexEl = this.el.querySelector('svg.apexcharts-svg');
+      const suffix = `w${this.id != null ? this.id : 'x'}`;
+      let markup = await BaseWidget.thumbApexSvgMarkup(this, suffix);
+      if (!markup && apexEl) markup = BaseWidget.thumbCloneLiveApexSvg(apexEl, suffix);
+      if (!markup) return '';
+      return markup.replace(/^<svg/, `<svg x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" preserveAspectRatio="xMidYMid meet"`);
+    }
+
     static dragHandleHTML() {
       return `<div class="drag-handle cursor-move text-ink/30 hover:text-ink/60 absolute left-1 top-0 bottom-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity z-20 text-[1rem] leading-none">⣿</div>`;
     }

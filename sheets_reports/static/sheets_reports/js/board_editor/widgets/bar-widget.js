@@ -45,6 +45,11 @@
       return this.buildStandardCardElement();
     }
 
+    // Miniatura: el SVG real del gráfico y, si no se puede, barras genéricas.
+    async thumbnailContent(ctx) {
+      return (await this.apexThumbnail(ctx)) || BaseWidget.thumbBars(ctx);
+    }
+
     getProperties() {
       return { ...super.getProperties() };
     }

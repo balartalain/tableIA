@@ -36,6 +36,22 @@
       return this.buildStandardCardElement();
     }
 
+    // Miniatura: el SVG real del gráfico y, si no se puede, una nube de puntos con su recta.
+    async thumbnailContent(ctx) {
+      const svg = await this.apexThumbnail(ctx);
+      if (svg) return svg;
+      const { x, y, w, h, primary, colors } = ctx;
+      const pts = [[0.12, 0.72], [0.28, 0.58], [0.42, 0.64], [0.55, 0.42], [0.7, 0.34], [0.84, 0.2]];
+      const px = (v) => (x + 10 + v * (w - 20)).toFixed(1);
+      const py = (v) => (y + 18 + v * (h - 32)).toFixed(1);
+      let dots = '';
+      pts.forEach(([a, b], i) => {
+        dots += `<circle cx="${px(a)}" cy="${py(b)}" r="1.7" fill="${colors[i % colors.length]}"/>`;
+      });
+      return `${dots}
+        <line x1="${px(0.1)}" y1="${py(0.78)}" x2="${px(0.9)}" y2="${py(0.14)}" stroke="${primary}" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+    }
+
     getProperties() {
       return { ...super.getProperties() };
     }

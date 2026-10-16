@@ -70,6 +70,13 @@
       return this.buildStandardCardElement();
     }
 
+    // Miniatura: el SVG real del heatmap y, si no se puede, una rejilla divergente.
+    async thumbnailContent(ctx) {
+      const svg = await this.apexThumbnail(ctx);
+      if (svg) return svg;
+      return BaseWidget.thumbGrid(ctx, ['#f4f3ef', '#d3e4f2', '#acccea', '#7fb0dd', '#f9d8cf', '#f4b2a4', '#ec8a7c']);
+    }
+
     getProperties() {
       return { ...super.getProperties() };
     }

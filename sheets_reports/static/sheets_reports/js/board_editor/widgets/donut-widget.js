@@ -21,6 +21,21 @@
       return this.buildStandardCardElement();
     }
 
+    // Miniatura: el SVG real del gráfico y, si no se puede, una dona esquemática.
+    async thumbnailContent(ctx) {
+      const svg = await this.apexThumbnail(ctx);
+      if (svg) return svg;
+      const { x, y, w, h, colors } = ctx;
+      const cx = x + w / 2;
+      const cy = y + h / 2 + 4;
+      const r = Math.max(6, Math.min(16, h / 2 - 8));
+      const sw = Math.max(3, r * 0.45);
+      return `
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[0]}" stroke-width="${sw}" stroke-dasharray="45 25"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[1] || colors[0]}" stroke-width="${sw}" stroke-dasharray="25 45" stroke-dashoffset="-45"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${colors[2] || colors[0]}" stroke-width="${sw}" stroke-dasharray="15 55" stroke-dashoffset="-70"/>`;
+    }
+
     getProperties() {
       return { ...super.getProperties() };
     }

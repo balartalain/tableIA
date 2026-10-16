@@ -27,15 +27,23 @@ class DashboardTemplateTests(TestCase):
         )
 
     def test_save_dashboard_as_template(self):
-        r = self.client.post(reverse("dashboard_save_as_template", kwargs={"dashboard_id": self.dashboard.id}))
+        fake_thumb = "data:image/jpeg;base64,/9j/4AAQSkZJRg=="
+        r = self.client.post(
+            reverse("dashboard_save_as_template", kwargs={"dashboard_id": self.dashboard.id}),
+            data={"thumbnail": fake_thumb},
+            content_type="application/json",
+        )
         self.assertEqual(r.status_code, 201)
         data = r.json()
         self.assertTrue(data["is_template"])
         self.assertIn("plantilla", data["nombre"].lower())
+        self.assertEqual(data["thumbnail"], fake_thumb)
+        self.assertEqual(data["owner"], "templateuser")
 
-        # Verificar que en base de datos existe la plantilla clonada
+        # Verificar que en base de datos existe la plantilla clonada con thumbnail
         template = Dashboard.objects.get(id=data["id"])
         self.assertTrue(template.is_template)
+        self.assertEqual(template.thumbnail, fake_thumb)
         self.assertEqual(template.sources.count(), 1)
         self.assertEqual(template.widgets.count(), 1)
 
@@ -175,3 +183,10 @@ class DashboardTemplateTests(TestCase):
         # Verificar que la campaña de correo NO existe en el nuevo tablero
         self.assertFalse(hasattr(new_board, "email_campaign"))
         self.assertIsNone(getattr(new_board, "email_campaign", None))
+
+    def test_home_renders_template_card_structure(self):
+        r = self.client.get(reverse("home"))
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode("utf-8")
+        self.assertIn("Creado por:", html)
+        self.assertIn("templateViewUrl(t)", html)

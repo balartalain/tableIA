@@ -31,6 +31,28 @@
       return this.buildStandardCardElement();
     }
 
+    // Miniatura: la lista del ranking (posición + nombre + barra + valor), con datos de reserva.
+    thumbnailContent(ctx) {
+      const { x, y, w, h } = ctx;
+      const top = y + 15;
+      const avail = Math.max(6, h - 17);
+      const n = Math.max(1, Math.min(5, Math.floor(avail / 11)));
+      const rowH = avail / n;
+      const pcts = [0.95, 0.8, 0.64, 0.5, 0.38];
+      let rows = '';
+      for (let i = 0; i < n; i++) {
+        const ry = top + i * rowH;
+        const barW = Math.max(3, (w - 34) * pcts[i % pcts.length]);
+        const labelW = Math.max(8, (w - 44) * 0.5);
+        rows += `
+        <rect x="${x + 5}" y="${ry + 1}" width="7" height="7" rx="1.5" fill="#EAF3EC"/>
+        <rect x="${x + 16}" y="${ry + 1.5}" width="${labelW}" height="2.6" rx="1.3" fill="#C7CBC2"/>
+        <rect x="${x + 16}" y="${ry + 6}" width="${barW}" height="2.2" rx="1.1" fill="#1F8A5F"/>
+        <rect x="${x + w - 12}" y="${ry + 1.5}" width="7" height="2.6" rx="1.3" fill="#8A8F86"/>`;
+      }
+      return rows;
+    }
+
     buildReadOnlyElement() {
       const el = super.buildReadOnlyElement();
       el.querySelector('.actions-slot').innerHTML = this.downloadButtonHTML('Descargar CSV');

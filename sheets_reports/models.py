@@ -22,6 +22,11 @@ class Dashboard(models.Model):
         default=False,
         help_text="Indica si este tablero actúa como plantilla de solo lectura.",
     )
+    thumbnail = models.TextField(
+        blank=True,
+        default="",
+        help_text="Miniatura del tablero en base64/data-URL.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

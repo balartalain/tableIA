@@ -56,6 +56,19 @@
         return this.buildStandardCardElement();
       }
 
+      // Miniatura: cabecera + filas esquemáticas (la hereda también el widget "table").
+      thumbnailContent(ctx) {
+        const { x, y, w, h, primary } = ctx;
+        const top = y + 14;
+        const lines = Math.max(2, Math.min(4, Math.floor((h - 20) / 7)));
+        let rows = '';
+        for (let i = 0; i < lines; i++) {
+          const ly = top + 9 + i * 7;
+          rows += `<line x1="${x + 6}" y1="${ly}" x2="${x + w - 6}" y2="${ly}" stroke="#E3E5DE" stroke-width="1.5"/>`;
+        }
+        return `<rect x="${x + 6}" y="${top}" width="${w - 12}" height="3" rx="1" fill="${primary}" opacity="0.35"/>${rows}`;
+      }
+
       buildReadOnlyElement() {
         const el = super.buildReadOnlyElement();
         el.querySelector('.actions-slot').innerHTML = this.downloadButtonHTML('Descargar CSV');

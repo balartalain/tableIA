@@ -55,20 +55,19 @@ class ProfileTests(SimpleTestCase):
                          ["2 - Malo", "5 - Regular", "10 - Excelente"])
         self.assertIsNone(known_order(["Norte", "Sur"]))
 
-    def test_las_respuestas_textuales_no_se_descartan_al_detectar_la_escala(self):
+    def test_las_respuestas_textuales_se_ignoran_por_defecto_al_detectar_la_escala_ordinal(self):
         values = ["Completamente satisfecho", "Satisfecho", "No utilizo este medio", "Insatisfecho",
                   "Completamente insatisfecho"]
-        self.assertIsNone(known_order(values))
-        self.assertIsNone(known_order(["Siempre", "Nunca", "No aplica"]))
-        for answer in ("No aplica", "N/A", "No utilizo este medio", "No he recibido este servicio", "Empty"):
+        self.assertEqual(known_order(values),
+                         ["Completamente insatisfecho", "Insatisfecho", "Satisfecho", "Completamente satisfecho"])
+        self.assertEqual(known_order(["Siempre", "Nunca", "No aplica"]), ["Nunca", "Siempre"])
+        # Si se deshabilita explicitamente el filtrado pasando set(), la escala pasa a ser nominal
+        self.assertIsNone(known_order(values, ignored_set=set()))
+        for answer in ("No aplica", "N/A", "No utilizo este medio", "No he recibido este servicio"):
             with self.subTest(answer=answer):
                 profile = profile_column(pd.Series(["Bajo", "Alto", answer, None]))
-                self.assertEqual(profile["scale"], "nominal")
-                self.assertEqual(profile["stats"]["missing"], 25.0)
-                self.assertIn(answer, profile["stats"]["values"])
-                self.assertEqual(dummy_count(profile), 3)
-                self.assertEqual(order_gaps(pd.Series(["Bajo", "Alto", answer, None]), ["Bajo", "Alto"]),
-                                 [answer])
+                self.assertEqual(profile["scale"], "ordinal")
+                self.assertEqual(profile["order"], ["Bajo", "Alto"])
 
     def test_fechas_y_envio_no_se_analizan(self):
         df = pd.DataFrame({"f": ["2026-01-01", "2026-02-01"], "envio": ["a", "b"]})

@@ -91,21 +91,26 @@ _KNOWN_LEVELS = [
 ]
 
 
-def known_order(values: list[str]) -> list[str] | None:
+def known_order(values: list[str], ignored_set: set[str] | None = None) -> list[str] | None:
     """Los valores de menor a mayor si todos son niveles de una escala conocida (Likert,
-    frecuencia, nivel...) o si todos empiezan con un número («1 - Malo»); None si no."""
-    if len(values) < 2:
+    frecuencia, nivel...) o si todos empiezan con un número («1 - Malo»); None si no.
+    Las respuestas no evaluables (No aplica, N/A, etc.) se ignoran por defecto al evaluar
+    si coincide con una escala conocida."""
+    if ignored_set is None:
+        ignored_set = parse_ignored_values(DEFAULT_IGNORED_VALUES)
+    eval_values = [v for v in values if normalize_text(v) not in ignored_set] if ignored_set else values
+    if len(eval_values) < 2:
         return None
     for levels in _KNOWN_LEVELS:
-        ranks = [levels.get(_level_key(v)) for v in values]
+        ranks = [levels.get(_level_key(v)) for v in eval_values]
         if all(r is not None for r in ranks):
-            return [v for _, v in sorted(zip(ranks, values), key=lambda p: p[0])]
-    numbers = [_LEADING_NUMBER.match(f"{v} ") for v in values]
+            return [v for _, v in sorted(zip(ranks, eval_values), key=lambda p: p[0])]
+    numbers = [_LEADING_NUMBER.match(f"{v} ") for v in eval_values]
     if all(numbers):
         keys = [float(m.group(1).replace(",", ".")) for m in numbers]
-        return [v for _, v in sorted(zip(keys, values), key=lambda p: p[0])]
-    months = time_order(values)
-    if months is not None and not all(isinstance(v, (int, float)) for v in values):
+        return [v for _, v in sorted(zip(keys, eval_values), key=lambda p: p[0])]
+    months = time_order(eval_values)
+    if months is not None and not all(isinstance(v, (int, float)) for v in eval_values):
         return [str(v) for v in months]
     return None
 
@@ -116,7 +121,7 @@ def _text_values(series: pd.Series) -> pd.Series:
 
 
 def profile_column(series: pd.Series, name: str = "", date: bool = False,
-                   submission: bool = False) -> dict:
+                   submission: bool = False, ignored_set: set[str] | None = None) -> dict:
     """
     {scale, order?, uncertain, stats} de una columna. `date` (fechas completas) y `submission`
     (fecha de envío de un formulario) no se analizan. `uncertain`: la escala detectada podría
@@ -157,7 +162,7 @@ def profile_column(series: pd.Series, name: str = "", date: bool = False,
         return {"scale": "none", "uncertain": False, "stats": stats}
     # Los valores de una categoría: con ellos se valida que el orden de una ordinal los cubra.
     stats["values"] = [str(v) for v in counts.index]
-    order = known_order(list(counts.index))
+    order = known_order(list(counts.index), ignored_set=ignored_set)
     if order is not None:
         return {"scale": "ordinal", "order": order, "uncertain": False, "stats": stats}
     # Dos valores (Sí/No) son nominales sin duda; con más, podrían tener un orden que no conocemos.
@@ -183,7 +188,7 @@ def effective_scales(df: pd.DataFrame, saved: dict | None = None, only=None,
     for column in columns:
         series = mask_ignored(df[column], ignored_set)
         profile = profile_column(series, column, date=column in date_columns,
-                                 submission=column == submission)
+                                 submission=column == submission, ignored_set=ignored_set)
         override = saved.get(column)
         if isinstance(override, dict) and override.get("scale") in SCALES:
             profile = {**profile, "scale": override["scale"], "uncertain": False, "saved": True}

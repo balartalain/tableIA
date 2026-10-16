@@ -360,7 +360,7 @@ class CorrelationGenerationTests(SimpleTestCase):
         for value in ("Totalmente de acuerdo", "De acuerdo", "Desacuerdo", "Totalmente en desacuerdo", "No aplica"):
             self.assertIn(value, repair)
         self.assertIn("Escalas efectivas y valores reales", repair)
-        self.assertIn('"scale": "nominal"', repair)
+        self.assertIn('"scale": "ordinal"', repair)
         self.assertIn("entre 2 y 12", repair)  # recuerda el límite corregido en el segundo intento
         self.assertIn("column_scales[2]", _audit.call_args_list[1].args[-1][0])
         self.assertEqual(_audit.call_args_list[2].args[-1], [])
@@ -368,8 +368,8 @@ class CorrelationGenerationTests(SimpleTestCase):
         self.assertEqual(result["style"], {"method": "spearman", "lowerOnly": True})
         self.assertEqual(ctx.scales, original_scales)
         out = compiled("correlation", result["fields"], result["style"], df=df)
-        self.assertEqual(len(out["variables"]), 11)  # 5 de satisfacción, 1 ordinal, 5 de acuerdo
-        self.assertEqual(sum(v.get("value") == "No aplica" for v in out["variables"]), 2)
+        self.assertEqual(len(out["variables"]), 3)  # 1 de satisfacción, 1 de aprendizaje, 1 de acuerdo (todas ordinales al ignorar "No aplica")
+        self.assertEqual(sum(v.get("value") == "No aplica" for v in out["variables"]), 0)
         self.assertEqual(out["rows"], 6)
 
     def test_no_reintenta_mas_si_repite_el_mismo_error_de_escala(self, _audit):

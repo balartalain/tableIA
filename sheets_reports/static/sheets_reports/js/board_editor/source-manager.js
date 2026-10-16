@@ -41,7 +41,9 @@ function sourceManager() {
       window.addEventListener('sources:changed', () => this.afterChange());
       window.addEventListener('bottom-sheet:resized', () => {
         if (this.view === 'data' && this._previewTable) {
-          this._previewTable.redraw(true);
+          requestAnimationFrame(() => {
+            if (this._previewTable) this._previewTable.redraw();
+          });
         }
       });
     },
@@ -203,6 +205,7 @@ function sourceManager() {
         nestedFieldSeparator: false,
         columns,
         layout: 'fitDataStretch',
+        renderHorizontal: 'virtual',
         resizableColumnGuide: true,
         progressiveLoad: 'scroll',
         progressiveLoadScrollMargin: 200,
@@ -230,9 +233,9 @@ function sourceManager() {
       });
 
       this._previewTable.on('tableBuilt', () => {
-        setTimeout(() => {
-          if (this._previewTable) this._previewTable.redraw(true);
-        }, 50);
+        requestAnimationFrame(() => {
+          if (this._previewTable) this._previewTable.redraw();
+        });
       });
     },
 
@@ -242,34 +245,29 @@ function sourceManager() {
       try {
         const colComponent = this._previewTable.getColumn(colName);
         if (colComponent) {
-          const scrollPromise = this._previewTable.scrollToColumn(colComponent, 'center', false);
-          if (scrollPromise && typeof scrollPromise.then === 'function') {
-            scrollPromise.then(() => {
-              const holder = this._previewTable && this._previewTable.rowManager && this._previewTable.rowManager.element;
-              const header = this._previewTable && this._previewTable.columnManager && this._previewTable.columnManager.headersElement;
-              if (holder && header && header.scrollLeft !== holder.scrollLeft) {
-                header.scrollLeft = holder.scrollLeft;
-              }
-            }).catch(() => {});
+          const scrollRes = this._previewTable.scrollToColumn(colComponent, 'center', false);
+          if (scrollRes && typeof scrollRes.then === 'function') {
+            scrollRes.catch(() => {});
           }
-
-          const headerEle = colComponent.getElement();
-          if (headerEle) {
-            headerEle.style.transition = 'all 0.3s ease';
-            headerEle.style.backgroundColor = '#dcfce7';
-            headerEle.style.boxShadow = 'inset 0 0 0 2px #4d7c0f';
-            setTimeout(() => {
-              headerEle.style.backgroundColor = '';
-              headerEle.style.boxShadow = '';
-            }, 2000);
-          }
+          setTimeout(() => {
+            const headerEle = colComponent.getElement();
+            if (headerEle) {
+              headerEle.style.transition = 'all 0.3s ease';
+              headerEle.style.backgroundColor = '#dcfce7';
+              headerEle.style.boxShadow = 'inset 0 0 0 2px #4d7c0f';
+              setTimeout(() => {
+                headerEle.style.backgroundColor = '';
+                headerEle.style.boxShadow = '';
+              }, 2000);
+            }
+          }, 100);
         }
       } catch (e) {
         console.error('Error al saltar a la columna:', e);
       }
       setTimeout(() => {
         this.selectedColumnJump = '';
-      }, 50);
+      }, 100);
     },
 
     closeDataView() {

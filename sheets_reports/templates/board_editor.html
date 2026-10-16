@@ -12,23 +12,75 @@
 
 {% block header_title %}
 {% if dashboard %}
-<input id="board-title" type="text" x-data="boardTitle()" x-model="name"
-       x-on:keydown.enter.prevent="$el.blur()" x-on:keydown.escape.prevent="revert(); $el.blur()"
-       x-on:blur="save()" aria-label="Nombre del tablero" maxlength="255"
-       data-name="{{ dashboard.nombre }}" value="{{ dashboard.nombre }}"
-       class="board-title min-w-[8ch] max-w-full truncate bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded-md px-2 py-1 font-sans font-semibold text-sm text-ink transition">
-<button id="sources-btn" type="button" aria-label="Gestionar fuente de datos" title="Gestionar fuente de datos"
-        x-data x-on:click="$store.bottomSheet.open({ title: 'Gestionar fuente de datos' }); window.dispatchEvent(new CustomEvent('sources:open'))"
-        class="shrink-0 ml-1 bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
-  <i class="ti ti-database text-base" aria-hidden="true"></i>
-  <span class="hidden sm:inline">Gestionar fuente de datos</span>
-</button>
-<button id="email-btn" type="button" aria-label="Configurar envío de correos" title="Configurar envío de correos"
-        x-data x-on:click="$store.bottomSheet.open({ title: 'Configurar envío de correos', view: 'email' }); window.dispatchEvent(new CustomEvent('email-campaign:open'))"
-        class="shrink-0 ml-1 bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
-  <i class="ti ti-mail text-base" aria-hidden="true"></i>
-  <span class="hidden sm:inline">Configurar envío de correos</span>
-</button>
+<div class="flex items-center justify-between w-full gap-3 min-w-0" x-data="boardHeaderMenu()">
+  <!-- Lado izquierdo: Título editable y menú desplegable -->
+  <div class="flex items-center gap-1.5 min-w-0">
+    <input id="board-title" type="text" x-data="boardTitle()" x-model="name"
+           x-on:keydown.enter.prevent="$el.blur()" x-on:keydown.escape.prevent="revert(); $el.blur()"
+           x-on:blur="save()" aria-label="Nombre del tablero" maxlength="255"
+           data-name="{{ dashboard.nombre }}" value="{{ dashboard.nombre }}"
+           class="board-title min-w-[8ch] max-w-full truncate bg-transparent border border-transparent hover:border-line focus:border-moss-500 focus:outline-none rounded-md px-2 py-1 font-sans font-semibold text-sm text-ink transition">
+
+    <!-- Menú de opciones del tablero -->
+    <div class="relative shrink-0" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
+      <button type="button" x-on:click="open = !open"
+              aria-label="Opciones del tablero" title="Opciones del tablero"
+              class="w-6 h-6 rounded-md flex items-center justify-center text-ink/50 hover:text-ink hover:bg-paper transition cursor-pointer">
+        <i class="ti ti-chevron-down text-sm transition-transform duration-150" :class="open ? 'rotate-180 text-ink' : ''" aria-hidden="true"></i>
+      </button>
+
+      <!-- Dropdown del menú -->
+      <div x-show="open" x-cloak
+           x-transition:enter="transition ease-out duration-100"
+           x-transition:enter-start="opacity-0 scale-95"
+           x-transition:enter-end="opacity-100 scale-100"
+           x-transition:leave="transition ease-in duration-75"
+           x-transition:leave-start="opacity-100 scale-100"
+           x-transition:leave-end="opacity-0 scale-95"
+           class="absolute left-0 top-full mt-1.5 w-56 rounded-xl bg-white border border-line shadow-xl py-1.5 z-50 text-xs font-medium text-ink">
+        <button type="button" x-on:click="open = false; duplicateBoard()"
+                class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-paper text-ink/80 hover:text-ink text-left transition cursor-pointer">
+          <i class="ti ti-copy text-base text-ink/50" aria-hidden="true"></i>
+          <span>Duplicar tablero</span>
+        </button>
+        <button type="button" x-on:click="open = false; saveTemplate()"
+                class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-paper text-ink/80 hover:text-ink text-left transition cursor-pointer">
+          <i class="ti ti-template text-base text-ink/50" aria-hidden="true"></i>
+          <span>Guardar como plantilla</span>
+        </button>
+        <button type="button" x-on:click="open = false; $store.bottomSheet.openSettings('board')"
+                class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-paper text-ink/80 hover:text-ink text-left transition cursor-pointer">
+          <i class="ti ti-settings text-base text-ink/50" aria-hidden="true"></i>
+          <span>Configuración</span>
+        </button>
+        <div class="my-1 border-t border-line"></div>
+        <a href="{% url 'home' %}"
+           class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-paper text-ink/80 hover:text-ink text-left transition cursor-pointer">
+          <i class="ti ti-arrow-left text-base text-ink/50" aria-hidden="true"></i>
+          <span>Salir al inicio</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Centro: Botón de Fuentes e Indicador de Autoguardado -->
+  <div class="hidden sm:flex items-center gap-2.5 shrink-0">
+    <button id="sources-btn" type="button" aria-label="Gestionar fuente de datos" title="Gestionar fuente de datos"
+            x-on:click="$store.bottomSheet.openSources()"
+            class="bg-white border border-line hover:bg-paper text-ink/75 hover:text-ink py-1.5 px-3 rounded-md font-medium text-xs transition cursor-pointer flex items-center gap-2 shadow-2xs">
+      <i class="ti ti-database text-sm text-moss-600" aria-hidden="true"></i>
+      <span>Gestionar fuentes</span>
+      <span x-show="$store.dashboard.sources && $store.dashboard.sources.length"
+            x-text="$store.dashboard.sources.length"
+            class="bg-paper text-ink/70 px-1.5 py-0.2 rounded-full font-semibold text-[10px] border border-line"></span>
+    </button>
+
+    <div class="hidden md:flex items-center gap-1.5 text-xs text-ink/50 px-2 py-1 select-none">
+      <i class="ti text-xs" :class="$store.dashboard.isSavingLayout ? 'ti-loader animate-spin text-ink/40' : 'ti-cloud-check text-moss-600'"></i>
+      <span x-text="$store.dashboard.isSavingLayout ? 'Guardando…' : 'Guardado'"></span>
+    </div>
+  </div>
+</div>
 {% else %}
 <span class="px-2 font-sans font-semibold text-sm text-ink">Nuevo tablero</span>
 {% endif %}
@@ -36,16 +88,24 @@
 
 {% block header_actions %}
 {% if dashboard %}
+<button id="ai-board-btn" type="button" aria-label="Generar con IA" title="Generar con IA"
+        x-data x-on:click="window.dispatchEvent(new CustomEvent('ai-board:open'))"
+        class="bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-700 py-1.5 px-2.5 sm:px-3 rounded-md font-medium text-xs sm:text-sm transition cursor-pointer flex items-center gap-1.5">
+  <i class="ti ti-sparkles text-base text-violet-600" aria-hidden="true"></i>
+  <span class="hidden sm:inline">Generar con IA</span>
+</button>
+
 <!-- Abre la vista real (la que recibe quien tiene el enlace) en otra pestaña. -->
 <button id="preview-btn" type="button" aria-label="Vista previa" title="Vista previa"
-        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+        class="bg-white border border-line hover:bg-paper text-ink/70 hover:text-ink py-1.5 px-2.5 sm:px-3 rounded-md font-medium text-xs sm:text-sm transition cursor-pointer flex items-center gap-1.5">
   <i class="ti ti-eye text-base" aria-hidden="true"></i>
   <span class="hidden sm:inline">Vista previa</span>
 </button>
+
 <button id="share-btn" type="button" aria-label="Compartir" title="Compartir"
-        class="bg-white border border-line hover:bg-paper text-ink/70 py-1.5 px-2 sm:px-3 rounded-md font-medium text-sm transition cursor-pointer flex items-center gap-1.5">
+        class="bg-moss-500 hover:bg-moss-600 text-white py-1.5 px-2.5 sm:px-3.5 rounded-md font-medium text-xs sm:text-sm transition cursor-pointer flex items-center gap-1.5 shadow-sm">
   <i class="ti ti-share text-base" aria-hidden="true"></i>
-  <span class="hidden sm:inline">Compartir</span>
+  <span>Compartir</span>
 </button>
 {% endif %}
 {% endblock %}
@@ -373,7 +433,85 @@
     </div>
     <div class="flex-1 min-h-0 overflow-auto p-5">
       {% if dashboard %}
+      <!-- Vista Fuentes de datos -->
       <div x-show="$store.bottomSheet.view === 'sources'" class="h-full">{% include "sheets_reports/source_manager.html" %}</div>
+
+      <!-- Vista Configuración (con 2 tabs: 'Configuración del tablero' y 'Envíos de correo') -->
+      <div x-show="$store.bottomSheet.view === 'settings'" x-cloak class="h-full flex flex-col">
+        <!-- Barra de navegación de pestañas -->
+        <div class="flex items-center gap-2 border-b border-line pb-3.5 mb-5 shrink-0">
+          <button type="button"
+                  x-on:click="$store.bottomSheet.switchSettingsTab('board')"
+                  x-bind:class="$store.bottomSheet.settingsTab === 'board' ? 'bg-moss-50 text-moss-700 font-semibold border-moss-300 shadow-2xs' : 'text-ink/60 hover:text-ink hover:bg-paper border-transparent'"
+                  class="px-3.5 py-1.5 rounded-lg text-sm border transition flex items-center gap-2 cursor-pointer">
+            <i class="ti ti-adjustments text-base" aria-hidden="true"></i>
+            <span>Configuración del tablero</span>
+          </button>
+          <button type="button"
+                  x-on:click="$store.bottomSheet.switchSettingsTab('email')"
+                  x-bind:class="$store.bottomSheet.settingsTab === 'email' ? 'bg-moss-50 text-moss-700 font-semibold border-moss-300 shadow-2xs' : 'text-ink/60 hover:text-ink hover:bg-paper border-transparent'"
+                  class="px-3.5 py-1.5 rounded-lg text-sm border transition flex items-center gap-2 cursor-pointer">
+            <i class="ti ti-mail text-base" aria-hidden="true"></i>
+            <span>Envíos de correo</span>
+          </button>
+        </div>
+
+        <!-- Tab 1: Configuración del tablero -->
+        <div x-show="$store.bottomSheet.settingsTab === 'board'" class="flex-1 min-h-0 overflow-y-auto space-y-6 max-w-2xl">
+          <div class="bg-white border border-line rounded-xl p-5 space-y-4">
+            <h4 class="text-sm font-bold text-ink">Información general</h4>
+            <div class="space-y-1.5">
+              <label for="settings-board-name" class="block text-xs font-semibold text-ink/70">Nombre del tablero</label>
+              <div class="flex items-center gap-2">
+                <input id="settings-board-name" type="text" x-data x-ref="settingsNameInput"
+                       value="{{ dashboard.nombre }}" maxlength="255"
+                       class="flex-1 text-sm border border-line rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-moss-500 focus:ring-1 focus:ring-moss-500">
+                <button type="button"
+                        x-on:click="saveBoardNameFromSettings($refs.settingsNameInput.value)"
+                        class="shrink-0 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 px-4 py-2 rounded-lg transition cursor-pointer">
+                  Guardar
+                </button>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-line/60 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-ink/60">
+              <div>
+                <span class="block text-ink/40 text-[11px] uppercase tracking-wider font-semibold">Identificador</span>
+                <span class="font-mono text-ink/80 text-xs">#{{ dashboard.id }}</span>
+              </div>
+              <div>
+                <span class="block text-ink/40 text-[11px] uppercase tracking-wider font-semibold">Fecha de creación</span>
+                <span class="text-ink/80">{{ dashboard.created_at|date:"d/m/Y H:i" }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Zona de peligro -->
+          <div class="bg-red-50/50 border border-red-200 rounded-xl p-5 space-y-3">
+            <h4 class="text-sm font-bold text-red-900 flex items-center gap-1.5">
+              <i class="ti ti-alert-triangle text-base text-red-600"></i>
+              <span>Zona de peligro</span>
+            </h4>
+            <p class="text-xs text-red-700/80 leading-relaxed">
+              Eliminar este tablero borrará permanentemente sus tarjetas, configuraciones y campañas de correo programadas asociadas.
+            </p>
+            <div class="pt-1">
+              <button type="button" x-on:click="deleteCurrentDashboard()"
+                      class="text-xs font-semibold text-red-700 hover:text-white bg-white hover:bg-red-600 border border-red-300 hover:border-red-600 px-3.5 py-2 rounded-lg transition cursor-pointer inline-flex items-center gap-1.5">
+                <i class="ti ti-trash text-sm"></i>
+                <span>Eliminar tablero definitivamente</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Envíos de Correo -->
+        <div x-show="$store.bottomSheet.settingsTab === 'email'" x-cloak class="flex-1 min-h-0 overflow-y-auto">
+          {% include "sheets_reports/email_campaign.html" %}
+        </div>
+      </div>
+
+      <!-- Compatibilidad retroactiva si algo llama a view 'email' directamente -->
       <div x-show="$store.bottomSheet.view === 'email'" x-cloak class="h-full">{% include "sheets_reports/email_campaign.html" %}</div>
       {% else %}{% include "sheets_reports/source_picker.html" with picker_mode="create" %}{% endif %}
     </div>

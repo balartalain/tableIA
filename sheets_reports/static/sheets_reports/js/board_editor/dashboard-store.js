@@ -565,21 +565,28 @@ document.addEventListener('alpine:init', () => {
 
     _layoutTimer: null,
     _layoutSaving: null,
+    isSavingLayout: false,
 
     scheduleLayoutSave() {
+      this.isSavingLayout = true;
       clearTimeout(this._layoutTimer);
       this._layoutTimer = setTimeout(() => this.flushLayoutSave(), LAYOUT_SAVE_DELAY_MS);
     },
 
     async flushLayoutSave({ keepalive = false } = {}) {
+      this.isSavingLayout = true;
       clearTimeout(this._layoutTimer);
       this._layoutTimer = null;
       if (this._layoutSaving && !keepalive) await this._layoutSaving;
       const pending = this.widgets.filter(w => w._dirty && w.id > 0);
-      if (!pending.length) return;
+      if (!pending.length) {
+        this.isSavingLayout = false;
+        return;
+      }
       this._layoutSaving = Promise.all(pending.map(w => this._saveWidget(w, { keepalive })));
       const results = await this._layoutSaving;
       this._layoutSaving = null;
+      this.isSavingLayout = false;
       if (results.some(r => !r.ok) && typeof window.showToast === 'function') {
         window.showToast('No se pudo guardar el diseño. Se reintentará con el próximo cambio.');
       }

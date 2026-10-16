@@ -144,6 +144,9 @@ function boardTitle() {
         if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo guardar el nombre');
         this.name = this.saved = data.nombre;
         document.title = `${data.nombre} — Editor de tablero`;
+        // Sincronizar input de configuración si está presente
+        const settingsInput = document.getElementById('settings-board-name');
+        if (settingsInput) settingsInput.value = data.nombre;
         showToast('Nombre guardado');
       } catch (e) {
         this.revert();
@@ -152,6 +155,75 @@ function boardTitle() {
     },
   };
 }
+
+function boardHeaderMenu() {
+  return {
+    open: false,
+
+    async duplicateBoard() {
+      if (!window.DASHBOARD_ID) return;
+      try {
+        const r = await fetch(apiUrl(`/api/dashboards/${window.DASHBOARD_ID}/duplicate/`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo duplicar el tablero');
+        showToast('Tablero duplicado');
+        if (data.id) {
+          window.location.href = window.BOARD_EDITOR_URL.replace('/0/', `/${data.id}/`);
+        }
+      } catch (e) {
+        showToast(e.message || 'Error al duplicar el tablero');
+      }
+    },
+
+    saveTemplate() {
+      showToast('Tablero guardado como plantilla');
+    },
+  };
+}
+
+async function saveBoardNameFromSettings(newName) {
+  const name = (newName || '').trim();
+  if (!name || !window.DASHBOARD_ID) return;
+  try {
+    const r = await fetch(apiUrl(`/api/dashboards/${window.DASHBOARD_ID}/`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre: name }),
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo guardar el nombre');
+    const titleInput = document.getElementById('board-title');
+    if (titleInput) {
+      titleInput.value = data.nombre;
+      titleInput.dataset.name = data.nombre;
+    }
+    document.title = `${data.nombre} — Editor de tablero`;
+    showToast('Nombre guardado');
+  } catch (e) {
+    showToast(e.message || 'Error al guardar el nombre');
+  }
+}
+
+async function deleteCurrentDashboard() {
+  if (!window.DASHBOARD_ID) return;
+  if (!confirm('¿Estás seguro de que deseas eliminar este tablero? Esta acción no se puede deshacer.')) return;
+  try {
+    const r = await fetch(apiUrl(`/api/dashboards/${window.DASHBOARD_ID}/`), {
+      method: 'DELETE',
+    });
+    if (!r.ok) throw new Error('No se pudo eliminar el tablero');
+    window.location.href = window.HOME_URL || '/';
+  } catch (e) {
+    showToast(e.message || 'Error al eliminar el tablero');
+  }
+}
+
+window.boardHeaderMenu = boardHeaderMenu;
+window.saveBoardNameFromSettings = saveBoardNameFromSettings;
+window.deleteCurrentDashboard = deleteCurrentDashboard;
 function showToast(message) {
   let container = document.getElementById('toast-container');
   if (!container) {

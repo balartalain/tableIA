@@ -11,15 +11,34 @@ document.addEventListener('alpine:init', () => {
     title: '',
     // Sin él (tablero nuevo, sin fuente) no se cierra: la ✕ vuelve al inicio.
     dismissible: true,
-    // Qué contenido muestra: 'sources' (fuentes de datos) | 'email' (envío de correos).
+    // Qué contenido muestra: 'sources' (fuentes de datos) | 'settings' (configuración) | 'email' (envío de correos).
     view: 'sources',
+    // Sub-pestaña cuando view === 'settings': 'board' (configuración del tablero) | 'email' (envíos de correo).
+    settingsTab: 'board',
 
-    open({ title = '', dismissible = true, view = 'sources' } = {}) {
+    open({ title = '', dismissible = true, view = 'sources', settingsTab = 'board' } = {}) {
       this.heightPct = BOTTOM_SHEET_DEFAULT_PCT;
       this.title = title;
       this.view = view;
+      this.settingsTab = settingsTab;
       this.dismissible = dismissible;
       this.isOpen = true;
+      if (this.view === 'settings' && this.settingsTab === 'email') {
+        window.dispatchEvent(new CustomEvent('email-campaign:open'));
+      }
+    },
+    openSettings(tab = 'board') {
+      this.open({ title: 'Configuración', view: 'settings', settingsTab: tab });
+    },
+    openSources() {
+      this.open({ title: 'Gestionar fuente de datos', view: 'sources' });
+      window.dispatchEvent(new CustomEvent('sources:open'));
+    },
+    switchSettingsTab(tab) {
+      this.settingsTab = tab;
+      if (tab === 'email') {
+        window.dispatchEvent(new CustomEvent('email-campaign:open'));
+      }
     },
     close() {
       if (!this.dismissible) {

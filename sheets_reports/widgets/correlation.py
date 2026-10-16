@@ -121,24 +121,13 @@ class CorrelationWidget(BaseWidget):
 
         frame = result.rows
         base_scales = (metadata or {}).get("scales") or {}
+        scales = effective_scales(frame, saved=base_scales, ignored_set=ignored_set)
 
         # Las filas de la matriz: una por variable, o una por dummy en una nominal.
         rows = []
         for column in frame.columns:
             series = mask_ignored(frame[column], ignored_set)
-            profile = copy.deepcopy(base_scales.get(column)) if base_scales.get(column) else None
-            if profile:
-                if profile.get("scale") == "ordinal" and profile.get("order"):
-                    profile["order"] = [v for v in profile["order"] if normalize_text(v) not in ignored_set]
-            else:
-                profile = profile_column(series, column)
-
-            if profile and not profile.get("saved") and profile.get("scale") != "ordinal":
-                detected = profile_column(series, column)
-                if detected.get("scale") == "ordinal":
-                    profile["scale"] = "ordinal"
-                    profile["order"] = detected.get("order")
-
+            profile = scales.get(column) or profile_column(series, column, ignored_set=ignored_set)
             label = labels.get(column, humanize(column))
             for ready in prepare(series, profile["scale"], profile.get("order")):
                 row = {**ready, "field": column, "label": label}

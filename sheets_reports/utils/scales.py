@@ -194,7 +194,10 @@ def effective_scales(df: pd.DataFrame, saved: dict | None = None, only=None,
             profile = {**profile, "scale": override["scale"], "uncertain": False, "saved": True}
             profile.pop("order", None)
             if override["scale"] == "ordinal" and override.get("order"):
-                profile["order"] = list(override["order"])
+                order = list(override["order"])
+                if ignored_set:
+                    order = [v for v in order if normalize_text(v) not in ignored_set]
+                profile["order"] = order
         else:
             profile["saved"] = False
         out[column] = profile

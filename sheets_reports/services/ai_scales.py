@@ -13,7 +13,7 @@ import pandas as pd
 
 from sheets_reports.services.ai_spec import THINKING_BUDGETS, SpecGenerationError, generate_json
 from sheets_reports.utils.scales import (DEFAULT_IGNORED_VALUES, MAX_CATEGORIES_LARGE, SCALES,
-                                         column_values, describe, mask_ignored, normalize_text,
+                                         column_values, describe, effective_scales, mask_ignored, normalize_text,
                                          parse_ignored_values, scale_errors)
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,8 @@ def classify_scales(df: pd.DataFrame, columns: list[str], scales: dict,
     if not columns:
         raise SpecGenerationError("Elige al menos una columna para clasificar.")
     ignored_set = parse_ignored_values(ignored_values) if ignored_values else set()
-    lines = "\n".join(_column_line(c, df[c], scales.get(c) or {"scale": "none"}, ignored_set=ignored_set) for c in columns)
+    detected_scales = effective_scales(df, saved=scales, only=columns, ignored_set=ignored_set)
+    lines = "\n".join(_column_line(c, df[c], detected_scales.get(c) or {"scale": "none"}, ignored_set=ignored_set) for c in columns)
     try:
         answer = generate_json(SCALES_PROMPT.format(columns=lines), RESPONSE_SCHEMA, call="scales",
                                thinking_budget=THINKING_BUDGETS["scales"])

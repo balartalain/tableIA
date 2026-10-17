@@ -4,7 +4,25 @@
 {% block title %}{{ dashboard.nombre }} — Report IA{% endblock %}
 
 {% block header %}
-<header class="border-b border-moss-700 bg-moss-600 text-white">
+<script>
+  (function() {
+    const color = "{{ dashboard.primary_color|default:'#1F8A5F'|escapejs }}";
+    const root = document.documentElement;
+    if (typeof window.chroma === 'function') {
+      const c = window.chroma(color);
+      root.style.setProperty('--board-primary', color);
+      root.style.setProperty('--board-primary-600', c.darken(0.35).hex());
+      root.style.setProperty('--board-primary-700', c.darken(0.7).hex());
+      root.style.setProperty('--board-primary-100', c.brighten(1.4).desaturate(0.4).hex());
+    } else {
+      root.style.setProperty('--board-primary', color);
+      root.style.setProperty('--board-primary-600', color);
+      root.style.setProperty('--board-primary-700', color);
+      root.style.setProperty('--board-primary-100', color);
+    }
+  })();
+</script>
+<header class="text-white transition-colors" style="background-color: var(--board-primary-600, #166B49); border-bottom: 1px solid var(--board-primary-700, #0F5138);">
   <div class="mx-auto px-6 h-16 flex items-center justify-between">
     <div class="flex items-center gap-3">
       <span class="font-sans font-semibold text-lg tracking-tight">{{ dashboard.nombre }}</span>
@@ -15,7 +33,7 @@
     {% if dashboard.is_template %}
     <div class="flex items-center gap-2">
       <button id="use-template-btn" type="button" onclick="useTemplate({{ dashboard.id }})"
-              class="bg-white hover:bg-paper text-moss-700 font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-md transition shadow flex items-center gap-1.5 cursor-pointer">
+              class="bg-white hover:bg-paper font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-md transition shadow flex items-center gap-1.5 cursor-pointer" style="color: var(--board-primary-700, #0F5138);">
         <i class="ti ti-pencil text-base" aria-hidden="true"></i>
         <span>Editar</span>
       </button>
@@ -37,9 +55,9 @@
   }
 </style>
 <!-- Visible desde el primer pintado; board-view-init.js la oculta al terminar de cargar. -->
-<div id="page-loader" class="fixed top-0 inset-x-0 z-50 h-1 overflow-hidden bg-moss-100"
+<div id="page-loader" class="fixed top-0 inset-x-0 z-50 h-1 overflow-hidden" style="background-color: var(--board-primary-100, #CFE6D6);"
      role="progressbar" aria-label="Cargando tablero">
-  <div class="h-full w-1/3 bg-moss-500"></div>
+  <div class="h-full w-1/3" style="background-color: var(--board-primary, #1F8A5F);"></div>
 </div>
 {% if email_enabled %}
 <!-- Con el envío de correos activado: el tablero o el reporte del envío (email-report.js). -->

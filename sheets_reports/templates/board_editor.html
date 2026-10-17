@@ -506,9 +506,9 @@
               <label class="block text-xs font-semibold text-ink/70">Color principal del tablero</label>
               <div class="flex flex-wrap items-center gap-3">
                 <template x-for="color in [
-                  { hex: '#1F8A5F', name: 'Verde Report IA' },
-                  { hex: '#0284C7', name: 'Azul Océano' },
-                  { hex: '#d97608', name: 'Naranja Atardecer' }
+                  { hex: '#1F8A5F', name: 'Verde' },
+                  { hex: '#0284C7', name: 'Azul' },
+                  { hex: '#6366F1', name: 'Índigo' }
                 ]" :key="color.hex">
                   <button type="button"
                           x-on:click="$store.dashboard.savePrimaryColor(color.hex)"

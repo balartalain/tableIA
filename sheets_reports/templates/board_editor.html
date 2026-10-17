@@ -460,7 +460,7 @@
       <!-- Vista Fuentes de datos -->
       <div x-show="$store.bottomSheet.view === 'sources'" class="h-full">{% include "sheets_reports/source_manager.html" %}</div>
 
-      <!-- Vista Configuración (con 2 tabs: 'Configuración del tablero' y 'Envio de correos') -->
+      <!-- Vista Configuración (con 2 tabs: 'Configuración del tablero' y 'Envío de correos') -->
       <div x-show="$store.bottomSheet.view === 'settings'" x-cloak class="h-full flex flex-col">
         <!-- Barra de navegación de pestañas -->
         <div class="flex items-center gap-2 border-b border-line pb-3.5 mb-5 shrink-0">
@@ -555,7 +555,7 @@
           </div>
         </div>
 
-        <!-- Tab 2: Envio de correos -->
+        <!-- Tab 2: Envío de correos -->
         <div x-show="$store.bottomSheet.settingsTab === 'email'" x-cloak class="flex-1 min-h-0 overflow-y-auto">
           {% include "sheets_reports/email_campaign.html" %}
         </div>

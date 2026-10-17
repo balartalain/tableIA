@@ -13,7 +13,7 @@ document.addEventListener('alpine:init', () => {
     dismissible: true,
     // Qué contenido muestra: 'sources' (fuentes de datos) | 'settings' (configuración) | 'email' (envío de correos).
     view: 'sources',
-    // Sub-pestaña cuando view === 'settings': 'board' (configuración del tablero) | 'email' (Envio de correos).
+    // Sub-pestaña cuando view === 'settings': 'board' (configuración del tablero) | 'email' (Envío de correos).
     settingsTab: 'board',
 
     open({ title = '', dismissible = true, view = 'sources', settingsTab = 'board' } = {}) {

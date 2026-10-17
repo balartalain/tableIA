@@ -184,7 +184,7 @@ class EmailCampaign(models.Model):
 
     class Meta:
         verbose_name = "Envío de correos"
-        verbose_name_plural = "Envio de correoss"
+        verbose_name_plural = "Envío de correoss"
 
     def __str__(self):
         return f"Correos de {self.dashboard}"

@@ -165,7 +165,7 @@ actualiza sola cada 10 segundos:
 ningún remitente pudo enviar (revisar «Remitentes»), o los que quedan fallaron y se
 reintentan el próximo día de envío.
 
-En el admin de Django están los mismos datos (`Envio de correoss`, `Destinatarios`, `Logs de
+En el admin de Django están los mismos datos (`Envío de correoss`, `Destinatarios`, `Logs de
 correos`).
 
 ## 6. Backend (`services/mailing.py`, `views_email.py`)

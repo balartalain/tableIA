@@ -231,11 +231,14 @@ async function generateRealBoardThumbnail() {
       innerSvg += `<text x="${x + 5}" y="${y + 9}" font-family="system-ui, -apple-system, sans-serif" font-size="6" font-weight="700" fill="#14171F" opacity="0.45">${title}</text>`;
     }
 
-    // La paleta sale del propio widget (su "Paleta"); el color principal, por posición.
+    // La paleta sale del propio widget o del color del tablero.
+    const boardPrimary = (store && store.primaryColor) || BaseWidget.DEFAULT_PRIMARY_COLOR;
     const palette = (widget && typeof widget.thumbnailPalette === 'function')
       ? widget.thumbnailPalette()
-      : BaseWidget.THUMB_PALETTES.default;
-    const primary = palette[idx % palette.length];
+      : [boardPrimary];
+    const primary = (widget && typeof widget.getPrimaryColor === 'function')
+      ? widget.getPrimaryColor()
+      : boardPrimary;
 
     // Caja real del gráfico (para incrustar su SVG de ApexCharts), si la hay.
     const content = apexRect ? {

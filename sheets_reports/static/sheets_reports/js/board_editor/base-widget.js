@@ -187,12 +187,6 @@
     // Cada widget sabe dibujarse en la miniatura: el generador mide la geometría real
     // (generateRealBoardThumbnail) y le pasa un `ctx`; el widget devuelve el SVG interior de
     // su tarjeta (el cromo y el título los pinta el generador). Datos de reserva permitidos.
-    static THUMB_PALETTES = {
-      default: ['#1F8A5F', '#36A586', '#10B981', '#A8D7C5', '#166B49', '#0F5138'],
-      ocean: ['#0284C7', '#38BDF8', '#0EA5E9', '#7DD3FC', '#0369A1'],
-      sunset: ['#F97316', '#FB923C', '#EA580C', '#FDBA74', '#C2410C'],
-      forest: ['#15803D', '#22C55E', '#16A34A', '#86EFAC', '#14532D'],
-    };
 
     // Obtiene el color base primario del tablero o del widget
     getPrimaryColor() {
@@ -270,10 +264,10 @@
       };
     }
 
-    // Paleta de la miniatura según la "Paleta" del widget (style.color_scheme).
+    // Paleta de la miniatura derivada dinámicamente del color del tablero y estilo del widget.
     thumbnailPalette() {
-      const scheme = (this.style && this.style.color_scheme) || 'default';
-      return BaseWidget.THUMB_PALETTES[scheme] || BaseWidget.THUMB_PALETTES.default;
+      const isMulti = this.style && this.style.color_scheme === 'multi';
+      return isMulti ? this.getDonutColors(6) : this.getSeriesColors(6);
     }
 
     // Contenido interior de la miniatura. Por defecto, nada (el generador dibuja barras).

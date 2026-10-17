@@ -71,6 +71,25 @@ class DashboardTemplateTests(TestCase):
         self.assertTrue(tpl_items[0]["is_template"])
         self.assertEqual(tpl_items[0]["nombre"], "Plantilla Modelo")
 
+    def test_templates_visible_to_all_users(self):
+        # Crear plantilla con el usuario A
+        Dashboard.objects.create(
+            nombre="Plantilla Global",
+            owner=self.user,
+            is_template=True,
+        )
+        # Iniciar sesión como usuario B
+        other_user = User.objects.create_user(username="otheruser", password="password")
+        self.client.login(username="otheruser", password="password")
+
+        # El usuario B debe ver la plantilla creada por el usuario A
+        r_tpl = self.client.get(reverse("dashboard_list") + "?is_template=1")
+        self.assertEqual(r_tpl.status_code, 200)
+        tpl_items = r_tpl.json()
+        self.assertEqual(len(tpl_items), 1)
+        self.assertTrue(tpl_items[0]["is_template"])
+        self.assertEqual(tpl_items[0]["nombre"], "Plantilla Global")
+
     def test_use_template_creates_editable_copy(self):
         # Crear una plantilla con fuentes y widgets
         template = Dashboard.objects.create(

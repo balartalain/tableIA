@@ -6,6 +6,7 @@ import uuid
 from typing import Any
 
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.timesince import timesince
@@ -124,9 +125,9 @@ def dashboard_list(request):
     if request.method == "GET":
         is_tpl = request.GET.get("is_template")
         if is_tpl in ("1", "true", "True"):
-            dashboards = Dashboard.objects.filter(owner=user, is_template=True).prefetch_related("sources")
+            dashboards = Dashboard.objects.filter(is_template=True).prefetch_related("sources")
         elif is_tpl in ("all", "both"):
-            dashboards = Dashboard.objects.filter(owner=user).prefetch_related("sources")
+            dashboards = Dashboard.objects.filter(Q(owner=user) | Q(is_template=True)).prefetch_related("sources")
         else:
             dashboards = Dashboard.objects.filter(owner=user, is_template=False).prefetch_related("sources")
         return JsonResponse([_serialize_dashboard(d) for d in dashboards], safe=False)

@@ -39,6 +39,11 @@ class GoogleCredential(models.Model):
         client_secret = getattr(settings, "GOOGLE_OAUTH_CLIENT_SECRET", "")
         if not client_id or not client_secret:
             return None
+
+        expiry = self.expiry
+        if expiry is not None and expiry.tzinfo is not None:
+            expiry = expiry.replace(tzinfo=None)
+
         return Credentials(
             token=crypto.decrypt(self.access_token_encrypted) or None,
             refresh_token=crypto.decrypt(self.refresh_token_encrypted) or None,
@@ -46,5 +51,5 @@ class GoogleCredential(models.Model):
             client_id=client_id,
             client_secret=client_secret,
             scopes=list(self.scopes or []) or None,
-            expiry=self.expiry,
+            expiry=expiry,
         )

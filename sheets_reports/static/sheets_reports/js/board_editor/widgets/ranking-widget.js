@@ -88,10 +88,14 @@
       const best = payload.order !== 'worst';
       const showShare = this.style.showShare !== false && item.share != null;
       const width = this._barWidth(item, max);
+      const barStyle = best
+        ? `width:${width}%; background-color:${this.getPrimaryColor()}`
+        : `width:${width}%`;
+      const barClass = best ? '' : 'bg-red-400';
       // La barra, fina y debajo de la fila, alineada con el nombre (después de la posición).
       const bar = width
         ? `<span class="block h-1 ml-[2.125rem] mt-1 rounded-full bg-line overflow-hidden" aria-hidden="true">
-             <span class="block h-full rounded-full ${best ? 'bg-moss-500' : 'bg-red-400'}" style="width:${width}%"></span>
+             <span class="block h-full rounded-full ${barClass}" style="${barStyle}"></span>
            </span>`
         : '';
       return `<li class="px-2 py-1.5">

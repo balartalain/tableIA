@@ -9,8 +9,8 @@
   --tb-ink-muted: #8A8F98;
   --tb-line: var(--color-line);
   --tb-paper: var(--color-paper);
-  --tb-accent: var(--color-header);
-  --tb-accent-hover: var(--color-moss-600);
+  --tb-accent: var(--board-primary, var(--color-header));
+  --tb-accent-hover: var(--board-primary-600, var(--color-moss-600));
 }
 
 /* Contenedor general: sin borde/sombra propios — ya vive dentro de tu card */
@@ -274,8 +274,8 @@
 /* Filas de subtotal ("Total Norte"): se distinguen del hover y de las filas normales */
 .tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal,
 .tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal:hover {
-  background: var(--color-moss-tint);
-  border-top: 1px solid var(--color-moss-100);
+  background: var(--board-primary-tint, var(--color-moss-tint));
+  border-top: 1px solid var(--board-primary-100, var(--color-moss-100));
 }
 .tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal .tabulator-cell {
   font-weight: 600;
@@ -288,7 +288,7 @@
   background: #fff;
 }
 .tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal .tabulator-cell.tabulator-frozen {
-  background: var(--color-moss-tint);
+  background: var(--board-primary-tint, var(--color-moss-tint));
 }
 .tabulator.tb-pivot .tabulator-row.tabulator-calcs .tabulator-cell.tabulator-frozen {
   background: var(--tb-paper);

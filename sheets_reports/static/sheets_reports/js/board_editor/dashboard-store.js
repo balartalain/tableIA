@@ -164,29 +164,35 @@ document.addEventListener('alpine:init', () => {
       this.applyThemeVariables(this.primaryColor);
     },
 
-    // Actualiza las variables CSS (:root) para header, barra de progreso y acentos
+    // Actualiza las variables CSS de la paleta del tablero (--board-primary-*) sin alterar la interfaz de la app
     applyThemeVariables(color) {
       const base = color || '#1F8A5F';
       const root = document.documentElement;
 
       if (typeof window.chroma === 'function') {
         const c = window.chroma(base);
-        const moss500 = base;
-        const moss600 = c.darken(0.35).hex();
-        const moss700 = c.darken(0.7).hex();
-        const moss300 = c.brighten(0.6).hex();
-        const moss100 = c.brighten(1.4).desaturate(0.4).hex();
-        const moss50 = c.brighten(1.8).desaturate(0.6).hex();
+        const p500 = base;
+        const p600 = c.darken(0.35).hex();
+        const p700 = c.darken(0.7).hex();
+        const p300 = c.brighten(0.6).hex();
+        const p100 = c.brighten(1.4).desaturate(0.4).hex();
+        const p50 = c.brighten(1.8).desaturate(0.6).hex();
 
-        root.style.setProperty('--color-moss-500', moss500);
-        root.style.setProperty('--color-moss-600', moss600);
-        root.style.setProperty('--color-moss-700', moss700);
-        root.style.setProperty('--color-header', moss700);
-        root.style.setProperty('--color-moss-300', moss300);
-        root.style.setProperty('--color-moss-100', moss100);
-        root.style.setProperty('--color-moss-50', moss50);
+        root.style.setProperty('--board-primary', p500);
+        root.style.setProperty('--board-primary-600', p600);
+        root.style.setProperty('--board-primary-700', p700);
+        root.style.setProperty('--board-primary-300', p300);
+        root.style.setProperty('--board-primary-100', p100);
+        root.style.setProperty('--board-primary-50', p50);
+        root.style.setProperty('--board-primary-tint', `color-mix(in srgb, ${p500} 10%, white)`);
       } else {
-        root.style.setProperty('--color-moss-500', base);
+        root.style.setProperty('--board-primary', base);
+        root.style.setProperty('--board-primary-600', base);
+        root.style.setProperty('--board-primary-700', base);
+        root.style.setProperty('--board-primary-300', base);
+        root.style.setProperty('--board-primary-100', base);
+        root.style.setProperty('--board-primary-50', base);
+        root.style.setProperty('--board-primary-tint', `color-mix(in srgb, ${base} 10%, white)`);
       }
     },
 

@@ -76,13 +76,15 @@
       const esc = BaseWidget.escapeHTML;
       const pct = target.pct;
       const width = pct == null ? 0 : Math.max(0, Math.min(100, pct));
-      const bar = STATUS_BAR[status] || 'bg-moss-500';
+      const statusClass = STATUS_BAR[status];
+      const barClass = statusClass || '';
+      const barStyle = statusClass ? `width:${width}%` : `width:${width}%; background-color:${this.getPrimaryColor()}`;
       const text = pct == null ? 'Sin datos para la meta'
         : `${this.format(pct, { percent: true })} de ${esc(target.label.toLowerCase())} (${esc(String(this.format(target.value, { percent })))})`;
       return `<div class="mt-3 w-full max-w-[16rem]">
           <div class="h-1.5 w-full rounded-full bg-line overflow-hidden" role="progressbar"
                aria-valuemin="0" aria-valuemax="100" aria-valuenow="${width}">
-            <div class="h-full rounded-full ${bar}" style="width:${width}%"></div>
+            <div class="h-full rounded-full ${barClass}" style="${barStyle}"></div>
           </div>
           <span class="mt-1 block text-[11px] text-ink/50">${text}</span>
         </div>`;

@@ -61,18 +61,13 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           </label>
         </div>
         <div class="flex-1 overflow-y-auto p-2">
-          <!-- Google: conectar la cuenta y elegir la hoja con el selector nativo de Drive. -->
+          <!-- Google: elegir la hoja con el selector nativo de Drive. -->
           <div x-show="source && google.configured" class="mb-2 space-y-1">
             <button type="button" x-on:click="openGooglePicker()" x-bind:disabled="loadingSheets"
                     class="w-full inline-flex items-center justify-center gap-2 h-9 px-3 text-sm font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer disabled:opacity-50">
               <i class="ti ti-brand-google-drive text-base" aria-hidden="true"></i>
               <span x-text="loadingSheets ? 'Abriendo Drive…' : (google.connected ? 'Elegir en mi Drive' : 'Conectar con Google')"></span>
             </button>
-            <p x-show="google.connected" class="px-1 flex items-center gap-1.5 text-[11px] text-ink/40">
-              <span class="truncate" x-text="google.email || 'Cuenta de Google conectada'"></span>
-              <button type="button" x-on:click="disconnectGoogle()"
-                      class="shrink-0 underline hover:text-ink cursor-pointer">Desconectar</button>
-            </p>
             <p x-show="googleError" x-text="googleError" role="alert" class="px-1 text-[11px] text-red-600"></p>
           </div>
           <p x-show="!source" class="px-2 py-6 text-center text-xs text-ink/50">Elige una fuente para ver sus documentos.</p>

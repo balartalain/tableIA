@@ -9,16 +9,8 @@
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;
-    static CHART_COLORS = ['#1F8A5F', '#36A586', '#10B981', '#A8D7C5', '#166B49', '#0F5138', '#6FAE86', '#047857'];
-    static DONUT_COLORS = ['#1F8A5F', '#F59E0B', '#0284C7', '#EC4899', '#8B5CF6', '#10B981', '#14B8A6', '#F97316'];
-
-    static PALETTES = {
-      default: ['#1F8A5F', '#36A586', '#10B981', '#A8D7C5', '#166B49', '#0F5138', '#6FAE86', '#047857'],
-      ocean: ['#0284C7', '#38BDF8', '#0EA5E9', '#7DD3FC', '#0369A1', '#1E40AF', '#60A5FA', '#0284C7'],
-      forest: ['#15803D', '#22C55E', '#16A34A', '#86EFAC', '#14532D', '#047857', '#059669', '#34D399'],
-      sunset: ['#EA580C', '#F97316', '#FB923C', '#FDBA74', '#C2410C', '#D97706', '#EF4444', '#F43F5E'],
-      multi: ['#1F8A5F', '#F59E0B', '#0284C7', '#EC4899', '#8B5CF6', '#10B981', '#14B8A6', '#F97316'],
-    };
+    static DEFAULT_PRIMARY_COLOR = '#1F8A5F';
+    static CHART_COLORS = ['#1F8A5F'];
 
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
 
@@ -202,56 +194,36 @@
       forest: ['#15803D', '#22C55E', '#16A34A', '#86EFAC', '#14532D'],
     };
 
-    // Obtiene los colores de gráfica respetando el esquema del widget, la paleta global del tablero
-    // o el color por defecto (verde institucional para gráficas, multicolor para dona).
-    getChartColors() {
-      const widgetScheme = this.style && this.style.color_scheme;
-      if (widgetScheme && widgetScheme !== 'default' && BaseWidget.PALETTES[widgetScheme]) {
-        return BaseWidget.PALETTES[widgetScheme];
-      }
+    // Obtiene el color base primario del tablero o del widget
+    getPrimaryColor() {
       const store = window.Alpine && Alpine.store('dashboard');
-      const boardScheme = store && store.colorScheme;
-      if (boardScheme && BaseWidget.PALETTES[boardScheme]) {
-        return BaseWidget.PALETTES[boardScheme];
+      if (store && store.primaryColor) {
+        return store.primaryColor;
       }
-      if (this.constructor.type === 'donut') {
-        return BaseWidget.DONUT_COLORS;
-      }
-      return BaseWidget.CHART_COLORS;
+      return BaseWidget.DEFAULT_PRIMARY_COLOR;
     }
 
-    // Obtiene el color base primario del widget / tablero
-    getPrimaryColor() {
-      const colors = this.getChartColors();
-      return colors && colors[0] ? colors[0] : '#1F8A5F';
+    // Método de compatibilidad para recuperar el color primario
+    getChartColors() {
+      return [this.getPrimaryColor()];
     }
 
     // Genera N tonos para series/categorías. Si count=1, usa el color base.
     // Si count > 1, escala de forma continua desde un tono oscuro del color base hasta un tono suave.
     getSeriesColors(count = 1) {
-      if (count <= 1) return [this.getPrimaryColor()];
-      
-      const widgetScheme = this.style && this.style.color_scheme;
-      if (widgetScheme === 'multi') {
-        return BaseWidget.DONUT_COLORS;
-      }
-
       const primary = this.getPrimaryColor();
+      if (count <= 1) return [primary];
+
       if (typeof window.chroma === 'function') {
         const dark = window.chroma(primary).darken(0.8).hex();
         const light = window.chroma(primary).brighten(1.2).hex();
         return window.chroma.scale([dark, light]).mode('lab').colors(count);
       }
-      const palette = this.getChartColors();
-      return Array.from({ length: count }, (_, i) => palette[i % palette.length]);
+      return [primary];
     }
 
     // Genera N colores armónicos con rotación de matiz para el gráfico de dona
     getDonutColors(count = 4) {
-      const widgetScheme = this.style && this.style.color_scheme;
-      if (widgetScheme === 'multi') {
-        return BaseWidget.DONUT_COLORS;
-      }
       const primary = this.getPrimaryColor();
       if (typeof window.chroma === 'function') {
         const base = window.chroma(primary);
@@ -269,7 +241,7 @@
         }
         return colors;
       }
-      return BaseWidget.DONUT_COLORS;
+      return [primary];
     }
 
     // Genera una escala cromática unidireccional (0 a 1) usando chroma.js

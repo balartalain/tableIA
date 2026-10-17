@@ -127,7 +127,7 @@
         };
       });
 
-      const posColor = this.getChartColors()[0] || '#1F8A5F';
+      const posColor = this.getPrimaryColor();
       const negColor = '#DC2626';
       const scaleData = BaseWidget.generateDivergentScale(posColor, negColor, '#F4F3EF', 4);
       const scaleLevels = [

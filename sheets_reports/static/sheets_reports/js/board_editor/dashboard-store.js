@@ -158,11 +158,42 @@ document.addEventListener('alpine:init', () => {
     widgets: [],
     // El tablero ya se pidió al servidor: hasta entonces el lienzo vacío no es «vacío».
     boardLoaded: false,
-    colorScheme: 'default',
+    primaryColor: '#1F8A5F',
 
-    // Cambia la paleta global del tablero y re-renderiza los gráficos.
-    setColorScheme(scheme) {
-      this.colorScheme = scheme || 'default';
+    init() {
+      this.applyThemeVariables(this.primaryColor);
+    },
+
+    // Actualiza las variables CSS (:root) para header, barra de progreso y acentos
+    applyThemeVariables(color) {
+      const base = color || '#1F8A5F';
+      const root = document.documentElement;
+
+      if (typeof window.chroma === 'function') {
+        const c = window.chroma(base);
+        const moss500 = base;
+        const moss600 = c.darken(0.35).hex();
+        const moss700 = c.darken(0.7).hex();
+        const moss300 = c.brighten(0.6).hex();
+        const moss100 = c.brighten(1.4).desaturate(0.4).hex();
+        const moss50 = c.brighten(1.8).desaturate(0.6).hex();
+
+        root.style.setProperty('--color-moss-500', moss500);
+        root.style.setProperty('--color-moss-600', moss600);
+        root.style.setProperty('--color-moss-700', moss700);
+        root.style.setProperty('--color-header', moss700);
+        root.style.setProperty('--color-moss-300', moss300);
+        root.style.setProperty('--color-moss-100', moss100);
+        root.style.setProperty('--color-moss-50', moss50);
+      } else {
+        root.style.setProperty('--color-moss-500', base);
+      }
+    },
+
+    // Cambia el color primario del tablero, actualiza las variables CSS y re-renderiza los gráficos.
+    setPrimaryColor(color) {
+      this.primaryColor = color || '#1F8A5F';
+      this.applyThemeVariables(this.primaryColor);
       this.widgets.forEach(w => {
         if (w.instance && typeof w.instance.draw === 'function') {
           w.instance.draw(w.instance._lastData);

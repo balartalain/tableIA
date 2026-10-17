@@ -107,7 +107,7 @@
         };
       });
 
-      const baseColor = this.getChartColors()[0] || '#1F8A5F';
+      const baseColor = this.getPrimaryColor();
       const steps = BaseWidget.generateSequentialScale(baseColor, '#F4F3EF', 5);
       const scaleLevels = [
         { min: 0, max: 0.1, label: 'Muy débil', color: steps[0] },

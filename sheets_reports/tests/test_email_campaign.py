@@ -349,6 +349,7 @@ class CampaignEndpointsTests(TestCase):
 class EmailReportTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
+        self.client.force_login(self.user)
         self.dashboard, _ = make_board(self.user)
         self.url = f"/api/dashboard/{self.dashboard.id}/email-report/"
         self.view_url = f"/tableros/{self.dashboard.id}/view/"

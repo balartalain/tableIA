@@ -103,6 +103,7 @@ def board_new(request):
     })
 
 
+@login_required
 def board_view(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     campaign = getattr(dashboard, "email_campaign", None)

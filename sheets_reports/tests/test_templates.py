@@ -118,6 +118,12 @@ class DashboardTemplateTests(TestCase):
         self.assertEqual(new_board.widgets.count(), 1)
         self.assertEqual(new_board.widgets.first().title, "Margen Neto")
 
+    def test_board_view_requires_login(self):
+        self.client.logout()
+        r = self.client.get(reverse("board_view", kwargs={"dashboard_id": self.dashboard.id}))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/login/", r["Location"])
+
     def test_board_view_shows_template_badge_and_edit_button(self):
         template = Dashboard.objects.create(
             nombre="Plantilla RRHH",

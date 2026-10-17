@@ -114,6 +114,12 @@
 
 <style>
   #dashboard-filters:empty { display: none; }
+  .bg-dot-grid {
+    background-color: var(--color-paper);
+    background-image: radial-gradient(color-mix(in srgb, var(--color-ink) 12%, transparent) 1.2px, transparent 1.2px);
+    background-size: 20px 20px;
+    background-position: 0 0;
+  }
   /* Franjas de columnas en todo el área del lienzo (detrás de filtros y debajo del último
      widget). Va en el contenedor de scroll y no en <main>: su 100% excluye la barra de scroll
      vertical, así que coincide con el ancho del grid. El inset de 16px es el p-4 del lienzo. */
@@ -256,7 +262,7 @@
           </button>
         </div>
       </div>
-      <div id="dashboard-canvas" x-data class="flex flex-col gap-4 content-start flex-1 p-4">
+      <div id="dashboard-canvas" x-data class="bg-dot-grid flex flex-col gap-4 content-start flex-1 p-4">
         <template x-for="row in $store.dashboard.rows" :key="row.id">
           <div class="canvas-row relative group p-1 pb-3 transition-colors rounded-lg"
                :class="!$store.dashboard.getRowWidgets(row.id).length ? 'bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(226,232,240,0.5)_10px,rgba(226,232,240,0.5)_20px)] border border-dashed border-line/60' : ''"

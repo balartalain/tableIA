@@ -133,13 +133,33 @@ def stored_credential(user):
 def credentials_email(credentials) -> str:
     """El correo de la cuenta: del `id_token` (un JWT sin verificar sirve para mostrarlo)."""
     id_token = getattr(credentials, "id_token", "") or ""
-    if not id_token:
+    if id_token:
+        try:
+            payload = id_token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            email = json.loads(base64.urlsafe_b64decode(payload)).get("email", "")
+            if email:
+                return email
+        except Exception:  # noqa: BLE001 - un id_token raro no debe romper la conexión
+            pass
+    return fetch_user_email(credentials)
+
+
+def fetch_user_email(credentials) -> str:
+    """Consulta la API de userinfo de Google si el id_token no trajo el email."""
+    token = getattr(credentials, "token", None)
+    if not token:
         return ""
     try:
-        payload = id_token.split(".")[1]
-        payload += "=" * (-len(payload) % 4)
-        return json.loads(base64.urlsafe_b64decode(payload)).get("email", "")
-    except Exception:  # noqa: BLE001 - un id_token raro no debe romper la conexión
+        import urllib.request
+        req = urllib.request.Request(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            return data.get("email", "")
+    except Exception:  # noqa: BLE001
         return ""
 
 

@@ -148,9 +148,6 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
 # Prefijo bajo el cual corre la app en producción (ej. detrás de un Apache
 # Alias /sheets-reports). Vacío en desarrollo. Django lo antepone automáticamente
 # a las URLs generadas con {% url %} / reverse() y a STATIC_URL; para que el JS
@@ -159,6 +156,7 @@ USE_TZ = True
 REPORT_PATH = config('REPORT_PATH', default='')
 FORCE_SCRIPT_NAME = REPORT_PATH or None
 STATIC_URL = f'{REPORT_PATH}/static/'
+LOGIN_URL = f"{REPORT_PATH}/login/" if REPORT_PATH else "/login/"
 
 # Carpeta donde `collectstatic` reúne todos los estáticos para producción.
 STATIC_ROOT = BASE_DIR / 'staticfiles'

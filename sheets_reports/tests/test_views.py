@@ -581,7 +581,14 @@ class SinUsuarioTests(TestCase):
         self.assertEqual(r.status_code, 401)
         self.assertIn("createsuperuser", r.json()["error"])
 
-    def test_home_siempre_muestra_crear_tablero(self):
+    def test_home_sin_usuario_redirige_a_login(self):
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/login/", r["Location"])
+
+    def test_home_con_usuario_muestra_crear_tablero(self):
+        user = get_user_model().objects.create_user("test_home", "th@example.com", "pass")
+        self.client.force_login(user)
         r = self.client.get("/")
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Crear tablero")

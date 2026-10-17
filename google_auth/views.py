@@ -8,8 +8,9 @@
 """
 import logging
 
+from django.contrib.auth import get_user_model, login as django_login, logout as django_logout
 from django.http import JsonResponse
-from django.shortcuts import redirect
+from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -36,6 +37,18 @@ def _mark_connected(url: str) -> str:
 
 
 @require_http_methods(["GET"])
+def login_page(request):
+    """Página de inicio de sesión."""
+    if request.user.is_authenticated:
+        return redirect(_safe_next(request.GET.get("next")) or "/")
+    next_url = _safe_next(request.GET.get("next"))
+    return render(request, "google_auth/login.html", {
+        "configured": services.is_configured(),
+        "next": next_url,
+    })
+
+
+@require_http_methods(["GET"])
 def login(request):
     if not services.is_configured():
         return JsonResponse({"error": "Google OAuth no está configurado en el servidor."}, status=400)
@@ -58,9 +71,6 @@ def callback(request):
     if not expected or state != expected:
         return JsonResponse({"error": "Estado OAuth inválido."}, status=400)
     next_url = _safe_next(request.session.pop(NEXT_KEY, "")) or "/"
-    user = services.current_app_user(request)
-    if user is None:
-        return JsonResponse({"error": "No hay usuarios creados para guardar la conexión."}, status=401)
     try:
         credentials = services.exchange_code(request, request.GET.get("code", ""), state)
     except services.GoogleAuthError as e:
@@ -68,8 +78,37 @@ def callback(request):
     except Exception:  # noqa: BLE001 - error de red o de Google
         logger.exception("OAuth callback de Google")
         return JsonResponse({"error": "No se pudo conectar con Google."}, status=502)
-    services.save_credentials(user, credentials, email=services.credentials_email(credentials))
+
+    email = services.credentials_email(credentials)
+
+    # Autenticar usuario en Django
+    if request.user.is_authenticated:
+        user = request.user
+    else:
+        User = get_user_model()
+        if email:
+            user = User.objects.filter(email__iexact=email).first()
+            if not user:
+                user = User.objects.create_user(username=email, email=email)
+        else:
+            user = services.current_app_user(request)
+
+        if user is None:
+            return JsonResponse({"error": "No se pudo determinar el usuario de Google."}, status=401)
+        django_login(request, user)
+
+    services.save_credentials(user, credentials, email=email)
+
+    if next_url in ("/", "", "/login/"):
+        return redirect("/")
     return redirect(_mark_connected(next_url))
+
+
+@require_http_methods(["GET", "POST"])
+def logout_view(request):
+    """Cierra la sesión del usuario."""
+    django_logout(request)
+    return redirect("/login/")
 
 
 @require_http_methods(["GET"])

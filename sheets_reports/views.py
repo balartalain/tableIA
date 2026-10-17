@@ -5,6 +5,7 @@ import re
 import uuid
 from typing import Any
 
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.timesince import timesince
@@ -79,8 +80,9 @@ def _widget_manifest() -> dict:
     }
 
 
+@login_required
 def board_editor(request, dashboard_id):
-    dashboard = get_object_or_404(Dashboard, id=dashboard_id)
+    dashboard = get_object_or_404(Dashboard, id=dashboard_id, owner=_get_user(request))
     Dashboard.objects.filter(id=dashboard.id).update(last_opened_at=now())
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "widget_manifest": _widget_manifest(),
@@ -89,6 +91,7 @@ def board_editor(request, dashboard_id):
     })
 
 
+@login_required
 def board_new(request):
     """Editor sin tablero: el bottom sheet abre el selector de fuente y, al confirmar, crea el
     tablero y redirige a su editor."""
@@ -347,6 +350,7 @@ def dashboard_use_template(request, dashboard_id):
     return JsonResponse(_serialize_dashboard(new_dashboard), status=201)
 
 
+@login_required
 def home(request):
     """Página de inicio - lista de tableros."""
     user = _get_user(request)

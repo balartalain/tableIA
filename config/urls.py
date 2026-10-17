@@ -2,10 +2,13 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from google_auth import views as google_auth_views
 from sheets_reports import views, views_email
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('login/', google_auth_views.login_page, name='login_page'),
+    path('logout/', google_auth_views.logout_view, name='logout'),
     path('auth/google/', include('google_auth.urls')),
     path('', views.home, name='home'),
     path('tableros/nuevo/', views.board_new, name='board_new'),

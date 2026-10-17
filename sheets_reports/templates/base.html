@@ -88,8 +88,36 @@
     </div>
     <div class="shrink-0 flex items-center gap-2">
       {% block header_actions %}{% endblock %}
-      <div class="w-8 h-8 rounded-full bg-moss-50 border border-moss-100 flex items-center justify-center text-xs font-medium text-moss-700"
-           title="Usuario" aria-label="Usuario">RA</div>
+      {% if request.user.is_authenticated %}
+      <div x-data="{ open: false }" class="relative">
+        <button type="button" @click="open = !open" @click.outside="open = false"
+                class="flex items-center gap-2 text-xs font-medium text-ink/80 hover:text-ink px-2 py-1 rounded-md hover:bg-paper transition cursor-pointer">
+          <div class="w-7 h-7 rounded-full bg-moss-50 border border-moss-200 flex items-center justify-center text-xs font-bold text-moss-700 uppercase"
+               title="{{ request.user.email }}">
+            {{ request.user.email|slice:":2"|default:request.user.username|slice:":2" }}
+          </div>
+          <span class="hidden sm:inline-block max-w-[140px] truncate text-ink/70">{{ request.user.email|default:request.user.username }}</span>
+          <i class="ti ti-chevron-down text-xs text-ink/40"></i>
+        </button>
+        <div x-show="open" x-cloak
+             class="absolute right-0 mt-1 w-48 bg-white border border-line rounded-lg shadow-lg py-1 z-50 text-xs">
+          <div class="px-3 py-2 border-b border-line/60">
+            <p class="font-semibold text-ink truncate">{{ request.user.email|default:request.user.username }}</p>
+            <p class="text-[10px] text-ink/40">Sesión activa</p>
+          </div>
+          <a href="{% url 'logout' %}"
+             class="flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 transition">
+            <i class="ti ti-logout text-sm"></i>
+            <span>Cerrar sesión</span>
+          </a>
+        </div>
+      </div>
+      {% else %}
+      <a href="{% url 'login_page' %}"
+         class="text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 px-3 py-1.5 rounded-md transition">
+        Iniciar sesión
+      </a>
+      {% endif %}
     </div>
   </div>
 </header>

@@ -154,3 +154,19 @@ class EndpointTests(TestCase):
         r = self.client.post("/auth/google/disconnect/")
         self.assertEqual(r.status_code, 200)
         self.assertFalse(GoogleCredential.objects.filter(user=self.user).exists())
+
+    def test_login_page_renders_template(self):
+        self.client.logout()
+        r = self.client.get("/login/")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Bienvenido a Report IA")
+
+    def test_login_page_autenticado_redirige_a_home(self):
+        r = self.client.get("/login/")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/")
+
+    def test_logout_cierra_sesion(self):
+        r = self.client.get("/logout/")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r["Location"], "/login/")

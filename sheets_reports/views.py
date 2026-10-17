@@ -86,7 +86,7 @@ def board_editor(request, dashboard_id):
     Dashboard.objects.filter(id=dashboard.id).update(last_opened_at=now())
     return render(request, "board_editor.html", {
         "dashboard": dashboard, "widget_manifest": _widget_manifest(),
-        "service_account_email": sheets.service_account_email(), "formula_catalog": BUILDER_CATALOG,
+        "formula_catalog": BUILDER_CATALOG,
         "google_oauth": google_oauth_context(request),
     })
 
@@ -97,7 +97,7 @@ def board_new(request):
     tablero y redirige a su editor."""
     return render(request, "board_editor.html", {
         "dashboard": None, "widget_manifest": _widget_manifest(),
-        "service_account_email": sheets.service_account_email(), "formula_catalog": BUILDER_CATALOG,
+        "formula_catalog": BUILDER_CATALOG,
         "google_oauth": google_oauth_context(request),
     })
 

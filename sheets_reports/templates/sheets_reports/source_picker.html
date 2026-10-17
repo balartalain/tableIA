@@ -6,29 +6,14 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
 
   <!-- Paso 1: fuente → documento → pestaña -->
   <div x-show="step === 'source'" class="flex-1 min-h-0 flex flex-col gap-4">
-    <!-- Barra superior: atrás (al agregar o cambiar la hoja), cuenta de servicio y aceptar. -->
+    <!-- Barra superior: atrás (al agregar o cambiar la hoja) y aceptar. -->
     <div class="flex flex-wrap items-center justify-end gap-3">
       <button type="button" x-show="mode === 'add' || mode === 'replace'" x-on:click="back()"
               title="Atrás" aria-label="Atrás"
               class="shrink-0 p-2 rounded-md text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
         <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
       </button>
-      {% if service_account_email %}
-      <!-- Para ver una hoja aquí hay que compartirla con la cuenta de servicio (salvo que el
-           usuario conecte su cuenta de Google). -->
-      <p x-show="!google.connected" class="mr-auto min-w-0 flex items-center gap-1.5 text-xs text-ink/50">
-        <i class="ti ti-share text-sm shrink-0" aria-hidden="true"></i>
-        <span class="shrink-0">Comparte tus hojas con</span>
-        <span class="font-medium text-ink/70 truncate">{{ service_account_email }}</span>
-        <button type="button" x-on:click="copyEmail('{{ service_account_email|escapejs }}')"
-                class="shrink-0 p-1 rounded-md text-ink/40 hover:text-ink hover:bg-paper cursor-pointer"
-                x-bind:title="emailCopied ? 'Copiado' : 'Copiar email'" x-bind:aria-label="emailCopied ? 'Copiado' : 'Copiar email'">
-          <i class="ti text-sm" x-bind:class="emailCopied ? 'ti-check text-moss-600' : 'ti-copy'" aria-hidden="true"></i>
-        </button>
-      </p>
-      {% else %}
       <span class="mr-auto"></span>
-      {% endif %}
       <div x-show="columnsError" class="flex items-center gap-2">
         <p x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
         <button type="button" x-on:click="loadColumns({ refresh: true })"
@@ -104,8 +89,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           </div>
           <p x-show="source && !loadingSheets && !sheetsError && !spreadsheets.length && !google.configured"
              class="px-2 py-6 text-center text-xs text-ink/50">
-            No hay hojas visibles. Comparte la hoja de cálculo con
-            {% if service_account_email %}<span class="font-medium text-ink/70 break-all">{{ service_account_email }}</span>{% else %}el email de la cuenta de servicio{% endif %}.
+            No hay hojas disponibles. Configura el cliente de Google OAuth para seleccionar hojas de tu Google Drive.
           </p>
           <ul x-show="!loadingSheets && !google.configured" class="space-y-0.5">
             <template x-for="s in spreadsheets" :key="s.id">

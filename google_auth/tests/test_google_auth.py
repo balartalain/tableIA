@@ -70,22 +70,14 @@ class CredentialStorageTests(TestCase):
 
 
 class TokenOrderTests(TestCase):
-    """Al leer una hoja se intenta primero con el token del usuario y, si no, con el de la
-    cuenta de servicio."""
+    """Al leer una hoja se intenta con el token del usuario activo."""
 
-    @mock.patch("sheets_reports.services.sheets._access_token", return_value="sa")
     @mock.patch("google_auth.services.active_access_token", return_value="user")
-    def test_usuario_primero(self, *_):
-        self.assertEqual(sheets._read_attempts(), ["user", "sa"])
+    def test_usuario_activo(self, *_):
+        self.assertEqual(sheets._read_attempts(), ["user"])
 
-    @mock.patch("sheets_reports.services.sheets._access_token", return_value="sa")
     @mock.patch("google_auth.services.active_access_token", return_value=None)
-    def test_sin_usuario_usa_la_cuenta_de_servicio(self, *_):
-        self.assertEqual(sheets._read_attempts(), ["sa"])
-
-    @mock.patch("sheets_reports.services.sheets._access_token", return_value=None)
-    @mock.patch("google_auth.services.active_access_token", return_value=None)
-    def test_sin_ninguno_intenta_igual_por_si_es_publica(self, *_):
+    def test_sin_usuario_intenta_sin_token_por_si_es_publica(self, *_):
         self.assertEqual(sheets._read_attempts(), [None])
 
 

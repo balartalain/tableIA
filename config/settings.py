@@ -172,13 +172,9 @@ STORAGES = {
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Google Sheets
-GOOGLE_SHEETS_CREDENTIALS_PATH = config("GOOGLE_SHEETS_CREDENTIALS_PATH", default="")
-
-# Google OAuth (login del usuario para leer SU Drive con el Google Picker; app google_auth).
-# El cliente OAuth de Google Cloud, de tipo «Web»; sin él el selector sigue usando la cuenta de
-# servicio de arriba. GOOGLE_PICKER_API_KEY y GOOGLE_PICKER_APP_ID (el número de proyecto) son
-# para el diálogo nativo del Picker en el navegador.
+# Google OAuth & Picker (login del usuario para leer su Drive con el Google Picker; app google_auth).
+# El cliente OAuth de Google Cloud, de tipo «Web». GOOGLE_PICKER_API_KEY y GOOGLE_PICKER_APP_ID (el número de proyecto)
+# son para el diálogo nativo del Picker en el navegador.
 GOOGLE_OAUTH_CLIENT_ID = config("GOOGLE_OAUTH_CLIENT_ID", default="")
 GOOGLE_OAUTH_CLIENT_SECRET = config("GOOGLE_OAUTH_CLIENT_SECRET", default="")
 # Debe coincidir con un «Authorized redirect URI» del cliente OAuth. Vacío: se arma con el request.

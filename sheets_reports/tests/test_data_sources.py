@@ -313,7 +313,7 @@ class TabStatusTests(SimpleTestCase):
 
     def test_sin_credenciales_no_se_sabe(self):
         from sheets_reports.services import google_drive
-        with mock.patch.object(google_drive, "service_account_credentials", return_value=None):
+        with mock.patch.object(google_drive, "_preferred_credentials", return_value=None):
             self.assertIsNone(google_drive.tab_status("abc", "0"))
 
 SHARE = {"id": "s", "name": "Participación", "formula": "SUM(ventas) / SUM(anio) * 100", "format": "percent"}

@@ -134,18 +134,18 @@ class SourceEndpointsTests(TestCase):
 
     def test_error_de_google_es_legible(self):
         with mock.patch("sheets_reports.services.google_drive.list_spreadsheets",
-                        side_effect=SheetError("Configura GOOGLE_SHEETS_CREDENTIALS_PATH")):
+                        side_effect=SheetError("Conecta tu cuenta de Google")):
             r = self.client.get("/api/sources/google/spreadsheets/")
         self.assertEqual(r.status_code, 502)
-        self.assertIn("GOOGLE_SHEETS_CREDENTIALS_PATH", r.json()["error"])
+        self.assertIn("Conecta tu cuenta", r.json()["error"])
 
     def test_sin_credenciales_no_llama_a_google(self):
-        with self.settings(GOOGLE_SHEETS_CREDENTIALS_PATH=""):
-            from sheets_reports.services import google_drive
+        from sheets_reports.services import google_drive
+        with mock.patch.object(google_drive, "_preferred_credentials", return_value=None):
             with mock.patch.object(google_drive.cache, "get", return_value=None):
                 r = self.client.get("/api/sources/google/spreadsheets/?q=sin-cache")
         self.assertEqual(r.status_code, 502)
-        self.assertIn("GOOGLE_SHEETS_CREDENTIALS_PATH", r.json()["error"])
+        self.assertIn("Conecta tu cuenta de Google", r.json()["error"])
 
     def test_pestanas(self):
         tabs = {"name": "Ventas", "tabs": [{"gid": "0", "title": "Hoja 1"}]}
@@ -292,13 +292,4 @@ class SheetCacheTests(SimpleTestCase):
 
 class ServiceAccountEmailTests(TestCase):
     def test_sin_credenciales_no_hay_email(self):
-        with mock.patch.object(sheets, "service_account_credentials", return_value=None):
-            self.assertIsNone(sheets.service_account_email())
-
-    def test_el_selector_muestra_el_email(self):
-        user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
-        self.client.force_login(user)
-        creds = mock.Mock(service_account_email="lector@proyecto.iam.gserviceaccount.com")
-        with mock.patch.object(sheets, "service_account_credentials", return_value=creds):
-            r = self.client.get("/tableros/nuevo/")
-        self.assertContains(r, "lector@proyecto.iam.gserviceaccount.com")
+        self.assertIsNone(sheets.service_account_email())

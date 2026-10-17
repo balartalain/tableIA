@@ -35,43 +35,26 @@ class SheetError(Exception):
 
 
 def service_account_credentials():
-    """Credenciales de la service account, o None si no hay configuradas (en ese caso solo se
-    leen hojas públicas por enlace y no se puede listar el Drive)."""
-    path = getattr(settings, "GOOGLE_SHEETS_CREDENTIALS_PATH", "")
-    if not path:
-        return None
-    from google.oauth2.service_account import Credentials
-
-    return Credentials.from_service_account_file(path, scopes=SCOPES)
+    """Obsoleto: el sistema utiliza ahora únicamente las credenciales OAuth del usuario."""
+    return None
 
 
 def service_account_email() -> str | None:
-    """Email de la cuenta de servicio: con él se comparten las hojas que el tablero puede leer."""
-    creds = service_account_credentials()
-    return getattr(creds, "service_account_email", None) if creds else None
+    """Obsoleto: el sistema utiliza ahora únicamente las credenciales OAuth del usuario."""
+    return None
 
 
 def _access_token() -> str | None:
-    """Token Bearer de la service account, o None si no hay credenciales configuradas."""
-    creds = service_account_credentials()
-    if creds is None:
-        return None
-    from google.auth.transport.requests import Request
-
-    creds.refresh(Request())
-    return creds.token
+    return None
 
 
 def _read_attempts() -> list[str | None]:
-    """Tokens con los que intentar leer la hoja, sin repetir: primero el del usuario que conectó
-    su cuenta de Google (app google_auth) y después el de la cuenta de servicio (una hoja puede
-    estar compartida con esta y no con el usuario). Sin ninguno se intenta igual, por si la hoja
-    es pública por enlace."""
+    """Tokens con los que intentar leer la hoja: el token del usuario conectado (app google_auth).
+    Si no hay token de usuario, se intenta sin token por si la hoja es pública por enlace."""
     from google_auth.services import active_access_token
 
-    tokens = [active_access_token(), _access_token()]
-    unique = [token for i, token in enumerate(tokens) if token and token not in tokens[:i]]
-    return unique or [None]
+    token = active_access_token()
+    return [token] if token else [None]
 
 
 def _request_csv(sheet_id: str, gid: str, token: str | None):

@@ -7,7 +7,7 @@ import logging
 
 from django.core.cache import cache
 
-from sheets_reports.services.sheets import SheetError, service_account_credentials
+from sheets_reports.services.sheets import SheetError
 
 logger = logging.getLogger(__name__)
 
@@ -17,19 +17,16 @@ CACHE_TTL_SECONDS = 60
 
 
 def _preferred_credentials():
-    """Las credenciales del usuario que conectó su cuenta de Google (app google_auth) o, sin
-    conexión, las de la cuenta de servicio."""
+    """Las credenciales del usuario que conectó su cuenta de Google (app google_auth)."""
     from google_auth.services import active_credentials
 
-    return active_credentials() or service_account_credentials()
+    return active_credentials()
 
 
 def _service(name: str, version: str, credentials=None):
     creds = credentials or _preferred_credentials()
     if creds is None:
-        raise SheetError(
-            "Conecta tu cuenta de Google o configura GOOGLE_SHEETS_CREDENTIALS_PATH para listar "
-            "las hojas de Google Drive.")
+        raise SheetError("Conecta tu cuenta de Google para acceder a las hojas de Google Drive.")
     from googleapiclient.discovery import build
 
     return build(name, version, credentials=creds, cache_discovery=False)
@@ -95,12 +92,9 @@ def list_tabs(spreadsheet_id: str) -> dict:
 
 
 def tab_status(spreadsheet_id: str, gid: str) -> str | None:
-    """Si la cuenta de servicio todavía llega a la pestaña de una fuente, sin caché (lo que vale
-    es el estado de ahora): "ok", "no_access" (no la puede abrir: se dejó de compartir o se
-    borró), "tab_missing" (la abre, pero la pestaña ya no está) o None si no se pudo saber (sin
-    credenciales, red)."""
+    """Si el usuario todavía llega a la pestaña de una fuente: "ok", "no_access" o "tab_missing"."""
     try:
-        response = _service("sheets", "v4", credentials=service_account_credentials()).spreadsheets().get(
+        response = _service("sheets", "v4").spreadsheets().get(
             spreadsheetId=spreadsheet_id, fields="sheets.properties.sheetId",
         ).execute()
     except SheetError:

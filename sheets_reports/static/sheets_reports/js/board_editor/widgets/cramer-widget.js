@@ -1,14 +1,14 @@
 (function () {
   // La fuerza de la asociación según V de Cramér (de 0 a 1):
   // La misma para el color de las celdas, el tooltip, «Lo más asociado» y la leyenda del panel (window.CRAMER_SCALE).
-  const SCALE = [
-    { min: 0, max: 0.1, label: 'Muy débil', color: '#f4f3ef' },
-    { min: 0.1, max: 0.3, label: 'Débil', color: '#cfe6d6' },
-    { min: 0.3, max: 0.5, label: 'Moderada', color: '#9ec7aa' },
-    { min: 0.5, max: 0.8, label: 'Fuerte', color: '#4fa87d' },
-    { min: 0.8, max: 1.0, label: 'Muy fuerte', color: '#1f8a5f' },
+  const DEFAULT_STEPS = BaseWidget.generateSequentialScale('#1F8A5F', '#F4F3EF', 5);
+  window.CRAMER_SCALE = [
+    { min: 0, max: 0.1, label: 'Muy débil', color: DEFAULT_STEPS[0] },
+    { min: 0.1, max: 0.3, label: 'Débil', color: DEFAULT_STEPS[1] },
+    { min: 0.3, max: 0.5, label: 'Moderada', color: DEFAULT_STEPS[2] },
+    { min: 0.5, max: 0.8, label: 'Fuerte', color: DEFAULT_STEPS[3] },
+    { min: 0.8, max: 1.0, label: 'Muy fuerte', color: DEFAULT_STEPS[4] },
   ];
-  window.CRAMER_SCALE = SCALE;
 
   const RANGES = SCALE.map(level => ({
     from: level.min,
@@ -107,6 +107,20 @@
         };
       });
 
+      const baseColor = this.getChartColors()[0] || '#1F8A5F';
+      const steps = BaseWidget.generateSequentialScale(baseColor, '#F4F3EF', 5);
+      const scaleLevels = [
+        { min: 0, max: 0.1, label: 'Muy débil', color: steps[0] },
+        { min: 0.1, max: 0.3, label: 'Débil', color: steps[1] },
+        { min: 0.3, max: 0.5, label: 'Moderada', color: steps[2] },
+        { min: 0.5, max: 0.8, label: 'Fuerte', color: steps[3] },
+        { min: 0.8, max: 1.0, label: 'Muy fuerte', color: steps[4] },
+      ];
+      window.CRAMER_SCALE = scaleLevels;
+      const colorRanges = scaleLevels.map(level => ({
+        from: level.min, to: level.max, color: level.color, name: level.label,
+      }));
+
       const options = {
         chart: {
           type: 'heatmap',
@@ -122,7 +136,7 @@
             enableShades: false,
             radius: 2,
             colorScale: {
-              ranges: RANGES,
+              ranges: colorRanges,
               min: 0,
               max: 1,
               gradientLegend: {

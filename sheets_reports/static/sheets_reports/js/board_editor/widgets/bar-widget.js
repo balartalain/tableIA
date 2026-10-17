@@ -33,10 +33,10 @@
     }
 
     _colorsFor(series) {
-      series.forEach((s) => {
-        if (!this._seriesColors.has(s.name)) {
-          this._seriesColors.set(s.name, COLOR_PALETTE[this._seriesColors.size % COLOR_PALETTE.length]);
-        }
+      this._seriesColors.clear();
+      const palette = this.getSeriesColors(series.length);
+      series.forEach((s, i) => {
+        this._seriesColors.set(s.name, palette[i % palette.length]);
       });
       return series.map((s) => this._seriesColors.get(s.name));
     }
@@ -99,10 +99,11 @@
       const roundLabel = (val) => (val == null || isNaN(val) ? val : formatNumber(val, { decimals: 0 }));
       const template = this.style.dataLabelFormatter;
       const withTemplate = (format) => (val) => (val == null ? val : template.replace('{value}', format(val)));
+      const palette = payload.ungrouped ? this.getSeriesColors(categories.length) : this.getSeriesColors(series.length);
 
       const options = {
         chart: { type: 'bar', stacked: !!this.style.stacked, height: '100%', width: this.style.chartWidth || '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
-        colors: series.map((s, i) => this._seriesColors.get(s.name) || COLOR_PALETTE[i % COLOR_PALETTE.length]),
+        colors: series.map((s, i) => this._seriesColors.get(s.name) || palette[i % palette.length]),
         series,
         xaxis: {
           categories: categories.map((cat) => formatearEtiquetaApex(cat, 18)),
@@ -155,7 +156,7 @@
       // leyenda, el nombre de la métrica ya va en el eje.
       if (payload.ungrouped) {
         options.plotOptions.bar.distributed = true;
-        options.colors = categories.map((_, i) => COLOR_PALETTE[i % COLOR_PALETTE.length]);
+        options.colors = categories.map((_, i) => palette[i % palette.length]);
         options.legend = { show: false };
       }
 

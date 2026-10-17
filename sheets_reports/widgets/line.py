@@ -41,10 +41,8 @@ class LineWidget(BaseWidget):
     style_schema: ClassVar[List[Dict[str, Any]]] = [
         {"key": "title", "label": "Título", "type": "string", "default": "Gráfico de Líneas"},
         {"key": "color_scheme", "label": "Paleta", "type": "choice", "default": "default", "options": [
-            {"value": "default", "label": "Por defecto"},
-            {"value": "ocean", "label": "Océano"},
-            {"value": "forest", "label": "Bosque"},
-            {"value": "sunset", "label": "Atardecer"},
+            {"value": "default", "label": "Verde Report IA (Por defecto)"},
+            {"value": "multi", "label": "Multicolor"},
         ]},
         {"key": "curve", "label": "Curva", "type": "choice", "default": "monotoneCubic", "options": [
             {"value": "monotoneCubic", "label": "Suave (monotoneCubic)"},

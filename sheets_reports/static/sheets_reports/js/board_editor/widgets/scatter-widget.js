@@ -103,7 +103,8 @@
       // Primero una serie de puntos por grupo y después, si hay, la recta de cada uno (mismo
       // color que sus puntos). Así el índice de la serie es el del grupo en tooltip y leyenda.
       const colored = !!payload.color;
-      const pointColors = groups.map((_, i) => COLORS[i % COLORS.length]);
+      const palette = this.getSeriesColors(groups.length);
+      const pointColors = groups.map((_, i) => palette[i % palette.length]);
       const series = groups.map(g => ({ name: g.name || 'Filas', type: 'scatter', data: g.points }));
       const colors = [...pointColors];
       groups.forEach((g, i) => {

@@ -158,6 +158,17 @@ document.addEventListener('alpine:init', () => {
     widgets: [],
     // El tablero ya se pidió al servidor: hasta entonces el lienzo vacío no es «vacío».
     boardLoaded: false,
+    colorScheme: 'default',
+
+    // Cambia la paleta global del tablero y re-renderiza los gráficos.
+    setColorScheme(scheme) {
+      this.colorScheme = scheme || 'default';
+      this.widgets.forEach(w => {
+        if (w.instance && typeof w.instance.draw === 'function') {
+          w.instance.draw(w.instance._lastData);
+        }
+      });
+    },
     editingId: null,
     editingType: null,
     dashboardId: window.DASHBOARD_ID,

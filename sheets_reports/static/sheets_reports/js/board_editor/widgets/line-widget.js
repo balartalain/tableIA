@@ -78,7 +78,7 @@
           type: 'line', height: '100%', width: '100%', fontFamily: 'inherit',
           toolbar: this.chartExportToolbar(),
         },
-        colors: BaseWidget.CHART_COLORS,
+        colors: this.getSeriesColors(series.length),
         stroke: { curve: 'monotoneCubic', width: 3 },
         markers: { size: 3, hover: { size: 5 } },
         series,

@@ -2,12 +2,13 @@
   // La fuerza de la relación según |r| (escala de Evans): la misma para el color de las
   // celdas, el tooltip, «Lo más relacionado» y la leyenda del panel (window.CORRELATION_SCALE).
   // `min`: desde qué |r| empieza el nivel. «Muy débil» es un solo tono, sin signo.
+  const DEFAULT_DIVERGENT = BaseWidget.generateDivergentScale('#1F8A5F', '#DC2626', '#F4F3EF', 4);
   const SCALE = [
-    { min: 0, label: 'Muy débil', negative: '#f4f3ef', positive: '#f4f3ef' },
-    { min: 0.2, label: 'Débil', negative: '#f9d8cf', positive: '#d3e4f2' },
-    { min: 0.4, label: 'Moderada', negative: '#f4b2a4', positive: '#acccea' },
-    { min: 0.6, label: 'Fuerte', negative: '#ec8a7c', positive: '#7fb0dd' },
-    { min: 0.8, label: 'Muy fuerte', negative: '#de5b55', positive: '#4f95cf' },
+    { min: 0, label: 'Muy débil', negative: DEFAULT_DIVERGENT.neutral, positive: DEFAULT_DIVERGENT.neutral },
+    { min: 0.2, label: 'Débil', negative: DEFAULT_DIVERGENT.negative[0], positive: DEFAULT_DIVERGENT.positive[0] },
+    { min: 0.4, label: 'Moderada', negative: DEFAULT_DIVERGENT.negative[1], positive: DEFAULT_DIVERGENT.positive[1] },
+    { min: 0.6, label: 'Fuerte', negative: DEFAULT_DIVERGENT.negative[2], positive: DEFAULT_DIVERGENT.positive[2] },
+    { min: 0.8, label: 'Muy fuerte', negative: DEFAULT_DIVERGENT.negative[3], positive: DEFAULT_DIVERGENT.positive[3] },
   ];
   window.CORRELATION_SCALE = SCALE;
 
@@ -126,6 +127,27 @@
         };
       });
 
+      const posColor = this.getChartColors()[0] || '#1F8A5F';
+      const negColor = '#DC2626';
+      const scaleData = BaseWidget.generateDivergentScale(posColor, negColor, '#F4F3EF', 4);
+      const scaleLevels = [
+        { min: 0, label: 'Muy débil', negative: scaleData.neutral, positive: scaleData.neutral },
+        { min: 0.2, label: 'Débil', negative: scaleData.negative[0], positive: scaleData.positive[0] },
+        { min: 0.4, label: 'Moderada', negative: scaleData.negative[1], positive: scaleData.positive[1] },
+        { min: 0.6, label: 'Fuerte', negative: scaleData.negative[2], positive: scaleData.positive[2] },
+        { min: 0.8, label: 'Muy fuerte', negative: scaleData.negative[3], positive: scaleData.positive[3] },
+      ];
+      window.CORRELATION_SCALE = scaleLevels;
+      const colorRanges = [
+        ...scaleLevels.slice(1).reverse().map((level, k, list) => ({
+          from: -(k === 0 ? 1 : list[k - 1].min), to: -level.min, color: level.negative, name: level.label,
+        })),
+        { from: -scaleLevels[1].min, to: scaleLevels[1].min, color: scaleLevels[0].positive, name: scaleLevels[0].label },
+        ...scaleLevels.slice(1).map((level, k, list) => ({
+          from: level.min, to: k === list.length - 1 ? 1 : list[k + 1].min, color: level.positive, name: level.label,
+        })),
+      ];
+
       const options = {
         chart: { type: 'heatmap', height: '100%', width: '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar(),
                  animations: { enabled: false } },
@@ -135,7 +157,7 @@
             enableShades: false,
             radius: 2,
             colorScale: {
-              ranges: RANGES,
+              ranges: colorRanges,
               min: -1,
               max: 1,
               gradientLegend: {

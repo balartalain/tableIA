@@ -9,7 +9,16 @@
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;
-    static CHART_COLORS = ['#0284C7', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1', '#EF4444'];
+    static CHART_COLORS = ['#1F8A5F', '#36A586', '#10B981', '#A8D7C5', '#166B49', '#0F5138', '#6FAE86', '#047857'];
+    static DONUT_COLORS = ['#1F8A5F', '#F59E0B', '#0284C7', '#EC4899', '#8B5CF6', '#10B981', '#14B8A6', '#F97316'];
+
+    static PALETTES = {
+      default: ['#1F8A5F', '#36A586', '#10B981', '#A8D7C5', '#166B49', '#0F5138', '#6FAE86', '#047857'],
+      ocean: ['#0284C7', '#38BDF8', '#0EA5E9', '#7DD3FC', '#0369A1', '#1E40AF', '#60A5FA', '#0284C7'],
+      forest: ['#15803D', '#22C55E', '#16A34A', '#86EFAC', '#14532D', '#047857', '#059669', '#34D399'],
+      sunset: ['#EA580C', '#F97316', '#FB923C', '#FDBA74', '#C2410C', '#D97706', '#EF4444', '#F43F5E'],
+      multi: ['#1F8A5F', '#F59E0B', '#0284C7', '#EC4899', '#8B5CF6', '#10B981', '#14B8A6', '#F97316'],
+    };
 
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
 
@@ -187,11 +196,107 @@
     // (generateRealBoardThumbnail) y le pasa un `ctx`; el widget devuelve el SVG interior de
     // su tarjeta (el cromo y el título los pinta el generador). Datos de reserva permitidos.
     static THUMB_PALETTES = {
-      default: ['#0284C7', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#6366F1', '#EF4444'],
+      default: ['#1F8A5F', '#36A586', '#10B981', '#A8D7C5', '#166B49', '#0F5138'],
       ocean: ['#0284C7', '#38BDF8', '#0EA5E9', '#7DD3FC', '#0369A1'],
       sunset: ['#F97316', '#FB923C', '#EA580C', '#FDBA74', '#C2410C'],
       forest: ['#15803D', '#22C55E', '#16A34A', '#86EFAC', '#14532D'],
     };
+
+    // Obtiene los colores de gráfica respetando el esquema del widget, la paleta global del tablero
+    // o el color por defecto (verde institucional para gráficas, multicolor para dona).
+    getChartColors() {
+      const widgetScheme = this.style && this.style.color_scheme;
+      if (widgetScheme && widgetScheme !== 'default' && BaseWidget.PALETTES[widgetScheme]) {
+        return BaseWidget.PALETTES[widgetScheme];
+      }
+      const store = window.Alpine && Alpine.store('dashboard');
+      const boardScheme = store && store.colorScheme;
+      if (boardScheme && BaseWidget.PALETTES[boardScheme]) {
+        return BaseWidget.PALETTES[boardScheme];
+      }
+      if (this.constructor.type === 'donut') {
+        return BaseWidget.DONUT_COLORS;
+      }
+      return BaseWidget.CHART_COLORS;
+    }
+
+    // Obtiene el color base primario del widget / tablero
+    getPrimaryColor() {
+      const colors = this.getChartColors();
+      return colors && colors[0] ? colors[0] : '#1F8A5F';
+    }
+
+    // Genera N tonos para series/categorías. Si count=1, usa el color base.
+    // Si count > 1, escala de forma continua desde un tono oscuro del color base hasta un tono suave.
+    getSeriesColors(count = 1) {
+      if (count <= 1) return [this.getPrimaryColor()];
+      
+      const widgetScheme = this.style && this.style.color_scheme;
+      if (widgetScheme === 'multi') {
+        return BaseWidget.DONUT_COLORS;
+      }
+
+      const primary = this.getPrimaryColor();
+      if (typeof window.chroma === 'function') {
+        const dark = window.chroma(primary).darken(0.8).hex();
+        const light = window.chroma(primary).brighten(1.2).hex();
+        return window.chroma.scale([dark, light]).mode('lab').colors(count);
+      }
+      const palette = this.getChartColors();
+      return Array.from({ length: count }, (_, i) => palette[i % palette.length]);
+    }
+
+    // Genera N colores armónicos con rotación de matiz para el gráfico de dona
+    getDonutColors(count = 4) {
+      const widgetScheme = this.style && this.style.color_scheme;
+      if (widgetScheme === 'multi') {
+        return BaseWidget.DONUT_COLORS;
+      }
+      const primary = this.getPrimaryColor();
+      if (typeof window.chroma === 'function') {
+        const base = window.chroma(primary);
+        const [h, s, l] = base.hsl();
+        const colors = [primary];
+        const step = 360 / Math.max(count, 4);
+        for (let i = 1; i < count; i++) {
+          const nextHue = ((h || 0) + i * step) % 360;
+          const nextColor = window.chroma.hsl(
+            nextHue,
+            Math.min(s || 0.6, 0.75),
+            Math.max(0.4, Math.min(l || 0.5, 0.65))
+          ).hex();
+          colors.push(nextColor);
+        }
+        return colors;
+      }
+      return BaseWidget.DONUT_COLORS;
+    }
+
+    // Genera una escala cromática unidireccional (0 a 1) usando chroma.js
+    static generateSequentialScale(targetColor = '#1F8A5F', neutralColor = '#F4F3EF', steps = 5) {
+      if (typeof window.chroma === 'function') {
+        return window.chroma.scale([neutralColor, targetColor]).mode('lab').colors(steps);
+      }
+      return ['#F4F3EF', '#CFE6D6', '#9EC7AA', '#4FA87D', targetColor];
+    }
+
+    // Genera una escala cromática divergente (-1 a +1) usando chroma.js
+    static generateDivergentScale(positiveColor = '#1F8A5F', negativeColor = '#DC2626', neutralColor = '#F4F3EF', stepsPerSide = 4) {
+      if (typeof window.chroma === 'function') {
+        const posColors = window.chroma.scale([neutralColor, positiveColor]).mode('lab').colors(stepsPerSide + 1);
+        const negColors = window.chroma.scale([neutralColor, negativeColor]).mode('lab').colors(stepsPerSide + 1);
+        return {
+          negative: negColors.slice(1),
+          neutral: neutralColor,
+          positive: posColors.slice(1),
+        };
+      }
+      return {
+        negative: ['#F9D8CF', '#F4B2A4', '#EC8A7C', negativeColor],
+        neutral: neutralColor,
+        positive: ['#D3E4F2', '#ACCCEA', '#7FB0DD', positiveColor],
+      };
+    }
 
     // Paleta de la miniatura según la "Paleta" del widget (style.color_scheme).
     thumbnailPalette() {

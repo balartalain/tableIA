@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 STATE_KEY = "google_oauth_state"
 NEXT_KEY = "google_oauth_next"
+CODE_VERIFIER_KEY = "google_oauth_code_verifier"
 
 
 def _safe_next(value: str) -> str:
@@ -53,11 +54,14 @@ def login(request):
     if not services.is_configured():
         return JsonResponse({"error": "Google OAuth no está configurado en el servidor."}, status=400)
     try:
-        url, state = services.authorization_url(request)
+        url, state, code_verifier = services.authorization_url(request)
     except services.GoogleAuthError as e:
         return JsonResponse({"error": str(e)}, status=400)
     request.session[STATE_KEY] = state
     request.session[NEXT_KEY] = _safe_next(request.GET.get("next"))
+    if isinstance(code_verifier, str):
+        request.session[CODE_VERIFIER_KEY] = code_verifier
+    request.session.save()
     return redirect(url)
 
 
@@ -66,13 +70,25 @@ def callback(request):
     if request.GET.get("error"):
         logger.warning("OAuth de Google rechazado: %s", request.GET.get("error"))
         return redirect(_safe_next(request.session.pop(NEXT_KEY, "")) or "/")
-    expected = request.session.pop(STATE_KEY, "")
+    expected = request.session.get(STATE_KEY, "")
     state = request.GET.get("state", "")
     if not expected or state != expected:
-        return JsonResponse({"error": "Estado OAuth inválido."}, status=400)
+        logger.warning(
+            "Estado OAuth inválido. Esperado en sesión: %r, recibido en URL: %r. "
+            "Asegúrate de acceder usando el mismo dominio/host (localhost vs 127.0.0.1).",
+            expected, state
+        )
+        return JsonResponse({
+            "error": "Estado OAuth inválido.",
+            "detalle": "La sesión expiró o ingresaste usando un host distinto (ej. localhost vs 127.0.0.1). Intenta iniciar sesión de nuevo."
+        }, status=400)
+    request.session.pop(STATE_KEY, None)
+    code_verifier = request.session.pop(CODE_VERIFIER_KEY, None)
     next_url = _safe_next(request.session.pop(NEXT_KEY, "")) or "/"
     try:
-        credentials = services.exchange_code(request, request.GET.get("code", ""), state)
+        credentials = services.exchange_code(
+            request, request.GET.get("code", ""), state, code_verifier=code_verifier
+        )
     except services.GoogleAuthError as e:
         return JsonResponse({"error": str(e)}, status=400)
     except Exception:  # noqa: BLE001 - error de red o de Google

@@ -103,16 +103,20 @@ def build_flow(redirect_uri_value: str, state: str | None = None):
 
 
 # ------------------------------------------------------------------ flujo OAuth
-def authorization_url(request) -> tuple[str, str]:
-    """La URL de consentimiento de Google y el `state` que hay que recordar en la sesión."""
+def authorization_url(request) -> tuple[str, str, str | None]:
+    """La URL de consentimiento de Google, el `state` y el `code_verifier` (PKCE) para la sesión."""
     flow = build_flow(redirect_uri(request))
-    return flow.authorization_url(
+    url, state = flow.authorization_url(
         access_type="offline", include_granted_scopes="true", prompt="consent")
+    code_verifier = getattr(flow, "code_verifier", None)
+    return url, state, code_verifier
 
 
-def exchange_code(request, code: str, state: str | None):
+def exchange_code(request, code: str, state: str | None, code_verifier: str | None = None):
     """Cambia el `code` del callback por las credenciales del usuario."""
     flow = build_flow(redirect_uri(request), state=state)
+    if code_verifier and hasattr(flow, "code_verifier"):
+        flow.code_verifier = code_verifier
     try:
         flow.fetch_token(code=code)
     except Exception as e:  # noqa: BLE001 - error de red o de Google: mensaje legible

@@ -38,7 +38,7 @@ class ConfigTests(TestCase):
 
     @override_settings(**CLIENT)
     def test_la_url_de_consentimiento_es_de_google(self):
-        url, state = services.authorization_url(None)
+        url, state, _ = services.authorization_url(None)
         self.assertTrue(url.startswith("https://accounts.google.com/"))
         self.assertTrue(state)
 

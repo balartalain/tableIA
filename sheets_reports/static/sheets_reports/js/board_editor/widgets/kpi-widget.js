@@ -132,7 +132,7 @@
         labels: trend.categories,
         stroke: { curve: 'smooth', width: 2 },
         fill: { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0 } },
-        colors: [SPARK_COLOR],
+        colors: [this.getPrimaryColor()],
         tooltip: {
           x: { show: true },
           y: { formatter: (v) => this.format(v, { percent }), title: { formatter: () => '' } },

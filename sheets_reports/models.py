@@ -27,6 +27,12 @@ class Dashboard(models.Model):
         default="",
         help_text="Miniatura del tablero (data-URL de un SVG) para la galería de plantillas.",
     )
+    primary_color = models.CharField(
+        max_length=20,
+        default="#1F8A5F",
+        blank=True,
+        help_text="Color primario del tema del tablero.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -31,7 +31,12 @@ document.addEventListener('alpine:init', () => {
           return null;
         }
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
-        if (data.dashboard && data.dashboard.sources) store.sources = data.dashboard.sources;
+        if (data.dashboard) {
+          if (data.dashboard.sources) store.sources = data.dashboard.sources;
+          if (data.dashboard.primary_color && typeof store.setPrimaryColor === 'function') {
+            store.setPrimaryColor(data.dashboard.primary_color);
+          }
+        }
         this.widgets.forEach(w => w.applyRender(byId[w.id]));
         requestAnimationFrame(() => {
           window.dispatchEvent(new Event('resize'));

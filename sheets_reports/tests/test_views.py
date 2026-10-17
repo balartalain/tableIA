@@ -553,6 +553,17 @@ class DashboardCrudTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(Dashboard.objects.filter(id=self.dashboard.id).exists())
 
+    def test_editar_primary_color(self):
+        r = self.client.put(
+            f"/api/dashboards/{self.dashboard.id}/",
+            json.dumps({"primary_color": "#0284C7"}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.dashboard.refresh_from_db()
+        self.assertEqual(self.dashboard.primary_color, "#0284C7")
+        self.assertEqual(r.json()["primary_color"], "#0284C7")
+
     def test_duplica_con_sus_fuentes_y_widgets(self):
         self.source.name, self.source.first_row_headers = "Mis ventas", False
         self.source.save()

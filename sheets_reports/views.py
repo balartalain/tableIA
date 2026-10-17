@@ -238,7 +238,7 @@ def _columns_errors(columns) -> list[str]:
 @csrf_exempt
 @require_http_methods(["GET", "PUT", "DELETE"])
 def dashboard_detail(request, dashboard_id):
-    """GET / PUT {nombre} / DELETE de un tablero del usuario."""
+    """GET / PUT {nombre, primary_color} / DELETE de un tablero del usuario."""
     dashboard = _owned_dashboard(request, dashboard_id)
     if not dashboard:
         return _error("Dashboard no encontrado", status=404)
@@ -256,6 +256,8 @@ def dashboard_detail(request, dashboard_id):
         if not nombre:
             return _error("El nombre es obligatorio")
         dashboard.nombre = nombre
+    if "primary_color" in data:
+        dashboard.primary_color = str(data.get("primary_color") or "#1F8A5F").strip()
     dashboard.save()
     return JsonResponse(_serialize_dashboard(dashboard))
 
@@ -267,6 +269,7 @@ def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=""):
         nombre=name,
         is_template=is_template,
         thumbnail=thumbnail,
+        primary_color=getattr(dashboard, "primary_color", "#1F8A5F") or "#1F8A5F",
     )
     copies = {}
     for source in dashboard.sources.all():
@@ -411,6 +414,7 @@ def _serialize_dashboard(dashboard):
     data = {
         "id": dashboard.id,
         "nombre": dashboard.nombre,
+        "primary_color": getattr(dashboard, "primary_color", "#1F8A5F") or "#1F8A5F",
         "is_template": getattr(dashboard, "is_template", False),
         "owner": dashboard.owner.username,
         "sources": [s.label for s in dashboard.sources.all()],

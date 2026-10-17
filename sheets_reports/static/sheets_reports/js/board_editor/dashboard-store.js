@@ -158,7 +158,7 @@ document.addEventListener('alpine:init', () => {
     widgets: [],
     // El tablero ya se pidió al servidor: hasta entonces el lienzo vacío no es «vacío».
     boardLoaded: false,
-    primaryColor: '#1F8A5F',
+    primaryColor: window.DASHBOARD_PRIMARY_COLOR || '#1F8A5F',
 
     init() {
       this.applyThemeVariables(this.primaryColor);
@@ -195,10 +195,25 @@ document.addEventListener('alpine:init', () => {
       this.primaryColor = color || '#1F8A5F';
       this.applyThemeVariables(this.primaryColor);
       this.widgets.forEach(w => {
-        if (w.instance && typeof w.instance.draw === 'function') {
-          w.instance.draw(w.instance._lastData);
+        if (w && typeof w.draw === 'function') {
+          w.draw(w._lastData);
         }
       });
+    },
+
+    // Guarda el nuevo color primario en el servidor y aplica el cambio al instante.
+    async savePrimaryColor(color) {
+      this.setPrimaryColor(color);
+      if (!this.dashboardId) return;
+      try {
+        await fetch(apiUrl(`/api/dashboards/${this.dashboardId}/`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ primary_color: color }),
+        });
+      } catch (e) {
+        console.warn('No se pudo guardar el color del tablero:', e);
+      }
     },
     editingId: null,
     editingType: null,
@@ -296,6 +311,9 @@ document.addEventListener('alpine:init', () => {
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
       this._reportFilterErrors(data);
       this.sources = (data.dashboard && data.dashboard.sources) || [];
+      if (data.dashboard && data.dashboard.primary_color) {
+        this.setPrimaryColor(data.dashboard.primary_color);
+      }
       // Instancias reales (mount/applyRender/setLoading), no objetos planos.
       this.widgets = data.widgets
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))

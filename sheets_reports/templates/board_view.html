@@ -120,6 +120,7 @@
 
 <script>
   window.DASHBOARD_ID = {{ dashboard.id }};
+  window.DASHBOARD_PRIMARY_COLOR = "{{ dashboard.primary_color|default:'#1F8A5F'|escapejs }}";
   async function useTemplate(id) {
     const btn = document.getElementById('use-template-btn');
     if (btn) {

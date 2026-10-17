@@ -216,26 +216,9 @@
       return [primary];
     }
 
-    // Genera N colores armónicos con rotación de matiz para el gráfico de dona
+    // Genera N colores por escala continua para el gráfico de dona
     getDonutColors(count = 4) {
-      const primary = this.getPrimaryColor();
-      if (typeof window.chroma === 'function') {
-        const base = window.chroma(primary);
-        const [h, s, l] = base.hsl();
-        const colors = [primary];
-        const step = 360 / Math.max(count, 4);
-        for (let i = 1; i < count; i++) {
-          const nextHue = ((h || 0) + i * step) % 360;
-          const nextColor = window.chroma.hsl(
-            nextHue,
-            Math.min(s || 0.6, 0.75),
-            Math.max(0.4, Math.min(l || 0.5, 0.65))
-          ).hex();
-          colors.push(nextColor);
-        }
-        return colors;
-      }
-      return [primary];
+      return this.getSeriesColors(count);
     }
 
     // Genera una escala cromática unidireccional (0 a 1) usando chroma.js

@@ -52,6 +52,7 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 | `tests/test_source_columns.py` | Las columnas que usa cada widget (para renombrar y avisar qué se rompe). |
 | `tests/test_column_scales.py` | Escala de medida de las columnas: reglas de detección (escalas conocidas, «No aplica» como categoría válida, identificadores, discreta y continua), la guardada en la fuente manda, el PUT de escalas con su validación y «Clasificar con IA» (modelo simulado). |
 | `tests/test_views.py` | Las vistas como adaptadores HTTP: render, guardar widgets, asistente de IA, tableros. |
+| `tests/test_activity.py` | Actividad del sistema: `ActivityLog` (guardado y poda), el resumen de trabajos programados (IA, fuentes, correos), el doble registro de los envíos de correo y el endpoint `/api/activity/` (trabajos, eventos, paginación y que solo muestra los tableros del dueño). |
 
 ### IA
 | Archivo | Qué prueba |

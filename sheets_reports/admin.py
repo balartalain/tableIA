@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from sheets_reports.models import (
-    Dashboard, DataSource, EmailCampaign, EmailLog, EmailRecipient, EmailSender, Widget,
+    ActivityLog, Dashboard, DataSource, EmailCampaign, EmailLog, EmailRecipient, EmailSender, Widget,
 )
 
 
@@ -78,3 +78,11 @@ class EmailLogAdmin(admin.ModelAdmin):
     list_display = ["created_at", "campaign", "level", "message", "recipient_email", "sender_email"]
     list_filter = ["level"]
     search_fields = ["message", "recipient_email"]
+
+
+@admin.register(ActivityLog)
+class ActivityLogAdmin(admin.ModelAdmin):
+    list_display = ["created_at", "dashboard", "category", "level", "message"]
+    list_filter = ["category", "level"]
+    search_fields = ["message"]
+    readonly_fields = ["created_at"]

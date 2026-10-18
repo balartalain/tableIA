@@ -34,20 +34,6 @@ class SheetError(Exception):
     """Error legible para el usuario al leer la hoja."""
 
 
-def service_account_credentials():
-    """Obsoleto: el sistema utiliza ahora únicamente las credenciales OAuth del usuario."""
-    return None
-
-
-def service_account_email() -> str | None:
-    """Obsoleto: el sistema utiliza ahora únicamente las credenciales OAuth del usuario."""
-    return None
-
-
-def _access_token() -> str | None:
-    return None
-
-
 def _read_attempts() -> list[str | None]:
     """Tokens con los que intentar leer la hoja: el token del usuario conectado (app google_auth).
     Si no hay token de usuario, se intenta sin token por si la hoja es pública por enlace."""

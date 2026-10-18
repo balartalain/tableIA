@@ -40,7 +40,6 @@ urlpatterns = [
          name='email_report_recipients'),
     path('api/dashboard/<int:dashboard_id>/email-report/logs/', views_email.email_report_logs,
          name='email_report_logs'),
-    path('api/sources/google/spreadsheets/', views.source_spreadsheets, name='source_spreadsheets'),
     path('api/sources/google/spreadsheets/<str:spreadsheet_id>/tabs/', views.source_tabs, name='source_tabs'),
     path('api/sources/google/spreadsheets/<str:spreadsheet_id>/tabs/<str:gid>/columns/',
          views.source_columns, name='source_columns'),

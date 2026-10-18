@@ -232,7 +232,7 @@ function sourcePicker({ mode = 'create' } = {}) {
     // `changeSheet`: al editar, pasa directo a elegir otra hoja («Cambiar hoja» de la tabla de fuentes).
     start({ mode, source = null, changeSheet = false }) {
       Object.assign(this, {
-        mode, editing: source, step: 'source', source: null, query: '', spreadsheets: [],
+        mode, editing: source, step: 'source', source: null,
         spreadsheet: null, tabs: [], tab: null, columns: [], rows: 0, name: '',
         sourceName: source ? source.name || '' : '',
         headers: source ? source.first_row_headers !== false : true, impact: null,
@@ -365,25 +365,6 @@ function sourcePicker({ mode = 'create' } = {}) {
     selectSource(source) {
       if (this.source === source) return;
       this.source = source;
-      this.loadSpreadsheets();
-    },
-
-    async loadSpreadsheets() {
-      const request = ++this._sheetsRequest;
-      this.loadingSheets = true;
-      this.sheetsError = '';
-      try {
-        const q = encodeURIComponent(this.query.trim());
-        const data = await this._get(`/api/sources/google/spreadsheets/${q ? `?q=${q}` : ''}`);
-        if (request === this._sheetsRequest) this.spreadsheets = data.spreadsheets || [];
-      } catch (e) {
-        if (request === this._sheetsRequest) {
-          this.spreadsheets = [];
-          this.sheetsError = e.message;
-        }
-      } finally {
-        if (request === this._sheetsRequest) this.loadingSheets = false;
-      }
     },
 
     // --------------------------------------------- Google: login y selector nativo de Drive

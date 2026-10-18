@@ -124,29 +124,6 @@ class SourceEndpointsTests(TestCase):
         self.user = get_user_model().objects.create_superuser("admin", "a@a.com", "x")
         self.client.force_login(self.user)
 
-    def test_lista_hojas_del_drive(self):
-        sheets = [{"id": "abc", "name": "Ventas", "modified": "2026-10-06T00:00:00Z"}]
-        with mock.patch("sheets_reports.services.google_drive.list_spreadsheets", return_value=sheets) as ls:
-            r = self.client.get("/api/sources/google/spreadsheets/?q=ven")
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json(), {"spreadsheets": sheets})
-        ls.assert_called_once_with("ven")
-
-    def test_error_de_google_es_legible(self):
-        with mock.patch("sheets_reports.services.google_drive.list_spreadsheets",
-                        side_effect=SheetError("Conecta tu cuenta de Google")):
-            r = self.client.get("/api/sources/google/spreadsheets/")
-        self.assertEqual(r.status_code, 502)
-        self.assertIn("Conecta tu cuenta", r.json()["error"])
-
-    def test_sin_credenciales_no_llama_a_google(self):
-        from sheets_reports.services import google_drive
-        with mock.patch.object(google_drive, "_preferred_credentials", return_value=None):
-            with mock.patch.object(google_drive.cache, "get", return_value=None):
-                r = self.client.get("/api/sources/google/spreadsheets/?q=sin-cache")
-        self.assertEqual(r.status_code, 502)
-        self.assertIn("Conecta tu cuenta de Google", r.json()["error"])
-
     def test_pestanas(self):
         tabs = {"name": "Ventas", "tabs": [{"gid": "0", "title": "Hoja 1"}]}
         with mock.patch("sheets_reports.services.google_drive.list_tabs", return_value=tabs):
@@ -231,28 +208,28 @@ def csv_response(text):
     return mock.Mock(status_code=200, headers={"Content-Type": "text/csv; charset=utf-8"}, text=text)
 
 
-@mock.patch("sheets_reports.services.sheets._access_token", return_value=None)
+@mock.patch("sheets_reports.services.sheets._read_attempts", return_value=[None])
 class FetchSheetTests(SimpleTestCase):
     CSV = "Producto,Ventas,,\r\nA,\"1,200\",,\r\nB,300,,\r\n"
 
-    def test_con_encabezados(self, _token):
+    def test_con_encabezados(self, _read):
         with mock.patch("requests.get", return_value=csv_response(self.CSV)) as get:
             df = sheets.fetch_sheet_dataframe("abc", "5")
         self.assertEqual(get.call_args.kwargs["params"], {"format": "csv", "gid": "5"})
         self.assertEqual(list(df.columns), ["Producto", "Ventas"])   # sin las de relleno
         self.assertEqual(df["Ventas"].tolist(), [1200, 300])
 
-    def test_sin_encabezados_las_columnas_se_llaman_por_su_letra(self, _token):
+    def test_sin_encabezados_las_columnas_se_llaman_por_su_letra(self, _read):
         with mock.patch("requests.get", return_value=csv_response(self.CSV)):
             df = sheets.fetch_sheet_dataframe("abc", "5", headers=False)
         self.assertEqual(list(df.columns), ["Columna A", "Columna B"])
         self.assertEqual(df["Columna A"].tolist(), ["Producto", "A", "B"])   # la fila 1 es un dato
 
-    def test_letras_de_columna(self, _token):
+    def test_letras_de_columna(self, _read):
         self.assertEqual([sheets.column_letter(i) for i in (0, 25, 26, 27, 701, 702)],
                          ["A", "Z", "AA", "AB", "ZZ", "AAA"])
 
-    def test_respuesta_que_no_es_csv(self, _token):
+    def test_respuesta_que_no_es_csv(self, _read):
         html = mock.Mock(status_code=200, headers={"Content-Type": "text/html"}, text="<html>")
         with mock.patch("requests.get", return_value=html):
             with self.assertRaises(SheetError):
@@ -288,8 +265,3 @@ class SheetCacheTests(SimpleTestCase):
         with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=sales_df()):
             sheets.get_sheet_dataframe("abc", "0")["ventas"] = 0
             self.assertNotEqual(sheets.get_sheet_dataframe("abc", "0")["ventas"].sum(), 0)
-
-
-class ServiceAccountEmailTests(TestCase):
-    def test_sin_credenciales_no_hay_email(self):
-        self.assertIsNone(sheets.service_account_email())

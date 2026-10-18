@@ -461,15 +461,6 @@ def _serialize_source(source):
 
 # ------------------------------------------------------------------ selector de hojas
 @require_http_methods(["GET"])
-def source_spreadsheets(request):
-    """Hojas de Google Drive compartidas con la cuenta de servicio (`?q=` filtra por nombre)."""
-    try:
-        return JsonResponse({"spreadsheets": google_drive.list_spreadsheets(request.GET.get("q", ""))})
-    except SheetError as e:
-        return _error(str(e), status=502)
-
-
-@require_http_methods(["GET"])
 def source_tabs(request, spreadsheet_id):
     try:
         return JsonResponse(google_drive.list_tabs(spreadsheet_id))

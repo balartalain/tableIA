@@ -32,39 +32,6 @@ def _service(name: str, version: str, credentials=None):
     return build(name, version, credentials=creds, cache_discovery=False)
 
 
-def _escape(text: str) -> str:
-    """Texto dentro de una comilla simple de la consulta de Drive."""
-    return text.replace("\\", "\\\\").replace("'", "\\'")
-
-
-def list_spreadsheets(query: str = "") -> list[dict]:
-    """Hojas de cálculo visibles para la cuenta de servicio, las modificadas más recientemente
-    primero: [{id, name, modified}]. `query` filtra por nombre."""
-    query = (query or "").strip()
-    key = f"drive_spreadsheets:{query.lower()}"
-    cached = cache.get(key)
-    if cached is not None:
-        return cached
-    q = f"mimeType='{SPREADSHEET_MIME}' and trashed=false"
-    if query:
-        q += f" and name contains '{_escape(query)}'"
-    try:
-        response = _service("drive", "v3").files().list(
-            q=q, orderBy="modifiedTime desc", pageSize=MAX_SPREADSHEETS,
-            fields="files(id,name,modifiedTime)",
-            includeItemsFromAllDrives=True, supportsAllDrives=True,
-        ).execute()
-    except SheetError:
-        raise
-    except Exception as e:  # noqa: BLE001 - HttpError, red, credenciales: un mensaje legible
-        logger.exception("Drive files.list")
-        raise SheetError(f"No se pudo listar las hojas de Google Drive: {e}") from e
-    result = [{"id": f["id"], "name": f.get("name", ""), "modified": f.get("modifiedTime")}
-              for f in response.get("files", [])]
-    cache.set(key, result, CACHE_TTL_SECONDS)
-    return result
-
-
 def list_tabs(spreadsheet_id: str) -> dict:
     """Nombre del documento y sus pestañas en orden: {name, tabs: [{gid, title}]}."""
     key = f"drive_tabs:{spreadsheet_id}"

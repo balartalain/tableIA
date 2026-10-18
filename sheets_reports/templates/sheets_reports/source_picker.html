@@ -50,15 +50,8 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
 
       <!-- Documentos -->
       <div class="min-h-0 flex flex-col border border-line rounded overflow-hidden">
-        <div class="flex items-center gap-2 px-3 py-2 border-b border-line">
+        <div class="flex items-center justify-between gap-2 px-3 py-2 border-b border-line">
           <p class="text-[10px] font-bold uppercase tracking-wider text-ink/40 shrink-0">Documentos</p>
-          <label x-show="source && !google.configured" class="relative flex-1">
-            <span class="sr-only">Buscar documento</span>
-            <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-ink/40" aria-hidden="true"></i>
-            <input type="search" x-model="query" x-on:input.debounce.300ms="loadSpreadsheets()"
-                   placeholder="Buscar en Drive…" autocomplete="off"
-                   class="w-full text-sm border border-line rounded-md pl-8 pr-2 py-1 focus:outline-none focus:border-moss-500">
-          </label>
         </div>
         <div class="flex-1 overflow-y-auto p-2">
           <!-- Google: elegir la hoja con el selector nativo de Drive. -->
@@ -69,36 +62,27 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               <span x-text="loadingSheets ? 'Abriendo Drive…' : (google.connected ? 'Elegir en mi Drive' : 'Conectar con Google')"></span>
             </button>
             <p x-show="googleError" x-text="googleError" role="alert" class="px-1 text-[11px] text-red-600"></p>
+            <div x-show="spreadsheet" class="mt-3 p-2.5 bg-moss-50/80 border border-moss-200 rounded-md flex items-center gap-2">
+              <i class="ti ti-file-spreadsheet text-moss-600 text-lg shrink-0"></i>
+              <div class="min-w-0 flex-1">
+                <span class="block text-xs font-semibold text-moss-900 truncate" x-text="spreadsheet ? spreadsheet.name : ''"></span>
+                <span class="block text-[10px] text-moss-700/70">Documento seleccionado</span>
+              </div>
+            </div>
           </div>
+
+          <!-- Alerta si Google OAuth no está configurado -->
+          <div x-show="source && !google.configured" class="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-900 space-y-1.5">
+            <div class="flex items-center gap-2 font-semibold text-xs text-amber-900">
+              <i class="ti ti-alert-triangle text-base text-amber-600" aria-hidden="true"></i>
+              <span>Google OAuth no configurado</span>
+            </div>
+            <p class="text-[11px] leading-relaxed text-amber-800/90">
+              Para seleccionar hojas de tu Google Drive debes configurar las credenciales OAuth en el servidor (<code class="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[10px]">GOOGLE_OAUTH_CLIENT_ID</code> y <code class="bg-amber-100/80 px-1 py-0.5 rounded font-mono text-[10px]">GOOGLE_OAUTH_CLIENT_SECRET</code>).
+            </p>
+          </div>
+
           <p x-show="!source" class="px-2 py-6 text-center text-xs text-ink/50">Elige una fuente para ver sus documentos.</p>
-          <p x-show="source && loadingSheets && !google.configured" class="px-2 py-6 text-center text-xs text-ink/50">
-            <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando documentos…
-          </p>
-          <div x-show="sheetsError" class="px-2 py-3 space-y-2">
-            <p x-text="sheetsError" role="alert" class="text-xs text-red-600"></p>
-            <button type="button" x-on:click="loadSpreadsheets()"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
-              <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
-              <span>Volver a conectar</span>
-            </button>
-          </div>
-          <p x-show="source && !loadingSheets && !sheetsError && !spreadsheets.length && !google.configured"
-             class="px-2 py-6 text-center text-xs text-ink/50">
-            No hay hojas disponibles. Configura el cliente de Google OAuth para seleccionar hojas de tu Google Drive.
-          </p>
-          <ul x-show="!loadingSheets && !google.configured" class="space-y-0.5">
-            <template x-for="s in spreadsheets" :key="s.id">
-              <li>
-                <button type="button" x-on:click="selectSpreadsheet(s)"
-                        x-bind:class="spreadsheet && spreadsheet.id === s.id ? 'bg-moss-50 text-moss-700' : 'hover:bg-paper text-ink/80'"
-                        class="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-left transition cursor-pointer">
-                  <i class="ti ti-table text-base text-moss-600" aria-hidden="true"></i>
-                  <span class="flex-1 min-w-0 truncate" x-text="s.name.trim() || 'Sin nombre'"></span>
-                  <span class="shrink-0 text-[11px] text-ink/40" x-text="formatDate(s.modified)"></span>
-                </button>
-              </li>
-            </template>
-          </ul>
         </div>
       </div>
 

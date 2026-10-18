@@ -1,4 +1,4 @@
-"""Corridas de tareas (`TaskRun`): el registro de una corrida con su estado y duración, la
+"""Tareas en segundo plano (`TaskRun`): el registro de una corrida con su estado y duración, la
 poda de las viejas y el registro que deja el comando del crontab."""
 from unittest import mock
 

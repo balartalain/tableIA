@@ -276,8 +276,8 @@ class TaskRun(models.Model):
     detail = models.TextField(blank=True, default="")
 
     class Meta:
-        verbose_name = "Corrida de tarea"
-        verbose_name_plural = "Corridas de tareas"
+        verbose_name = "Tarea en segundo plano"
+        verbose_name_plural = "Tareas en segundo plano"
         ordering = ["-started_at"]
         indexes = [models.Index(fields=["label", "-started_at"])]
 

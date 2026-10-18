@@ -22,8 +22,8 @@ class Migration(migrations.Migration):
                 ('detail', models.TextField(blank=True, default='')),
             ],
             options={
-                'verbose_name': 'Corrida de tarea',
-                'verbose_name_plural': 'Corridas de tareas',
+                'verbose_name': 'Tarea en segundo plano',
+                'verbose_name_plural': 'Tareas en segundo plano',
                 'ordering': ['-started_at'],
                 'indexes': [models.Index(fields=['label', '-started_at'], name='sheets_repo_label_390c41_idx')],
             },

@@ -89,20 +89,26 @@ function emailCampaign() {
       return new Date(this.report.next_run).toLocaleString('es', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
     },
 
-    // La última franja de ticks antes de medianoche (p. ej. 23:55 con 5 min): una hora dentro de
-    // ella puede no alcanzar a correr con el cron del servidor. '' si el intervalo no da ticks por minuto.
-    get riskyFromLabel() {
+    // La última franja de ticks antes de medianoche (p. ej. las 23:55 con 5 min): una hora dentro de
+    // ella puede no alcanzar a correr con el cron del servidor. null si el intervalo no da ticks por minuto.
+    get riskyFromMinute() {
       const n = this.cronMinutes;
-      if (!(n >= 1 && n <= 59)) return '';
-      const last = Math.floor(59 / n) * n;
-      return `${String(Math.floor(last / 60)).padStart(2, '0')}:${String(last % 60).padStart(2, '0')}`;
+      if (!(n >= 1 && n <= 59)) return null;
+      return 23 * 60 + Math.floor(59 / n) * n;
+    },
+
+    get riskyFromLabel() {
+      const from = this.riskyFromMinute;
+      if (from === null) return '';
+      return `${String(Math.floor(from / 60)).padStart(2, '0')}:${String(from % 60).padStart(2, '0')}`;
     },
 
     get riskySendTime() {
-      if (!this.riskyFromLabel) return false;
+      const from = this.riskyFromMinute;
+      if (from === null) return false;
       const match = /^(\d{1,2}):(\d{2})/.exec(this.form.send_time || '');
       if (!match) return false;
-      return Number(match[1]) * 60 + Number(match[2]) > Math.floor(59 / this.cronMinutes) * this.cronMinutes;
+      return Number(match[1]) * 60 + Number(match[2]) > from;
     },
 
     // Sube el CSV elegido: sus correos se agregan a la lista (los que ya estaban no cambian).

@@ -193,8 +193,9 @@
   #module-rail.rail-animated { transition: width 160ms ease; }
   #module-rail .rail-chevron { transition: transform 160ms ease; }
   html[data-rail="collapsed"] #module-rail { width: 56px; }
-  html[data-rail="collapsed"] #module-rail .rail-body { padding-left: 0.5rem; padding-right: 0.5rem; }
-  html[data-rail="collapsed"] #module-rail .rail-header,
+  html[data-rail="collapsed"] #module-rail .rail-body { padding-left: 0.375rem; padding-right: 0.375rem; }
+  html[data-rail="collapsed"] #module-rail .rail-header { justify-content: center; margin-bottom: 0.75rem; }
+  html[data-rail="collapsed"] #module-rail .rail-title-box,
   html[data-rail="collapsed"] #module-rail .rail-search,
   html[data-rail="collapsed"] #module-rail .rail-group,
   html[data-rail="collapsed"] #module-rail .rail-empty,
@@ -219,9 +220,16 @@
   </script>
   <aside id="module-rail" class="relative shrink-0 bg-white border-r border-line shadow-sm z-20">
     <div class="rail-body h-full overflow-y-auto overflow-x-hidden px-4 py-5">
-      <div class="rail-header mb-4">
-        <h2 class="text-base font-bold text-ink whitespace-nowrap">Módulos</h2>
-        <p class="text-xs text-ink/50 mt-1">Arrastra un módulo al lienzo.</p>
+      <div class="rail-header flex items-center justify-between gap-2 mb-4">
+        <div class="rail-title-box min-w-0">
+          <h2 class="text-base font-bold text-ink whitespace-nowrap">Módulos</h2>
+          <p class="text-xs text-ink/50 mt-0.5 leading-tight">Arrastra un módulo al lienzo.</p>
+        </div>
+        <button id="rail-toggle" type="button" aria-controls="module-rail" aria-expanded="true"
+                aria-label="Contraer panel" title="Contraer panel"
+                class="shrink-0 w-8 h-8 rounded-md bg-paper hover:bg-line/60 border border-line text-ink/60 hover:text-ink flex items-center justify-center cursor-pointer transition-colors shadow-2xs">
+          <i class="rail-chevron ti ti-chevron-left text-sm" aria-hidden="true"></i>
+        </button>
       </div>
 
       <label class="rail-search relative block mb-4">
@@ -233,12 +241,6 @@
 
       <div id="sidebar-components"></div>
     </div>
-
-    <button id="rail-toggle" type="button" aria-controls="module-rail" aria-expanded="true"
-            aria-label="Contraer panel" title="Contraer panel"
-            class="absolute top-5 -right-[11px] z-20 w-[22px] h-[22px] rounded-full bg-white border border-line shadow-sm text-ink/60 hover:text-ink flex items-center justify-center cursor-pointer">
-      <i class="rail-chevron ti ti-chevron-left text-xs" aria-hidden="true"></i>
-    </button>
   </aside>
 
   <main id="board-main" class="bg-dot-grid relative flex-1 min-w-0 min-h-0 overflow-hidden">

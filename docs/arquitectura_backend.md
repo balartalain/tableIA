@@ -244,24 +244,6 @@ Semántica de `position` (documentada en el `help_text`): `x` = columna inicial 
   (el widget queda en BD pero el render devuelve un error legible).
 - `Meta`: `ordering = ["created_at"]`.
 
-### 4.2b `ActivityLog` (`models.py`)
-
-Registro de actividad de un tablero: la base del tab **«Actividad»** de la home (§12). Una fila
-por evento; la escribe `services/activity.py`.
-
-| Campo | Tipo | Restricciones / notas |
-|---|---|---|
-| `dashboard` | `FK → Dashboard` | `related_name="activity_logs"`, CASCADE |
-| `created_at` | `DateTimeField(auto_now_add=True)` | |
-| `category` | `CharField(10)` | `email` \| `ai` \| `sheets` \| `system` |
-| `level` | `CharField(10)` | `info` \| `warning` \| `error` |
-| `message` | `TextField` | |
-| `data` | `JSONField` | Contexto del evento; reservado para el prompt/respuesta de la IA |
-| `widget_id` / `source_id` | `PositiveIntegerField(null=True)` | Enlace opcional al widget/fuente |
-
-- `Meta`: `ordering = ["-id"]`, índice `(dashboard, -created_at)`.
-- Al escribir se podan los más viejos (`MAX_PER_DASHBOARD = 500` por tablero).
-
 ### 4.3 Migraciones relevantes
 
 | Migración | Qué hizo |
@@ -270,7 +252,6 @@ por evento; la escribe `services/activity.py`.
 | `0004_rename_table_to_dynamic_table` | `table` → `dynamic_table` |
 | `0006_data_spec_own_keys` | `data_spec` con claves propias |
 | `0007_remove_widget_data_spec_remove_widget_view_spec_and_more` | **Fin del contrato viejo**: borra `data_spec`/`view_spec`, deja `fields` + `style` |
-| `0028_activitylog` | Crea `ActivityLog` (tab «Actividad» de la home) |
 
 ---
 
@@ -1109,30 +1090,3 @@ inventar posiciones para respuestas que no tienen un orden definido.
 ## 11. Envío de correos
 
 El envío de correos está documentado en [`configuracion_correos.md`](configuracion_correos.md).
-
-Cada evento de la bitácora del envío (`EmailLog`) se duplica como `ActivityLog` (categoría
-`email`) desde `services/mailing.py::_log`, para el tab «Actividad» de la home.
-
----
-
-## 12. Actividad (`services/activity.py`, `ActivityLog`)
-
-El tab **«Actividad»** de la home (`home.html`, sección `#actividad`) muestra dos cosas: el
-**trabajo recurrente** del usuario y el **registro de eventos** de sus tableros.
-
-- **`log_event(dashboard, category, message, level, data, widget_id, source_id)`**: único punto
-  de escritura de `ActivityLog`; poda los eventos más viejos por tablero.
-- **`scheduled_summary(user)`** (declarativo + estado dinámico):
-  - *Análisis de IA de las tarjetas*: a demanda, caché de 7 días.
-  - *Envío de correos* (por campaña activada): cron `*/5 * * * *` con la frecuencia/hora de la
-    campaña y su estado (`mailing.report_summary`).
-  - *Refresco de datos* (por fuente): manual («Actualizar datos»), con su último `fetched_at`.
-- **`recent_events(user, page, size)`**: página de eventos de todos los tableros del dueño.
-
-Endpoint (solo el dueño):
-
-| Endpoint | Qué hace |
-|---|---|
-| `GET /api/activity/?page=&size=` | `{tasks, rows, total_rows, last_page}`: trabajos programados y eventos del usuario (`views.activity_feed`) |
-
-El **prompt y la respuesta de la IA** se guardarán en `ActivityLog.data` en una fase posterior.

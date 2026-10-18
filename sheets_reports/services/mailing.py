@@ -24,7 +24,7 @@ from django.db.models import Count, Max, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
-from sheets_reports.models import ActivityLog, EmailCampaign, EmailLog, EmailRecipient
+from sheets_reports.models import EmailCampaign, EmailLog, EmailRecipient
 
 # Intentos por destinatario antes de darlo por fallido.
 MAX_ATTEMPTS = 3
@@ -168,14 +168,6 @@ def _connection(sender):
 def _log(campaign, message: str, level: str = EmailLog.INFO, recipient: str = "", sender: str = "") -> None:
     EmailLog.objects.create(campaign=campaign, level=level, message=message,
                             recipient_email=recipient, sender_email=sender)
-    # Además de la bitácora del envío (que ve la vista compartida), el evento entra en la
-    # actividad del tablero para el tab «Actividad» de la home.
-    from sheets_reports.services import activity
-    activity.log_event(
-        campaign.dashboard, ActivityLog.EMAIL, message,
-        level=ActivityLog.ERROR if level == EmailLog.ERROR else ActivityLog.INFO,
-        data={"recipient_email": recipient, "sender_email": sender} if (recipient or sender) else None,
-    )
 
 
 def _send_group(campaign: EmailCampaign, sender, group: list, now: datetime | None = None) -> tuple[int, list, bool]:

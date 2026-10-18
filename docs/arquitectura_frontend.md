@@ -22,7 +22,7 @@ templates/
     _<tipo>_config.html       # Panel de cada tipo: «Configurar» + «Personalizar» (7 partials)
     blocks/                   # Piezas compartidas que incluyen los paneles (ver «Drawer de edición»)
   board_view.html             # Vista compartida (read-only)
-  home.html                   # Lista de tableros (Alpine component local); secciones Recientes, Plantillas y Actividad
+  home.html                   # Lista de tableros (Alpine component local)
   sheets_reports/
     source_manager.html       # Gestor de fuentes del tablero (bottom sheet)
     source_picker.html        # Selector de hoja → pestaña → columnas (crear, agregar, editar, cambiar hoja)
@@ -602,13 +602,6 @@ La excepción es la tabla de columnas de la fuente (`source_picker.html`): sus s
 ## Envío de correos
 
 El envío de correos está documentado en [`configuracion_correos.md`](configuracion_correos.md).
-
-## Actividad (home)
-
-La home (`home.html`, componente `homeApp()`) tiene la sección **«Actividad»** (`#actividad`),
-junto a Recientes y Plantillas. Se carga al entrar (como Plantillas) con
-`GET /api/activity/` y muestra las **tarjetas de trabajos programados** (`tasks`) y el
-**registro de eventos** (`rows`, paginado). Solo aparecen los tableros del usuario.
 
 ## apiUrl y despliegue
 

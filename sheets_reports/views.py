@@ -363,24 +363,6 @@ def home(request):
     return render(request, "home.html", {"dashboards": dashboards})
 
 
-@login_required
-def activity_feed(request):
-    """Actividad del sistema para el tab «Actividad» de la home: el trabajo recurrente
-    (correos, refresco de fuentes, análisis IA) y los eventos de todos los tableros del usuario.
-    GET ?page=1&size=50."""
-    from sheets_reports.services import activity
-
-    def positive(name: str, default: int) -> int:
-        try:
-            return max(int(request.GET.get(name) or default), 1)
-        except ValueError:
-            return default
-
-    page = positive("page", 1)
-    size = min(positive("size", 50), 200)
-    return JsonResponse(activity.feed(_get_user(request), page=page, size=size))
-
-
 def _get_user(request):
     """El usuario de la sesión o, sin login, el superusuario (la app todavía no tiene login
     propio). Misma regla que `google_auth.services.current_app_user`."""

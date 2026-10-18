@@ -16,7 +16,6 @@ urlpatterns = [
     path('tableros/<int:dashboard_id>/view/', views.board_view, name='board_view'),
     # La ruta anterior: los enlaces ya compartidos siguen llegando a la vista.
     path('tableros/<int:dashboard_id>/shared/', RedirectView.as_view(pattern_name='board_view', permanent=True)),
-    path('api/activity/', views.activity_feed, name='activity_feed'),
     path('api/dashboards/', views.dashboard_list, name='dashboard_list'),
     path('api/dashboards/<int:dashboard_id>/', views.dashboard_detail, name='dashboard_detail'),
     path('api/dashboards/<int:dashboard_id>/duplicate/', views.dashboard_duplicate, name='dashboard_duplicate'),

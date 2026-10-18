@@ -151,81 +151,6 @@
       </div>
     </section>
 
-    <!-- Actividad -->
-    <section x-show="section === 'actividad'" x-cloak>
-      <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
-        <div>
-          <h1 class="font-sans text-2xl font-semibold">Actividad</h1>
-          <p class="text-sm text-ink/60 mt-1">Qué ejecuta el sistema, cada cuánto, y qué ha ido pasando en tus tableros.</p>
-        </div>
-        <button type="button" @click="loadActivity(activity.page)" :disabled="activity.loading"
-                class="text-sm font-medium text-ink/70 hover:text-ink bg-white border border-line hover:bg-paper rounded-md px-3 py-2 transition inline-flex items-center gap-1.5 disabled:opacity-50">
-          <i class="ti ti-refresh text-base" :class="activity.loading && 'animate-spin'" aria-hidden="true"></i>Actualizar
-        </button>
-      </div>
-
-      <div x-show="activity.error" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3" x-text="activity.error"></div>
-
-      <div x-show="activity.loading && !activity.loaded" class="text-center py-20 bg-white border border-line rounded">
-        <i class="ti ti-loader-2 text-moss-600 text-3xl animate-spin mx-auto mb-2" aria-hidden="true"></i>
-        <p class="text-sm text-ink/60">Cargando actividad…</p>
-      </div>
-
-      <div x-show="activity.loaded">
-        <!-- Trabajos programados -->
-        <h2 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50 mb-3">Trabajos programados</h2>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          <template x-for="task in activity.tasks" :key="task.id">
-            <div class="bg-white border border-line rounded p-4 flex flex-col gap-2">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="text-sm font-semibold text-ink" x-text="task.label"></h3>
-                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
-                      :class="levelBadge(task.level)" x-text="task.state_label"></span>
-              </div>
-              <p class="text-xs text-ink/60 inline-flex items-center gap-1.5">
-                <i class="ti ti-clock text-sm" aria-hidden="true"></i><span x-text="task.interval"></span>
-              </p>
-              <p class="text-xs text-ink/50 leading-relaxed" x-text="task.detail"></p>
-              <p class="text-[11px] text-ink/40 mt-auto pt-1 space-x-1">
-                <span x-show="task.last_run">Última: <span x-text="task.last_run ? timeAgo(task.last_run) : ''"></span></span>
-                <span x-show="task.next_run">· Próxima: <span x-text="task.next_run ? new Date(task.next_run).toLocaleString('es') : ''"></span></span>
-              </p>
-            </div>
-          </template>
-        </div>
-
-        <!-- Registro de actividad -->
-        <div class="flex items-center justify-between gap-3 mb-3">
-          <h2 class="text-[11px] font-semibold uppercase tracking-wider text-ink/50">Registro de actividad</h2>
-          <span class="text-xs text-ink/50" x-text="`${activity.totalRows} eventos`"></span>
-        </div>
-        <div x-show="activity.rows.length === 0" class="text-center py-12 bg-white border border-line rounded text-sm text-ink/50">
-          Todavía no hay actividad registrada.
-        </div>
-        <div x-show="activity.rows.length > 0" class="bg-white border border-line rounded divide-y divide-line overflow-hidden">
-          <template x-for="row in activity.rows" :key="row.id">
-            <div class="px-4 py-3 flex items-start gap-3">
-              <i class="ti text-base mt-0.5" :class="`${categoryIcon(row.category)} ${levelIcon(row.level)}`" aria-hidden="true"></i>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm text-ink break-words" x-text="row.message"></p>
-                <p class="text-[11px] text-ink/40 mt-0.5">
-                  <a :href="boardUrl({ id: row.dashboard_id })" class="hover:text-moss-600" x-text="row.dashboard"></a>
-                  · <span x-text="timeAgo(row.created_at)"></span>
-                </p>
-              </div>
-            </div>
-          </template>
-        </div>
-        <div x-show="activity.lastPage > 1" class="flex items-center justify-between mt-4">
-          <button type="button" @click="loadActivity(activity.page - 1)" :disabled="activity.page <= 1"
-                  class="text-sm font-medium text-ink/70 hover:text-ink border border-line rounded-md px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed transition">Anterior</button>
-          <span class="text-xs text-ink/50" x-text="`Página ${activity.page} de ${activity.lastPage}`"></span>
-          <button type="button" @click="loadActivity(activity.page + 1)" :disabled="activity.page >= activity.lastPage"
-                  class="text-sm font-medium text-ink/70 hover:text-ink border border-line rounded-md px-3 py-1.5 disabled:opacity-40 disabled:cursor-not-allowed transition">Siguiente</button>
-        </div>
-      </div>
-    </section>
-
   </main>
 
   <!-- Renombrar -->
@@ -282,7 +207,6 @@
       menu: [
         { id: 'recientes', label: 'Recientes', icon: 'ti-clock' },
         { id: 'plantillas', label: 'Plantillas', icon: 'ti-template' },
-        { id: 'actividad', label: 'Actividad', icon: 'ti-history' },
       ],
       section: 'recientes',
       search: '',
@@ -295,7 +219,6 @@
       templatesLoaded: false,
       templatesLoading: false,
       templatesError: '',
-      activity: { loaded: false, loading: false, error: '', tasks: [], rows: [], page: 1, lastPage: 1, totalRows: 0 },
 
       async init() {
         this.syncSection();
@@ -326,9 +249,6 @@
         if (this.section === 'plantillas' && !this.templatesLoaded) {
           await this.loadTemplates();
         }
-        if (this.section === 'actividad' && !this.activity.loaded) {
-          await this.loadActivity(1);
-        }
       },
 
       async loadTemplates() {
@@ -352,55 +272,6 @@
 
       templateViewUrl(t) {
         return apiUrl(`/tableros/${t.id}/view/`);
-      },
-
-      // Actividad: trabajos programados + registro de eventos de todos los tableros del usuario.
-      async loadActivity(page = 1) {
-        this.activity.loading = true;
-        this.activity.error = '';
-        try {
-          const r = await fetch(apiUrl(`/api/activity/?page=${page}&size=50`));
-          const data = await r.json().catch(() => null);
-          if (!r.ok || !data) {
-            this.activity.error = (data && data.error) || 'No se pudo cargar la actividad.';
-            return;
-          }
-          this.activity.tasks = data.tasks || [];
-          this.activity.rows = data.rows || [];
-          this.activity.page = page;
-          this.activity.lastPage = data.last_page || 1;
-          this.activity.totalRows = data.total_rows || 0;
-          this.activity.loaded = true;
-        } catch (e) {
-          this.activity.error = 'No se pudo conectar con el servidor.';
-        } finally {
-          this.activity.loading = false;
-        }
-      },
-
-      levelBadge(level) {
-        return {
-          info: 'bg-moss-50 text-moss-700',
-          warning: 'bg-amber-50 text-amber-700',
-          error: 'bg-red-50 text-red-700',
-        }[level] || 'bg-paper text-ink/60';
-      },
-
-      levelIcon(level) {
-        return {
-          info: 'text-moss-600',
-          warning: 'text-amber-600',
-          error: 'text-red-600',
-        }[level] || 'text-ink/40';
-      },
-
-      categoryIcon(category) {
-        return {
-          email: 'ti-mail',
-          ai: 'ti-sparkles',
-          sheets: 'ti-table',
-          system: 'ti-settings',
-        }[category] || 'ti-point';
       },
 
       async deleteTemplate(id) {

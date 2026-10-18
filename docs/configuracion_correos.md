@@ -105,7 +105,7 @@ del correo:
 
 1. En la cuenta de Google, activar la verificación en dos pasos.
 2. Entrar a <https://myaccount.google.com/apppasswords>, crear una contraseña de aplicación
-   y copiar las 16 letras. alain.perez@uapa.edu.do => dwpn vhng yuma ffal
+   y copiar las 16 letras. alainperez@uapa.edu.do => dwpn vhng yuma ffal
 3. Pegarla en el tablero junto al correo del remitente (con o sin espacios).
 
 La contraseña se guarda cifrada y no vuelve al navegador: el campo aparece vacío, y solo se

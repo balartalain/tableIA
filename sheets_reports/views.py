@@ -5,7 +5,9 @@ import re
 import uuid
 from typing import Any
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import RequestDataTooBig
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -371,7 +373,13 @@ def _get_user(request):
 
 def _json_body(request) -> dict:
     try:
-        data = json.loads(request.body) if request.body else {}
+        raw = request.body
+    except RequestDataTooBig:
+        limit = settings.DATA_UPLOAD_MAX_MEMORY_SIZE
+        shown = f"{limit // (1024 * 1024)} MB" if limit >= 1024 * 1024 else f"{limit} bytes"
+        raise ValueError(f"El contenido enviado es demasiado grande (máximo {shown}).")
+    try:
+        data = json.loads(raw) if raw else {}
     except json.JSONDecodeError:
         raise ValueError("JSON inválido")
     if not isinstance(data, dict):

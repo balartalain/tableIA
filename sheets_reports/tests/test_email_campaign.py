@@ -333,6 +333,12 @@ class CampaignEndpointsTests(TestCase):
         self.assertEqual(self.put(body="<p><br></p>").json()["body"], "")
         self.assertIn("cuerpo", self.put(enabled=True, body="<p><br></p>").json()["error"])
 
+    def test_un_cuerpo_demasiado_grande_lo_avisa(self):
+        with override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=100):
+            r = self.put(body="x" * 500)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("demasiado grande", r.json()["error"])
+
     def test_valida_lo_que_llega(self):
         for changes in ({"send_time": "25:00"}, {"daily_limit": 0}, {"batch_size": 0}, {"frequency": "mensual"},
                         {"frequency": "weekly", "weekdays": []}, {"weekdays": [9]},

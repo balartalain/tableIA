@@ -130,7 +130,8 @@ remitentes se puede subir el máximo diario.
 El correo se envía en **HTML** y, además, con una versión en texto plano para los clientes
 que no muestran HTML (se genera quitando las etiquetas). Las **imágenes van incrustadas en
 base64** dentro del propio mensaje: no hace falta alojarlas, pero engordan el correo (el tope
-por imagen es 300 KB y `DATA_UPLOAD_MAX_MEMORY_SIZE` > 2.5 MB, ver §1). Gmail las muestra;
+por imagen es 300 KB y `DATA_UPLOAD_MAX_MEMORY_SIZE` > 2.5 MB, ver §1; si el mensaje entero
+supera ese tope, al guardar avisa de que es demasiado grande). Gmail las muestra;
 algunos clientes de escritorio (Outlook) pueden no hacerlo. Al guardar, el servidor **sanea**
 el HTML: solo se conservan las etiquetas del editor (script, estilos y atributos peligrosos
 se eliminan) y los enlaces se abren en otra pestaña.

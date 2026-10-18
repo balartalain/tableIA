@@ -40,12 +40,20 @@
       const container = this.getContentContainer();
       container.innerHTML = '';
       container.style.backgroundColor = '#fff';
-      // Ocupa todo el alto bajo el título: la tabla arranca arriba aunque tenga pocas filas.
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
       container.style.flex = '1 1 0%';
+      container.style.height = '100%';
+      container.style.minHeight = '0';
+      container.style.overflow = 'hidden';
       container.classList.remove('tb-pivot');
-      // La tabla va en un hijo con alto máximo = el del contenedor: mide lo que sus filas (el
-      // pie queda pegado a la última) y solo con muchas llega al fondo y hace scroll.
+
       const host = document.createElement('div');
+      host.className = 'w-full h-full min-h-0 flex flex-col overflow-hidden';
+      host.style.width = '100%';
+      host.style.height = '100%';
+      host.style.flex = '1 1 0%';
+      host.style.minHeight = '0';
       container.appendChild(host);
 
       const formats = this.constructor.formats;
@@ -62,7 +70,8 @@
         return result;
       });
       const rows = payload.rows || [];
-      this._table = new Tabulator(host, {
+      const TableClass = window.CustomTable || Tabulator;
+      this._table = new TableClass(host, {
         data: rows,
         nestedFieldSeparator: false,
         movableColumns: true,

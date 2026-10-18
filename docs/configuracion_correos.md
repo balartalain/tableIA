@@ -12,6 +12,7 @@ secciones 6 y 7, el detalle técnico.
 | Variable | Por defecto | Para qué |
 |---|---|---|
 | `CAMPAIGN_TIME_ZONE` | `America/Santo_Domingo` | Zona horaria de la hora de envío que se elige en el tablero. |
+| `CAMPAIGN_CRON_MINUTES` | `5` | Cada cuánto despierta el cron; debe coincidir con el intervalo del crontab. La interfaz avisa de las horas de envío que casi no alcanzan a correr. |
 | `EMAIL_ENCRYPTION_KEY` | vacía | Clave con la que se cifran las contraseñas de los remitentes. Vacía, se deriva de `SECRET_KEY` (cambiar `SECRET_KEY` obligaría a escribirlas de nuevo). |
 | `CAMPAIGN_SMTP_HOST` | `smtp.gmail.com` | Servidor SMTP de los remitentes. |
 | `CAMPAIGN_SMTP_PORT` | `587` | Puerto SMTP (TLS). |
@@ -40,6 +41,10 @@ El envío lo arranca el crontab; nada se envía desde la web salvo «Enviar prue
 El cron solo **dispara** el envío cuando llega la hora: su frecuencia es cuánto puede
 atrasarse el arranque, no el ritmo de los correos. El comando puede durar varios minutos
 (ver §4); una pasada que encuentra un envío en curso no hace nada.
+
+El intervalo del crontab debe coincidir con `CAMPAIGN_CRON_MINUTES` (arriba). Con él, la
+interfaz avisa cuando la hora de envío cae en la última franja de ticks antes de medianoche
+(p. ej. 23:56–23:59 con 5 minutos), donde un tick puede no alcanzarla y el envío no arranca.
 
 Para probar a mano:
 

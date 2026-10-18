@@ -53,6 +53,11 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 | `tests/test_column_scales.py` | Escala de medida de las columnas: reglas de detección (escalas conocidas, «No aplica» como categoría válida, identificadores, discreta y continua), la guardada en la fuente manda, el PUT de escalas con su validación y «Clasificar con IA» (modelo simulado). |
 | `tests/test_views.py` | Las vistas como adaptadores HTTP: render, guardar widgets, asistente de IA, tableros. |
 
+### Tareas en segundo plano
+| Archivo | Qué prueba |
+|---|---|
+| `tests/test_tasks.py` | Las corridas del cron (`TaskRun`): registro con estado y duración, el mensaje de error que se relanza, la poda de las viejas y el registro que deja `send_campaign_emails`. |
+
 ### IA
 | Archivo | Qué prueba |
 |---|---|

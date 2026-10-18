@@ -228,6 +228,10 @@ CAMPAIGN_SMTP_HOST = config("CAMPAIGN_SMTP_HOST", default="smtp.gmail.com")
 CAMPAIGN_SMTP_PORT = config("CAMPAIGN_SMTP_PORT", default=587, cast=int)
 # Clave con la que se cifran las contraseñas de los remitentes; vacía, se deriva de SECRET_KEY.
 EMAIL_ENCRYPTION_KEY = config("EMAIL_ENCRYPTION_KEY", default="")
+# Cada cuánto "despierta" el cron (min). La UI avisa si la hora de envío cae en la última
+# franja antes de medianoche, donde puede no alcanzar a correr un tick. Debe coincidir con
+# el intervalo instalado en el crontab (ver docs/configuracion_correos.md).
+CAMPAIGN_CRON_MINUTES = config("CAMPAIGN_CRON_MINUTES", default=5, cast=int)
 
 # Configuración para GUNICON - APACHE
 USE_X_FORWARDED_HOST = True

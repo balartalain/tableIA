@@ -1,5 +1,8 @@
+from contextlib import contextmanager
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 def default_position():
@@ -252,3 +255,69 @@ class EmailLog(models.Model):
 
     def __str__(self):
         return self.message[:80]
+
+
+class TaskRun(models.Model):
+    """Una fila por corrida de una tarea de cron. La escribe la propia tarea con `record(...)`
+    (ver send_campaign_emails): sirve para comprobar que el cron corre, a qué hora y cuánto
+    tardó. Solo se conservan las últimas `KEEP` corridas de cada etiqueta."""
+    RUNNING = "running"
+    OK = "ok"
+    ERROR = "error"
+    STATUS_CHOICES = [(RUNNING, "En curso"), (OK, "Correcto"), (ERROR, "Error")]
+
+    # Cuántas corridas se conservan por etiqueta; al terminar cada una se podan las viejas.
+    KEEP = 5
+
+    label = models.CharField(max_length=120, help_text="Nombre de la tarea, lo pone la función.")
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=RUNNING)
+    detail = models.TextField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Corrida de tarea"
+        verbose_name_plural = "Corridas de tareas"
+        ordering = ["-started_at"]
+        indexes = [models.Index(fields=["label", "-started_at"])]
+
+    def __str__(self):
+        return f"{self.label} · {self.started_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def duration(self):
+        if self.started_at and self.finished_at:
+            return self.finished_at - self.started_at
+        return None
+
+    @classmethod
+    @contextmanager
+    def record(cls, label: str):
+        """Envuelve la corrida de una tarea: crea la fila al entrar, y al salir fija el fin y el
+        estado (`ok`, o `error` con el mensaje de la excepción, que se relanza) y poda las viejas.
+
+            with TaskRun.record("Envío de correos") as run:
+                ...
+                run.detail = "12 enviados, 0 con error, 5 pendientes"
+        """
+        run = cls.objects.create(label=label, started_at=timezone.now(), status=cls.RUNNING)
+        try:
+            yield run
+        except Exception as exc:  # noqa: BLE001 - queda registrado y se relanza
+            run.finished_at = timezone.now()
+            run.status = cls.ERROR
+            run.detail = f"{type(exc).__name__}: {exc}"
+            run.save(update_fields=["finished_at", "status", "detail"])
+            cls._prune(label)
+            raise
+        run.finished_at = timezone.now()
+        run.status = cls.OK
+        run.save(update_fields=["finished_at", "status", "detail"])
+        cls._prune(label)
+
+    @classmethod
+    def _prune(cls, label: str) -> None:
+        """Deja solo las últimas `KEEP` corridas de la etiqueta."""
+        keep = list(cls.objects.filter(label=label).order_by("-started_at")
+                    .values_list("id", flat=True)[:cls.KEEP])
+        cls.objects.filter(label=label).exclude(id__in=keep).delete()

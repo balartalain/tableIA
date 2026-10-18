@@ -271,6 +271,11 @@ class CampaignEndpointsTests(TestCase):
         self.assertEqual((data["enabled"], data["senders"], data["report"]["total"]), (False, [], 0))
         self.assertFalse(EmailCampaign.objects.exists())
 
+    def test_la_franja_de_riesgo_del_cron_viene_en_la_config(self):
+        self.assertEqual(self.client.get(self.url).json()["cron_minutes"], 5)
+        with override_settings(CAMPAIGN_CRON_MINUTES=10):
+            self.assertEqual(self.client.get(self.url).json()["cron_minutes"], 10)
+
     def test_la_contrasena_se_cifra_y_nunca_sale(self):
         r = self.put()
         self.assertEqual(r.status_code, 200, r.content)

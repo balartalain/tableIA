@@ -109,6 +109,12 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
                  class="border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
         </label>
       </div>
+      <p x-show="riskySendTime" x-cloak role="status"
+         class="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-start gap-1.5">
+        <i class="ti ti-alert-triangle text-base text-amber-600 shrink-0" aria-hidden="true"></i>
+        <span>No se recomienda una hora tan cercana a medianoche: con el cron actual puede no
+          ejecutarse. Elige una hora anterior a <span class="font-semibold" x-text="riskyFromLabel"></span>.</span>
+      </p>
       <div x-show="form.frequency === 'weekly'" class="flex flex-wrap gap-1.5" role="group" aria-label="Días de envío">
         <template x-for="d in WEEKDAYS" :key="d.value">
           <button type="button" x-on:click="toggleDay(d.value)" x-text="d.label" x-bind:aria-pressed="form.weekdays.includes(d.value)"

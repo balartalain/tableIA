@@ -3,6 +3,7 @@ La configuración es del dueño del tablero (editor); el reporte es de solo lect
 vista compartida, como `dashboard_render`."""
 from datetime import time
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.http import JsonResponse
@@ -45,6 +46,9 @@ def _serialize_campaign(campaign: EmailCampaign) -> dict:
         "report": mailing.report_summary(campaign) if saved else
                   {"total": 0, "sent": 0, "pending": 0, "failed": 0, "last_log_id": 0, "next_run": None},
         "time_zone": mailing.local_now().tzinfo.key,
+        # Cada cuánto despierta el cron (min): la UI lo usa para avisar de las horas que casi
+        # no alcanzan a correr (última franja antes de medianoche).
+        "cron_minutes": settings.CAMPAIGN_CRON_MINUTES,
     }
 
 

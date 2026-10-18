@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from sheets_reports.models import (
-    Dashboard, DataSource, EmailCampaign, EmailLog, EmailRecipient, EmailSender, Widget,
+    Dashboard, DataSource, EmailCampaign, EmailLog, EmailRecipient, EmailSender, TaskRun, Widget,
 )
 
 
@@ -78,3 +78,27 @@ class EmailLogAdmin(admin.ModelAdmin):
     list_display = ["created_at", "campaign", "level", "message", "recipient_email", "sender_email"]
     list_filter = ["level"]
     search_fields = ["message", "recipient_email"]
+
+
+@admin.register(TaskRun)
+class TaskRunAdmin(admin.ModelAdmin):
+    list_display = ["label", "started_at", "duration", "status_display", "detail"]
+    list_filter = ["label", "status"]
+    readonly_fields = ["label", "started_at", "finished_at", "status", "detail", "duration"]
+
+    @admin.display(description="Duración")
+    def duration(self, obj):
+        return obj.duration or "—"
+
+    @admin.display(description="Estado", ordering="status")
+    def status_display(self, obj):
+        return obj.get_status_display()
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

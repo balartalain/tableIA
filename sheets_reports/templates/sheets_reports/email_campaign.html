@@ -137,11 +137,13 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
         <input type="text" maxlength="255" x-model="form.subject"
                class="w-full border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">
       </label>
-      <label class="block">
+      <div>
         <span class="block text-[11px] font-semibold text-ink/60 mb-1">Cuerpo</span>
-        <textarea rows="7" x-model="form.body"
-                  class="w-full border border-line rounded-md px-3 py-2 text-sm focus:border-moss-500 focus:outline-none"></textarea>
-      </label>
+        <p class="text-xs text-ink/50 mb-1.5">Admite negrita, cursiva, listas, enlaces e imágenes (hasta 300 KB cada una).</p>
+        <div class="email-editor rounded-md">
+          <div x-ref="bodyEditor"></div>
+        </div>
+      </div>
       <div class="flex flex-wrap items-center gap-2">
         <input type="email" x-model="testTo" placeholder="Correo para la prueba" aria-label="Correo para la prueba"
                class="flex-1 min-w-[12rem] border border-line rounded-md px-3 py-1.5 text-sm focus:border-moss-500 focus:outline-none">

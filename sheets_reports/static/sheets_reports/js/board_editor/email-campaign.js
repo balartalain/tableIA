@@ -8,7 +8,15 @@ const EMAIL_WEEKDAYS = [
   { value: 6, label: 'Dom' },
 ];
 
+// Tope por imagen del mensaje: van incrustadas en base64 dentro del cuerpo (PUT JSON).
+const EMAIL_BODY_IMAGE_BYTES = 300 * 1024;
+
 function emailCampaign() {
+  // Fuera de la reactividad de Alpine: la instancia de Quill y el input de archivo no son datos.
+  let quill = null;
+  let imageInput = null;
+  let syncing = false;
+
   return {
     WEEKDAYS: EMAIL_WEEKDAYS,
     loading: false,
@@ -31,6 +39,76 @@ function emailCampaign() {
 
     init() {
       window.addEventListener('email-campaign:open', () => this.load());
+      this.$nextTick(() => this.initBodyEditor());
+    },
+
+    // Editor del mensaje (Quill): arranca una sola vez y vuelca su HTML a form.body.
+    initBodyEditor() {
+      if (quill || !this.$refs.bodyEditor) return;
+      if (typeof Quill === 'undefined') {
+        showToast('No se pudo cargar el editor del mensaje.');
+        return;
+      }
+      quill = new Quill(this.$refs.bodyEditor, {
+        theme: 'snow',
+        placeholder: 'Escribe el mensaje…',
+        modules: {
+          toolbar: {
+            container: [
+              ['bold', 'italic', 'underline', 'strike'],
+              [{ header: [false, 1, 2, 3] }],
+              [{ list: 'ordered' }, { list: 'bullet' }],
+              ['blockquote', 'link', 'image'],
+              ['clean'],
+            ],
+            handlers: { image: () => this.pickBodyImage() },
+          },
+        },
+        formats: ['bold', 'italic', 'underline', 'strike', 'header', 'list', 'blockquote', 'link', 'image'],
+      });
+      quill.on('text-change', () => {
+        if (syncing) return;
+        this.form.body = quill.getSemanticHTML();
+      });
+      this.setBody(this.form.body);
+    },
+
+    // Vuelca el HTML guardado dentro del editor sin que el editor lo devuelva a form.body.
+    setBody(html) {
+      if (!quill) return;
+      syncing = true;
+      if (html) quill.clipboard.dangerouslyPasteHTML(html);
+      else quill.setText('');
+      syncing = false;
+    },
+
+    // «Imagen» de la barra: abre un diálogo de archivo y la incrusta en base64.
+    pickBodyImage() {
+      if (!imageInput) {
+        imageInput = document.createElement('input');
+        imageInput.type = 'file';
+        imageInput.accept = 'image/*';
+        imageInput.style.display = 'none';
+        imageInput.addEventListener('change', () => this.insertBodyImage(imageInput.files[0]));
+        document.body.appendChild(imageInput);
+      }
+      imageInput.value = '';
+      imageInput.click();
+    },
+
+    insertBodyImage(file) {
+      if (!file || !quill) return;
+      if (file.size > EMAIL_BODY_IMAGE_BYTES) {
+        showToast(`La imagen pesa ${Math.round(file.size / 1024)} KB; el máximo es 300 KB.`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const range = quill.getSelection(true) || { index: quill.getLength() };
+        quill.insertEmbed(range.index, 'image', reader.result, 'user');
+        quill.setSelection(range.index + 1, 0, 'silent');
+      };
+      reader.readAsDataURL(file);
     },
 
     get url() {
@@ -52,6 +130,7 @@ function emailCampaign() {
       this.report = data.report;
       this.timeZone = data.time_zone || '';
       this.cronMinutes = data.cron_minutes || 5;
+      this.setBody(this.form.body);
     },
 
     async load() {

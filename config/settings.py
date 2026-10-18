@@ -232,6 +232,10 @@ EMAIL_ENCRYPTION_KEY = config("EMAIL_ENCRYPTION_KEY", default="")
 # franja antes de medianoche, donde puede no alcanzar a correr un tick. Debe coincidir con
 # el intervalo instalado en el crontab (ver docs/configuracion_correos.md).
 CAMPAIGN_CRON_MINUTES = config("CAMPAIGN_CRON_MINUTES", default=5, cast=int)
+# El mensaje se guarda con un PUT JSON y sus imágenes van embebidas en base64: el cuerpo del
+# formulario puede superar el límite por defecto (2.5 MB). `request.body` lo respeta.
+DATA_UPLOAD_MAX_MEMORY_SIZE = config("DATA_UPLOAD_MAX_MEMORY_SIZE",
+                                     default=3 * 1024 * 1024, cast=int)
 
 # Configuración para GUNICON - APACHE
 USE_X_FORWARDED_HOST = True

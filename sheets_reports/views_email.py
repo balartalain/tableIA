@@ -1,8 +1,10 @@
 """Vistas del envío de correos de un tablero: adaptadores HTTP sobre services/mailing.py.
 La configuración es del dueño del tablero (editor); el reporte es de solo lectura y lo usa la
 vista compartida, como `dashboard_render`."""
+import re
 from datetime import time
 
+import nh3
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -19,6 +21,23 @@ MAX_CSV_BYTES = 5 * 1024 * 1024
 MAX_INVALID_SHOWN = 20
 REPORT_PAGE_SIZE = 50
 REPORT_MAX_PAGE_SIZE = 200
+
+# El cuerpo es el HTML que escribe el editor (Quill): solo se permiten estas etiquetas y, en
+# las imágenes, el `src` en base64 (`data:`) o una URL normal. `link_rel` añade el `rel`.
+BODY_TAGS = {"p", "br", "strong", "em", "u", "s", "ol", "ul", "li", "a",
+             "h1", "h2", "h3", "blockquote", "img", "span"}
+BODY_ATTRIBUTES = {"a": {"href", "target"}, "img": {"src", "alt", "width", "height"}}
+BODY_URL_SCHEMES = {"http", "https", "mailto", "data"}
+_ANCHOR_RE = re.compile(r"<a\s(?![^>]*\btarget=)", re.IGNORECASE)
+
+
+def _clean_html(value) -> str:
+    """El HTML del mensaje, saneado (sin scripts ni atributos peligrosos) y con enlaces que
+    abren en otra pestaña. Vacío si no queda contenido visible, para no activar un envío en blanco."""
+    html = nh3.clean(str(value or ""), tags=BODY_TAGS, attributes=BODY_ATTRIBUTES,
+                     url_schemes=BODY_URL_SCHEMES, link_rel="noopener noreferrer")
+    html = _ANCHOR_RE.sub('<a target="_blank" ', html).strip()
+    return html if mailing.html_to_text(html) or re.search(r"(?i)<img\b", html) else ""
 
 
 def _campaign(dashboard) -> EmailCampaign:
@@ -100,7 +119,7 @@ def _clean_campaign(data: dict, campaign: EmailCampaign) -> tuple[dict, list[dic
     fields = {
         "enabled": bool(data.get("enabled")),
         "subject": str(data.get("subject") or "").strip()[:255],
-        "body": str(data.get("body") or "").strip(),
+        "body": _clean_html(data.get("body")),
         "daily_limit": limit,
         "batch_size": batch_size,
         "frequency": frequency,

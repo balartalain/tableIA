@@ -13,6 +13,7 @@ secciones 6 y 7, el detalle técnico.
 |---|---|---|
 | `CAMPAIGN_TIME_ZONE` | `America/Santo_Domingo` | Zona horaria de la hora de envío que se elige en el tablero. |
 | `CAMPAIGN_CRON_MINUTES` | `5` | Cada cuánto despierta el cron; debe coincidir con el intervalo del crontab. La interfaz avisa de las horas de envío que casi no alcanzan a correr. |
+| `DATA_UPLOAD_MAX_MEMORY_SIZE` | `3145728` (3 MB) | Tope del cuerpo de una petición que Django lee en memoria. El mensaje se guarda con un `PUT` JSON y lleva las imágenes incrustadas en base64, así que supera el valor por defecto de Django (2.5 MB). |
 | `EMAIL_ENCRYPTION_KEY` | vacía | Clave con la que se cifran las contraseñas de los remitentes. Vacía, se deriva de `SECRET_KEY` (cambiar `SECRET_KEY` obligaría a escribirlas de nuevo). |
 | `CAMPAIGN_SMTP_HOST` | `smtp.gmail.com` | Servidor SMTP de los remitentes. |
 | `CAMPAIGN_SMTP_PORT` | `587` | Puerto SMTP (TLS). |
@@ -122,9 +123,17 @@ remitentes se puede subir el máximo diario.
 | **Tamaño del lote por remitente** | Cuántos correos envía cada remitente en cada lote. |
 | **Frecuencia** | Todos los días, o los días de la semana que se marquen. |
 | **Hora** | Hora a la que arranca el envío, en `CAMPAIGN_TIME_ZONE`. |
-| **Asunto y cuerpo** | El mensaje, en texto plano. |
+| **Asunto y cuerpo** | El asunto en texto plano y el cuerpo con un editor enriquecido (negrita, cursiva, listas, enlaces e imágenes). |
 | **Enviar prueba** | Guarda lo escrito y envía el mensaje a una dirección, con el primer remitente. |
 | **Activar el envío** | Exige asunto, cuerpo, al menos un remitente y destinatarios. Suma la pestaña «Seguimiento de correos» a la vista compartida. |
+
+El correo se envía en **HTML** y, además, con una versión en texto plano para los clientes
+que no muestran HTML (se genera quitando las etiquetas). Las **imágenes van incrustadas en
+base64** dentro del propio mensaje: no hace falta alojarlas, pero engordan el correo (el tope
+por imagen es 300 KB y `DATA_UPLOAD_MAX_MEMORY_SIZE` > 2.5 MB, ver §1). Gmail las muestra;
+algunos clientes de escritorio (Outlook) pueden no hacerlo. Al guardar, el servidor **sanea**
+el HTML: solo se conservan las etiquetas del editor (script, estilos y atributos peligrosos
+se eliminan) y los enlaces se abren en otra pestaña.
 
 ## 4. Cómo se envía
 
@@ -179,7 +188,7 @@ correos`).
 
 | Modelo | Qué guarda |
 |---|---|
-| `EmailCampaign` | Uno por tablero (`dashboard.email_campaign`): `enabled`, `subject`, `body`, `daily_limit` (máximo de correos al día), `batch_size` (correos por remitente en cada lote), `frequency` (`daily` \| `weekly`), `send_time`, `weekdays` (0 = lunes … 6 = domingo, solo en `weekly`), `last_run_on` (día local cerrado: ese día ya no se envía más) y `running_since` (hay un lote en curso). |
+| `EmailCampaign` | Uno por tablero (`dashboard.email_campaign`): `enabled`, `subject`, `body` (el mensaje, en HTML saneado), `daily_limit` (máximo de correos al día), `batch_size` (correos por remitente en cada lote), `frequency` (`daily` \| `weekly`), `send_time`, `weekdays` (0 = lunes … 6 = domingo, solo en `weekly`), `last_run_on` (día local cerrado: ese día ya no se envía más) y `running_since` (hay un lote en curso). |
 | `EmailSender` | Cuenta de Gmail que envía: `email` y `password_encrypted` (su contraseña de aplicación, cifrada). |
 | `EmailRecipient` | Destinatario: `email`, `status` (`pending` \| `sent` \| `failed`), `attempts`, `sent_at`, `sender_email` y `error`. |
 | `EmailLog` | Bitácora: `created_at`, `level` (`info` \| `error`), `message`, `recipient_email`, `sender_email`. |
@@ -214,6 +223,11 @@ correos`).
   5. Al terminar cierra el día (`last_run_on`). Si el proceso se corta a medias el día
      queda abierto: la siguiente pasada del cron retoma cuando el candado vence.
   6. Deja en `EmailLog` el inicio, cada lote, cada error y el resumen.
+- **Mensaje:** se envía en HTML (`EmailMultiAlternatives`) con su alternativa en texto plano
+  (`html_to_text`: quita las etiquetas y respeta los saltos de bloque). El HTML del cuerpo se
+  guarda saneado con `nh3` (allow-list en `views_email.BODY_TAGS`): sin `script`, sin atributos
+  de eventos y con los enlaces abriéndose en otra pestaña; se permite el `src` en `data:` para
+  las imágenes incrustadas en base64.
 - **`send_test(campaign, to)`**: el mensaje a una dirección, con el primer remitente.
 - **`report_summary(campaign)`** (lo que se consulta cada pocos segundos): `state`
   (`running`: hay un envío en curso · `done`: sin pendientes · `stopped`: el día se cerró
@@ -269,7 +283,9 @@ la configuración y la guarda entera con «Guardar»:
   navegador: el campo queda vacío y solo se envía si se escribe otra.
 - **Programación:** máximo de correos al día, tamaño del lote por remitente, frecuencia
   (todos los días o días de la semana) y hora. Muestra el próximo envío que calcula el servidor.
-- **Mensaje:** asunto y cuerpo. «Enviar prueba» guarda lo escrito y manda el mensaje a la
+- **Mensaje:** asunto y cuerpo, este último con un editor enriquecido (**Quill**, por CDN). La
+  barra permite negrita/cursiva, encabezados, listas, cita, enlaces e imágenes (se incrustan en
+  base64, hasta 300 KB cada una). «Enviar prueba» guarda lo escrito y manda el mensaje a la
   dirección indicada.
 - **Activar el envío:** el servidor lo rechaza si falta el mensaje, un remitente o los
   destinatarios.

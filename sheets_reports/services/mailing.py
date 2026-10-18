@@ -12,17 +12,19 @@ import io
 import re
 import smtplib
 from datetime import datetime, time, timedelta
+from html import unescape
 from time import sleep
 from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.mail import EmailMessage, get_connection
+from django.core.mail import EmailMultiAlternatives, get_connection
 from django.core.validators import validate_email
 from django.db.models import Count, Max, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
+from django.utils.html import strip_tags
 
 from sheets_reports.models import EmailCampaign, EmailLog, EmailRecipient
 
@@ -151,6 +153,29 @@ def next_run(campaign: EmailCampaign, now: datetime | None = None) -> datetime |
     return None
 
 
+# ------------------------------------------------------------------ mensaje
+# Cierres de bloque que en texto plano pasan a ser saltos de línea.
+_BLOCK_END_RE = re.compile(r"(?i)<\s*(?:br\s*/?|/p\s*|/div\s*|/li\s*|/h[1-6]\s*|/blockquote\s*)>")
+
+
+def html_to_text(html: str) -> str:
+    """El HTML de un mensaje → su alternativa en texto plano (clientes de correo sin HTML)."""
+    if not html:
+        return ""
+    text = _BLOCK_END_RE.sub("\n", html)
+    text = unescape(strip_tags(text))
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def _message(campaign: EmailCampaign, sender_email: str, to: list[str], connection) -> EmailMultiAlternatives:
+    """El mensaje de la campaña: HTML, con su alternativa en texto plano."""
+    message = EmailMultiAlternatives(campaign.subject, html_to_text(campaign.body),
+                                     from_email=sender_email, to=to, connection=connection)
+    message.attach_alternative(campaign.body, "text/html")
+    return message
+
+
 # ------------------------------------------------------------------- envío
 def _connection(sender):
     return get_connection(
@@ -183,8 +208,7 @@ def _send_group(campaign: EmailCampaign, sender, group: list, now: datetime | No
     try:
         for recipient in group:
             try:
-                EmailMessage(campaign.subject, campaign.body, from_email=sender.email,
-                             to=[recipient.email], connection=connection).send()
+                _message(campaign, sender.email, [recipient.email], connection).send()
             except SENDER_ERRORS as e:
                 _log(campaign, f"El remitente dejó de enviar: {e}", EmailLog.ERROR, sender=sender.email)
                 alive = False
@@ -299,8 +323,7 @@ def send_test(campaign: EmailCampaign, to: str) -> str:
         raise MailingError("Guarda al menos un remitente con su contraseña de aplicación.")
     try:
         connection = _connection(sender)
-        EmailMessage(campaign.subject, campaign.body, from_email=sender.email, to=[to],
-                     connection=connection).send()
+        _message(campaign, sender.email, [to], connection).send()
     except MailingError:
         raise
     except Exception as e:

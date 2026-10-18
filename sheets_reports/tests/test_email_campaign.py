@@ -63,6 +63,16 @@ class PasswordTests(SimpleTestCase):
             mailing.decrypt_password("no-es-un-token")
 
 
+class MessageTests(SimpleTestCase):
+    def test_el_html_se_vuelve_texto_plano(self):
+        html = "<p>Hola <strong>mundo</strong></p><ul><li>uno</li><li>dos</li></ul>"
+        self.assertEqual(mailing.html_to_text(html), "Hola mundo\nuno\ndos")
+
+    def test_sin_html_no_cambia(self):
+        self.assertEqual(mailing.html_to_text(""), "")
+        self.assertEqual(mailing.html_to_text("Texto plano"), "Texto plano")
+
+
 @LOCMEM
 class ScheduleTests(TestCase):
     def setUp(self):
@@ -127,6 +137,14 @@ class RunCampaignTests(TestCase):
         self.assertEqual(self.statuses(campaign), ["sent"] * 3)
         self.assertIn("Envío completado", campaign.logs.first().message)
 
+    def test_el_mensaje_va_en_html_con_su_alternativa_en_texto(self):
+        campaign = make_campaign(self.dashboard, recipients=1,
+                                 body="<p>Hola <strong>mundo</strong></p>")
+        mailing.run_campaign(campaign, utc(1, 15))
+        self.assertEqual(mail.outbox[0].body, "Hola mundo")
+        self.assertEqual(mail.outbox[0].alternatives,
+                         [("<p>Hola <strong>mundo</strong></p>", "text/html")])
+
     def test_respeta_el_limite_diario(self):
         campaign = make_campaign(self.dashboard, recipients=5, daily_limit=2)
         self.assertEqual(mailing.run_campaign(campaign, utc(1, 15))["sent"], 2)
@@ -159,14 +177,14 @@ class RunCampaignTests(TestCase):
 
     def test_el_que_falla_no_se_reintenta_en_la_misma_ejecucion(self):
         campaign = make_campaign(self.dashboard, recipients=3, batch_size=1)
-        real_send = mailing.EmailMessage.send
+        real_send = mailing.EmailMultiAlternatives.send
 
         def send(message, *args, **kwargs):
             if message.to == ["p0@uapa.edu.do"]:
                 raise smtplib.SMTPRecipientsRefused({})
             return real_send(message, *args, **kwargs)
 
-        with mock.patch("sheets_reports.services.mailing.EmailMessage.send", send):
+        with mock.patch("sheets_reports.services.mailing.EmailMultiAlternatives.send", send):
             result = mailing.run_campaign(campaign, utc(1, 15))
         self.assertEqual(result, {"sent": 2, "failed": 1, "pending": 1})
         self.assertEqual(campaign.recipients.get(email="p0@uapa.edu.do").attempts, 1)
@@ -220,7 +238,7 @@ class RunCampaignTests(TestCase):
 
     def test_un_destinatario_que_falla_se_reintenta_hasta_tres_veces(self):
         campaign = make_campaign(self.dashboard, recipients=1)
-        with mock.patch("sheets_reports.services.mailing.EmailMessage.send",
+        with mock.patch("sheets_reports.services.mailing.EmailMultiAlternatives.send",
                         side_effect=smtplib.SMTPRecipientsRefused({})):
             for day in (1, 2, 3):
                 mailing.run_campaign(campaign, utc(day, 15))
@@ -298,6 +316,22 @@ class CampaignEndpointsTests(TestCase):
         EmailCampaign.objects.update(last_run_on=date(2026, 6, 1))
         self.assertEqual(self.put(batch_size=25).json()["batch_size"], 25)
         self.assertIsNone(EmailCampaign.objects.get().last_run_on)
+
+    def test_el_cuerpo_se_sanea_al_guardar(self):
+        r = self.put(body='<p>Hola</p><script>alert(1)</script>'
+                          '<img src="data:image/png;base64,AAA" onerror="alert(1)">'
+                          '<a href="http://x.com">enlace</a>')
+        self.assertEqual(r.status_code, 200, r.content)
+        body = r.json()["body"]
+        self.assertNotIn("script", body)
+        self.assertNotIn("onerror", body)
+        self.assertIn('src="data:image/png;base64,AAA"', body)
+        self.assertIn('target="_blank"', body)
+        self.assertIn('rel="noopener noreferrer"', body)
+
+    def test_un_cuerpo_sin_contenido_se_guarda_vacio(self):
+        self.assertEqual(self.put(body="<p><br></p>").json()["body"], "")
+        self.assertIn("cuerpo", self.put(enabled=True, body="<p><br></p>").json()["error"])
 
     def test_valida_lo_que_llega(self):
         for changes in ({"send_time": "25:00"}, {"daily_limit": 0}, {"batch_size": 0}, {"frequency": "mensual"},

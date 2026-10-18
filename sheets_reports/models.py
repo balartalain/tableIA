@@ -168,7 +168,9 @@ class EmailCampaign(models.Model):
     dashboard = models.OneToOneField(Dashboard, on_delete=models.CASCADE, related_name="email_campaign")
     enabled = models.BooleanField(default=False)
     subject = models.CharField(max_length=255, blank=True, default="")
-    body = models.TextField(blank=True, default="")
+    body = models.TextField(
+        blank=True, default="",
+        help_text="El mensaje en HTML, con las etiquetas que permite el editor (texto, listas, enlaces e imágenes incrustadas).")
     daily_limit = models.PositiveIntegerField(
         default=100, help_text="Máximo de correos al día, entre todos los remitentes.")
     batch_size = models.PositiveIntegerField(

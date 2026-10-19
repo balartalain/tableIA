@@ -12,6 +12,7 @@ Para verlas: `HEADED=1 SLOWMO=300` antes del comando abre Chromium con ventana y
 acciones; `PWDEBUG=1` abre además el Inspector de Playwright para ir paso a paso.
 """
 import os
+import re
 import unittest
 from unittest import mock
 
@@ -183,7 +184,8 @@ class PanelTests(StaticLiveServerTestCase):
                 self.assertEqual(self.page.evaluate("args => formatNumber(...args)", args), expected)
 
     def test_la_tabla_de_fuentes(self):
-        """«Sin usar», columnas incluidas, estado de la fuente y la confirmación al eliminar."""
+        """«Sin usar», columnas incluidas, estado de la fuente, sus acciones y la confirmación al
+        eliminar."""
         with mock.patch("sheets_reports.services.google_drive.tab_status", return_value="no_access"):
             self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
             self.page.locator("#sources-btn").click()
@@ -191,7 +193,8 @@ class PanelTests(StaticLiveServerTestCase):
             self.page.locator("#bottom-sheet").get_by_text("Sin acceso").wait_for()
         self.assertTrue(self.page.get_by_role("cell", name="Sin usar").is_visible())
         self.assertTrue(self.page.get_by_text("5 de 5 incluidas").is_visible())
-        self.assertTrue(self.page.get_by_role("button", name=f"Actualizar {self.source.label}").is_visible())
+        # «Actualizar datos» ya no está en la fila: vive dentro de «Editar» (la fuente abierta).
+        self.assertTrue(self.page.get_by_role("button", name=f"Editar {self.source.label}").is_visible())
         link = self.page.get_by_role("link", name=f"Abrir origen de {self.source.label}")
         self.assertEqual(link.get_attribute("href"), "https://docs.google.com/spreadsheets/d/abc/edit#gid=0")
         self.page.get_by_role("button", name=f"Eliminar {self.source.label}").click()
@@ -215,10 +218,25 @@ class FormulaBuilderTests(PanelTests):
         self.page.locator("#sources-btn").click()
         self.page.get_by_role("button", name=f"Editar {self.source.label}").click()
         self.page.get_by_role("tab", name="Campos calculados").click()
-        return self.page.locator('aside[aria-label="Piezas de la fórmula"]')
+        # El selector de fuente está dos veces en la página (agregar y editar): el que se ve.
+        return self.page.locator('aside[aria-label="Piezas de la fórmula"]:visible')
 
     def piece(self, panel, text):
         return panel.locator("button", has_text=text).first
+
+    # Las secciones de la paleta se pliegan y solo una está abierta (`activePaletteSection`).
+    SECTIONS = {"Columnas": "columns", "Valores": "values", "Operadores": "operators",
+                "Condición": "condition", "Agregaciones": "aggregations"}
+
+    def open_section(self, panel, title):
+        """Abre la sección de la paleta con un clic en su encabezado, si no está abierta (el
+        clic sobre la abierta la cerraría)."""
+        if panel.evaluate("el => Alpine.$data(el).activePaletteSection") == self.SECTIONS[title]:
+            return
+        panel.locator("button").filter(has_text=re.compile(rf"^\s*{title}\s*$")).first.click()
+        # Las secciones se abren con una transición de 300 ms: un arrastre medido antes
+        # tomaría las piezas a mitad de camino.
+        self.page.wait_for_timeout(400)
 
     def drag(self, source, target):
         """Un arrastre de verdad con el mouse (interact.js necesita varios movimientos)."""
@@ -240,9 +258,13 @@ class FormulaBuilderTests(PanelTests):
         self.page.get_by_role("button", name="Agregar campo").click()
         self.page.get_by_label("Nombre del campo").fill("Nivel")
         # Cada clic coloca la pieza en el hueco elegido y elige el siguiente.
+        self.open_section(panel, "Agregaciones")
         self.piece(panel, "SI").click()
+        self.open_section(panel, "Condición")
         self.piece(panel, "[ ] = [ ]").click()
+        self.open_section(panel, "Columnas")
         self.piece(panel, "categoria").click()
+        self.open_section(panel, "Valores")
         panel.get_by_role("radio", name="Texto").click()
         value = panel.get_by_label("Valor", exact=True)
         for text in ("Hogar", "X", "Y"):
@@ -258,14 +280,16 @@ class FormulaBuilderTests(PanelTests):
         self.source.calculated_fields = [{"id": "t", "name": "Total", "formula": "SUM([ventas])", "format": "number"}]
         self.source.save()
         panel = self.open_calculated()
-        canvas = self.page.locator('[aria-label="Fórmula"]')
+        canvas = self.page.locator('[aria-label="Fórmula"]:visible')
         canvas.get_by_text("SUM", exact=True).wait_for()
         self.page.get_by_text("Toda la hoja: 755").wait_for()
         # «+» soltado sobre el bloque SUM: SUM([ventas]) + [ ].
         sum_block = canvas.locator("[data-fb-drag='']")
-        self.drag(self.page.get_by_role("button", name="Sumar"), sum_block)
+        self.open_section(panel, "Operadores")
+        self.drag(panel.get_by_role("button", name="Sumar"), sum_block)
         hole = canvas.get_by_text("suelta aquí")
         hole.wait_for()
+        self.open_section(panel, "Valores")
         value = panel.get_by_label("Valor", exact=True)
         value.fill("1")
         self.drag(panel.locator("button.font-mono", has_text="1"), hole)
@@ -279,13 +303,14 @@ class FormulaBuilderTests(PanelTests):
         self.source.calculated_fields = [{"id": "t", "name": "", "formula": "SUM([ventas])", "format": "number"}]
         self.source.save()
         panel = self.open_calculated()
-        canvas = self.page.locator('[aria-label="Fórmula"]')
+        canvas = self.page.locator('[aria-label="Fórmula"]:visible')
         prompt = self.page.get_by_label("Pedido para generar la fórmula con IA")
         ask = "sheets_reports.services.ai_formula.generate_json"
         # No pudo: el motivo y el lienzo igual.
         with mock.patch(ask, return_value={"ok": False, "reason": "La hoja no tiene costos."}):
             prompt.fill("el margen")
-            self.page.get_by_role("button", name="Generar").click()
+            # El «Generar» de la fórmula, no los de «Generar con IA» del tablero.
+            prompt.locator("xpath=ancestor::form[1]").get_by_role("button", name="Generar").click()
             self.page.get_by_text("No pude armar la fórmula: La hoja no tiene costos.").wait_for()
         canvas.get_by_text("SUM", exact=True).wait_for()
         # Pudo: los bloques nuevos reemplazan los anteriores y el campo toma el nombre propuesto.

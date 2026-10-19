@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.template.loader import get_template
 from django.test import SimpleTestCase, TestCase
 
-from sheets_reports.help import HELP_TOPICS, SECTIONS, help_index, help_sections
+from sheets_reports.help import HELP_TOPICS, HELP_VIDEOS, SECTIONS, VIDEO_DIR, help_index, help_sections
 from sheets_reports.tests.fixtures import make_board
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -64,3 +64,15 @@ class HelpPanelTests(TestCase):
         self.client.force_login(user)
         dashboard, _ = make_board(user)
         self.assertNotContains(self.client.get(f"/tableros/{dashboard.id}/view/"), 'id="help-panel"')
+
+
+class HelpVideoTests(SimpleTestCase):
+    def test_cada_video_tiene_su_topico_su_archivo_y_su_portada(self):
+        slugs = {slug for slug, *_ in HELP_TOPICS}
+        static_dir = PACKAGE / "static" / VIDEO_DIR
+        for slug, (name, length) in HELP_VIDEOS.items():
+            with self.subTest(topic=slug):
+                self.assertIn(slug, slugs)
+                self.assertTrue((static_dir / f"{name}.webm").is_file(), name)
+                self.assertTrue((static_dir / f"{name}.png").is_file(), name)
+                self.assertTrue(length)

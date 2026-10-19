@@ -40,10 +40,10 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 
 ### Videos de demostración (`tests/e2e/demo_videos.py`, solo con `DEMO=1`)
 No es parte de la suite: el nombre no empieza con `test_`, así que solo corre si se lo nombra.
-Graba un `.webm` por flujo (y una captura del final) en `demo_videos/`, que está en `.gitignore`.
+Graba un `.webm` por flujo, con su portada (`.png`, la última imagen), en `sheets_reports/static/sheets_reports/help/videos/`. Están en git porque los muestra el centro de ayuda («Ver video» en cada tópico, según `HELP_VIDEOS` de `sheets_reports/help.py`): regrabarlos actualiza la ayuda.
 
 ```bash
-DEMO=1 venv/bin/python manage.py test sheets_reports.tests.e2e.demo_videos                                     # los 8
+DEMO=1 venv/bin/python manage.py test sheets_reports.tests.e2e.demo_videos                                     # los 9
 DEMO=1 venv/bin/python manage.py test sheets_reports.tests.e2e.demo_videos.DemoVideos.test_05_generar_tablero_con_ia  # uno
 HEADED=1 DEMO=1 venv/bin/python manage.py test sheets_reports.tests.e2e.demo_videos                            # mirándolos
 ```
@@ -57,6 +57,7 @@ Los flujos son:
 6. Asistente IA del widget.
 7. Análisis IA de un widget.
 8. Chat con los datos.
+9. Campos calculados.
 
 Todo lo externo está simulado para que cada grabación salga igual:
 - **La hoja:** `demo_df()`, con 96 ventas, y sus pestañas.
@@ -66,7 +67,7 @@ Todo lo externo está simulado para que cada grabación salga igual:
 Cómo se graba:
 - El cursor y los subtítulos de cada paso los dibuja `OVERLAY`, porque Playwright no muestra el mouse.
 - Cada video falla si la página tiene un error de JS.
-- Para pasarlos a mp4 (`brew install ffmpeg`): `ffmpeg -i demo_videos/01_crear_tablero.webm -c:v libx264 -crf 20 -pix_fmt yuv420p 01_crear_tablero.mp4`.
+- Para pasarlos a mp4 (`brew install ffmpeg`): `ffmpeg -i sheets_reports/static/sheets_reports/help/videos/01_crear_tablero.webm -c:v libx264 -crf 20 -pix_fmt yuv420p 01_crear_tablero.mp4`.
 
 ### Motor
 | Archivo | Qué prueba |

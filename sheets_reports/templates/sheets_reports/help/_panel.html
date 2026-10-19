@@ -63,7 +63,10 @@ orden salen de sheets_reports/help.py; cada uno es help/<slug>.html.{% endcommen
               <a x-show="$store.help.matches(t)" x-bind:href="`#help:${t.slug}`"
                  class="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-sm text-ink/80 hover:bg-paper hover:text-ink">
                 <span x-text="t.title"></span>
-                <i class="ti ti-chevron-right text-xs text-ink/30" aria-hidden="true"></i>
+                <span class="flex items-center gap-2 shrink-0">
+                  <i x-show="t.video" class="ti ti-movie text-sm text-moss-600" title="Tiene video" aria-label="Tiene video"></i>
+                  <i class="ti ti-chevron-right text-xs text-ink/30" aria-hidden="true"></i>
+                </span>
               </a>
             </template>
           </div>
@@ -78,6 +81,23 @@ orden salen de sheets_reports/help.py; cada uno es help/<slug>.html.{% endcommen
       <article id="help-topic-{{ topic.slug }}" x-show="$store.help.topic === '{{ topic.slug }}' && !$store.help.searching" x-cloak
                class="help-article px-5 py-5 [&_a[href^='#help:']]:text-moss-700 [&_a[href^='#help:']]:font-medium [&_a[href^='#help:']]:underline [&_a[href^='#help:']]:underline-offset-2">
         <h2 class="text-lg font-semibold text-ink mb-3">{{ topic.title }}</h2>
+        {% if topic.video %}
+        <!-- El video de demostración: se descarga recién al reproducirlo (preload="none"). -->
+        <div class="mb-5 space-y-2">
+          <button type="button" x-on:click="$store.help.toggleVideo('{{ topic.slug }}')"
+                  x-bind:aria-expanded="$store.help.videoOpen === '{{ topic.slug }}'"
+                  class="ui-btn ui-btn-primary ui-btn-sm">
+            <i class="ti text-sm" x-bind:class="$store.help.videoOpen === '{{ topic.slug }}' ? 'ti-player-stop' : 'ti-player-play'" aria-hidden="true"></i>
+            <span x-text="$store.help.videoOpen === '{{ topic.slug }}' ? 'Ocultar video' : 'Ver video ({{ topic.video_length }})'"></span>
+          </button>
+          <video x-show="$store.help.videoOpen === '{{ topic.slug }}'" x-cloak controls preload="none"
+                 poster="{{ topic.poster }}" aria-label="Video: {{ topic.title }}"
+                 class="help-video w-full rounded-md border border-line bg-paper">
+            <source src="{{ topic.video }}" type="video/webm">
+            Tu navegador no puede reproducir este video.
+          </video>
+        </div>
+        {% endif %}
         {% include topic.template %}
       </article>
       {% endfor %}{% endfor %}

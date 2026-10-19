@@ -603,6 +603,14 @@ panel de edición. Se abre desde el menú del tablero › **Ayuda** o desde los 
   (`openDrawer`) cierra la ayuda.
 - **Estilo del contenido**: `text-sm`, títulos `h4` y tablas como en los tópicos existentes; los
   enlaces `#help:` se ven subrayados en verde.
+- **Videos**: `HELP_VIDEOS` (en `help.py`) asocia un tópico a su video de demostración
+  (`static/sheets_reports/help/videos/<nombre>.webm` y su portada `.png`) y su duración.
+  - El tópico muestra **Ver video**: un `<video preload="none">` que se descarga recién al reproducirlo.
+  - Cambiar de tópico o cerrar la ayuda lo pausa.
+  - En el índice, `ti-movie` marca los tópicos con video.
+  - Los videos los graba `tests/e2e/demo_videos.py` (`DEMO=1`, ver `docs/tests.md`). Para sumar uno: un
+    `test_NN_*` nuevo en ese archivo y su entrada en `HELP_VIDEOS`. `test_help` verifica que
+    existan el `.webm` y el `.png`.
 
 ## Design system
 

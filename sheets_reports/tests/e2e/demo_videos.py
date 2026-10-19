@@ -1,5 +1,8 @@
 """
-Videos de demostración de la app (Playwright + Chromium): un `.webm` por flujo en `demo_videos/`.
+Videos de demostración de la app (Playwright + Chromium): un `.webm` por flujo, con su portada
+(`.png`, la última imagen), en `static/sheets_reports/help/videos/`. El centro de ayuda los
+muestra en su tópico («Ver video»; `HELP_VIDEOS` en sheets_reports/help.py), así que regrabarlos
+actualiza la ayuda.
 
 No es parte de la suite (el nombre no empieza con `test_`); se corre a mano:
 
@@ -11,6 +14,7 @@ pestañas), el selector de Google Drive y las respuestas de la IA. `HEADED=1` ab
 para mirarlos mientras se graban.
 """
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -28,7 +32,7 @@ from sheets_reports.tests.e2e.test_panel import PanelTests
 from sheets_reports.tests.fixtures import agg, fields, make_board
 
 DEMO = os.environ.get("DEMO") == "1"
-OUT_DIR = Path(settings.BASE_DIR) / "demo_videos"
+OUT_DIR = Path(settings.BASE_DIR) / "sheets_reports" / "static" / "sheets_reports" / "help" / "videos"
 SIZE = {"width": 1280, "height": 800}
 SHEET_ID = "demo-ventas"
 SHEET_NAME = "Ventas 2026"
@@ -207,7 +211,7 @@ class DemoVideos(PanelTests):
         ]
         for p in cls._patches:
             p.start()
-        OUT_DIR.mkdir(exist_ok=True)
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -494,3 +498,49 @@ class DemoVideos(PanelTests):
         self.click(page.get_by_role("button", name="Enviar", exact=True))
         page.get_by_text("que más creció en el semestre").wait_for()
         self.caption("Preguntas en lenguaje natural, respuestas sobre la hoja", 2500)
+
+    def test_09_campos_calculados(self):
+        page = self.page
+        dashboard, _ = self.board(widgets=False)
+        self.open_editor(dashboard)
+        self.caption("Un campo calculado es una columna nueva hecha con una fórmula")
+        self.click(page.locator("#sources-btn"))
+        self.click(page.get_by_role("button", name=re.compile("^Editar ")))
+        self.click(page.get_by_role("tab", name="Campos calculados"))
+        self.caption("Agregamos un campo y le damos un nombre")
+        self.click(page.get_by_role("button", name="Agregar campo"))
+        name = page.get_by_label("Nombre del campo")
+        name.fill("")
+        self.type(name, "Precio promedio")
+        # El selector de fuente está dos veces en la página (agregar y editar): el que se ve.
+        palette = page.locator('aside[aria-label="Piezas de la fórmula"]:visible')
+
+        def piece(text):
+            return palette.locator("button", has_text=text).first
+
+        def section(title):
+            self.click(palette.locator("button").filter(has_text=re.compile(f"^\\s*{title}\\s*$")).first)
+
+        self.caption("La fórmula se arma con bloques: primero, una división")
+        section("Operadores")
+        self.click(piece("÷"))
+        self.caption("En el primer hueco, la suma de las ventas")
+        section("Agregaciones")
+        self.click(piece("SUM"))
+        section("Columnas")
+        self.click(piece(L["ventas"]))
+        self.caption("En el segundo, la suma de las unidades")
+        section("Agregaciones")
+        self.click(piece("SUM"))
+        section("Columnas")
+        self.click(piece(L["unidades"]))
+        page.locator("p:visible", has_text=re.compile("Toda la hoja|Primeras filas")).first.wait_for()
+        self.caption("Usa SUM: es un campo «Agregado», y la vista previa muestra su valor en toda la hoja", 2500)
+        self.caption("Guardamos: el campo queda disponible como métrica en todos los widgets")
+        self.click(page.get_by_role("button", name="Guardar cambios"))
+        self.pause(1200)
+        self.caption("Al volver a la fuente, el campo está guardado con su fórmula")
+        self.click(page.get_by_role("button", name=re.compile("^Editar ")))
+        self.click(page.get_by_role("tab", name="Campos calculados"))
+        page.locator("p:visible", has_text=re.compile("Toda la hoja")).first.wait_for()
+        self.pause(1500)

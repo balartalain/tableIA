@@ -357,3 +357,17 @@ class HelpPanelTests(PanelTests):
         self.page.get_by_role("button", name="Cerrar la ayuda").click()
         self.page.wait_for_function("() => document.getElementById('edit-drawer').getBoundingClientRect().width > 400")
         self.assertEqual(title.input_value(), "Borrador sin guardar")
+
+    def test_el_video_de_un_topico(self):
+        """«Ver video» muestra el reproductor y lo arranca; cambiar de tópico lo pausa."""
+        self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
+        self.page.evaluate("() => Alpine.store('help').open('crear-tablero')")
+        topic = self.page.locator("#help-topic-crear-tablero")
+        topic.get_by_role("button", name="Ver video").click()
+        video = topic.locator("video")
+        video.wait_for()
+        self.page.wait_for_function(
+            "() => document.querySelector('#help-topic-crear-tablero video').currentTime > 0.5")
+        topic.get_by_role("link", name="Conectar una hoja").first.click()
+        self.page.locator("#help-topic-conectar-hoja").wait_for()
+        self.assertTrue(video.evaluate("v => v.paused"))

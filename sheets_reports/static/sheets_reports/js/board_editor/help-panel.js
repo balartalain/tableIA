@@ -32,6 +32,8 @@ document.addEventListener('alpine:init', () => {
     query: '',
     width: storedHelpWidth(),
     resizing: false,
+    // El tópico con su video desplegado (uno a la vez).
+    videoOpen: null,
     sections,
     topics,
     defaultWidth: HELP_WIDTH.default,
@@ -45,6 +47,7 @@ document.addEventListener('alpine:init', () => {
     // Abre la ayuda en un tópico (o en el índice) y, si se pide, en una parte de él (`id`).
     open(slug = null, anchor = null) {
       if (slug && !topics.some(t => t.slug === slug)) slug = null;
+      if (slug !== this.topic) this._stopVideo();
       if (this.isOpen && slug !== this.topic) this.history.push(this.topic);
       if (!this.isOpen) this.history = [];
       this.topic = slug;
@@ -55,11 +58,30 @@ document.addEventListener('alpine:init', () => {
     showIndex() { this.open(null); },
     back() {
       if (!this.history.length) return;
+      this._stopVideo();
       this.topic = this.history.pop();
       this.query = '';
       this._scrollTo(null);
     },
-    close() { this.isOpen = false; },
+    close() {
+      this._stopVideo();
+      this.isOpen = false;
+    },
+
+    // «Ver video» del tópico: muestra el reproductor y lo arranca; otra vez, lo pausa y lo oculta.
+    toggleVideo(slug) {
+      if (this.videoOpen === slug) return this._stopVideo();
+      this._stopVideo();
+      this.videoOpen = slug;
+      Alpine.nextTick(() => {
+        const video = document.querySelector(`#help-topic-${slug} video`);
+        if (video) video.play().catch(() => {});
+      });
+    },
+    _stopVideo() {
+      document.querySelectorAll('#help-panel video').forEach(v => v.pause());
+      this.videoOpen = null;
+    },
 
     // El buscador: el título, las palabras clave y el texto del tópico.
     matches(topic) {

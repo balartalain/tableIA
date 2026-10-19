@@ -133,7 +133,7 @@ def dashboard_list(request):
             dashboards = Dashboard.objects.filter(Q(owner=user) | Q(is_template=True)).prefetch_related("sources")
         else:
             dashboards = Dashboard.objects.filter(owner=user, is_template=False).prefetch_related("sources")
-        return JsonResponse([_serialize_dashboard(d) for d in dashboards], safe=False)
+        return JsonResponse([_serialize_dashboard(d, user) for d in dashboards], safe=False)
     try:
         data = _json_body(request)
     except ValueError as e:
@@ -243,14 +243,17 @@ def _columns_errors(columns) -> list[str]:
 @require_http_methods(["GET", "PUT", "DELETE"])
 def dashboard_detail(request, dashboard_id):
     """GET / PUT {nombre, primary_color} / DELETE de un tablero del usuario."""
+    if request.method == "DELETE":
+        dashboard = _deletable_dashboard(request, dashboard_id)
+        if not dashboard:
+            return _error("Dashboard no encontrado", status=404)
+        dashboard.delete()
+        return JsonResponse({"deleted": True})
     dashboard = _owned_dashboard(request, dashboard_id)
     if not dashboard:
         return _error("Dashboard no encontrado", status=404)
     if request.method == "GET":
         return JsonResponse(_serialize_dashboard(dashboard))
-    if request.method == "DELETE":
-        dashboard.delete()
-        return JsonResponse({"deleted": True})
     try:
         data = _json_body(request)
     except ValueError as e:
@@ -395,6 +398,17 @@ def _owned_dashboard(request, dashboard_id):
     return Dashboard.objects.filter(id=dashboard_id, owner=_get_user(request)).first()
 
 
+def _can_delete(user, dashboard) -> bool:
+    """Un tablero lo borra su dueño; una plantilla (la ven todos), también un superusuario."""
+    return dashboard.owner_id == user.id or (dashboard.is_template and user.is_superuser)
+
+
+def _deletable_dashboard(request, dashboard_id):
+    user = _get_user(request)
+    dashboard = Dashboard.objects.filter(id=dashboard_id).first()
+    return dashboard if dashboard and user and _can_delete(user, dashboard) else None
+
+
 def _owned_widget(request, widget_id):
     return Widget.objects.select_related("dashboard", "source").filter(
         id=widget_id, dashboard__owner=_get_user(request)
@@ -420,7 +434,7 @@ def _dashboard_source(dashboard, raw_id, default=None):
     return source
 
 
-def _serialize_dashboard(dashboard):
+def _serialize_dashboard(dashboard, user=None):
     data = {
         "id": dashboard.id,
         "nombre": dashboard.nombre,
@@ -436,6 +450,9 @@ def _serialize_dashboard(dashboard):
     # La miniatura solo interesa para la galería de plantillas: no se envía en los demás tableros.
     if data["is_template"]:
         data["thumbnail"] = getattr(dashboard, "thumbnail", "") or ""
+        # La galería solo muestra «Eliminar» a quien puede borrarla.
+        if user is not None:
+            data["can_delete"] = _can_delete(user, dashboard)
     return data
 
 

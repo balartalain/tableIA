@@ -586,6 +586,25 @@ class DashboardCrudTests(TestCase):
         self.assertEqual(self.client.get(f"/api/dashboards/{other.id}/").status_code, 404)
         self.assertEqual(self.client.delete(f"/api/dashboards/{other.id}/").status_code, 404)
 
+    def test_una_plantilla_la_borra_su_dueno_o_un_superusuario(self):
+        """Las plantillas las ven todos, pero «Eliminar» solo lo tiene su dueño o un superusuario."""
+        pepe = get_user_model().objects.create(username="pepe")
+        template, _ = make_board(pepe, nombre="Plantilla de Pepe")
+        template.is_template = True
+        template.save()
+        ajeno, _ = make_board(pepe, nombre="Tablero de Pepe")
+
+        listed = self.client.get("/api/dashboards/?is_template=1").json()
+        self.assertEqual([(t["id"], t["can_delete"]) for t in listed], [(template.id, False)])
+        self.assertEqual(self.client.delete(f"/api/dashboards/{template.id}/").status_code, 404)
+
+        self.client.force_login(get_user_model().objects.create(username="root", is_superuser=True))
+        self.assertTrue(self.client.get("/api/dashboards/?is_template=1").json()[0]["can_delete"])
+        # Un superusuario borra plantillas ajenas, no tableros ajenos.
+        self.assertEqual(self.client.delete(f"/api/dashboards/{ajeno.id}/").status_code, 404)
+        self.assertEqual(self.client.delete(f"/api/dashboards/{template.id}/").status_code, 200)
+        self.assertFalse(Dashboard.objects.filter(id=template.id).exists())
+
 class SinUsuarioTests(TestCase):
     def test_lista_explica_como_crear_usuario(self):
         r = self.client.get("/api/dashboards/")

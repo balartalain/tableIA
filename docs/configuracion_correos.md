@@ -1,7 +1,7 @@
 # Configuración del envío de correos
 
 Cada tablero puede enviar un mensaje a una lista de destinatarios. Cada destinatario lo
-recibe **una sola vez**; el envío se reparte en lotes y, si hace falta, en varios días. Este
+recibe **una sola vez**; el envío se reparte entre los remitentes y, si hace falta, en varios días. Este
 es el único documento del envío de correos: las secciones 1 a 5 son la guía de uso y las
 secciones 6 y 7, el detalle técnico.
 
@@ -66,9 +66,9 @@ ejemplo `/tableros/19/edit/`.
 
 Sigue respetando:
 
-- el máximo de correos al día (si hoy ya se alcanzó, no envía nada y lo anota en el registro);
+- el cupo del día (si hoy ya se alcanzó, no envía nada y lo anota en el registro);
 - que cada persona lo recibe una sola vez: solo envía a los pendientes;
-- los lotes y la pausa de 1 minuto entre ellos;
+- el ritmo entre correos (1 por segundo, `SEND_INTERVAL_S`);
 - el envío en curso: si ya hay uno corriendo para ese tablero, no arranca otro.
 
 Sin `--force`, el comando hace lo mismo que el cron: revisa si al envío le toca y, si no,
@@ -82,8 +82,8 @@ En el `.env` **local**:
 CAMPAIGN_EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 ```
 
-Ningún correo sale a Gmail: cada mensaje se imprime completo en la terminal. Los lotes, la
-pausa y la pestaña «Seguimiento de correos» se comportan como en un envío real.
+Ningún correo sale a Gmail: cada mensaje se imprime completo en la terminal. El ritmo, el
+reparto y la pestaña «Seguimiento de correos» se comportan como en un envío real.
 
 1. Reiniciar `runserver` después de cambiar el `.env`.
 2. En el tablero, guardar al menos un remitente con cualquier contraseña (se exige que
@@ -119,8 +119,7 @@ remitentes se puede subir el máximo diario.
 |---|---|
 | **Destinatarios** | Un CSV con un correo por fila (de cada fila se toma la primera celda que sea un correo; la primera fila puede ser el encabezado). Los nuevos se agregan; los que ya estaban conservan su estado. «Vaciar lista» borra también quién ya fue notificado y desactiva el envío. |
 | **Remitentes** | Correo y contraseña de aplicación (§2). |
-| **Máximo de correos al día** | Tope de correos por día de envío, entre todos los remitentes. |
-| **Tamaño del lote por remitente** | Cuántos correos envía cada remitente en cada lote. |
+| **Correos por remitente al día** | Cuántos correos envía cada remitente cada día (máximo 500, el límite de Gmail). El cupo del día es ese número por cada remitente: dos remitentes a 200 envían hasta 400 al día. |
 | **Frecuencia** | Todos los días, o los días de la semana que se marquen. |
 | **Hora** | Hora a la que arranca el envío, en `CAMPAIGN_TIME_ZONE`. |
 | **Asunto y cuerpo** | El asunto en texto plano y el cuerpo con un editor enriquecido (negrita, cursiva, listas, enlaces e imágenes). |
@@ -138,17 +137,17 @@ se eliminan) y los enlaces se abren en otra pestaña.
 
 ## 4. Cómo se envía
 
-A la hora indicada arranca una ejecución que:
+A la hora indicada arranca una ejecución que va enviando los **pendientes de uno en uno**,
+espaciados **1 segundo** (fijo en el código: `SEND_INTERVAL_S` en `services/mailing.py`),
+repartidos en ronda entre los remitentes, hasta llegar al **cupo de cada remitente** o
+quedarse sin pendientes. El paso uniforme evita las ráfagas que activan las defensas
+anti-spam de Gmail. Los pendientes que no entraron siguen el próximo día de envío.
 
-1. Envía un **lote**: hasta «tamaño del lote» correos por cada remitente.
-2. Espera **1 minuto** (fijo en el código: `BATCH_PAUSE_S` en `services/mailing.py`).
-3. Repite hasta llegar al **máximo de correos al día** o quedarse sin pendientes.
-
-Los pendientes que no entraron siguen el próximo día de envío.
-
-**Ejemplo:** 1 200 destinatarios, 2 remitentes, lote de 50 y máximo de 500 al día. Cada
-lote son 100 correos (50 × 2): el día hace 5 lotes, unos 5 minutos más lo que tarde Gmail
-en aceptar los correos. El envío termina al tercer día de envío (500 + 500 + 200).
+**Ejemplo:** 1 200 destinatarios, un remitente con el tope en 500 al día. A ~1 correo por
+segundo, el envío del día (~500 correos) tarda unos 8–9 minutos; termina al tercer día de
+envío (500 + 500 + 200). Más remitentes suben el **cupo diario** (hasta 500 por cuenta), no
+la velocidad: los correos salen en serie. Si se ponen dos remitentes a 200, el cupo del día
+es 400.
 
 Lo que pasa cuando algo falla:
 
@@ -159,7 +158,7 @@ Lo que pasa cuando algo falla:
   termina. Tras corregirlo, **Guardar** en el tablero reabre el día y el envío se retoma en
   la siguiente pasada del cron.
 - **El proceso se corta** (reinicio del servidor): la siguiente pasada del cron lo retoma
-  pasados 10 minutos, sin repetir a nadie ni pasar del máximo.
+  pasados 10 minutos, sin repetir a nadie ni pasar del cupo.
 
 ## 5. Seguimiento
 
@@ -170,11 +169,11 @@ actualiza sola cada 10 segundos:
 |---|---|
 | **Franja de estado** | ¿En qué está el envío? «Enviando ahora» (con cuántos van de hoy), «Próximo envío», «El envío de hoy terminó antes de llegar al máximo» (con el último error) o «Envío completado». |
 | **Notificados** | ¿Cuánto falta? Total notificado, barra con notificados, pendientes y fallidos, y la fecha aproximada en que termina. |
-| **Enviados por día** | ¿Va al ritmo esperado? Una barra por día y la línea del máximo diario; una barra corta es un día que no llegó al máximo. |
+| **Enviados por día** | ¿Va al ritmo esperado? Una barra por día y la línea de la capacidad diaria (tope por remitente × remitentes); una barra corta es un día que no llegó al tope. |
 | **Remitentes** | ¿Qué cuenta falla? Por cuenta: enviados hoy, en total, errores y el último error. |
 | **Errores por motivo** | ¿Por qué falla? Los errores agrupados y contados: distingue direcciones que no existen de un problema de la cuenta. |
 | **Destinatarios** | ¿Qué pasó con una persona? Estado, fecha, remitente y error de cada correo. |
-| **Registro de envíos** | El detalle cronológico (inicio, cada lote, cada error, resumen). Está plegado: se despliega al hacer clic. |
+| **Registro de envíos** | El detalle cronológico (inicio, cada error, resumen). Está plegado: se despliega al hacer clic. |
 
 «Terminó antes de llegar al máximo» significa que quedaron pendientes sin enviar hoy: o
 ningún remitente pudo enviar (revisar «Remitentes»), o los que quedan fallaron y se
@@ -189,7 +188,7 @@ correos`).
 
 | Modelo | Qué guarda |
 |---|---|
-| `EmailCampaign` | Uno por tablero (`dashboard.email_campaign`): `enabled`, `subject`, `body` (el mensaje, en HTML saneado), `daily_limit` (máximo de correos al día), `batch_size` (correos por remitente en cada lote), `frequency` (`daily` \| `weekly`), `send_time`, `weekdays` (0 = lunes … 6 = domingo, solo en `weekly`), `last_run_on` (día local cerrado: ese día ya no se envía más) y `running_since` (hay un lote en curso). |
+| `EmailCampaign` | Uno por tablero (`dashboard.email_campaign`): `enabled`, `subject`, `body` (el mensaje, en HTML saneado), `per_sender_limit` (correos al día por remitente, máximo 500), `frequency` (`daily` \| `weekly`), `send_time`, `weekdays` (0 = lunes … 6 = domingo, solo en `weekly`), `last_run_on` (día local cerrado: ese día ya no se envía más) y `running_since` (hay un envío en curso). |
 | `EmailSender` | Cuenta de Gmail que envía: `email` y `password_encrypted` (su contraseña de aplicación, cifrada). |
 | `EmailRecipient` | Destinatario: `email`, `status` (`pending` \| `sent` \| `failed`), `attempts`, `sent_at`, `sender_email` y `error`. |
 | `EmailLog` | Bitácora: `created_at`, `level` (`info` \| `error`), `message`, `recipient_email`, `sender_email`. |
@@ -201,21 +200,23 @@ correos`).
 - **`parse_recipients_csv(content)`** → `(válidos, inválidos)`: de cada fila, la primera celda
   que es un correo; en minúsculas y sin repetir. Una primera fila sin correo es el encabezado.
 - **`is_due(campaign, now)`**: activada, con pendientes, hoy es día de envío, ya pasó
-  `send_time`, el día no está cerrado (`last_run_on`) y queda cupo de `daily_limit`. La hora
-  y el día son de `CAMPAIGN_TIME_ZONE`. Un cron atrasado la ejecuta igual; `next_run` da la
-  próxima fecha (ahora mismo si el envío de hoy quedó sin terminar).
-- **`run_campaign(campaign, now, force)`** hace **el envío del día**, en lotes:
+  `send_time`, el día no está cerrado (`last_run_on`) y queda cupo (enviados hoy <
+  `per_sender_limit` × remitentes). La hora y el día son de `CAMPAIGN_TIME_ZONE`. Un cron
+  atrasado la ejecuta igual; `next_run` da la próxima fecha (ahora mismo si el envío de hoy
+  quedó sin terminar).
+- **`run_campaign(campaign, now, force)`** hace **el envío del día**:
   1. Toma el candado con un `update` condicionado sobre `running_since`: de dos crons
-     solapados, solo uno sigue (el otro recibe `None`). El envío renueva el candado en cada
-     lote; uno de más de `LOCK_STALE` (10 min) es de un proceso que murió y no bloquea. Con
-     el día cerrado también devuelve `None`, salvo `force`.
-  2. Cada lote: cupo = el menor entre `daily_limit` − enviados hoy y `batch_size` ×
-     remitentes; toma esa cantidad de pendientes y los reparte en ronda entre los remitentes
-     con contraseña (a lo sumo `batch_size` cada uno). Cada remitente envía los suyos por
-     una conexión SMTP (`CAMPAIGN_SMTP_HOST`/`PORT`, TLS).
-  3. Entre un lote y el siguiente espera `BATCH_PAUSE_S` (60 s, fijo en el código). Sigue
-     hasta llegar al máximo del día, quedarse sin pendientes o sin remitentes, o cambiar el
-     día.
+     solapados, solo uno sigue (el otro recibe `None`). El envío renueva el candado cada minuto
+     mientras envía (así un envío largo no se lo roba otro cron); uno de más de `LOCK_STALE`
+     (10 min) es de un proceso que murió y no bloquea. Con el día cerrado también devuelve
+     `None`, salvo `force`.
+  2. Calcula el cupo de hoy de cada remitente (`per_sender_limit` − lo que ya envió hoy) y
+     reparte los pendientes en ronda entre los remitentes con contraseña, hasta agotar sus
+     cupos. Cada remitente envía los suyos por una conexión SMTP
+     (`CAMPAIGN_SMTP_HOST`/`PORT`, TLS).
+  3. Espacia los correos `SEND_INTERVAL_S` (1 s, fijo en el código) y renueva el candado a
+     mitad de camino. Sigue hasta agotar los cupos, quedarse sin pendientes o sin remitentes,
+     o cambiar el día (los que sobran siguen el próximo día de envío).
   4. Un destinatario que falla suma un intento y sigue pendiente, pero no se reintenta en
      la misma ejecución sino el próximo día de envío; al tercero (`MAX_ATTEMPTS`) queda
      `failed`. Si falla el remitente (no inicia sesión, se desconecta, el servidor lo
@@ -223,7 +224,7 @@ correos`).
      sumar intentos, para los demás remitentes.
   5. Al terminar cierra el día (`last_run_on`). Si el proceso se corta a medias el día
      queda abierto: la siguiente pasada del cron retoma cuando el candado vence.
-  6. Deja en `EmailLog` el inicio, cada lote, cada error y el resumen.
+  6. Deja en `EmailLog` el inicio, cada error y el resumen.
 - **Mensaje:** se envía en HTML (`EmailMultiAlternatives`) con su alternativa en texto plano
   (`html_to_text`: quita las etiquetas y respeta los saltos de bloque). El HTML del cuerpo se
   guarda saneado con `nh3` (allow-list en `views_email.BODY_TAGS`): sin `script`, sin atributos
@@ -232,19 +233,20 @@ correos`).
 - **`send_test(campaign, to)`**: el mensaje a una dirección, con el primer remitente.
 - **`report_summary(campaign)`** (lo que se consulta cada pocos segundos): `state`
   (`running`: hay un envío en curso · `done`: sin pendientes · `stopped`: el día se cerró
-  antes del máximo y quedan pendientes · `scheduled`: espera su próxima ejecución), totales
-  por estado, `sent_today`, `daily_limit`, `last_log_id`, `next_run`, `estimated_end` (el día
-  en que se acaban los pendientes al ritmo del máximo diario) y `last_error` (el último error
-  de hoy).
-- **`report_stats(campaign)`** (se pide cuando hay novedades): `by_day` (enviados por día
-  local, últimos `STATS_DAYS`), `by_sender` (por remitente: enviados hoy y en total, errores
-  y último error; incluye los configurados sin envíos y los quitados que enviaron) y
-  `errors` (los `STATS_ERRORS` motivos más frecuentes, juntando los intentos del mismo).
+  antes del cupo y quedan pendientes · `scheduled`: espera su próxima ejecución), totales
+  por estado, `sent_today`, `per_sender_limit`, `daily_capacity` (tope por remitente ×
+  remitentes), `last_log_id`, `next_run`, `estimated_end` (el día en que se acaban los
+  pendientes al ritmo de la capacidad diaria) y `last_error` (el último error de hoy).
+- **`report_stats(campaign)`** (se pide cuando hay novedades): `per_sender_limit`,
+  `daily_capacity`, `by_day` (enviados por día local, últimos `STATS_DAYS`), `by_sender` (por
+  remitente: enviados hoy y en total, errores y último error; incluye los configurados sin
+  envíos y los quitados que enviaron) y `errors` (los `STATS_ERRORS` motivos más frecuentes,
+  juntando los intentos del mismo).
 
 ### 6.3 Comando y crontab
 
 `manage.py send_campaign_emails` recorre los envíos activados y ejecuta los que `is_due`.
-El cron solo dispara el arranque: el ritmo de los lotes lo lleva `run_campaign`, así que el
+El cron solo dispara el arranque: el ritmo de los envíos lo lleva `run_campaign`, así que el
 comando puede durar varios minutos.
 Las opciones `--dashboard` y `--force` y la línea del crontab están en §1.
 
@@ -282,8 +284,8 @@ la configuración y la guarda entera con «Guardar»:
   estaban y cuáles no son un correo. «Vaciar lista» pide confirmación.
 - **Remitentes:** correo y contraseña de aplicación. Una contraseña ya guardada no vuelve al
   navegador: el campo queda vacío y solo se envía si se escribe otra.
-- **Programación:** máximo de correos al día, tamaño del lote por remitente, frecuencia
-  (todos los días o días de la semana) y hora. Muestra el próximo envío que calcula el servidor.
+- **Programación:** correos por remitente al día, frecuencia (todos los días o días de la
+  semana) y hora. Muestra el próximo envío que calcula el servidor.
 - **Mensaje:** asunto y cuerpo, este último con un editor enriquecido (**Quill**, por CDN). La
   barra permite negrita/cursiva, encabezados, listas, cita, enlaces e imágenes (se incrustan en
   base64, hasta 300 KB cada una). «Enviar prueba» guarda lo escrito y manda el mensaje a la
@@ -297,10 +299,10 @@ la configuración y la guarda entera con «Guardar»:
 ancho. La pestaña «Seguimiento de correos» tiene:
 
 - la franja de estado (`state` del reporte): enviando ahora, próximo envío, terminó antes
-  del máximo (con el último error) o completado;
+  del cupo (con el último error) o completado;
 - «Notificados»: el total, una barra de avance (notificados, pendientes, fallidos) y la
   fecha estimada de fin;
-- «Enviados por día»: barras (ApexCharts) con la línea del máximo diario;
+- «Enviados por día»: barras (ApexCharts) con la línea de la capacidad diaria;
 - «Remitentes» y «Errores por motivo»: tablas cortas (Tabulator, datos locales);
 - la tabla de destinatarios, con paginación remota;
 - el registro de envíos, plegado (`<details>`): su tabla se crea al desplegarlo.

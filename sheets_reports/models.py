@@ -158,8 +158,12 @@ class Widget(models.Model):
             return None
         return WIDGET_REGISTRY.get(self.type)
 
+# Límite de Gmail por cuenta: correos que puede enviar un remitente al día.
+MAX_PER_SENDER = 500
+
+
 class EmailCampaign(models.Model):
-    """El envío de correos de un tablero: el mensaje, cuántos se envían por día y cuándo.
+    """El envío de correos de un tablero: el mensaje, cuántos se envían por remitente y cuándo.
     Cada destinatario lo recibe una sola vez (ver services/mailing.py)."""
     DAILY = "daily"
     WEEKLY = "weekly"
@@ -171,10 +175,9 @@ class EmailCampaign(models.Model):
     body = models.TextField(
         blank=True, default="",
         help_text="El mensaje en HTML, con las etiquetas que permite el editor (texto, listas, enlaces e imágenes incrustadas).")
-    daily_limit = models.PositiveIntegerField(
-        default=100, help_text="Máximo de correos al día, entre todos los remitentes.")
-    batch_size = models.PositiveIntegerField(
-        default=50, help_text="Correos que envía cada remitente en cada lote; entre lotes pasa 1 minuto.")
+    per_sender_limit = models.PositiveIntegerField(
+        default=200, help_text="Correos que envía cada remitente al día (máximo 500, el límite de Gmail). "
+                               "El cupo del día es este número por cada remitente.")
     frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default=DAILY)
     send_time = models.TimeField(default="08:00", help_text="Hora local (CAMPAIGN_TIME_ZONE).")
     weekdays = models.JSONField(

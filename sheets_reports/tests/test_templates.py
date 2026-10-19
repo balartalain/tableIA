@@ -172,7 +172,7 @@ class DashboardTemplateTests(TestCase):
             enabled=True,
             subject="Reporte Trimestral",
             body="Adjunto reporte.",
-            daily_limit=150,
+            per_sender_limit=150,
         )
 
         # 1. Guardar como plantilla

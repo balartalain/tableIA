@@ -1,6 +1,6 @@
 """Envío de correos de un tablero: leer el CSV de destinatarios, cuándo le toca ejecutarse,
-la ejecución (límite diario, reparto entre remitentes, reintentos, bitácora), sus endpoints
-y el comando que llama el crontab."""
+la ejecución (tope por remitente, reparto entre remitentes, reintentos, bitácora), sus
+endpoints y el comando que llama el crontab."""
 import json
 import smtplib
 from datetime import date, datetime, time, timezone
@@ -28,7 +28,7 @@ def utc(day: int, hour: int, minute: int = 0) -> datetime:
 
 def make_campaign(dashboard, recipients=3, senders=("a@gmail.com",), **fields) -> EmailCampaign:
     campaign = EmailCampaign.objects.create(dashboard=dashboard, **{
-        "enabled": True, "subject": "Hola", "body": "Mensaje", "daily_limit": 100,
+        "enabled": True, "subject": "Hola", "body": "Mensaje", "per_sender_limit": 100,
         "send_time": time(8, 0), **fields})
     for email in senders:
         EmailSender.objects.create(campaign=campaign, email=email,
@@ -73,6 +73,23 @@ class MessageTests(SimpleTestCase):
         self.assertEqual(mailing.html_to_text("Texto plano"), "Texto plano")
 
 
+class PacerTests(SimpleTestCase):
+    def test_no_espera_antes_del_primero_y_espacia_los_demas(self):
+        with mock.patch("sheets_reports.services.mailing.sleep") as sleep:
+            pacer = mailing._Pacer(interval=1.0)
+            for _ in range(3):
+                pacer.before_send()
+        self.assertEqual(sleep.call_args_list, [mock.call(1.0), mock.call(1.0)])
+
+    def test_renueva_el_candado_cada_tantos_envios(self):
+        renewals = []
+        with mock.patch("sheets_reports.services.mailing.sleep"):
+            pacer = mailing._Pacer(keepalive=lambda: renewals.append(1), keepalive_every=2, interval=0)
+            for _ in range(4):
+                pacer.before_send()
+        self.assertEqual(len(renewals), 2)
+
+
 @LOCMEM
 class ScheduleTests(TestCase):
     def setUp(self):
@@ -97,7 +114,7 @@ class ScheduleTests(TestCase):
         self.assertTrue(mailing.is_due(campaign, utc(1, 15)))
         # Un envío que se cortó a medias se retoma ya mismo.
         self.assertEqual(mailing.next_run(campaign, utc(1, 15)), mailing.local_now(utc(1, 15)))
-        campaign.daily_limit = 2
+        campaign.per_sender_limit = 2
         self.assertFalse(mailing.is_due(campaign, utc(1, 15)))
         self.assertEqual(mailing.next_run(campaign, utc(1, 15)).date(), date(2026, 6, 2))
 
@@ -145,8 +162,13 @@ class RunCampaignTests(TestCase):
         self.assertEqual(mail.outbox[0].alternatives,
                          [("<p>Hola <strong>mundo</strong></p>", "text/html")])
 
-    def test_respeta_el_limite_diario(self):
-        campaign = make_campaign(self.dashboard, recipients=5, daily_limit=2)
+    def test_espacia_los_correos_uno_por_segundo(self):
+        campaign = make_campaign(self.dashboard, recipients=3)
+        mailing.run_campaign(campaign, utc(1, 15))
+        self.assertEqual(self.sleep.call_args_list, [mock.call(1.0), mock.call(1.0)])
+
+    def test_respeta_el_tope_por_remitente(self):
+        campaign = make_campaign(self.dashboard, recipients=5, per_sender_limit=2)
         self.assertEqual(mailing.run_campaign(campaign, utc(1, 15))["sent"], 2)
         # El mismo día ya no hay cupo, ni forzando; al día siguiente siguen los pendientes.
         self.assertEqual(mailing.run_campaign(campaign, utc(1, 16), force=True)["sent"], 0)
@@ -154,29 +176,45 @@ class RunCampaignTests(TestCase):
         self.assertEqual(self.statuses(campaign), ["sent"] * 4 + ["pending"])
 
     def test_con_el_maximo_alcanzado_no_envia_mas_ese_dia(self):
-        campaign = make_campaign(self.dashboard, recipients=4, daily_limit=2)
+        campaign = make_campaign(self.dashboard, recipients=4, per_sender_limit=2)
         mailing.run_campaign(campaign, utc(1, 15))
         self.assertIsNone(mailing.run_campaign(EmailCampaign.objects.get(id=campaign.id), utc(1, 15, 5)))
         self.assertEqual(len(mail.outbox), 2)
         self.assertIn("Se alcanzó el máximo", campaign.logs.first().message)
 
-    def test_cada_lote_envia_su_tamano_por_remitente(self):
-        campaign = make_campaign(self.dashboard, recipients=7, batch_size=2,
+    def test_el_reparto_no_rebasa_el_tope_de_cada_remitente(self):
+        campaign = make_campaign(self.dashboard, recipients=7, per_sender_limit=2,
                                  senders=("a@gmail.com", "b@gmail.com"))
-        self.assertEqual(mailing.run_campaign(campaign, utc(1, 15)), {"sent": 7, "failed": 0, "pending": 0})
-        # 4 + 3: dos lotes, con un minuto entre uno y otro.
-        self.assertEqual(self.sleep.call_args_list, [mock.call(60)])
-        self.assertEqual(campaign.logs.filter(message__startswith="Lote").count(), 2)
+        self.assertEqual(mailing.run_campaign(campaign, utc(1, 15)), {"sent": 4, "failed": 0, "pending": 3})
+        # Dos por remitente en ronda: 4 correos espaciados 1 s (el primero no espera).
+        self.assertEqual(self.sleep.call_args_list, [mock.call(1.0)] * 3)
+        used = sorted(campaign.recipients.filter(status=EmailRecipient.SENT).values_list("sender_email", flat=True))
+        self.assertEqual(used, ["a@gmail.com", "a@gmail.com", "b@gmail.com", "b@gmail.com"])
         self.assertFalse(mailing.is_due(campaign, utc(1, 15, 5)))
 
-    def test_los_lotes_paran_en_el_maximo_del_dia(self):
-        campaign = make_campaign(self.dashboard, recipients=5, daily_limit=4, batch_size=2)
+    def test_el_envio_para_en_el_tope_del_dia(self):
+        campaign = make_campaign(self.dashboard, recipients=5, per_sender_limit=4)
         self.assertEqual(mailing.run_campaign(campaign, utc(1, 15)), {"sent": 4, "failed": 0, "pending": 1})
-        self.assertEqual(self.sleep.call_count, 1)
+        self.assertEqual(self.sleep.call_count, 3)  # 4 correos espaciados 1 s: el primero no espera
         self.assertEqual(mailing.next_run(campaign, utc(1, 15, 5)).date(), date(2026, 6, 2))
 
+    def test_el_cupo_del_dia_crece_con_los_remitentes(self):
+        campaign = make_campaign(self.dashboard, recipients=6, per_sender_limit=2,
+                                 senders=("a@gmail.com", "b@gmail.com"))
+        self.assertEqual(mailing._capacity(campaign), 4)
+        self.assertEqual(mailing.run_campaign(campaign, utc(1, 15))["sent"], 4)
+
+    def test_un_remitente_que_ya_gasto_su_cupo_hoy_no_vuelve_a_enviar(self):
+        campaign = make_campaign(self.dashboard, recipients=3, per_sender_limit=1,
+                                 senders=("a@gmail.com", "b@gmail.com"))
+        # «a» ya gastó su único correo de hoy: solo queda cupo para «b».
+        EmailRecipient.objects.filter(email="p0@uapa.edu.do").update(
+            status=EmailRecipient.SENT, sent_at=utc(1, 14), sender_email="a@gmail.com")
+        self.assertEqual(mailing.run_campaign(campaign, utc(1, 15)), {"sent": 1, "failed": 0, "pending": 1})
+        self.assertEqual(campaign.recipients.get(email="p1@uapa.edu.do").sender_email, "b@gmail.com")
+
     def test_el_que_falla_no_se_reintenta_en_la_misma_ejecucion(self):
-        campaign = make_campaign(self.dashboard, recipients=3, batch_size=1)
+        campaign = make_campaign(self.dashboard, recipients=3)
         real_send = mailing.EmailMultiAlternatives.send
 
         def send(message, *args, **kwargs):
@@ -190,7 +228,7 @@ class RunCampaignTests(TestCase):
         self.assertEqual(campaign.recipients.get(email="p0@uapa.edu.do").attempts, 1)
 
     def test_un_remitente_que_falla_sale_y_el_otro_termina(self):
-        campaign = make_campaign(self.dashboard, recipients=4, batch_size=1,
+        campaign = make_campaign(self.dashboard, recipients=4,
                                  senders=("a@gmail.com", "b@gmail.com"))
         real_connection = mailing._connection
 
@@ -275,7 +313,7 @@ class CampaignEndpointsTests(TestCase):
         self.url = f"/api/dashboard/{self.dashboard.id}/email-campaign/"
 
     def put(self, **changes):
-        body = {"enabled": False, "subject": "Hola", "body": "Mensaje", "daily_limit": 50, "batch_size": 10,
+        body = {"enabled": False, "subject": "Hola", "body": "Mensaje", "per_sender_limit": 50,
                 "frequency": "daily", "send_time": "09:30", "weekdays": [],
                 "senders": [{"email": "a@gmail.com", "password": "abcd efgh ijkl mnop"}], **changes}
         return self.client.put(self.url, json.dumps(body), content_type="application/json")
@@ -314,7 +352,7 @@ class CampaignEndpointsTests(TestCase):
     def test_guardar_reabre_el_dia(self):
         self.put()
         EmailCampaign.objects.update(last_run_on=date(2026, 6, 1))
-        self.assertEqual(self.put(batch_size=25).json()["batch_size"], 25)
+        self.assertEqual(self.put(per_sender_limit=25).json()["per_sender_limit"], 25)
         self.assertIsNone(EmailCampaign.objects.get().last_run_on)
 
     def test_el_cuerpo_se_sanea_al_guardar(self):
@@ -340,7 +378,8 @@ class CampaignEndpointsTests(TestCase):
         self.assertIn("demasiado grande", r.json()["error"])
 
     def test_valida_lo_que_llega(self):
-        for changes in ({"send_time": "25:00"}, {"daily_limit": 0}, {"batch_size": 0}, {"frequency": "mensual"},
+        for changes in ({"send_time": "25:00"}, {"per_sender_limit": 0}, {"per_sender_limit": 501},
+                        {"frequency": "mensual"},
                         {"frequency": "weekly", "weekdays": []}, {"weekdays": [9]},
                         {"senders": [{"email": "sin-arroba", "password": "x"}]},
                         {"senders": [{"email": "nuevo@gmail.com", "password": ""}]}):
@@ -414,7 +453,7 @@ class EmailReportTests(TestCase):
         self.assertContains(r, "email-report.js")
 
     def test_los_totales_cambian_cuando_se_envia(self):
-        campaign = make_campaign(self.dashboard, recipients=3, daily_limit=2)
+        campaign = make_campaign(self.dashboard, recipients=3, per_sender_limit=2)
         before = self.client.get(self.url).json()
         self.assertEqual((before["total"], before["sent"], before["pending"], before["last_log_id"]), (3, 0, 3, 0))
         mailing.run_campaign(campaign, utc(1, 15))
@@ -423,7 +462,7 @@ class EmailReportTests(TestCase):
         self.assertGreater(after["last_log_id"], before["last_log_id"])
 
     def test_el_estado_del_envio(self):
-        campaign = make_campaign(self.dashboard, recipients=3, daily_limit=2, senders=())
+        campaign = make_campaign(self.dashboard, recipients=3, per_sender_limit=2, senders=())
         self.assertEqual(mailing.report_summary(campaign, utc(1, 11))["state"], "scheduled")
         campaign.running_since = utc(1, 14, 58)
         self.assertEqual(mailing.report_summary(campaign, utc(1, 15))["state"], "running")
@@ -438,7 +477,7 @@ class EmailReportTests(TestCase):
         self.assertEqual(mailing.report_summary(campaign, utc(1, 15, 5))["state"], "done")
 
     def test_la_fecha_estimada_de_fin(self):
-        campaign = make_campaign(self.dashboard, recipients=5, daily_limit=2)
+        campaign = make_campaign(self.dashboard, recipients=5, per_sender_limit=2)
         self.assertEqual(mailing.report_summary(campaign, utc(1, 11))["estimated_end"], "2026-06-03")
         campaign.frequency, campaign.weekdays = EmailCampaign.WEEKLY, [2]  # solo los miércoles
         self.assertEqual(mailing.report_summary(campaign, utc(1, 11))["estimated_end"], "2026-06-17")
@@ -465,12 +504,13 @@ class EmailReportTests(TestCase):
         self.assertEqual((b["email"], b["active"], b["sent_total"], b["errors"]), ("b@gmail.com", True, 0, 0))
         self.assertEqual([(e["message"], e["count"]) for e in stats["errors"]],
                          [("No se pudo enviar: buzón lleno", 2), ("No hay remitentes", 1)])
-        self.assertEqual(self.client.get(f"{self.url}stats/").json()["daily_limit"], 100)
+        self.assertEqual(self.client.get(f"{self.url}stats/").json()["per_sender_limit"], 100)
+        self.assertEqual(self.client.get(f"{self.url}stats/").json()["daily_capacity"], 200)
         EmailCampaign.objects.update(enabled=False)
         self.assertEqual(self.client.get(f"{self.url}stats/").status_code, 404)
 
     def test_destinatarios_y_logs_paginados(self):
-        campaign = make_campaign(self.dashboard, recipients=5, daily_limit=2)
+        campaign = make_campaign(self.dashboard, recipients=5, per_sender_limit=2)
         mailing.run_campaign(campaign, utc(1, 15))
         data = self.client.get(f"{self.url}recipients/?page=2&size=2").json()
         self.assertEqual((data["total_rows"], data["last_page"], len(data["rows"])), (5, 3, 2))
@@ -478,5 +518,5 @@ class EmailReportTests(TestCase):
         sent = self.client.get(f"{self.url}recipients/?status=sent").json()
         self.assertEqual([row["sender_email"] for row in sent["rows"]], ["a@gmail.com"] * 2)
         logs = self.client.get(f"{self.url}logs/").json()
-        self.assertEqual(logs["total_rows"], 3)  # inicio, el lote y el resumen
+        self.assertEqual(logs["total_rows"], 2)  # inicio y fin
         self.assertIn("Fin del envío", logs["rows"][0]["message"])  # el más reciente primero

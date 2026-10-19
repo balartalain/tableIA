@@ -1,6 +1,6 @@
 // Envío de correos del tablero (bottom sheet «Configurar envío de correos»): los destinatarios (desde un
-// CSV), los remitentes (cuentas de Gmail con su contraseña de aplicación), cuántos correos se
-// envían por día, en lotes de qué tamaño y cuándo, y el mensaje. El envío lo ejecuta el crontab del servidor; con el
+// CSV), los remitentes (cuentas de Gmail con su contraseña de aplicación), cuántos correos envía cada
+// remitente al día y cuándo, y el mensaje. El envío lo ejecuta el crontab del servidor; con el
 // envío activado, la vista compartida muestra la pestaña «Seguimiento de correos» (email-report.js).
 const EMAIL_WEEKDAYS = [
   { value: 0, label: 'Lun' }, { value: 1, label: 'Mar' }, { value: 2, label: 'Mié' },
@@ -23,10 +23,11 @@ function emailCampaign() {
     error: '',
     saving: false,
     // Lo que se edita. Cada remitente: {email, password (solo si se escribe una nueva), has_password}.
-    form: { enabled: false, subject: '', body: '', daily_limit: 100, batch_size: 50, frequency: 'daily', send_time: '08:00', weekdays: [], senders: [] },
+    form: { enabled: false, subject: '', body: '', per_sender_limit: 200, frequency: 'daily', send_time: '08:00', weekdays: [], senders: [] },
     report: { total: 0, sent: 0, pending: 0, failed: 0, next_run: null },
     timeZone: '',
     cronMinutes: 5,
+    perSenderMax: 500,
     uploading: false,
     // Resultado de la última carga del CSV: {added, duplicates, invalid, invalid_count}.
     uploadResult: null,
@@ -122,14 +123,14 @@ function emailCampaign() {
     // La respuesta del servidor (configuración + totales) al formulario.
     apply(data) {
       this.form = {
-        enabled: data.enabled, subject: data.subject, body: data.body, daily_limit: data.daily_limit,
-        batch_size: data.batch_size,
+        enabled: data.enabled, subject: data.subject, body: data.body, per_sender_limit: data.per_sender_limit,
         frequency: data.frequency, send_time: data.send_time, weekdays: data.weekdays || [],
         senders: (data.senders || []).map(s => ({ email: s.email, password: '', has_password: s.has_password })),
       };
       this.report = data.report;
       this.timeZone = data.time_zone || '';
       this.cronMinutes = data.cron_minutes || 5;
+      this.perSenderMax = data.per_sender_max || 500;
       this.setBody(this.form.body);
     },
 
@@ -232,8 +233,7 @@ function emailCampaign() {
       this.error = '';
       const body = {
         ...this.form,
-        daily_limit: Number(this.form.daily_limit),
-        batch_size: Number(this.form.batch_size),
+        per_sender_limit: Number(this.form.per_sender_limit),
         senders: this.form.senders.filter(s => s.email.trim() || s.password)
           .map(s => ({ email: s.email.trim(), password: s.password })),
       };

@@ -107,17 +107,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let detail = `${number(data.sent)} notificados${data.failed ? ` · ${number(data.failed)} no se pudieron enviar` : ''}.`;
     if (data.state === 'running') {
       title = 'Enviando ahora';
-      detail = `${number(data.sent_today)} de ${number(data.daily_limit)} correos de hoy.`;
+      detail = `${number(data.sent_today)} de ${number(data.daily_capacity)} correos de hoy.`;
     } else if (data.state === 'stopped') {
       title = 'El envío de hoy terminó antes de llegar al máximo';
-      detail = `${number(data.sent_today)} de ${number(data.daily_limit)} correos de hoy.`
+      detail = `${number(data.sent_today)} de ${number(data.daily_capacity)} correos de hoy.`
         + (data.last_error ? ` Último error${data.last_error.sender_email ? ` (${data.last_error.sender_email})` : ''}: ${data.last_error.message}` : '');
     } else if (data.state === 'scheduled') {
       title = data.next_run
         ? `Próximo envío: ${longDate(data.next_run, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`
         : 'No hay un próximo envío programado';
-      detail = data.sent_today ? `Hoy se enviaron ${number(data.sent_today)} de ${number(data.daily_limit)}.`
-        : `Hasta ${number(data.daily_limit)} correos por día.`;
+      detail = data.sent_today ? `Hoy se enviaron ${number(data.sent_today)} de ${number(data.daily_capacity)}.`
+        : `Hasta ${number(data.per_sender_limit)} correos por remitente al día.`;
     }
     document.getElementById('email-status').className = `flex items-start gap-3 border rounded p-4 ${style.box}`;
     document.getElementById('email-status-icon').className = `ti text-xl ${style.icon}`;
@@ -141,10 +141,10 @@ document.addEventListener('DOMContentLoaded', () => {
       : '';
   };
 
-  // Barras de enviados por día, con la línea del máximo diario.
+  // Barras de enviados por día, con la línea de la capacidad diaria.
   const renderChart = (stats) => {
     const days = stats.by_day;
-    const top = Math.max(stats.daily_limit, ...days.map(d => d.sent));
+    const top = Math.max(stats.daily_capacity, ...days.map(d => d.sent));
     const options = {
       series: [{ name: 'Enviados', data: days.map(d => d.sent) }],
       xaxis: {
@@ -155,8 +155,8 @@ document.addEventListener('DOMContentLoaded', () => {
       plotOptions: { bar: { borderRadius: 4, borderRadiusApplication: 'end', columnWidth: `${Math.min(60, Math.max(days.length, 1) * 8)}%` } },
       dataLabels: { enabled: days.length <= 12, offsetY: -18, style: { colors: ['#333'], fontWeight: 600 } },
       annotations: { yaxis: [{
-        y: stats.daily_limit, borderColor: '#6b7280', strokeDashArray: 4,
-        label: { text: `Máximo diario: ${number(stats.daily_limit)}`, borderWidth: 0, style: { color: '#4b5563', background: 'transparent' } },
+        y: stats.daily_capacity, borderColor: '#6b7280', strokeDashArray: 4,
+        label: { text: `Capacidad diaria: ${number(stats.daily_capacity)}`, borderWidth: 0, style: { color: '#4b5563', background: 'transparent' } },
       }] },
     };
     if (chart) return chart.updateOptions(options);

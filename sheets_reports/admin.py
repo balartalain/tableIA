@@ -60,7 +60,7 @@ class EmailSenderInline(admin.TabularInline):
 
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(admin.ModelAdmin):
-    list_display = ["dashboard", "enabled", "frequency", "send_time", "daily_limit", "batch_size", "last_run_on"]
+    list_display = ["dashboard", "enabled", "frequency", "send_time", "per_sender_limit", "last_run_on"]
     list_filter = ["enabled", "frequency"]
     readonly_fields = ["running_since"]
     inlines = [EmailSenderInline]

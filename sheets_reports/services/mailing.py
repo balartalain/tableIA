@@ -1,9 +1,10 @@
 """
 Envío de correos de un tablero (`EmailCampaign`): cada destinatario recibe el mensaje una
 sola vez. El crontab llama a `manage.py send_campaign_emails`, que ejecuta las campañas a
-las que les toca (`is_due`); la ejecución envía lotes (`batch_size` correos por remitente;
-los remitentes son cuentas de Gmail con contraseña de aplicación), con un minuto entre uno y
-otro, hasta llegar al máximo del día (`daily_limit`), y deja su bitácora en `EmailLog`. No hace HTTP: las vistas (views_email.py) son adaptadores sobre este servicio.
+las que les toca (`is_due`); la ejecución envía los pendientes de uno en uno, espaciados
+`SEND_INTERVAL_S` (todos los remitentes van en serie; son cuentas de Gmail con contraseña de
+aplicación), hasta llegar al máximo de cada remitente (`per_sender_limit`), y deja su bitácora
+en `EmailLog`. No hace HTTP: las vistas (views_email.py) son adaptadores sobre este servicio.
 """
 import base64
 import csv
@@ -31,10 +32,11 @@ from sheets_reports.models import EmailCampaign, EmailLog, EmailRecipient
 # Intentos por destinatario antes de darlo por fallido.
 MAX_ATTEMPTS = 3
 SMTP_TIMEOUT_S = 30
-# Segundos entre un lote y el siguiente.
-BATCH_PAUSE_S = 60
-# El envío renueva su candado (`running_since`) en cada lote: uno más viejo que esto es de
-# un proceso que murió.
+# Segundos entre un correo y el siguiente (los remitentes van en serie, así que el ritmo es
+# global). Reparte los envíos a paso uniforme para no activar las defensas anti-spam de Gmail.
+SEND_INTERVAL_S = 1.0
+# El envío renueva su candado (`running_since`) a lo largo de la corrida: uno más viejo que
+# esto es de un proceso que murió.
 LOCK_STALE = timedelta(minutes=10)
 # Errores del remitente (no del destinatario): se deja de usar esa cuenta en la ejecución.
 SENDER_ERRORS = (smtplib.SMTPServerDisconnected, smtplib.SMTPSenderRefused,
@@ -124,17 +126,45 @@ def _sent_today(campaign: EmailCampaign, current: datetime) -> int:
                                       sent_at__lt=start + timedelta(days=1)).count()
 
 
+def _sent_today_by_sender(campaign: EmailCampaign, current: datetime) -> dict:
+    """Los enviados hoy, por remitente: es el cupo que ya gastó cada cuenta."""
+    start = _day_start(current)
+    rows = (campaign.recipients.filter(status=EmailRecipient.SENT, sent_at__gte=start,
+                                       sent_at__lt=start + timedelta(days=1))
+            .exclude(sender_email="").values("sender_email").annotate(n=Count("id")))
+    return {row["sender_email"]: row["n"] for row in rows}
+
+
+def _senders(campaign: EmailCampaign) -> list:
+    """Los remitentes que pueden enviar (tienen contraseña de aplicación)."""
+    return [s for s in campaign.senders.all() if s.password_encrypted]
+
+
+def _capacity(campaign: EmailCampaign) -> int:
+    """Correos que se pueden enviar hoy: el tope de cada remitente por el número de remitentes."""
+    return campaign.per_sender_limit * len(_senders(campaign))
+
+
+def _has_quota(campaign: EmailCampaign, current: datetime) -> bool:
+    """Queda cupo hoy. Sin remitentes no hay cupo, pero se deja pasar la ejecución para que
+    quede el aviso en la bitácora."""
+    senders = _senders(campaign)
+    if not senders:
+        return True
+    return _sent_today(campaign, current) < campaign.per_sender_limit * len(senders)
+
+
 def is_due(campaign: EmailCampaign, now: datetime | None = None) -> bool:
     """Le toca ejecutarse: activada, con pendientes, hoy es día de envío, ya pasó la hora,
-    el día no está cerrado (`last_run_on`) y queda cupo del máximo diario. La ejecución
-    cierra el día al terminar; una que se cortó a medias vuelve a tocarle y se retoma."""
+    el día no está cerrado (`last_run_on`) y queda cupo. La ejecución cierra el día al
+    terminar; una que se cortó a medias vuelve a tocarle y se retoma."""
     current = local_now(now)
     return (campaign.enabled
             and campaign.last_run_on != current.date()
             and _is_scheduled_day(campaign, current.date())
             and current.time() >= campaign.send_time
             and _has_pending(campaign)
-            and _sent_today(campaign, current) < campaign.daily_limit)
+            and _has_quota(campaign, current))
 
 
 def next_run(campaign: EmailCampaign, now: datetime | None = None) -> datetime | None:
@@ -147,7 +177,7 @@ def next_run(campaign: EmailCampaign, now: datetime | None = None) -> datetime |
         day = current.date() + timedelta(days=offset)
         if not _is_scheduled_day(campaign, day) or campaign.last_run_on == day:
             continue
-        if offset == 0 and _sent_today(campaign, current) >= campaign.daily_limit:
+        if offset == 0 and not _has_quota(campaign, current):
             continue
         return max(datetime.combine(day, campaign.send_time, tzinfo=current.tzinfo), current)
     return None
@@ -195,7 +225,28 @@ def _log(campaign, message: str, level: str = EmailLog.INFO, recipient: str = ""
                             recipient_email=recipient, sender_email=sender)
 
 
-def _send_group(campaign: EmailCampaign, sender, group: list, now: datetime | None = None) -> tuple[int, list, bool]:
+class _Pacer:
+    """Espacia los envíos a un ritmo uniforme (`SEND_INTERVAL_S`) y, de paso, renueva el candado
+    de la campaña cada `keepalive_every` correos: así un envío largo no se lo roba otro cron."""
+
+    def __init__(self, keepalive=None, keepalive_every: int = 0, interval: float = SEND_INTERVAL_S):
+        self.interval = interval
+        self.keepalive = keepalive
+        self.keepalive_every = keepalive_every
+        self._started = False
+        self._sent = 0
+
+    def before_send(self) -> None:
+        if self._started and self.interval:
+            sleep(self.interval)
+        self._started = True
+        self._sent += 1
+        if self.keepalive and self.keepalive_every and self._sent % self.keepalive_every == 0:
+            self.keepalive()
+
+
+def _send_group(campaign: EmailCampaign, sender, group: list, now: datetime | None = None,
+                pacer: "_Pacer | None" = None) -> tuple[int, list, bool]:
     """Los correos de un remitente por una sola conexión → (enviados, ids de los que fallaron,
     si la cuenta sigue pudiendo enviar). Si no puede, sus destinatarios quedan pendientes."""
     try:
@@ -207,6 +258,8 @@ def _send_group(campaign: EmailCampaign, sender, group: list, now: datetime | No
     sent, failed, alive = 0, [], True
     try:
         for recipient in group:
+            if pacer:
+                pacer.before_send()
             try:
                 _message(campaign, sender.email, [recipient.email], connection).send()
             except SENDER_ERRORS as e:
@@ -245,9 +298,10 @@ def _close_day(campaign: EmailCampaign, today) -> None:
 
 
 def run_campaign(campaign: EmailCampaign, now: datetime | None = None, force: bool = False) -> dict | None:
-    """El envío del día: lotes de `batch_size` correos por remitente, repartidos en ronda y con
-    `BATCH_PAUSE_S` entre uno y otro, hasta el máximo diario → {sent, failed, pending}. None si
-    hay otro envío en curso (dos crons solapados) o si el día ya está cerrado y no es `force`."""
+    """El envío del día: reparte los pendientes en ronda entre los remitentes, hasta
+    `per_sender_limit` por remitente, con los correos espaciados `SEND_INTERVAL_S` →
+    {sent, failed, pending}. None si hay otro envío en curso (dos crons solapados) o si el día
+    ya está cerrado y no es `force`."""
     moment = now or timezone.now()
     current = local_now(now)
     claimed = EmailCampaign.objects.filter(
@@ -264,49 +318,77 @@ def run_campaign(campaign: EmailCampaign, now: datetime | None = None, force: bo
 
 def _run_day(campaign: EmailCampaign, current: datetime, now: datetime | None) -> dict:
     today = current.date()
-    senders = [s for s in campaign.senders.all() if s.password_encrypted]
+    senders = _senders(campaign)
     pending = campaign.recipients.filter(status=EmailRecipient.PENDING)
     if not senders:
         _log(campaign, "No hay remitentes con contraseña: no se envió nada.", EmailLog.ERROR)
         _close_day(campaign, today)
         return {"sent": 0, "failed": 0, "pending": pending.count()}
 
-    sent = failed = batches = 0
-    # Los que fallaron en esta ejecución: se reintentan el próximo día de envío, no al minuto.
+    # Cupo de hoy por remitente: su tope menos lo que ya envió hoy.
+    ya_hoy = _sent_today_by_sender(campaign, current)
+    quota = {s.email: max(campaign.per_sender_limit - ya_hoy.get(s.email, 0), 0) for s in senders}
+    quota = {email: n for email, n in quota.items() if n > 0}
+
+    sent = failed = 0
+    started = False
+    # Los que fallaron en esta ejecución: se reintentan el próximo día de envío, no en la misma.
     tried = set()
-    while senders:
-        quota = max(campaign.daily_limit - _sent_today(campaign, current), 0)
-        batch = list(pending.exclude(id__in=tried).order_by("id")[:min(quota, campaign.batch_size * len(senders))])
-        if not batch:
+    # El ritmo lo lleva un solo pacer para todo el envío; de paso renueva el candado cada minuto.
+    keepalive_every = max(1, round(60 / SEND_INTERVAL_S)) if SEND_INTERVAL_S else 0
+    pacer = _Pacer(
+        keepalive=lambda: EmailCampaign.objects.filter(id=campaign.id).update(running_since=timezone.now()),
+        keepalive_every=keepalive_every)
+    while quota:
+        if local_now(now).date() != today:
             break
-        if batches:
-            sleep(BATCH_PAUSE_S)
-            if local_now(now).date() != today:
-                break
-        else:
-            _log(campaign, f"Inicio del envío: lotes de {campaign.batch_size} por remitente, con "
-                           f"{len(senders)} {'remitente' if len(senders) == 1 else 'remitentes'}.")
-        batches += 1
-        batch_sent, batch_failed, alive = 0, 0, []
-        for index, sender in enumerate(senders):
-            group_sent, group_failed, sender_alive = _send_group(campaign, sender, batch[index::len(senders)], now)
-            batch_sent += group_sent
-            batch_failed += len(group_failed)
+        queue = list(pending.exclude(id__in=tried).order_by("id")[:sum(quota.values())])
+        if not queue:
+            break
+        if not started:
+            _log(campaign, f"Inicio del envío: hasta {campaign.per_sender_limit} por remitente, "
+                           f"con {len(senders)} {'remitente' if len(senders) == 1 else 'remitentes'}.")
+            started = True
+        # Reparte en ronda entre los remitentes con cupo (los agotados se saltan).
+        order = list(quota)
+        groups = {email: [] for email in order}
+        caps = dict(quota)
+        index = 0
+        for recipient in queue:
+            for _ in range(len(order)):
+                email = order[index]
+                index = (index + 1) % len(order)
+                if caps[email]:
+                    groups[email].append(recipient)
+                    caps[email] -= 1
+                    break
+        round_sent, round_failed, alive = 0, 0, []
+        for sender in senders:
+            group = groups.get(sender.email)
+            if not group:
+                continue
+            group_sent, group_failed, sender_alive = _send_group(campaign, sender, group, now, pacer)
+            round_sent += group_sent
+            round_failed += len(group_failed)
             tried.update(group_failed)
+            # Solo lo enviado de verdad gasta cupo: un fallo deja el hueco para otro pendiente.
+            quota[sender.email] -= group_sent
             if sender_alive:
                 alive.append(sender)
         # Un remitente que no puede enviar no se vuelve a usar en esta ejecución.
         senders = alive
-        sent += batch_sent
-        failed += batch_failed
-        _log(campaign, f"Lote {batches}: {batch_sent} enviados, {batch_failed} con error.")
+        sent += round_sent
+        failed += round_failed
+        # Fuera los remitentes que se fueron o ya agotaron su cupo.
+        vivos = {s.email for s in senders}
+        quota = {email: n for email, n in quota.items() if n > 0 and email in vivos}
         # Renueva el candado: el envío sigue vivo.
         EmailCampaign.objects.filter(id=campaign.id).update(running_since=timezone.now())
 
     _close_day(campaign, today)
     remaining = pending.count()
-    reached = _sent_today(campaign, current) >= campaign.daily_limit
-    if not batches:
+    reached = _sent_today(campaign, current) >= _capacity(campaign)
+    if not started:
         _log(campaign, "Ya se alcanzó el máximo de correos de hoy." if remaining
              else "No hay destinatarios pendientes.")
     else:
@@ -342,15 +424,16 @@ _ATTEMPT_RE = re.compile(r" \(intento \d+ de \d+\)")
 
 
 def _estimated_end(campaign: EmailCampaign, current: datetime, pending: int, sent_today: int):
-    """El día en que se acaban los pendientes al ritmo del máximo diario, o None si no hay
+    """El día en que se acaban los pendientes al ritmo de la capacidad diaria, o None si no hay
     pendientes o falta más de un año."""
-    if not pending or not campaign.enabled:
+    capacity = _capacity(campaign)
+    if not pending or not campaign.enabled or not capacity:
         return None
     for offset in range(366):
         day = current.date() + timedelta(days=offset)
         if not _is_scheduled_day(campaign, day) or campaign.last_run_on == day:
             continue
-        pending -= max(campaign.daily_limit - sent_today, 0) if offset == 0 else campaign.daily_limit
+        pending -= max(capacity - sent_today, 0) if offset == 0 else capacity
         if pending <= 0:
             return day
     return None
@@ -363,6 +446,7 @@ def report_summary(campaign: EmailCampaign, now: datetime | None = None) -> dict
     counts = dict(campaign.recipients.values_list("status").annotate(n=Count("id")))
     pending = counts.get(EmailRecipient.PENDING, 0)
     sent_today = _sent_today(campaign, current)
+    capacity = _capacity(campaign)
     last_log = campaign.logs.order_by("-id").values_list("id", flat=True).first()
     upcoming = next_run(campaign, now)
     running_since = campaign.running_since
@@ -370,7 +454,7 @@ def report_summary(campaign: EmailCampaign, now: datetime | None = None) -> dict
         state = RUNNING
     elif not pending:
         state = DONE
-    elif campaign.last_run_on == current.date() and sent_today < campaign.daily_limit:
+    elif campaign.last_run_on == current.date() and _has_quota(campaign, current):
         state = STOPPED
     else:
         state = SCHEDULED
@@ -383,7 +467,8 @@ def report_summary(campaign: EmailCampaign, now: datetime | None = None) -> dict
         "pending": pending,
         "failed": counts.get(EmailRecipient.FAILED, 0),
         "sent_today": sent_today,
-        "daily_limit": campaign.daily_limit,
+        "per_sender_limit": campaign.per_sender_limit,
+        "daily_capacity": capacity,
         "last_log_id": last_log or 0,
         "next_run": upcoming.isoformat() if upcoming else None,
         "estimated_end": end.isoformat() if end else None,
@@ -428,7 +513,8 @@ def report_stats(campaign: EmailCampaign, now: datetime | None = None) -> dict:
         reason["last_at"] = max(reason["last_at"], item["last"])
     top = sorted(reasons.items(), key=lambda pair: -pair[1]["count"])[:STATS_ERRORS]
     return {
-        "daily_limit": campaign.daily_limit,
+        "per_sender_limit": campaign.per_sender_limit,
+        "daily_capacity": _capacity(campaign),
         "by_day": [{"date": item["day"].isoformat(), "sent": item["n"]} for item in list(by_day)[::-1]],
         "by_sender": sorted(senders.values(), key=lambda item: (not item["active"], item["email"])),
         "errors": [{"message": message, "count": reason["count"], "last_at": reason["last_at"].isoformat()}

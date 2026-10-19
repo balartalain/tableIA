@@ -13,7 +13,8 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from sheets_reports.models import Dashboard, EmailCampaign, EmailRecipient, EmailSender
+from sheets_reports.models import (
+    MAX_PER_SENDER, Dashboard, EmailCampaign, EmailRecipient, EmailSender)
 from sheets_reports.services import mailing
 from sheets_reports.views import _error, _json_body, _owned_dashboard
 
@@ -54,8 +55,7 @@ def _serialize_campaign(campaign: EmailCampaign) -> dict:
         "enabled": campaign.enabled,
         "subject": campaign.subject,
         "body": campaign.body,
-        "daily_limit": campaign.daily_limit,
-        "batch_size": campaign.batch_size,
+        "per_sender_limit": campaign.per_sender_limit,
         "frequency": campaign.frequency,
         "send_time": send_time.strftime("%H:%M"),
         "weekdays": campaign.weekdays or [],
@@ -68,6 +68,8 @@ def _serialize_campaign(campaign: EmailCampaign) -> dict:
         # Cada cuánto despierta el cron (min): la UI lo usa para avisar de las horas que casi
         # no alcanzan a correr (última franja antes de medianoche).
         "cron_minutes": settings.CAMPAIGN_CRON_MINUTES,
+        # Tope por remitente (el límite de Gmail): la UI lo usa como máximo del campo.
+        "per_sender_max": MAX_PER_SENDER,
     }
 
 
@@ -95,12 +97,10 @@ def _clean_campaign(data: dict, campaign: EmailCampaign) -> tuple[dict, list[dic
     weekdays = sorted(set(weekdays))
     if frequency == EmailCampaign.WEEKLY and not weekdays:
         return {}, [], "Elige al menos un día de la semana."
-    limit = data.get("daily_limit")
-    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-        return {}, [], "El máximo de correos al día debe ser un número mayor que cero."
-    batch_size = data.get("batch_size")
-    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
-        return {}, [], "El tamaño del lote por remitente debe ser un número mayor que cero."
+    limit = data.get("per_sender_limit")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_PER_SENDER:
+        return {}, [], (f"Los correos por remitente al día deben ser un número entre 1 y "
+                        f"{MAX_PER_SENDER}.")
 
     stored = {s.email: s for s in campaign.senders.all()} if campaign.pk else {}
     senders, seen = [], set()
@@ -120,8 +120,7 @@ def _clean_campaign(data: dict, campaign: EmailCampaign) -> tuple[dict, list[dic
         "enabled": bool(data.get("enabled")),
         "subject": str(data.get("subject") or "").strip()[:255],
         "body": _clean_html(data.get("body")),
-        "daily_limit": limit,
-        "batch_size": batch_size,
+        "per_sender_limit": limit,
         "frequency": frequency,
         "send_time": send_time,
         "weekdays": weekdays,
@@ -140,7 +139,7 @@ def _clean_campaign(data: dict, campaign: EmailCampaign) -> tuple[dict, list[dic
 @require_http_methods(["GET", "PUT"])
 def email_campaign(request, dashboard_id):
     """GET: la configuración del envío del tablero (sin contraseñas). PUT {enabled, subject,
-    body, daily_limit, batch_size, frequency, send_time, weekdays, senders: [{email,
+    body, per_sender_limit, frequency, send_time, weekdays, senders: [{email,
     password?}]}: la guarda; un remitente sin `password` conserva la que tenía y uno que no
     viene se quita."""
     dashboard = _owned_dashboard(request, dashboard_id)

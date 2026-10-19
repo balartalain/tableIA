@@ -519,8 +519,8 @@ Todos los tipos tienen `ai_enabled = True`.
 | Tipo | Controles |
 |---|---|
 | `kpi` | `title`, `decimals`, `abbreviate`, `prefix`, `suffix`, `primary`, `compare`, `compareMode`, `target`, `targetMetric`, `targetLabel`, `statusBasis`, `status_good`, `status_warn`, `higher_is_better` |
-| `bar` | `title`, `horizontal`, `stacked`, `color_scheme`, `yAxisWidth`, `barWidth`, `dataLabelFormatter`, `chartWidth`, `showGrid`, `seriesOrder` |
-| `line` | `title`, `color_scheme`, `curve`, `showGrid`, `showMarkers` |
+| `bar` | `title`, `horizontal`, `stacked`, `yAxisWidth`, `barWidth`, `dataLabelFormatter`, `chartWidth`, `showGrid`, `seriesOrder` |
+| `line` | `title`, `curve`, `showGrid`, `showMarkers` |
 | `donut` | `title`, `labelMode`, `donutSize`, `showLegend` |
 | `table` | `title`, `pageSize`, `showPagination` |
 | `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels` |
@@ -563,7 +563,7 @@ Los tres usan `chart_series()` para `(categories, pairs)` y `percent_aliases()`.
 
 - **`bar`**: `horizontal`, `stacked`; `reference_lines` → `referenceLines` (anotaciones
   ApexCharts con `kind: "value"`, color `#d97706`, label «Meta: {valor}»).
-- **`line`**: `curve`, `showMarkers`, `showGrid`, `color_scheme`; si no hay `sort_by`,
+- **`line`**: `curve`, `showMarkers`, `showGrid`; si no hay `sort_by`,
   reordena el eje con `chronological()` (best-effort).
 - **`donut`**: una sola serie (`pairs[0]`); `labelMode`, `donutSize`, `showLegend` (front).
 

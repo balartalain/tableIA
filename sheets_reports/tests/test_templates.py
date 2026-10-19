@@ -157,7 +157,6 @@ class DashboardTemplateTests(TestCase):
 
         # Configurar estilos detallados en el widget
         widget_style = {
-            "color_scheme": "ocean",
             "horizontal": True,
             "stacked": True,
             "barWidth": 80,

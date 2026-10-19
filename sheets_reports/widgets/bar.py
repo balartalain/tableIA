@@ -76,10 +76,6 @@ class BarChartWidget(BaseWidget):
         {"key": "title", "label": "Título", "type": "string", "default": "Gráfico de Barras"},
         {"key": "horizontal", "label": "Horizontal", "type": "boolean", "default": False},
         {"key": "stacked", "label": "Apilado", "type": "boolean", "default": False},
-        {"key": "color_scheme", "label": "Paleta", "type": "choice", "default": "default", "options": [
-            {"value": "default", "label": "Verde Report IA (Por defecto)"},
-            {"value": "multi", "label": "Multicolor"},
-        ]},
         {"key": "yAxisWidth", "label": "Ancho del Eje Y (px)", "type": "number"},
         {"key": "barWidth", "label": "Ancho de barra (%)", "type": "number", "default": 70},
         {"key": "dataLabelFormatter", "label": "Formato de etiquetas. Ej. {value} %", "type": "string"},

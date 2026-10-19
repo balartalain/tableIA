@@ -151,7 +151,7 @@ class EndpointTests(TestCase):
         self.client.logout()
         r = self.client.get("/login/")
         self.assertEqual(r.status_code, 200)
-        self.assertContains(r, "Bienvenido a Report IA")
+        self.assertContains(r, "Bienvenido a Tabler IA")
 
     def test_login_page_autenticado_redirige_a_home(self):
         r = self.client.get("/login/")

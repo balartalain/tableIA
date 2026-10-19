@@ -205,7 +205,7 @@ class StyleSchemaErrorsTests(SimpleTestCase):
                       errors_for("bar", fields(), {"etiquetas": True}))
 
     def test_select_numero_checkbox_texto(self):
-        self.assertIn("style.color_scheme", errors_for("bar", fields(), {"color_scheme": "arcoiris"})[0])
+        self.assertIn("style.curve", errors_for("line", fields(), {"curve": "zigzag"})[0])
         self.assertIn("style.pageSize", errors_for("table", table_fields(["mes"]), {"pageSize": "diez"})[0])
         self.assertIn("style.showPagination", errors_for("table", table_fields(["mes"]),
                                                         {"showPagination": 1})[0])

@@ -133,6 +133,14 @@ class WidgetContractTests(SimpleTestCase):
                 self.assertLessEqual(set(caps["windows"]), set(WINDOW_TYPES))
                 if caps["metrics"][1] == 0:
                     self.assertEqual(caps["windows"], [])
+                self.assertNotIn("window", caps, "la ventana va dentro de la métrica")
+                # Columnas sueltas (tabla, correlación, dispersión) no agregan: sin métricas ni
+                # pivotes. Una dimensión ahí no agrupa (en la dispersión, colorea los puntos).
+                if "columns" in caps:
+                    low, high = caps["columns"]
+                    self.assertLessEqual(0, low)
+                    self.assertLessEqual(low, high, f"{key}.columns = {caps['columns']}")
+                    self.assertEqual((caps["pivots"], caps["metrics"]), ([0, 0], [0, 0]))
 
     def test_style_schema_solo_declara_datos(self):
         for key, widget in WIDGETS.items():
@@ -140,13 +148,14 @@ class WidgetContractTests(SimpleTestCase):
                 with self.subTest(widget=key, control=control["key"]):
                     self.assertLessEqual(set(control), STYLE_KEYS)
                     self.assertIn(control.get("type"), STYLE_TYPES)
+                    self.assertTrue(control.get("key"))
                     self.assertTrue(control.get("label"))
                     if control["type"] == "choice":
                         options = control.get("options") or []
                         self.assertTrue(options)
                         self.assertEqual({o["value"] for o in options}, {o["value"] for o in options})
                         for option in options:
-                            self.assertTrue({"value", "label"} <= set(option))
+                            self.assertEqual(set(option), {"value", "label"})
                     if "default" in control:
                         self._assert_default_matches(control)
 
@@ -168,8 +177,8 @@ class WidgetContractTests(SimpleTestCase):
     def test_style_defaults_cubre_solo_claves_del_schema(self):
         for key, widget in WIDGETS.items():
             with self.subTest(widget=key):
-                self.assertEqual(set(widget.style_defaults()),
-                                 {c["key"] for c in widget.style_schema if "default" in c})
+                self.assertEqual(widget.style_defaults(),
+                                 {c["key"]: c["default"] for c in widget.style_schema if "default" in c})
 
     def test_el_manifiesto_refleja_cada_tipo(self):
         manifest = _widget_manifest()

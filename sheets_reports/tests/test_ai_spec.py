@@ -236,21 +236,17 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertIn("como mucho 10", errors_demasiados[0])
 
     def test_dos_propuestas_invalidas_dan_error_legible(self, _audit):
-        with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", INVALID_ARGS)) as call:
-            with self.assertRaises(SpecGenerationError) as ctx:
-                generate_widget_form("ventas por categoría", None, sales_ctx())
-
-        self.assertEqual(call.call_count, 2)
-        self.assertIn("No se pudo generar un widget válido", str(ctx.exception))
-
-    def test_pivote_con_varias_metricas_da_error(self, _audit):
+        """La IA tiene un segundo intento; si vuelve a fallar, el error dice por qué (aquí, un
+        pivote con dos métricas)."""
         args = {**VALID_ARGS, "fields": {**VALID_ARGS["fields"], "pivots": ["mes"], "metrics": [
             agg("total_ventas"), {"agg": "count", "alias": "cantidad"},
         ]}}
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", args)) as call:
-            with self.assertRaisesMessage(SpecGenerationError, "UNA métrica"):
+            with self.assertRaises(SpecGenerationError) as ctx:
                 generate_widget_form("ventas y cantidad por categoría y mes", None, sales_ctx())
         self.assertEqual(call.call_count, 2)
+        self.assertIn("No se pudo generar un widget válido", str(ctx.exception))
+        self.assertIn("UNA métrica", str(ctx.exception))
 
     def test_la_tendencia_solo_por_una_columna_de_tiempo(self, _audit):
         from sheets_reports.services.ai_spec import form_errors

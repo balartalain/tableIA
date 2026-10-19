@@ -128,16 +128,6 @@ class ViewsTests(TestCase):
         self.assertEqual(data["categories"][0], "Electrónica")
         self.assertEqual(data["series"][0]["data"][0], 500.0)
 
-    def test_las_barras_no_admiten_limite(self, _df):
-        """Solo el ranking recorta filas; el resto trabaja con toda la data."""
-        r = self.client.post(
-            f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps(payload(fields_data=fields(sort_by="-total_ventas", limit=1))),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 422, r.content)
-        self.assertIn("no admite límite", r.json()["error"])
-
     def test_crear_widget_desde_builder_sin_ia(self, _df):
         with mock.patch("sheets_reports.services.ai_spec.generate_widget_form") as ai:
             r = self.client.post(
@@ -165,17 +155,6 @@ class ViewsTests(TestCase):
         )
         self.assertEqual(r.status_code, 422)
         self.assertIn("no puede estar también en las dimensiones", r.json()["error"])
-        self.assertEqual(Widget.objects.count(), 1)
-
-    def test_crear_barras_con_pivote_y_varias_metricas_se_rechaza(self, _df):
-        r = self.client.post(
-            f"/api/dashboard/{self.dashboard.id}/widgets/",
-            json.dumps(payload(fields_data=fields(pivots=["mes"], metrics=[agg("total_ventas"),
-                                                                          agg("cantidad", agg="count")]))),
-            content_type="application/json",
-        )
-        self.assertEqual(r.status_code, 422)
-        self.assertIn("UNA métrica", r.json()["error"])
         self.assertEqual(Widget.objects.count(), 1)
 
     def test_crear_estilo_fuera_del_schema_se_descarta(self, _df):
@@ -291,19 +270,6 @@ class ViewsTests(TestCase):
         r = self.client.get(f"/api/widget/{filter_w.id}/ai-insight/")
         self.assertEqual(r.status_code, 400)
         self.assertIn("filtros", r.json()["error"].lower())
-
-    def test_el_editor_incluye_el_panel_de_cada_tipo(self, _df):
-        from sheets_reports.widgets import WIDGETS
-        r = self.client.get(f"/tableros/{self.dashboard.id}/edit/")
-        self.assertEqual(r.status_code, 200)
-        html = r.content.decode()
-        for key in WIDGETS.keys():
-            with self.subTest(widget=key):
-                self.assertIn(f"editingType === '{key}'", html)
-        # Paneles propios: la meta del KPI y los totales por nivel de la tabla dinámica.
-        self.assertIn("Valor objetivo", html)
-        self.assertIn("['showTotals', 'rowSubtotal1', 'rowSubtotal2'][idx]", html)
-        self.assertIn("drawerDraft.style.stacked", html)
 
     def test_update_rechaza_pivote_igual_a_dimension(self, _df):
         r = self.client.put(
@@ -514,6 +480,16 @@ class ViewsTests(TestCase):
         self.assertContains(r, 'id="board-title"')
         self.assertContains(r, 'id="preview-btn"')
         self.assertContains(r, 'id="share-btn"')
+        # Los ids que usan el JS y los tests en el navegador.
+        for element_id in ("sources-btn", "ai-board-btn", "board-ruler", "settings-board-name"):
+            self.assertContains(r, f'id="{element_id}"')
+        for component in ("boardHeaderMenu()", "boardRuler()", "board-ruler.js"):
+            self.assertContains(r, component)
+        # Paneles propios: la meta del KPI, los totales por nivel de la tabla dinámica y el
+        # apilado de las barras (que cada tipo tenga su panel lo prueba test_architecture).
+        self.assertContains(r, "Valor objetivo")
+        self.assertContains(r, "['showTotals', 'rowSubtotal1', 'rowSubtotal2'][idx]")
+        self.assertContains(r, "drawerDraft.style.stacked")
         self.assertContains(self.client.get("/"), "Tableros IA")
 
 

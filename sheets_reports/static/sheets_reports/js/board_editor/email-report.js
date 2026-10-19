@@ -6,11 +6,8 @@
 const EMAIL_REPORT_POLL_MS = 10000;
 const EMAIL_REPORT_PAGE_SIZE = 50;
 const EMAIL_STATUS_LABELS = { pending: 'Pendiente', sent: 'Notificado', failed: 'Falló' };
-const EMAIL_STATUS_CLASSES = {
-  pending: 'bg-paper text-ink/60 border-line',
-  sent: 'bg-moss-50 text-moss-700 border-moss-100',
-  failed: 'bg-red-50 text-red-700 border-red-200',
-};
+// Variante de .ui-badge (_app_ui.html) de cada estado.
+const EMAIL_STATUS_BADGES = { pending: 'ui-badge-neutral', sent: 'ui-badge-success', failed: 'ui-badge-danger' };
 
 // La franja de estado: icono y colores de cada `state` del reporte.
 const EMAIL_STATE_STYLES = {
@@ -91,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
       { title: 'Estado', field: 'status', headerSort: false, width: 130, formatter: (cell) => {
         const status = cell.getValue();
         const badge = document.createElement('span');
-        badge.className = `inline-flex text-[11px] font-semibold rounded-full border px-2 py-0.5 ${EMAIL_STATUS_CLASSES[status] || ''}`;
+        badge.className = `ui-badge ${EMAIL_STATUS_BADGES[status] || 'ui-badge-neutral'}`;
         badge.textContent = EMAIL_STATUS_LABELS[status] || status;
         return badge;
       } },
@@ -119,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
       detail = data.sent_today ? `Hoy se enviaron ${number(data.sent_today)} de ${number(data.daily_capacity)}.`
         : `Hasta ${number(data.per_sender_limit)} correos por remitente al día.`;
     }
-    document.getElementById('email-status').className = `flex items-start gap-3 border rounded p-4 ${style.box}`;
+    document.getElementById('email-status').className = `flex items-start gap-3 border rounded-md p-4 ${style.box}`;
     document.getElementById('email-status-icon').className = `ti text-xl ${style.icon}`;
     document.getElementById('email-status-title').textContent = title;
     document.getElementById('email-status-detail').textContent = detail;
@@ -224,10 +221,6 @@ document.addEventListener('DOMContentLoaded', () => {
     tabs.forEach(tab => {
       const active = tab.dataset.tab === name;
       tab.setAttribute('aria-selected', active);
-      tab.classList.toggle('border-moss-500', active);
-      tab.classList.toggle('text-ink', active);
-      tab.classList.toggle('border-transparent', !active);
-      tab.classList.toggle('text-ink/50', !active);
     });
     panels.charts.classList.toggle('hidden', name !== 'charts');
     panels.emails.classList.toggle('hidden', name !== 'emails');

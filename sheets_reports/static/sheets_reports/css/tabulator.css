@@ -52,16 +52,27 @@
   white-space: normal !important;
 }
 
-/* La vista previa de fuentes conserva su encabezado neutro. */
-.tb-preview .tabulator-header,
-.tb-preview .tabulator-header .tabulator-col {
+/* Tablas de la app (home, vista previa de fuentes): encabezado neutro, no el color del tablero. */
+.tb-app .tabulator-header,
+.tb-app .tabulator-header .tabulator-col {
   background: var(--tb-paper);
 }
-.tb-preview .tabulator-header .tabulator-col-title {
+.tb-app .tabulator-header .tabulator-col-title {
   color: var(--tb-ink-muted);
 }
-.tb-preview .tabulator-col.tabulator-sortable:hover {
+.tb-app .tabulator-col.tabulator-sortable:hover {
   background: var(--tb-paper);
+}
+/* Listado (tableros del home): filas más altas, con el contenido centrado. */
+.tabulator.tb-list .tabulator-header .tabulator-col .tabulator-col-content {
+  padding: 12px 16px;
+}
+.tabulator.tb-list .tabulator-row .tabulator-cell {
+  padding: 10px 16px;
+  line-height: 32px;
+}
+.tabulator.tb-list .tabulator-row .tabulator-cell .ui-btn {
+  vertical-align: middle;
 }
 /* Números: cifras del mismo ancho para que encolumnen */
 .tabulator .tb-num {
@@ -111,7 +122,7 @@
 }
 
 .tabulator .tabulator-row.tabulator-selected {
-  background: #EAF3EC;
+  background: var(--color-moss-50);
 }
 
 /* ---------- Footer / paginación ---------- */
@@ -189,7 +200,7 @@
 }
 
 .tabulator .tabulator-page:disabled {
-  color: #C7C9C3;
+  color: color-mix(in srgb, var(--tb-ink) 30%, transparent);
   cursor: not-allowed;
 }
 

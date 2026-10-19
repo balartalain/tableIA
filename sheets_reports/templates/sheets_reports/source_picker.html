@@ -10,27 +10,27 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
     <div class="flex flex-wrap items-center justify-end gap-3">
       <button type="button" x-show="mode === 'add' || mode === 'replace'" x-on:click="back()"
               title="Atrás" aria-label="Atrás"
-              class="shrink-0 p-2 rounded-md text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
+              class="ui-btn ui-btn-icon w-9 h-9 shrink-0">
         <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
       </button>
       <span class="mr-auto"></span>
       <div x-show="columnsError" class="flex items-center gap-2">
         <p x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
         <button type="button" x-on:click="loadColumns({ refresh: true })"
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
+                class="ui-btn ui-btn-soft ui-btn-sm">
           <i class="ti ti-refresh text-xs" aria-hidden="true"></i>
           <span>Volver a conectar</span>
         </button>
       </div>
       <button type="button" x-on:click="loadColumns()" x-bind:disabled="!tab || loadingColumns"
-              class="text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-md px-5 py-2 transition cursor-pointer"
+              class="ui-btn ui-btn-primary"
               x-text="loadingColumns ? 'Leyendo la pestaña…' : 'Aceptar'"></button>
     </div>
     <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[14rem_minmax(0,1fr)_16rem] lg:grid-cols-[20rem_minmax(0,1fr)_24rem] gap-4">
 
       <!-- Fuentes -->
-      <div class="min-h-0 flex flex-col border border-line rounded overflow-hidden">
-        <p class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink/40 border-b border-line">Fuente</p>
+      <div class="ui-card min-h-0 flex flex-col overflow-hidden">
+        <p class="ui-eyebrow px-3 py-2 border-b border-line">Fuente</p>
         <div class="flex-1 overflow-y-auto p-2 space-y-1">
           <button type="button" x-on:click="selectSource('google')"
                   x-bind:class="source === 'google' ? 'bg-moss-50 text-moss-700 border-moss-100' : 'border-transparent hover:bg-paper text-ink/80'"
@@ -43,36 +43,36 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                   class="w-full flex items-center gap-2.5 px-3 py-2 rounded-md border border-transparent text-sm text-left text-ink/40 cursor-not-allowed">
             <i class="ti ti-file-spreadsheet text-base" aria-hidden="true"></i>
             <span class="flex-1">Excel</span>
-            <span class="text-[10px] font-medium rounded-full bg-paper border border-line px-1.5 py-0.5">Próximamente</span>
+            <span class="ui-badge ui-badge-neutral font-medium">Próximamente</span>
           </button>
         </div>
       </div>
 
       <!-- Documentos -->
-      <div class="min-h-0 flex flex-col border border-line rounded overflow-hidden">
+      <div class="ui-card min-h-0 flex flex-col overflow-hidden">
         <div class="flex items-center justify-between gap-2 px-3 py-2 border-b border-line">
-          <p class="text-[10px] font-bold uppercase tracking-wider text-ink/40 shrink-0">Documentos</p>
+          <p class="ui-eyebrow shrink-0">Documentos</p>
         </div>
         <div class="flex-1 overflow-y-auto p-2">
           <!-- Google: elegir la hoja con el selector nativo de Drive. -->
           <div x-show="source && google.configured" class="mb-2 space-y-1">
             <button type="button" x-on:click="openGooglePicker()" x-bind:disabled="loadingSheets"
-                    class="w-full inline-flex items-center justify-center gap-2 h-9 px-3 text-sm font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer disabled:opacity-50">
+                    class="ui-btn ui-btn-soft w-full px-3">
               <i class="ti ti-brand-google-drive text-base" aria-hidden="true"></i>
               <span x-text="loadingSheets ? 'Abriendo Drive…' : (google.connected ? 'Elegir en mi Drive' : 'Conectar con Google')"></span>
             </button>
             <p x-show="googleError" x-text="googleError" role="alert" class="px-1 text-[11px] text-red-600"></p>
-            <div x-show="spreadsheet" class="mt-3 p-2.5 bg-moss-50/80 border border-moss-200 rounded-md flex items-center gap-2">
+            <div x-show="spreadsheet" class="mt-3 p-2.5 bg-moss-50/80 border border-moss-100 rounded-md flex items-center gap-2">
               <i class="ti ti-file-spreadsheet text-moss-600 text-lg shrink-0"></i>
               <div class="min-w-0 flex-1">
-                <span class="block text-xs font-semibold text-moss-900 truncate" x-text="spreadsheet ? spreadsheet.name : ''"></span>
+                <span class="block text-xs font-semibold text-moss-700 truncate" x-text="spreadsheet ? spreadsheet.name : ''"></span>
                 <span class="block text-[10px] text-moss-700/70">Documento seleccionado</span>
               </div>
             </div>
           </div>
 
           <!-- Alerta si Google OAuth no está configurado -->
-          <div x-show="source && !google.configured" class="p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-900 space-y-1.5">
+          <div x-show="source && !google.configured" class="ui-alert ui-alert-warn p-3 space-y-1.5">
             <div class="flex items-center gap-2 font-semibold text-xs text-amber-900">
               <i class="ti ti-alert-triangle text-base text-amber-600" aria-hidden="true"></i>
               <span>Google OAuth no configurado</span>
@@ -87,8 +87,8 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       </div>
 
       <!-- Pestañas -->
-      <div class="min-h-0 flex flex-col border border-line rounded overflow-hidden">
-        <p class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-ink/40 border-b border-line">Pestaña</p>
+      <div class="ui-card min-h-0 flex flex-col overflow-hidden">
+        <p class="ui-eyebrow px-3 py-2 border-b border-line">Pestaña</p>
         <div class="flex-1 overflow-y-auto p-2">
           <p x-show="!spreadsheet" class="px-2 py-6 text-center text-xs text-ink/50">Elige un documento.</p>
           <p x-show="spreadsheet && loadingTabs" class="px-2 py-6 text-center text-xs text-ink/50">
@@ -97,7 +97,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <div x-show="tabsError" class="px-2 py-3 space-y-2">
             <p x-text="tabsError" role="alert" class="text-xs text-red-600"></p>
             <button type="button" x-on:click="spreadsheet && selectSpreadsheet(spreadsheet)"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
+                    class="ui-btn ui-btn-soft ui-btn-sm">
               <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
               <span>Volver a conectar</span>
             </button>
@@ -107,7 +107,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             <template x-for="t in tabs" :key="t.gid">
               <label x-bind:class="tab && tab.gid === t.gid ? 'bg-moss-50 text-moss-700' : 'hover:bg-paper text-ink/80'"
                      class="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition">
-                <input type="radio" name="source-tab" class="accent-moss-500"
+                <input type="radio" name="source-tab" class="ui-check"
                        x-bind:value="t.gid" x-bind:checked="tab && tab.gid === t.gid" x-on:change="tab = t">
                 <span class="min-w-0 truncate" x-text="t.title"></span>
               </label>
@@ -121,34 +121,33 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
 
   <!-- Paso 2: columnas y tipos -->
   <div x-show="step === 'columns'" x-cloak class="flex-1 min-h-0 flex flex-col gap-4">
-    <!-- Barra superior: atrás, nombre, acciones sobre la hoja y guardar; todos de h-10 para que
-         queden a la misma altura. -->
+    <!-- Barra superior: atrás, nombre, acciones sobre la hoja y guardar; todos de la altura de
+         .ui-btn / .ui-input para que queden alineados. -->
     <div class="flex flex-wrap items-end gap-4">
       <button type="button" x-on:click="back()"
               x-bind:title="impact ? 'Volver' : 'Atrás'" x-bind:aria-label="impact ? 'Volver' : 'Atrás'"
-              class="shrink-0 inline-flex items-center justify-center h-10 w-10 rounded-md text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
+              class="ui-btn ui-btn-icon w-9 h-9 shrink-0">
         <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
       </button>
-      <label x-show="mode === 'create'" class="block flex-1 min-w-[16rem] -ml-2 text-xs font-semibold text-ink/70">Nombre del tablero
-        <input type="text" x-model="name"
-               class="mt-1 w-full text-sm font-normal text-ink border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500">
+      <label x-show="mode === 'create'" class="ui-label flex-1 min-w-[16rem] -ml-2">Nombre del tablero
+        <input type="text" x-model="name" class="ui-input mt-1 font-normal">
       </label>
       <p x-show="mode === 'add'" class="min-w-0 max-w-md truncate -ml-2 pb-2 text-sm font-semibold text-ink" x-text="originalLabel"></p>
       <!-- Nombre propio de la fuente: opcional, el original se conserva. -->
       <input type="text" x-show="mode === 'edit' || mode === 'replace'" x-model="sourceName"
              x-bind:placeholder="originalLabel" maxlength="255"
              aria-label="Nombre de la fuente (opcional)" title="Nombre de la fuente (opcional)"
-             class="w-72 max-w-full h-10 -ml-2 text-sm text-ink border border-line rounded-md px-3 focus:outline-none focus:border-moss-500">
+             class="ui-input w-72 max-w-full -ml-2">
       <!-- Cambiar fuente (al editar) y Actualizar datos: relee la hoja de Google y muestra su
            estructura actual. -->
       <div class="flex items-center gap-2 -ml-2">
         <button type="button" x-show="mode === 'edit'" x-on:click="changeSheet()" x-bind:disabled="refreshing || loadingColumns"
-                class="inline-flex items-center gap-1.5 h-10 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md px-3 transition cursor-pointer disabled:opacity-50">
+                class="ui-btn ui-btn-secondary px-3">
           <i class="ti ti-replace text-base" aria-hidden="true"></i>
           Cambiar fuente
         </button>
         <button type="button" x-on:click="refreshColumns()" x-bind:disabled="refreshing || loadingColumns"
-                class="inline-flex items-center gap-1.5 h-10 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md px-3 transition cursor-pointer disabled:opacity-50 disabled:cursor-wait">
+                class="ui-btn ui-btn-secondary px-3 disabled:cursor-wait">
           <i class="ti ti-refresh text-base" x-bind:class="refreshing ? 'animate-spin' : ''" aria-hidden="true"></i>
           Actualizar datos
         </button>
@@ -159,16 +158,16 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <div class="flex items-center gap-3">
         <p x-show="createError" x-text="createError" role="alert" class="text-xs text-red-600"></p>
         <button type="button" x-show="!impact" x-on:click="submit()" x-bind:disabled="!canSubmit || saving || loadingColumns"
-                class="inline-flex items-center h-10 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-md px-5 transition cursor-pointer"
+                class="ui-btn ui-btn-primary px-5"
                 x-text="submitLabel"></button>
         <button type="button" x-show="impact" x-on:click="submit({ confirmed: true })" x-bind:disabled="saving"
-                class="inline-flex items-center h-10 text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-40 rounded-md px-5 transition cursor-pointer"
+                class="ui-btn px-5 text-white bg-amber-600 hover:bg-amber-700"
                 x-text="saving ? 'Guardando…' : 'Guardar igual'"></button>
       </div>
     </div>
 
     <!-- Antes de guardar: los widgets que usan columnas que se quitan o cambian de tipo. -->
-    <div x-show="impact" x-cloak role="alert" class="rounded border border-amber-200 bg-amber-50 p-3 space-y-2">
+    <div x-show="impact" x-cloak role="alert" class="ui-alert ui-alert-warn p-3 space-y-2">
       <p class="text-sm font-semibold text-amber-900">
         <i class="ti ti-alert-triangle" aria-hidden="true"></i>
         <span x-text="impact && impact.length === 1 ? 'Un widget usa columnas que se quitan o cambian de tipo y mostrará un error:' : `${impact ? impact.length : 0} widgets usan columnas que se quitan o cambian de tipo y mostrarán un error:`"></span>
@@ -181,13 +180,11 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
     </div>
 
     <!-- Al editar: columnas de la hoja y campos calculados. -->
-    <div x-show="mode === 'edit'" class="flex items-center gap-1 border-b border-line -mb-2" role="tablist">
+    <div x-show="mode === 'edit'" class="ui-tabs -mb-2" role="tablist">
       <button type="button" role="tab" x-on:click="columnsTab = 'columns'" x-bind:aria-selected="columnsTab === 'columns'"
-              x-bind:class="columnsTab === 'columns' ? 'border-moss-500 text-ink' : 'border-transparent text-ink/50 hover:text-ink'"
-              class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition cursor-pointer">Columnas</button>
+              class="ui-tab py-2">Columnas</button>
       <button type="button" role="tab" x-on:click="openCalculated()" x-bind:aria-selected="columnsTab === 'calculated'"
-              x-bind:class="columnsTab === 'calculated' ? 'border-moss-500 text-ink' : 'border-transparent text-ink/50 hover:text-ink'"
-              class="-mb-px border-b-2 px-3 py-2 text-sm font-medium transition cursor-pointer">
+              class="ui-tab py-2">
         Campos calculados <span x-show="calculated.length" class="text-ink/40" x-text="`(${calculated.length})`"></span>
       </button>
     </div>
@@ -197,12 +194,12 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <div class="flex items-center gap-3">
         <label class="flex items-center gap-2 pl-[13px] text-xs font-medium text-ink/70 cursor-pointer">
           <input type="checkbox" x-model="headers" x-on:change="toggleHeaders()" x-bind:disabled="loadingColumns"
-                 class="accent-moss-500">
+                 class="ui-check">
           Usar la primera fila como encabezado
         </label>
         <button type="button" x-on:click="generateColumnLabels()"
                 x-bind:disabled="generatingLabels || loadingColumns || !columns.length"
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-moss-200 text-moss-700 bg-moss-50 hover:bg-moss-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                class="ui-btn ui-btn-soft ui-btn-sm"
                 title="Generar nombres cortos y limpios para las columnas con IA">
           <i class="ti" x-bind:class="generatingLabels ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
           <span x-text="generatingLabels ? 'Generando nombres…' : 'Generar nombres con IA'"></span>
@@ -215,7 +212,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <label class="relative ml-auto">
         <i class="ti ti-search absolute left-2.5 top-1/2 -translate-y-1/2 text-ink/40 text-sm" aria-hidden="true"></i>
         <input type="search" x-model="columnFilter" placeholder="Buscar columna…" aria-label="Buscar columna"
-               class="w-56 text-sm border border-line rounded-md pl-8 pr-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+               class="ui-input ui-input-sm w-56 pl-8">
       </label>
       <p x-show="!loadingColumns" class="text-xs text-ink/50">
         <span x-show="columnFilter.trim()"><span x-text="shownColumns.length"></span> coincidencias ·</span>
@@ -224,20 +221,20 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       </p>
     </div>
 
-    <div x-show="columnsTab === 'columns'" class="flex-1 min-h-0 overflow-auto border border-line rounded">
-      <table class="w-full text-sm" x-bind:style="`--name-column-width: ${nameColumnWidth}px`">
-        <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
+    <div x-show="columnsTab === 'columns'" class="ui-card flex-1 min-h-0 overflow-auto">
+      <table class="ui-table" x-bind:style="`--name-column-width: ${nameColumnWidth}px`">
+        <thead>
           <tr>
-            <th class="px-3 py-2 w-20 font-semibold">
+            <th class="w-20">
               <label class="inline-flex items-center gap-1.5 cursor-pointer">
                 <!-- Con el buscador activo, solo las columnas a la vista. -->
-                <input type="checkbox" class="accent-moss-500"
+                <input type="checkbox" class="ui-check"
                        x-bind:checked="shownColumns.length > 0 && shownColumns.every(c => c.include)"
                        x-on:change="shownColumns.forEach(c => { if (!c.readonly) c.include = $event.target.checked })">
                 Incluir
               </label>
             </th>
-            <th class="relative px-3 py-2 font-semibold w-[var(--name-column-width)] min-w-[var(--name-column-width)]">
+            <th class="relative w-[var(--name-column-width)] min-w-[var(--name-column-width)]">
               Columna
               <!-- Arrastrar para cambiar el ancho; doble clic lo devuelve al original. -->
               <span role="separator" aria-orientation="vertical" tabindex="0" aria-label="Ancho de la columna «Columna»"
@@ -247,55 +244,55 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                     x-on:keydown="onNameColumnResizeKey($event)"
                     class="absolute right-0 top-0 h-full w-2 cursor-col-resize border-r-2 border-line hover:border-moss-500 focus:border-moss-500 focus:outline-none"></span>
             </th>
-            <th class="px-3 py-2 font-semibold" title="Alias interno asignado a la columna">Alias</th>
-            <th class="px-3 py-2 font-semibold">Nombre a mostrar</th>
-            <th class="px-3 py-2 w-40 font-semibold">Tipo</th>
-            <th class="px-3 py-2 w-40 font-semibold" title="Cómo se muestran sus valores en todo el tablero">Formato</th>
-            <th class="px-3 py-2 font-semibold">Ejemplos</th>
+            <th title="Alias interno asignado a la columna">Alias</th>
+            <th>Nombre a mostrar</th>
+            <th class="w-40">Tipo</th>
+            <th class="w-40" title="Cómo se muestran sus valores en todo el tablero">Formato</th>
+            <th>Ejemplos</th>
           </tr>
         </thead>
         <tbody>
           <template x-for="(c, index) in columns" :key="c.name">
-            <tr x-show="matchesColumn(c)" class="border-t border-line" x-bind:class="c.include ? '' : 'text-ink/40'">
-              <td class="px-3 py-2">
+            <tr x-show="matchesColumn(c)" x-bind:class="c.include ? '' : 'text-ink/40'">
+              <td class="py-2">
                 <!-- ID: columna de sistema, de solo lectura (siempre incluida). -->
-                <input type="checkbox" x-model="c.include" class="accent-moss-500"
+                <input type="checkbox" x-model="c.include" class="ui-check"
                        x-bind:disabled="c.readonly" x-bind:aria-label="`Incluir ${c.name}`">
               </td>
-              <td class="px-3 py-2 font-medium max-w-[var(--name-column-width)] truncate" x-text="c.name" x-bind:title="c.name"></td>
-              <td class="px-3 py-2 font-mono text-xs text-ink/60">
+              <td class="py-2 font-medium max-w-[var(--name-column-width)] truncate" x-text="c.name" x-bind:title="c.name"></td>
+              <td class="py-2 font-mono text-xs text-ink/60">
                 <code class="bg-paper border border-line px-1.5 py-0.5 rounded text-[11px]" x-text="c.alias || `col_${index + 1}`" x-bind:title="`Alias interno: ${c.alias || 'col_' + (index + 1)}`"></code>
               </td>
-              <td class="px-3 py-2">
+              <td class="py-2">
                 <input type="text" x-model="c.label" x-bind:placeholder="c.name"
                        x-bind:disabled="!c.include || c.readonly"
                        x-bind:aria-label="`Nombre a mostrar de ${c.name}`" maxlength="120"
-                       class="w-full min-w-[10rem] text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                       class="ui-input ui-input-sm min-w-[10rem] disabled:opacity-50">
               </td>
-              <td class="px-3 py-2">
+              <td class="py-2">
                 <select x-model="c.type" x-bind:disabled="!c.include || c.readonly" x-bind:aria-label="`Tipo de ${c.name}`"
-                        class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                        class="ui-input ui-input-sm disabled:opacity-50">
                   <template x-for="t in TYPES" :key="t.value">
                     <option x-bind:value="t.value" x-text="t.label" x-bind:selected="c.type === t.value"></option>
                   </template>
                 </select>
               </td>
-              <td class="px-3 py-2">
+              <td class="py-2">
                 <!-- Solo las numéricas: todas las métricas que las suman, promedian… lo heredan. -->
                 <select x-show="c.type === 'number'" x-model="c.format" x-bind:disabled="!c.include || c.readonly"
                         x-bind:aria-label="`Formato de ${c.name}`"
-                        class="w-full text-sm border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:opacity-50">
+                        class="ui-input ui-input-sm disabled:opacity-50">
                   <template x-for="f in FORMATS" :key="f.value">
                     <option x-bind:value="f.value" x-text="f.label" x-bind:selected="(c.format || '') === f.value"></option>
                   </template>
                 </select>
                 <span x-show="c.type !== 'number'" class="text-xs text-ink/30">—</span>
               </td>
-              <td class="px-3 py-2 text-xs text-ink/50 truncate max-w-[20rem]" x-text="c.samples.join(' · ')"></td>
+              <td class="py-2 text-xs text-ink/50 truncate max-w-[20rem]" x-text="c.samples.join(' · ')"></td>
             </tr>
           </template>
-          <tr x-show="columns.length && !shownColumns.length" x-cloak class="border-t border-line">
-            <td colspan="7" class="px-3 py-6 text-center text-sm text-ink/50">Ninguna columna coincide con la búsqueda.</td>
+          <tr x-show="columns.length && !shownColumns.length" x-cloak>
+            <td colspan="7" class="py-6 text-center text-sm text-ink/50">Ninguna columna coincide con la búsqueda.</td>
           </tr>
         </tbody>
       </table>
@@ -311,14 +308,14 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
              ayudas del panel de widgets). -->
         <button type="button" x-on:click="helpOpen = true"
                 aria-label="Ayuda de campos calculados" title="¿Cómo funcionan?"
-                class="p-1 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+                class="ui-btn ui-btn-icon hover:text-moss-700">
           <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
         </button>
         {% include "sheets_reports/widgets/config/blocks/_help_modal.html" with flag="helpOpen" title="Campos calculados" icon="ti-math-function" body="sheets_reports/source_formula_help.html" %}
       </div>
 
       <div x-show="!calculated.length"
-           class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded py-10">
+           class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-md py-10">
         <i class="ti ti-math-function text-2xl text-ink/30" aria-hidden="true"></i>
         <p class="text-sm text-ink/60">Sin campos calculados.</p>
         <p class="text-xs text-ink/50">Agrega uno y arma su fórmula arrastrando columnas, condiciones y funciones.</p>
@@ -346,25 +343,25 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       </div>
 
       <template x-for="f in selectedField ? [selectedField] : []" :key="f.id">
-        <div class="flex-1 min-h-0 flex flex-col gap-3 rounded border border-line bg-white p-3 overflow-y-auto sm:overflow-visible">
+        <div class="ui-card flex-1 min-h-0 flex flex-col gap-3 p-3 overflow-y-auto sm:overflow-visible">
           <div class="flex flex-wrap items-center gap-2">
             <input type="text" x-model="f.name" placeholder="Nombre del campo" maxlength="120"
                    x-on:focus="f._nameBefore = f.name" x-on:change="renameField(f)" aria-label="Nombre del campo"
-                   class="w-full sm:w-80 max-w-full text-sm font-medium border border-line rounded-md px-3 py-1.5 focus:outline-none focus:border-moss-500">
+                   class="ui-input w-full sm:w-80 max-w-full font-medium">
             <!-- El tipo lo decide la fórmula: con SUM, AVG… es agregado. -->
             <span x-show="f._kind === 'row'" title="Se calcula en cada fila; se usa como una columna más"
-                  class="text-[11px] font-semibold rounded-full bg-moss-50 text-moss-700 border border-moss-100 px-2 py-0.5">Por fila</span>
+                  class="ui-badge ui-badge-success">Por fila</span>
             <span x-show="f._kind === 'aggregated'" title="Se calcula por grupo del widget; solo como métrica"
-                  class="text-[11px] font-semibold rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-2 py-0.5">Agregado</span>
+                  class="ui-badge ui-badge-info">Agregado</span>
             <select x-vselect x-show="f._kind === 'aggregated'" x-model="f.format" aria-label="Formato"
-                    class="text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                    class="ui-input ui-input-sm w-auto">
               <option value="number" x-bind:selected="f.format !== 'percent'">Número</option>
               <option value="percent" x-bind:selected="f.format === 'percent'">Porcentaje (%)</option>
             </select>
             <span class="flex-1" aria-hidden="true"></span>
             <button type="button" x-on:click="removeCalculated(calculated.indexOf(f))" title="Eliminar campo"
                     x-bind:aria-label="`Eliminar ${f.name || 'campo'}`"
-                    class="p-1.5 rounded-md text-ink/40 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+                    class="ui-btn ui-btn-icon hover:text-red-600 hover:bg-red-50">
               <i class="ti ti-trash text-base" aria-hidden="true"></i>
             </button>
           </div>
@@ -373,7 +370,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
             <!-- Panel de piezas: se arrastran al canvas o, con un lugar elegido, se colocan con
                  un clic. Soltar aquí un bloque del canvas lo quita. -->
             <aside data-fb-trash aria-label="Piezas de la fórmula"
-                   class="h-full min-h-[30rem] sm:min-h-0 flex flex-col overflow-hidden rounded border border-line bg-paper/60 text-xs">
+                   class="h-full min-h-[30rem] sm:min-h-0 flex flex-col overflow-hidden rounded-md border border-line bg-paper/60 text-xs">
 
               <!-- 1. Columnas -->
               <div class="flex flex-col border-b border-line transition-all duration-300"
@@ -390,7 +387,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                      x-transition:enter-end="opacity-100 translate-y-0"
                      class="flex-1 min-h-0 flex flex-col gap-2 p-2.5 pt-0">
                   <input type="search" x-model="columnQuery" placeholder="Buscar columna…" aria-label="Buscar columna"
-                         class="w-full shrink-0 text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                         class="ui-input ui-input-sm shrink-0">
                   <div class="flex-1 min-h-0 overflow-y-auto flex flex-wrap gap-1 content-start pr-1">
                     <template x-for="col in filteredBuilderColumns" :key="col">
                       <button type="button" x-bind:data-fb-piece="JSON.stringify(columnPiece(col))" x-on:click="clickPiece(columnPiece(col))"
@@ -426,7 +423,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                   <input type="text" x-model="valueInput" x-bind:placeholder="valueType === 'number' ? 'Ej. 100 o 1.5' : 'Ej. Sí'"
                          x-bind:inputmode="valueType === 'number' ? 'decimal' : 'text'" aria-label="Valor"
                          x-on:keydown.enter.prevent="clickPiece(valuePiece)"
-                         class="w-full text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                         class="ui-input ui-input-sm">
                   <p x-show="valueError" x-text="valueError" class="text-[11px] text-red-600"></p>
                   <div x-show="valuePiece && (valueType === 'text' || valueInput.trim())" class="flex items-center gap-1.5">
                     <button type="button" x-bind:data-fb-piece="valuePiece ? JSON.stringify(valuePiece) : null"
@@ -550,14 +547,14 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               <!-- Generar con IA: la fórmula que arma reemplaza lo que haya en el lienzo; si no
                    puede con el pedido, muestra su motivo y el lienzo no cambia. -->
               <form x-on:submit.prevent="generateWithAI(f)" class="space-y-1">
-                <div class="flex items-center gap-2 rounded border border-violet-200 bg-violet-50/60 pl-2.5 pr-1 py-1 focus-within:border-violet-400">
+                <div class="flex items-center gap-2 rounded-md border border-violet-200 bg-violet-50/60 pl-2.5 pr-1 py-1 focus-within:border-violet-400">
                   <i class="ti ti-sparkles text-base text-violet-600 shrink-0" aria-hidden="true"></i>
                   <input type="text" x-model="f._aiPrompt" x-bind:disabled="f._aiLoading" maxlength="500"
                          placeholder="Describe el cálculo y la IA arma la fórmula, ej. % de las ventas que son de Hogar"
                          aria-label="Pedido para generar la fórmula con IA"
                          class="flex-1 min-w-0 bg-transparent text-sm text-ink placeholder:text-ink/40 focus:outline-none disabled:opacity-60">
                   <button type="submit" x-bind:disabled="!f._aiPrompt.trim() || f._aiLoading"
-                          class="shrink-0 inline-flex items-center gap-1.5 h-8 rounded-md bg-violet-600 hover:bg-violet-700 px-3 text-xs font-semibold text-white transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                          class="ui-btn ui-btn-sm shrink-0 bg-violet-600 hover:bg-violet-700 text-white">
                     <i x-show="f._aiLoading" class="ti ti-loader-2 animate-spin" aria-hidden="true"></i>
                     <span x-text="f._aiLoading ? 'Generando…' : 'Generar'"></span>
                   </button>
@@ -566,7 +563,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               </form>
               <!-- Canvas: la fórmula como bloques; el fondo es la raíz. -->
               <div data-fb-drop="" x-on:click="fbSelected = null" aria-label="Fórmula"
-                   class="flex-1 min-h-[10rem] overflow-auto rounded border border-line bg-paper/30 p-3">
+                   class="flex-1 min-h-[10rem] overflow-auto rounded-md border border-line bg-paper/30 p-3">
                 <div x-show="f._unreadable" class="mb-2 flex flex-wrap items-center gap-2 text-xs text-amber-800">
                   <i class="ti ti-alert-triangle" aria-hidden="true"></i>
                   <span>No se pudo leer esta fórmula: <span class="font-mono" x-text="f.formula"></span></span>
@@ -593,27 +590,23 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
        sirve en modelo transformado; con «no»
        se lee como hoja normal, sin transformación. -->
   <template x-teleport="body">
-    <div x-show="formPopup" x-cloak x-on:keydown.escape.window="formPopup = false"
-         class="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="form-origin-title"
-           class="bg-white rounded w-full max-w-md border border-line shadow-xl">
-        <div class="flex items-center gap-2.5 px-5 py-2.5 border-b border-line">
+    <div x-show="formPopup" x-cloak x-on:keydown.escape.window="formPopup = false" class="ui-modal-backdrop">
+      <div role="dialog" aria-modal="true" aria-labelledby="form-origin-title" class="ui-modal">
+        <div class="ui-modal-header justify-start gap-2.5">
           <i class="ti ti-file-text text-base text-moss-600" aria-hidden="true"></i>
-          <h2 id="form-origin-title" class="flex-1 text-sm font-semibold text-ink">Origen de la hoja</h2>
+          <h2 id="form-origin-title" class="ui-modal-title flex-1">Origen de la hoja</h2>
         </div>
-        <div class="px-5 py-4 space-y-3">
+        <div class="ui-modal-body space-y-3">
           <p class="text-sm text-ink/80">
             ¿La pestaña <span class="font-medium" x-text="tab ? tab.title.trim() : ''"></span>
             proviene de un <span class="font-medium">Google Forms</span>?
           </p>
         </div>
-        <div class="flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-line">
-          <button type="button" x-on:click="answerFormOrigin(false)"
-                  class="inline-flex items-center h-9 px-4 text-sm font-medium text-ink/70 border border-line bg-white hover:bg-paper rounded-md transition cursor-pointer">
+        <div class="ui-modal-footer flex-wrap">
+          <button type="button" x-on:click="answerFormOrigin(false)" class="ui-btn ui-btn-secondary">
             No, es una hoja normal
           </button>
-          <button type="button" x-on:click="answerFormOrigin(true)"
-                  class="inline-flex items-center h-9 px-4 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-md transition cursor-pointer">
+          <button type="button" x-on:click="answerFormOrigin(true)" class="ui-btn ui-btn-primary">
             Sí, es de Google Forms
           </button>
         </div>

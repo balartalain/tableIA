@@ -253,8 +253,8 @@ function sourceManager() {
             const headerEle = colComponent.getElement();
             if (headerEle) {
               headerEle.style.transition = 'all 0.3s ease';
-              headerEle.style.backgroundColor = '#dcfce7';
-              headerEle.style.boxShadow = 'inset 0 0 0 2px #4d7c0f';
+              headerEle.style.backgroundColor = 'var(--color-moss-50)';
+              headerEle.style.boxShadow = 'inset 0 0 0 2px var(--color-moss-500)';
               setTimeout(() => {
                 headerEle.style.backgroundColor = '';
                 headerEle.style.boxShadow = '';

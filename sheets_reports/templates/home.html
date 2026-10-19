@@ -9,16 +9,6 @@
 <link href="{% static 'sheets_reports/css/tabulator.css' %}" rel="stylesheet">
 <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
 
-<style>
-  /* Altura aumentada para el encabezado y las filas de la tabla de tableros */
-  #dashboards-table .tabulator-header .tabulator-col .tabulator-col-content {
-    padding: 14px 16px;
-  }
-  #dashboards-table .tabulator-row .tabulator-cell {
-    padding: 14px 16px 0;
-  }
-</style>
-
 <script>
   window.URLS = {
     boardEditor: "{% url 'board_editor' dashboard_id=0 %}",
@@ -31,7 +21,7 @@
   <!-- Menú lateral -->
   <aside class="w-60 shrink-0 bg-white border-r border-line px-4 py-6 flex flex-col gap-6">
     <a :href="URLS.boardNew"
-       class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-md inline-flex items-center justify-center gap-2 transition">
+       class="ui-btn ui-btn-primary">
       <i class="ti ti-plus text-base" aria-hidden="true"></i>Crear tablero
     </a>
 
@@ -61,27 +51,27 @@
           <span class="sr-only">Buscar tablero</span>
           <i class="ti ti-search text-ink/30 absolute left-3 top-1/2 -translate-y-1/2 text-base" aria-hidden="true"></i>
           <input x-model="search" @input="applySearch()" type="search" placeholder="Buscar tablero…"
-                 class="w-64 border border-line rounded-md pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
+                 class="ui-input w-64 pl-9">
         </label>
       </div>
 
-      <div x-show="loadError" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3" x-text="loadError"></div>
+      <div x-show="loadError" x-cloak class="ui-alert ui-alert-error mb-4" x-text="loadError"></div>
 
-      <div x-show="loaded && dashboards.length === 0 && !loadError" x-cloak class="text-center py-20 bg-white border border-line rounded">
+      <div x-show="loaded && dashboards.length === 0 && !loadError" x-cloak class="ui-card text-center py-20">
         <div class="w-14 h-14 rounded-md bg-moss-50 flex items-center justify-center mx-auto mb-4">
           <i class="ti ti-layout-dashboard text-moss-600 text-2xl" aria-hidden="true"></i>
         </div>
         <h2 class="font-sans text-lg font-semibold mb-1">Crea tu primer tablero</h2>
         <p class="text-sm text-ink/50 mb-5 max-w-xs mx-auto">Conecta una hoja de Google Sheets y arma tu primer reporte en minutos.</p>
         <a :href="URLS.boardNew"
-           class="bg-moss-500 hover:bg-moss-600 text-white text-sm font-medium px-4 py-2.5 rounded-md inline-flex items-center gap-2 transition">
+           class="ui-btn ui-btn-primary">
           <i class="ti ti-plus text-base" aria-hidden="true"></i>Crear tablero
         </a>
       </div>
 
       <!-- Visible desde el inicio: Tabulator mide su contenedor al construirse (oculto mediría 0). -->
-      <div x-show="!(loaded && dashboards.length === 0)" class="bg-white border border-line rounded overflow-hidden">
-        <div x-ref="table" id="dashboards-table"></div>
+      <div x-show="!(loaded && dashboards.length === 0)" class="ui-card overflow-hidden">
+        <div x-ref="table" id="dashboards-table" class="tb-app tb-list"></div>
       </div>
     </section>
 
@@ -94,16 +84,16 @@
         </div>
       </div>
 
-      <div x-show="templatesError" x-cloak class="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded px-4 py-3" x-text="templatesError"></div>
+      <div x-show="templatesError" x-cloak class="ui-alert ui-alert-error mb-4" x-text="templatesError"></div>
 
-      <div x-show="templatesLoading" class="text-center py-20 bg-white border border-line rounded">
+      <div x-show="templatesLoading" class="ui-card text-center py-20">
         <i class="ti ti-loader-2 text-moss-600 text-3xl animate-spin mx-auto mb-2" aria-hidden="true"></i>
         <p class="text-sm text-ink/60">Cargando plantillas…</p>
       </div>
 
       <!-- Estado vacío cuando no hay plantillas -->
-      <div x-show="!templatesLoading && templatesLoaded && templates.length === 0 && !templatesError" class="text-center py-20 bg-white border border-line rounded">
-        <div class="w-14 h-14 rounded-2xl bg-moss-50 flex items-center justify-center mx-auto mb-4 border border-moss-100">
+      <div x-show="!templatesLoading && templatesLoaded && templates.length === 0 && !templatesError" class="ui-card text-center py-20">
+        <div class="w-14 h-14 rounded-md bg-moss-50 flex items-center justify-center mx-auto mb-4">
           <i class="ti ti-template text-moss-600 text-2xl" aria-hidden="true"></i>
         </div>
         <h2 class="font-sans text-lg font-semibold mb-1">Aún no tienes plantillas guardadas</h2>
@@ -116,22 +106,22 @@
       <div x-show="!templatesLoading && templates.length > 0" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
         <template x-for="t in templates" :key="t.id">
           <a :href="templateViewUrl(t)"
-             class="group relative bg-white border border-line hover:border-moss-400 rounded overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col cursor-pointer">
+             class="ui-card group relative hover:border-moss-300 overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col cursor-pointer">
             
             <!-- Botón de eliminar en hover -->
             <button type="button" x-show="t.can_delete" @click.stop.prevent="deleteTemplate(t.id)" title="Eliminar plantilla" aria-label="Eliminar plantilla"
-                    class="absolute top-2 right-2 z-10 w-6 h-6 rounded bg-white/90 hover:bg-red-50 text-ink/40 hover:text-red-600 shadow-xs flex items-center justify-center transition opacity-0 group-hover:opacity-100 cursor-pointer">
+                    class="ui-btn ui-btn-icon absolute top-2 right-2 z-10 w-7 h-7 bg-white/90 hover:bg-red-50 hover:text-red-600 shadow-sm opacity-0 group-hover:opacity-100">
               <i class="ti ti-trash text-xs" aria-hidden="true"></i>
             </button>
 
             <!-- Miniatura / Thumbnail -->
-            <div class="h-36 w-full bg-paper border-b border-line overflow-hidden relative flex items-center justify-center rounded-t">
+            <div class="h-36 w-full bg-paper border-b border-line overflow-hidden relative flex items-center justify-center">
               <template x-if="t.thumbnail">
-                <img :src="t.thumbnail" alt="Vista previa del tablero" class="w-full h-full object-cover object-top transition-transform duration-200 group-hover:scale-102">
+                <img :src="t.thumbnail" alt="Vista previa del tablero" class="w-full h-full object-cover object-top transition-transform duration-200 group-hover:scale-105">
               </template>
               <template x-if="!t.thumbnail">
                 <div class="w-full h-full flex flex-col items-center justify-center bg-paper text-ink/40 gap-1.5 select-none p-3 text-center">
-                  <div class="w-10 h-10 rounded bg-moss-50 border border-moss-100 flex items-center justify-center text-moss-700 shadow-2xs">
+                  <div class="w-10 h-10 rounded-md bg-moss-50 border border-moss-100 flex items-center justify-center text-moss-700">
                     <i class="ti ti-template text-xl"></i>
                   </div>
                   <span class="text-[10px] font-semibold text-ink/60" x-text="t.cardCount === 1 ? '1 tarjeta' : `${t.cardCount} tarjetas`"></span>
@@ -140,7 +130,7 @@
             </div>
 
             <!-- Footer: Nombre y Creado por -->
-            <div class="p-3.5 bg-white flex flex-col justify-between flex-1 min-w-0 rounded-b">
+            <div class="p-3.5 bg-white flex flex-col justify-between flex-1 min-w-0">
               <h3 class="font-semibold text-xs text-ink truncate group-hover:text-moss-600 transition" x-text="t.nombre"></h3>
               <p class="text-[11px] text-ink/40 mt-1 truncate">
                 Creado por: <span class="font-medium text-ink/60" x-text="t.owner"></span>
@@ -154,28 +144,26 @@
   </main>
 
   <!-- Renombrar -->
-  <div x-show="editingDashboard" x-cloak
-       class="fixed inset-0 bg-ink/40 flex items-center justify-center p-4 z-40">
+  <div x-show="editingDashboard" x-cloak class="ui-modal-backdrop">
     <div @click.outside="editingDashboard = null" @keydown.escape.window="editingDashboard = null"
-         class="bg-white rounded w-full max-w-md border border-line shadow-xl">
-      <div class="px-6 pt-6 pb-4 border-b border-line">
-        <h2 class="font-sans text-lg font-semibold">Renombrar tablero</h2>
+         role="dialog" aria-modal="true" aria-labelledby="rename-title" class="ui-modal">
+      <div class="ui-modal-header">
+        <h2 id="rename-title" class="ui-modal-title">Renombrar tablero</h2>
       </div>
       <template x-if="editingDashboard">
-        <form @submit.prevent="saveEdit()" class="px-6 py-5 space-y-3">
-          <label class="block text-xs font-medium text-ink/60">Nombre del tablero
+        <form @submit.prevent="saveEdit()" class="ui-modal-body space-y-3">
+          <label class="ui-label">Nombre del tablero
             <input x-model="editingDashboard.nombre" type="text" x-init="$nextTick(() => $el.select())"
-                   class="mt-1.5 w-full border border-line rounded-md px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-moss-300 focus:border-moss-500">
+                   class="ui-input mt-1.5">
           </label>
           <p x-show="formError" x-text="formError" class="text-xs text-red-600"></p>
         </form>
       </template>
-      <div class="px-6 py-4 border-t border-line flex justify-end gap-2">
-        <button @click="editingDashboard = null"
-                class="px-4 py-2 text-sm font-medium text-ink/60 hover:bg-paper rounded-md transition">Cancelar</button>
-        <button @click="saveEdit()"
+      <div class="ui-modal-footer">
+        <button type="button" @click="editingDashboard = null" class="ui-btn ui-btn-ghost">Cancelar</button>
+        <button type="button" @click="saveEdit()"
                 :disabled="!editingDashboard || !editingDashboard.nombre.trim()"
-                class="px-4 py-2 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 disabled:opacity-40 disabled:cursor-not-allowed rounded-md transition">
+                class="ui-btn ui-btn-primary">
           Guardar
         </button>
       </div>
@@ -297,7 +285,7 @@
         const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         const action = (name, icon, label, extra = '') =>
           `<button type="button" data-action="${name}" title="${label}" aria-label="${label}"
-                   class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper ${extra}">
+                   class="ui-btn ui-btn-icon ${extra}">
              <i class="ti ${icon} text-base" aria-hidden="true"></i></button>`;
         table = new Tabulator(this.$refs.table, {
           data: [],

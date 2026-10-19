@@ -5,7 +5,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
   <div x-show="view === 'list'" class="flex-1 min-h-0 flex flex-col gap-4">
     <div class="flex items-center justify-between gap-3">
       <button type="button" x-on:click="add()"
-              class="shrink-0 text-sm font-medium text-white bg-moss-500 hover:bg-moss-600 rounded-md px-4 py-2 transition cursor-pointer inline-flex items-center gap-1.5">
+              class="ui-btn ui-btn-primary shrink-0">
         <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar fuente
       </button>
     </div>
@@ -14,7 +14,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
 
     <!-- Confirmación al eliminar: los widgets que se quedan sin datos. -->
     <div x-show="pendingDelete" x-cloak role="alertdialog" aria-label="Confirmar eliminación"
-         class="rounded border border-red-200 bg-red-50 p-3 space-y-2">
+         class="ui-alert ui-alert-error p-3 space-y-2">
       <p class="text-sm font-semibold text-red-900">
         ¿Eliminar la fuente «<span x-text="pendingDelete && pendingDelete.source.label"></span>»?
         <span x-show="pendingDelete && pendingDelete.impact.length" class="font-normal"
@@ -28,9 +28,9 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
       </ul>
       <div class="flex justify-end gap-2">
         <button type="button" x-on:click="pendingDelete = null"
-                class="text-sm font-medium text-ink/60 bg-white hover:bg-paper rounded-md px-3 py-1.5 transition cursor-pointer">Cancelar</button>
+                class="ui-btn ui-btn-secondary ui-btn-sm">Cancelar</button>
         <button type="button" x-on:click="confirmRemove()"
-                class="text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md px-3 py-1.5 transition cursor-pointer">Eliminar</button>
+                class="ui-btn ui-btn-danger ui-btn-sm">Eliminar</button>
       </div>
     </div>
     <p x-show="loading" class="text-xs text-ink/50">
@@ -38,39 +38,39 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
     </p>
 
     <div x-show="!loading && !error && !sources.length"
-         class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded py-10">
+         class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-md py-10">
       <i class="ti ti-database-off text-2xl text-ink/30" aria-hidden="true"></i>
       <p class="text-sm text-ink/60">Este tablero no tiene fuentes de datos.</p>
     </div>
 
-    <div x-show="sources.length" class="flex-1 min-h-0 overflow-auto border border-line rounded">
-      <table class="w-full text-sm">
-        <thead class="sticky top-0 z-10 bg-paper text-left text-[11px] uppercase tracking-wider text-ink/50">
+    <div x-show="sources.length" class="ui-card flex-1 min-h-0 overflow-auto">
+      <table class="ui-table">
+        <thead>
           <tr>
-            <th class="px-3 py-2 font-semibold">Fuente</th>
-            <th class="px-3 py-2 w-44 font-semibold">Columnas en uso</th>
-            <th class="px-3 py-2 w-40 font-semibold">Última actualización</th>
-            <th class="px-3 py-2 w-28 font-semibold text-right">Widgets</th>
-            <th class="px-3 py-2 w-px font-semibold text-right">Acciones</th>
+            <th>Fuente</th>
+            <th class="w-44">Columnas en uso</th>
+            <th class="w-40">Última actualización</th>
+            <th class="w-28 text-right">Widgets</th>
+            <th class="w-px text-right">Acciones</th>
           </tr>
         </thead>
         <tbody>
           <template x-for="s in sources" :key="s.id">
-            <tr class="border-t border-line align-top">
-              <td class="px-3 py-2.5">
+            <tr class="align-top">
+              <td>
                 <span class="flex items-start gap-2.5 min-w-0">
                   <span class="mt-0.5">{% include "sheets_reports/_icon_google_sheets.html" %}</span>
                   <span class="min-w-0 space-y-0.5">
                     <span class="flex flex-wrap items-center gap-2">
                       <span class="font-medium truncate" x-text="s.label"></span>
                       <button type="button" x-on:click="viewData(s)" title="Ver datos transformados de la fuente"
-                              class="inline-flex items-center gap-1 text-[11px] font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 px-2 py-0.5 rounded transition cursor-pointer shrink-0">
+                              class="ui-btn ui-btn-soft ui-btn-xs shrink-0">
                         <i class="ti ti-eye text-xs" aria-hidden="true"></i>
                         <span>Ver</span>
                       </button>
                       <!-- Estado: solo cuando hay un problema. -->
                       <span x-show="statusInfo(s)" x-cloak x-bind:title="statusInfo(s) && statusInfo(s).title"
-                            class="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full bg-red-50 text-red-700 border border-red-200 px-2 py-0.5">
+                            class="ui-badge ui-badge-danger">
                         <i class="ti ti-alert-triangle text-xs" aria-hidden="true"></i>
                         <span x-text="statusInfo(s) && statusInfo(s).label"></span>
                       </span>
@@ -81,33 +81,33 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                   </span>
                 </span>
               </td>
-              <td class="px-3 py-2.5 text-ink/70" x-text="columnsLabel(s)"></td>
-              <td class="px-3 py-2.5 whitespace-nowrap" x-bind:title="s.refreshed_at && new Date(s.refreshed_at).toLocaleString()"
+              <td class="text-ink/70" x-text="columnsLabel(s)"></td>
+              <td class="whitespace-nowrap" x-bind:title="s.refreshed_at && new Date(s.refreshed_at).toLocaleString()"
                   x-bind:class="s.refreshed_at || refreshing[s.id] ? 'text-ink/70' : 'text-ink/40'"
                   x-text="refreshing[s.id] ? 'Actualizando…' : refreshedLabel(s)"></td>
-              <td class="px-3 py-2.5 text-right" x-bind:class="s.widgets ? 'text-ink/70' : 'text-ink/40'"
+              <td class="text-right" x-bind:class="s.widgets ? 'text-ink/70' : 'text-ink/40'"
                   x-text="s.widgets ? s.widgets : 'Sin usar'"></td>
-              <td class="px-3 py-1.5">
-                <div class="flex justify-end gap-0.5 whitespace-nowrap text-xs font-medium">
+              <td class="py-1.5">
+                <div class="flex justify-end gap-0.5">
                   <button type="button" x-on:click="changeSheet(s)" title="Elegir otra hoja o pestaña"
                           x-bind:aria-label="`Cambiar fuente de ${s.label}`"
-                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-ink hover:bg-paper cursor-pointer">
+                          class="ui-btn ui-btn-ghost ui-btn-xs text-xs">
                     <i class="ti ti-replace text-base" aria-hidden="true"></i>
                     Cambiar fuente
                   </button>
                   <a x-bind:href="sheetUrl(s)" target="_blank" rel="noopener" title="Abrir la hoja en Google Sheets"
                      x-bind:aria-label="`Abrir origen de ${s.label}`"
-                     class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-ink hover:bg-paper">
+                     class="ui-btn ui-btn-ghost ui-btn-xs text-xs">
                     <i class="ti ti-external-link text-base" aria-hidden="true"></i>
                     Abrir origen
                   </a>
                   <button type="button" x-on:click="edit(s)" title="Editar columnas y campos calculados" x-bind:aria-label="`Editar ${s.label}`"
-                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-ink hover:bg-paper cursor-pointer">
+                          class="ui-btn ui-btn-ghost ui-btn-xs text-xs">
                     <i class="ti ti-pencil text-base" aria-hidden="true"></i>
                     Editar
                   </button>
                   <button type="button" x-on:click="remove(s)" title="Eliminar la fuente" x-bind:aria-label="`Eliminar ${s.label}`"
-                          class="inline-flex items-center gap-1 px-1.5 py-1 rounded-md text-ink/60 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+                          class="ui-btn ui-btn-ghost ui-btn-xs text-xs hover:text-red-600 hover:bg-red-50">
                     <i class="ti ti-trash text-base" aria-hidden="true"></i>
                     Eliminar
                   </button>
@@ -129,7 +129,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
     <div class="flex items-center justify-between gap-3">
       <div class="flex items-center gap-3 min-w-0">
         <button type="button" x-on:click="closeDataView()" title="Volver a la lista de fuentes"
-                class="shrink-0 p-1.5 rounded-md text-ink/60 hover:text-ink hover:bg-paper transition cursor-pointer">
+                class="ui-btn ui-btn-icon shrink-0">
           <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
         </button>
         <div class="min-w-0">
@@ -141,7 +141,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
       <div x-show="!loadingData && !dataError && previewColumns.length" class="w-64 max-w-xs shrink-0">
         <select x-vselect="selectedColumnJump" x-model="selectedColumnJump" x-on:change="jumpToColumn($event.target.value)"
                 aria-label="Ir a columna" placeholder="Ir a columna…"
-                class="w-full text-xs border border-line rounded-md px-2 py-1 bg-white focus:outline-none focus:border-moss-500">
+                class="ui-input ui-input-sm">
           <option value="">Ir a columna…</option>
           <template x-for="c in previewColumns" :key="c">
             <option x-bind:value="c" x-text="c"></option>
@@ -158,17 +158,17 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
       <p class="text-xs text-ink/60">Cargando datos transformados…</p>
     </div>
 
-    <div x-show="dataError" role="alert" class="px-3 py-3 rounded border border-red-200 bg-red-50 text-xs text-red-700 space-y-2">
+    <div x-show="dataError" role="alert" class="ui-alert ui-alert-error text-xs space-y-2">
       <p x-text="dataError"></p>
       <button type="button" x-on:click="previewSource && viewData(previewSource)"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-moss-700 bg-moss-50 hover:bg-moss-100 border border-moss-200 rounded-md transition cursor-pointer">
+              class="ui-btn ui-btn-soft ui-btn-sm">
         <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
         <span>Volver a conectar</span>
       </button>
     </div>
 
-    <div x-show="!loadingData && !dataError" class="flex-1 min-h-0 border border-line rounded overflow-hidden">
-      <div x-ref="previewTabulatorHost" class="w-full h-full tb-preview"></div>
+    <div x-show="!loadingData && !dataError" class="ui-card flex-1 min-h-0 overflow-hidden">
+      <div x-ref="previewTabulatorHost" class="w-full h-full tb-app"></div>
     </div>
   </div>
 </div>

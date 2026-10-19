@@ -583,6 +583,36 @@ Todas usan `forceFallback: true` + `fallbackOnBody: true` para arrastre consiste
 - **CSS custom properties** en `:root` para toda la paleta.
 - **`[x-cloak]`** global para ocultar elementos antes de que Alpine arranque.
 
+### Estilos de la app (`ui-*`)
+
+Las pantallas de la app usan los componentes de `templates/sheets_reports/_app_ui.html`, no
+cadenas de utilidades sueltas. Esas pantallas son el home, Fuentes (`source_manager.html`,
+`source_picker.html`), el panel de Configuración, `email_campaign.html` y la pestaña
+«Seguimiento de correos». El tablero y los widgets no los usan.
+
+El archivo es un `<style type="text/tailwindcss">` con `@layer components` incluido en el
+`<head>` de `base.html`, que el CDN de Tailwind procesa sin build. No es un `.css` aparte
+porque el preflight de Tailwind (`[type=button] { background: transparent }`) le ganaría a
+los fondos de los botones. Al quedar en la capa `components`, una utilidad suelta
+(`w-64`, `hover:text-red-600`) ajusta un caso puntual.
+
+| Pieza | Clases |
+|---|---|
+| Botón | `ui-btn` + `ui-btn-primary` / `-secondary` / `-ghost` / `-soft` / `-danger` / `-danger-outline` / `-icon`; tamaños `ui-btn-sm`, `ui-btn-xs` |
+| Campo | `ui-label`, `ui-input` (también para `<select>`), `ui-input-sm`, `ui-textarea`, `ui-check` |
+| Contenedor | `ui-card`, `ui-card-title`, `ui-eyebrow` (rótulo en mayúsculas) |
+| Aviso | `ui-alert` + `ui-alert-error` / `-warn` / `-info` |
+| Badge | `ui-badge` + `ui-badge-neutral` / `-success` / `-danger` / `-warn` / `-info` |
+| Modal | `ui-modal-backdrop` > `ui-modal` > `ui-modal-header` (`ui-modal-title`), `ui-modal-body`, `ui-modal-footer` |
+| Pestañas | `ui-tabs` > `ui-tab`, activa con `aria-selected="true"` (o `.is-active`) |
+| Tabla HTML | `ui-table`: encabezado fijo, rótulos y celdas ya espaciados |
+
+Reglas:
+- Un solo radio, `rounded-md`.
+- El foco es el borde `moss-500`, sin anillo.
+- Solo existen los tonos `moss` del tema (50, 100, 300, 500, 600, 700): `moss-200` o `moss-800` no generan nada.
+- Las tablas Tabulator de la app llevan `tb-app` (encabezado neutro, no el color del tablero). El listado del home lleva además `tb-list` (filas más altas).
+
 ## Selects con buscador (`x-vselect`)
 
 Los `<select>` del editor llevan la directiva `x-vselect` (`vselect.js`), que monta un

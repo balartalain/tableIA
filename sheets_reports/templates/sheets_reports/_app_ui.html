@@ -1,0 +1,85 @@
+{% comment %}
+Componentes de la app (home, fuentes, configuración, correo): una sola versión de cada botón,
+campo, tarjeta, modal, pestaña, badge y tabla. El tablero y los widgets no los usan.
+
+Va dentro de <head> como `text/tailwindcss`: el CDN de Tailwind la procesa (sin build) y deja
+estas clases en la capa `components`, debajo de las utilidades, así que una utilidad suelta
+(`w-64`, `hover:text-red-600`) las ajusta en un caso puntual. Las reglas sobre descendientes
+van con `:where()` para no ganarle en especificidad a esas utilidades.
+{% endcomment %}
+<style type="text/tailwindcss">
+  @layer components {
+    /* ---------- Botones: .ui-btn + una variante (+ un tamaño) ---------- */
+    .ui-btn {
+      @apply inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-md border border-transparent
+             text-sm font-medium whitespace-nowrap transition cursor-pointer
+             disabled:opacity-40 disabled:cursor-not-allowed;
+    }
+    .ui-btn-sm { @apply h-8 px-3 text-xs; }
+    .ui-btn-xs { @apply h-6 px-2 gap-1 text-[11px]; }
+    .ui-btn-primary { @apply bg-moss-500 text-white hover:bg-moss-600; }
+    .ui-btn-secondary { @apply bg-white border-line text-ink/70 hover:bg-paper hover:text-ink; }
+    .ui-btn-ghost { @apply text-ink/60 hover:bg-paper hover:text-ink; }
+    .ui-btn-soft { @apply bg-moss-50 border-moss-100 text-moss-700 hover:bg-moss-100; }
+    .ui-btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
+    .ui-btn-danger-outline { @apply bg-white border-red-300 text-red-700 hover:bg-red-600 hover:border-red-600 hover:text-white; }
+    /* Solo ícono: cuadrado, gris hasta el hover. */
+    .ui-btn-icon { @apply w-8 h-8 px-0 text-ink/50 hover:text-ink hover:bg-paper; }
+
+    /* ---------- Formularios ---------- */
+    .ui-label { @apply block text-xs font-semibold text-ink/70; }
+    .ui-input {
+      @apply w-full h-9 px-3 rounded-md border border-line bg-white text-sm text-ink
+             placeholder:text-ink/40 focus:outline-none focus:border-moss-500 transition
+             disabled:bg-paper disabled:text-ink/50;
+    }
+    .ui-input-sm { @apply h-8 px-2.5 text-xs; }
+    .ui-textarea {
+      @apply w-full px-3 py-2 rounded-md border border-line bg-white text-sm text-ink
+             placeholder:text-ink/40 focus:outline-none focus:border-moss-500 transition;
+    }
+    .ui-check { @apply accent-moss-500 cursor-pointer; }
+
+    /* ---------- Contenedores ---------- */
+    .ui-card { @apply bg-white border border-line rounded-md; }
+    .ui-card-title { @apply text-sm font-semibold text-ink; }
+    /* Rótulo pequeño en mayúsculas: encabezados de sección, de tabla y de dato. */
+    .ui-eyebrow { @apply text-[11px] font-semibold uppercase tracking-wider text-ink/50; }
+
+    .ui-alert { @apply rounded-md border px-3 py-2.5 text-sm; }
+    .ui-alert-error { @apply border-red-200 bg-red-50 text-red-700; }
+    .ui-alert-warn { @apply border-amber-200 bg-amber-50 text-amber-800; }
+    .ui-alert-info { @apply border-moss-100 bg-moss-50 text-moss-700; }
+
+    /* ---------- Badges ---------- */
+    .ui-badge { @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap; }
+    .ui-badge-neutral { @apply bg-paper border-line text-ink/60; }
+    .ui-badge-success { @apply bg-moss-50 border-moss-100 text-moss-700; }
+    .ui-badge-danger { @apply bg-red-50 border-red-200 text-red-700; }
+    .ui-badge-warn { @apply bg-amber-50 border-amber-200 text-amber-800; }
+    .ui-badge-info { @apply bg-sky-50 border-sky-200 text-sky-700; }
+
+    /* ---------- Modal ---------- */
+    .ui-modal-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40; }
+    .ui-modal { @apply w-full max-w-md max-h-[90vh] flex flex-col bg-white border border-line rounded-md shadow-xl overflow-hidden; }
+    .ui-modal-header { @apply shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-b border-line; }
+    .ui-modal-title { @apply text-sm font-semibold text-ink; }
+    .ui-modal-body { @apply flex-1 min-h-0 overflow-y-auto px-5 py-4; }
+    .ui-modal-footer { @apply shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-line bg-paper/60; }
+
+    /* ---------- Pestañas (subrayado) ---------- */
+    .ui-tabs { @apply flex gap-1 border-b border-line; }
+    .ui-tab {
+      @apply -mb-px inline-flex items-center gap-1.5 px-3 py-2.5 border-b-2 border-transparent
+             text-sm font-medium text-ink/60 hover:text-ink transition cursor-pointer;
+    }
+    .ui-tab[aria-selected="true"], .ui-tab.is-active { @apply border-moss-500 text-moss-700; }
+
+    /* ---------- Tabla HTML simple (listados) ---------- */
+    .ui-table { @apply w-full text-sm; }
+    .ui-table :where(thead) { @apply sticky top-0 z-10 bg-paper text-left; }
+    .ui-table :where(th) { @apply px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/50; }
+    .ui-table :where(td) { @apply px-3 py-2.5; }
+    .ui-table :where(tbody tr) { @apply border-t border-line; }
+  }
+</style>

@@ -61,13 +61,13 @@
 </div>
 {% if email_enabled %}
 <!-- Con el envío de correos activado: el tablero o el reporte del envío (email-report.js). -->
-<nav id="view-tabs" role="tablist" aria-label="Reportes" class="border-b border-line bg-white px-6 flex gap-1">
+<nav id="view-tabs" role="tablist" aria-label="Reportes" class="ui-tabs bg-white px-6">
   <button type="button" role="tab" data-tab="charts" aria-controls="tab-charts"
-          class="view-tab -mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition cursor-pointer inline-flex items-center gap-1.5">
+          class="view-tab ui-tab">
     <i class="ti ti-layout-dashboard text-base" aria-hidden="true"></i>Tablero
   </button>
   <button type="button" role="tab" data-tab="emails" aria-controls="tab-emails"
-          class="view-tab -mb-px border-b-2 px-3 py-2.5 text-sm font-medium transition cursor-pointer inline-flex items-center gap-1.5">
+          class="view-tab ui-tab">
     <i class="ti ti-mail text-base" aria-hidden="true"></i>Seguimiento de correos
   </button>
 </nav>
@@ -80,9 +80,9 @@
 </div>
 {% if email_enabled %}
 <div id="tab-emails" class="mx-auto p-6 space-y-6 hidden">
-  <p id="email-report-error" role="alert" class="hidden text-sm text-red-600"></p>
+  <p id="email-report-error" role="alert" class="ui-alert ui-alert-error hidden"></p>
   <!-- En qué está el envío -->
-  <div id="email-status" role="status" class="flex items-start gap-3 border border-line rounded bg-white p-4">
+  <div id="email-status" role="status" class="flex items-start gap-3 border border-line rounded-md bg-white p-4">
     <i id="email-status-icon" class="ti ti-clock text-xl text-ink/50" aria-hidden="true"></i>
     <div class="min-w-0">
       <p id="email-status-title" class="text-sm font-semibold text-ink">—</p>
@@ -90,8 +90,8 @@
     </div>
   </div>
   <div class="grid grid-cols-12 gap-4">
-    <section class="col-span-12 md:col-span-4 bg-white border border-line rounded shadow-sm p-4">
-      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Notificados</h2>
+    <section class="col-span-12 md:col-span-4 ui-card shadow-sm p-4">
+      <h2 class="ui-eyebrow pb-2">Notificados</h2>
       <p class="font-semibold text-ink">
         <span id="email-kpi-sent" class="text-4xl">—</span>
         <span class="text-sm text-ink/50">de <span id="email-kpi-total">—</span> destinatarios</span>
@@ -107,27 +107,27 @@
       </ul>
       <p id="email-kpi-end" class="mt-3 text-xs text-ink/60"></p>
     </section>
-    <section class="col-span-12 md:col-span-8 bg-white border border-line rounded shadow-sm p-4">
-      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Enviados por día</h2>
+    <section class="col-span-12 md:col-span-8 ui-card shadow-sm p-4">
+      <h2 class="ui-eyebrow pb-2">Enviados por día</h2>
       <div id="email-by-day-chart"></div>
     </section>
   </div>
   <div class="grid grid-cols-12 gap-4">
-    <section class="col-span-12 lg:col-span-7 bg-white border border-line rounded shadow-sm p-4">
-      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Remitentes</h2>
+    <section class="col-span-12 lg:col-span-7 ui-card shadow-sm p-4">
+      <h2 class="ui-eyebrow pb-2">Remitentes</h2>
       <div id="email-senders-table"></div>
     </section>
-    <section class="col-span-12 lg:col-span-5 bg-white border border-line rounded shadow-sm p-4">
-      <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Errores por motivo</h2>
+    <section class="col-span-12 lg:col-span-5 ui-card shadow-sm p-4">
+      <h2 class="ui-eyebrow pb-2">Errores por motivo</h2>
       <div id="email-errors-table"></div>
     </section>
   </div>
-  <section class="bg-white border border-line rounded shadow-sm p-4">
-    <h2 class="text-[10px] font-bold uppercase tracking-wider text-ink/40 pb-2">Destinatarios</h2>
+  <section class="ui-card shadow-sm p-4">
+    <h2 class="ui-eyebrow pb-2">Destinatarios</h2>
     <div id="email-recipients-table"></div>
   </section>
-  <details id="email-logs" class="bg-white border border-line rounded shadow-sm p-4">
-    <summary class="text-[10px] font-bold uppercase tracking-wider text-ink/40 cursor-pointer">Registro de envíos</summary>
+  <details id="email-logs" class="ui-card shadow-sm p-4">
+    <summary class="ui-eyebrow cursor-pointer">Registro de envíos</summary>
     <div id="email-logs-table" class="mt-2"></div>
   </details>
 </div>

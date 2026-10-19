@@ -96,7 +96,7 @@
             }
           }
         },
-        colors: this.getDonutColors(series.length),
+        colors: this.getSeriesColors(series.length),
         series,
         labels,
         legend: { show: this.style.showLegend !== false, position: 'bottom', fontSize: '10px' },

@@ -202,23 +202,17 @@
       return [this.getPrimaryColor()];
     }
 
-    // Genera N tonos para series/categorías. Si count=1, usa el color base.
-    // Si count > 1, escala de forma continua desde un tono oscuro del color base hasta un tono suave.
+    // Genera N tonos para series, categorías y porciones. Si count=1, usa el color base.
+    // Si count > 1, escala de forma continua desde el color primario hasta un tono suave.
     getSeriesColors(count = 1) {
       const primary = this.getPrimaryColor();
       if (count <= 1) return [primary];
 
       if (typeof window.chroma === 'function') {
-        const dark = window.chroma(primary).darken(0.8).hex();
         const light = window.chroma(primary).brighten(1.2).hex();
-        return window.chroma.scale([dark, light]).mode('lab').colors(count);
+        return window.chroma.scale([primary, light]).mode('lab').colors(count);
       }
       return [primary];
-    }
-
-    // Genera N colores por escala continua para el gráfico de dona
-    getDonutColors(count = 4) {
-      return this.getSeriesColors(count);
     }
 
     // Genera una escala cromática unidireccional (0 a 1) usando chroma.js
@@ -247,10 +241,9 @@
       };
     }
 
-    // Paleta de la miniatura derivada dinámicamente del color del tablero y estilo del widget.
+    // Paleta de la miniatura derivada dinámicamente del color del tablero.
     thumbnailPalette() {
-      const isMulti = this.style && this.style.color_scheme === 'multi';
-      return isMulti ? this.getDonutColors(6) : this.getSeriesColors(6);
+      return this.getSeriesColors(6);
     }
 
     // Contenido interior de la miniatura. Por defecto, nada (el generador dibuja barras).

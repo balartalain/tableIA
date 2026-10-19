@@ -104,7 +104,11 @@ def fetch_sheet_dataframe(sheet_id: str, gid: str, headers: bool = True,
             "conectar tu cuenta de Google."
         )
 
-    df = pd.read_csv(io.StringIO(response.text), keep_default_na=False, na_values=[""],
+    # La exportación de Google es siempre UTF-8, pero a veces responde «text/csv» sin charset y
+    # `response.text` lo leería como ISO-8859-1 («Tecnología» → «TecnologÃ­a»). `-sig` quita
+    # la marca BOM si viene.
+    text = response.content.decode("utf-8-sig", errors="replace")
+    df = pd.read_csv(io.StringIO(text), keep_default_na=False, na_values=[""],
                      header=0 if headers else None, dtype=str)
     if headers:
         df.columns = [str(c).strip() for c in df.columns]
@@ -127,7 +131,7 @@ def _cache_key(sheet_id: str, gid: str, headers: bool) -> str:
 # mostrar «actualizado» sin cargar el frame. La hoja original no se guarda: se lee de Google al
 # conectar la pestaña, con «Actualizar datos» o cuando cambia `_FRAME_VERSION`.
 COERCED, TRANSFORMED = "coerced", "transformed"
-_FRAME_VERSION = 6
+_FRAME_VERSION = 7
 
 
 def _frame_key(kind: str, sheet_id: str, gid: str, headers: bool) -> str:

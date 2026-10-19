@@ -204,8 +204,9 @@ class CreateFromSourceTests(TestCase):
         self.assertIsNotNone(d.last_opened_at)
 
 
-def csv_response(text):
-    return mock.Mock(status_code=200, headers={"Content-Type": "text/csv; charset=utf-8"}, text=text)
+def csv_response(text, content_type="text/csv; charset=utf-8"):
+    return mock.Mock(status_code=200, headers={"Content-Type": content_type}, text=text,
+                     content=text.encode("utf-8"))
 
 
 @mock.patch("sheets_reports.services.sheets._read_attempts", return_value=[None])
@@ -228,6 +229,22 @@ class FetchSheetTests(SimpleTestCase):
     def test_letras_de_columna(self, _read):
         self.assertEqual([sheets.column_letter(i) for i in (0, 25, 26, 27, 701, 702)],
                          ["A", "Z", "AA", "AB", "ZZ", "AAA"])
+
+    def test_las_tildes_llegan_bien_aunque_google_no_diga_el_charset(self, _read):
+        """Con «text/csv» a secas, `requests` decodifica como ISO-8859-1: «Tecnología» llegaría
+        como «TecnologÃ­a». Los bytes son UTF-8 y se leen como tal."""
+        csv = "Categoría,Estado\r\nTecnología y Software,En Tránsito\r\n"
+        response = csv_response(csv, content_type="text/csv")
+        response.text = csv.encode("utf-8").decode("latin-1")     # lo que haría requests
+        with mock.patch("requests.get", return_value=response):
+            df = sheets.fetch_sheet_dataframe("abc", "5")
+        self.assertEqual(list(df.columns), ["Categoría", "Estado"])
+        self.assertEqual(df.iloc[0].tolist(), ["Tecnología y Software", "En Tránsito"])
+
+    def test_la_marca_bom_no_queda_en_el_primer_encabezado(self, _read):
+        response = csv_response("\ufeffProducto,Ventas\r\nA,1\r\n")
+        with mock.patch("requests.get", return_value=response):
+            self.assertEqual(list(sheets.fetch_sheet_dataframe("abc", "5").columns), ["Producto", "Ventas"])
 
     def test_respuesta_que_no_es_csv(self, _read):
         html = mock.Mock(status_code=200, headers={"Content-Type": "text/html"}, text="<html>")

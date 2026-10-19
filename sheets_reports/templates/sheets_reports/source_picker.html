@@ -17,7 +17,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
       <div x-show="columnsError" class="flex items-center gap-2">
         <p x-text="columnsError" role="alert" class="text-xs text-red-600"></p>
         <button type="button" x-on:click="loadColumns({ refresh: true })"
-                class="ui-btn ui-btn-soft ui-btn-sm">
+                class="ui-btn ui-btn-primary ui-btn-sm">
           <i class="ti ti-refresh text-xs" aria-hidden="true"></i>
           <span>Volver a conectar</span>
         </button>
@@ -57,7 +57,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <!-- Google: elegir la hoja con el selector nativo de Drive. -->
           <div x-show="source && google.configured" class="mb-2 space-y-1">
             <button type="button" x-on:click="openGooglePicker()" x-bind:disabled="loadingSheets"
-                    class="ui-btn ui-btn-soft w-full px-3">
+                    class="ui-btn ui-btn-primary w-full px-3">
               <i class="ti ti-brand-google-drive text-base" aria-hidden="true"></i>
               <span x-text="loadingSheets ? 'Abriendo Drive…' : (google.connected ? 'Elegir en mi Drive' : 'Conectar con Google')"></span>
             </button>
@@ -97,7 +97,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
           <div x-show="tabsError" class="px-2 py-3 space-y-2">
             <p x-text="tabsError" role="alert" class="text-xs text-red-600"></p>
             <button type="button" x-on:click="spreadsheet && selectSpreadsheet(spreadsheet)"
-                    class="ui-btn ui-btn-soft ui-btn-sm">
+                    class="ui-btn ui-btn-primary ui-btn-sm">
               <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
               <span>Volver a conectar</span>
             </button>
@@ -199,7 +199,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
         </label>
         <button type="button" x-on:click="generateColumnLabels()"
                 x-bind:disabled="generatingLabels || loadingColumns || !columns.length"
-                class="ui-btn ui-btn-soft ui-btn-sm"
+                class="ui-btn ui-btn-primary ui-btn-sm"
                 title="Generar nombres cortos y limpios para las columnas con IA">
           <i class="ti" x-bind:class="generatingLabels ? 'ti-loader-2 animate-spin' : 'ti-sparkles'" aria-hidden="true"></i>
           <span x-text="generatingLabels ? 'Generando nombres…' : 'Generar nombres con IA'"></span>

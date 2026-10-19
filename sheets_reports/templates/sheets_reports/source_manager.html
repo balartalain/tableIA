@@ -64,7 +64,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                     <span class="flex flex-wrap items-center gap-2">
                       <span class="font-medium truncate" x-text="s.label"></span>
                       <button type="button" x-on:click="viewData(s)" title="Ver datos transformados de la fuente"
-                              class="ui-btn ui-btn-soft ui-btn-xs shrink-0">
+                              class="ui-btn ui-btn-primary ui-btn-xs shrink-0">
                         <i class="ti ti-eye text-xs" aria-hidden="true"></i>
                         <span>Ver</span>
                       </button>
@@ -161,7 +161,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
     <div x-show="dataError" role="alert" class="ui-alert ui-alert-error text-xs space-y-2">
       <p x-text="dataError"></p>
       <button type="button" x-on:click="previewSource && viewData(previewSource)"
-              class="ui-btn ui-btn-soft ui-btn-sm">
+              class="ui-btn ui-btn-primary ui-btn-sm">
         <i class="ti ti-refresh text-sm" aria-hidden="true"></i>
         <span>Volver a conectar</span>
       </button>

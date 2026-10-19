@@ -17,10 +17,11 @@ van con `:where()` para no ganarle en especificidad a esas utilidades.
     }
     .ui-btn-sm { @apply h-8 px-3 text-xs; }
     .ui-btn-xs { @apply h-6 px-2 gap-1 text-[11px]; }
-    .ui-btn-primary { @apply bg-moss-500 text-white hover:bg-moss-600; }
+    /* Principal: fondo verde muy claro, texto oscuro y borde suave (como «Generar con IA» en violeta). */
+    .ui-btn-primary { @apply bg-moss-50 border-moss-100 text-moss-700 hover:bg-moss-100; }
+    .ui-btn-primary :where(.ti) { @apply text-moss-600; }
     .ui-btn-secondary { @apply bg-white border-line text-ink/70 hover:bg-paper hover:text-ink; }
     .ui-btn-ghost { @apply text-ink/60 hover:bg-paper hover:text-ink; }
-    .ui-btn-soft { @apply bg-moss-50 border-moss-100 text-moss-700 hover:bg-moss-100; }
     .ui-btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
     .ui-btn-danger-outline { @apply bg-white border-red-300 text-red-700 hover:bg-red-600 hover:border-red-600 hover:text-white; }
     /* Solo ícono: cuadrado, gris hasta el hover. */

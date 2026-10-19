@@ -598,7 +598,7 @@ los fondos de los botones. Al quedar en la capa `components`, una utilidad suelt
 
 | Pieza | Clases |
 |---|---|
-| Botón | `ui-btn` + `ui-btn-primary` / `-secondary` / `-ghost` / `-soft` / `-danger` / `-danger-outline` / `-icon`; tamaños `ui-btn-sm`, `ui-btn-xs` |
+| Botón | `ui-btn` + `ui-btn-primary` / `-secondary` / `-ghost` / `-danger` / `-danger-outline` / `-icon`; tamaños `ui-btn-sm`, `ui-btn-xs` |
 | Campo | `ui-label`, `ui-input` (también para `<select>`), `ui-input-sm`, `ui-textarea`, `ui-check` |
 | Contenedor | `ui-card`, `ui-card-title`, `ui-eyebrow` (rótulo en mayúsculas) |
 | Aviso | `ui-alert` + `ui-alert-error` / `-warn` / `-info` |
@@ -608,6 +608,7 @@ los fondos de los botones. Al quedar en la capa `components`, una utilidad suelt
 | Tabla HTML | `ui-table`: encabezado fijo, rótulos y celdas ya espaciados |
 
 Reglas:
+- El principal (`ui-btn-primary`) es fondo verde muy claro, texto `moss-700` e ícono `moss-600` con borde suave: el mismo tratamiento que «Generar con IA» en violeta. El verde sólido queda para estados seleccionados, no para botones.
 - Un solo radio, `rounded-md`.
 - El foco es el borde `moss-500`, sin anillo.
 - Solo existen los tonos `moss` del tema (50, 100, 300, 500, 600, 700): `moss-200` o `moss-800` no generan nada.

@@ -1,0 +1,26 @@
+{% comment %}Conectar una hoja de Google con el selector de Drive; sheets de Google Forms (docs/form_transform.md).{% endcomment %}
+<div class="space-y-5 text-sm text-ink/80 leading-relaxed">
+  <p>Las fuentes de datos son pestañas de hojas de Google Sheets de tu cuenta de Google.</p>
+  <section class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Elegir la hoja</h4>
+    <ol class="list-decimal pl-5 space-y-1">
+      <li>Elige <b>Hoja de Google</b>.</li>
+      <li>Pulsa <b>Elegir en mi Drive</b>. La primera vez aparece <b>Conectar con Google</b>: inicia sesión y acepta los permisos.</li>
+      <li>Escoge el documento en la ventana de Google Drive.</li>
+      <li>Marca la <b>pestaña</b> que tiene los datos (si el documento tiene una sola, queda elegida) y pulsa <b>Aceptar</b>.</li>
+    </ol>
+  </section>
+  <section class="space-y-1.5">
+    <h4 class="font-semibold text-ink">¿La pestaña viene de un Google Forms?</h4>
+    <p>Al aceptar, la app pregunta si la pestaña son respuestas de un formulario. Responde <b>Sí</b> si cada fila es una respuesta y cada columna una pregunta: la app ordena esas respuestas para poder contarlas y cruzarlas por pregunta. Para cualquier otra hoja, responde <b>No, es una hoja normal</b>.</p>
+  </section>
+  <section class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Cómo debe estar la hoja</h4>
+    <ul class="list-disc pl-5 space-y-1">
+      <li>La <b>primera fila</b> con los nombres de las columnas (si no, desmarca «Usar la primera fila como encabezado»).</li>
+      <li>Una fila por registro (una venta, una respuesta, un estudiante…), sin filas de totales ni celdas combinadas.</li>
+      <li>Los números como números: sin texto mezclado (por ejemplo «1.200 USD» se lee como texto).</li>
+    </ul>
+  </section>
+  <p class="ui-alert ui-alert-info"><i class="ti ti-bulb" aria-hidden="true"></i> La app agrega una columna <b>ID</b> con el número de cada fila: sirve para contar registros.</p>
+</div>

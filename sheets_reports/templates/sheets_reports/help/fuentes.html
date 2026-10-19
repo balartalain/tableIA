@@ -1,0 +1,29 @@
+{% comment %}Gestionar las fuentes del tablero (source_manager.html).{% endcomment %}
+<div class="space-y-5 text-sm text-ink/80 leading-relaxed">
+  <p>Un tablero puede tener <b>varias fuentes</b>: cada widget elige la suya. Se gestionan desde <b>Gestionar fuentes</b> en la cabecera.</p>
+  <section class="space-y-1.5">
+    <h4 class="font-semibold text-ink">La tabla de fuentes</h4>
+    <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead class="text-ink/50"><tr class="border-b border-line"><th class="py-1 pr-3 text-left font-semibold">Columna</th><th class="py-1 pr-3 text-left font-semibold">Qué dice</th></tr></thead>
+      <tbody class="divide-y divide-line/60">
+<tr><td class="py-1 pr-3 align-top">Fuente</td><td class="py-1 pr-3 align-top">El documento y la pestaña (o el nombre que le diste). <b>Ver</b> muestra los datos tal como los usan los widgets.</td></tr>
+<tr><td class="py-1 pr-3 align-top">Columnas en uso</td><td class="py-1 pr-3 align-top">Cuántas columnas de la hoja están incluidas.</td></tr>
+<tr><td class="py-1 pr-3 align-top">Última actualización</td><td class="py-1 pr-3 align-top">Cuándo se leyeron los datos de la hoja por última vez.</td></tr>
+<tr><td class="py-1 pr-3 align-top">Widgets</td><td class="py-1 pr-3 align-top">Cuántos widgets la usan («Sin usar» si ninguno).</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section class="space-y-1.5">
+    <h4 class="font-semibold text-ink">Acciones</h4>
+    <ul class="list-disc pl-5 space-y-1">
+      <li><b>Agregar fuente</b>: conecta otra pestaña (<a href="#help:conectar-hoja">Conectar una hoja</a>).</li>
+      <li><b>Editar</b>: columnas, nombre de la fuente y campos calculados (<a href="#help:columnas">Columnas</a>, <a href="#help:campos-calculados">Campos calculados</a>). <b>Actualizar datos</b> vuelve a leer la hoja.</li>
+      <li><b>Cambiar fuente</b>: usa otra hoja u otra pestaña con columnas parecidas; los widgets se conservan. Si faltan columnas que un widget usa, la app avisa antes de guardar.</li>
+      <li><b>Abrir origen</b>: abre la hoja en Google Sheets.</li>
+      <li><b>Eliminar</b>: pide confirmación y avisa qué widgets se quedarán sin datos.</li>
+    </ul>
+  </section>
+  <p class="ui-alert ui-alert-info"><i class="ti ti-bulb" aria-hidden="true"></i> Si una fuente muestra «Sin acceso», tu cuenta de Google ya no puede leer esa hoja: pide acceso al dueño o usa <b>Cambiar fuente</b>.</p>
+</div>

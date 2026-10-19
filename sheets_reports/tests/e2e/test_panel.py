@@ -187,7 +187,8 @@ class PanelTests(StaticLiveServerTestCase):
         with mock.patch("sheets_reports.services.google_drive.tab_status", return_value="no_access"):
             self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
             self.page.locator("#sources-btn").click()
-            self.page.get_by_text("Sin acceso").wait_for()
+            # Dentro del panel de fuentes: la ayuda también menciona «Sin acceso».
+            self.page.locator("#bottom-sheet").get_by_text("Sin acceso").wait_for()
         self.assertTrue(self.page.get_by_role("cell", name="Sin usar").is_visible())
         self.assertTrue(self.page.get_by_text("5 de 5 incluidas").is_visible())
         self.assertTrue(self.page.get_by_role("button", name=f"Actualizar {self.source.label}").is_visible())
@@ -297,3 +298,62 @@ class FormulaBuilderTests(PanelTests):
         self.assertEqual(self.page.get_by_label("Nombre del campo").input_value(), "Es Hogar")
         self.assertEqual(prompt.input_value(), "")
 
+
+
+class HelpPanelTests(PanelTests):
+    """El centro de ayuda: se abre desde el menú del tablero, se navega con enlaces y se
+    ensancha arrastrando su borde; un «?» del panel del widget abre su tópico."""
+
+    for _name in [n for n in dir(PanelTests) if n.startswith("test_")]:
+        locals()[_name] = None
+    del _name
+
+    def help_width(self):
+        return self.page.locator("#help-panel").evaluate("el => el.getBoundingClientRect().width")
+
+    def wait_help_width(self, width):
+        """El panel se abre animando su ancho: se espera a que llegue."""
+        self.page.wait_for_function(
+            "w => Math.abs(document.getElementById('help-panel').getBoundingClientRect().width - w) <= 1", arg=width)
+
+    def test_navegar_y_ensanchar_la_ayuda(self):
+        self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
+        self.page.get_by_role("button", name="Opciones del tablero").click()
+        self.page.get_by_role("button", name="Ayuda", exact=True).click()
+        panel = self.page.locator("#help-panel")
+        panel.get_by_role("link", name="Dimensiones").click()
+        panel.locator("#help-topic-dimensiones").wait_for()
+        # Un enlace dentro del tópico lleva a otro, y «Atrás» vuelve.
+        panel.locator("#help-topic-dimensiones").get_by_role("link", name="Pivotes").click()
+        panel.locator("#help-topic-pivotes").wait_for()
+        panel.get_by_role("button", name="Atrás").click()
+        panel.locator("#help-topic-dimensiones").wait_for()
+        # El buscador encuentra por el texto del tópico, sin tildes.
+        panel.get_by_placeholder("Buscar en la ayuda…").fill("contrasena de aplicacion")
+        panel.get_by_role("link", name="Envío de correos").wait_for()
+        panel.get_by_role("link", name="Dimensiones").wait_for(state="hidden")
+        # Arrastrar el borde izquierdo hacia la izquierda la ensancha, y el ancho se recuerda.
+        self.wait_help_width(480)
+        handle = panel.get_by_role("separator", name="Ancho de la ayuda").bounding_box()
+        self.page.mouse.move(handle["x"] + 2, handle["y"] + 200)
+        self.page.mouse.down()
+        self.page.mouse.move(handle["x"] - 200, handle["y"] + 200, steps=8)
+        self.page.mouse.up()
+        width = self.help_width()
+        self.assertAlmostEqual(width, 680, delta=3)
+        self.page.reload()
+        self.page.locator("#dashboard-canvas").wait_for()
+        self.page.evaluate("() => Alpine.store('help').open('metricas')")
+        self.wait_help_width(width)
+
+    def test_el_signo_de_ayuda_del_panel_vuelve_al_widget(self):
+        card = self.open_editor(self.widget(fields()))
+        drawer = self.open_panel(card)
+        title = drawer.locator('input[x-model="$store.dashboard.drawerDraft.title"]')
+        title.fill("Borrador sin guardar")
+        drawer.get_by_role("button", name="Ayuda de métricas").click()
+        self.page.locator("#help-topic-metricas").wait_for()
+        self.page.wait_for_function("() => document.getElementById('edit-drawer').getBoundingClientRect().width === 0")
+        self.page.get_by_role("button", name="Cerrar la ayuda").click()
+        self.page.wait_for_function("() => document.getElementById('edit-drawer').getBoundingClientRect().width > 400")
+        self.assertEqual(title.input_value(), "Borrador sin guardar")

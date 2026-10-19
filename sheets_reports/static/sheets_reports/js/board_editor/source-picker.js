@@ -119,7 +119,6 @@ function sourcePicker({ mode = 'create' } = {}) {
     // (él lo escribe como texto); `formula` es el último texto que devolvió. «Generar con IA»:
     // _aiPrompt, _aiLoading, _aiError (por campo).
     calculated: [],
-    helpOpen: false,
     // Si el reemplazo de hoja empezó en la tabla de fuentes («Cambiar fuente») y no en la edición.
     replaceFromList: false,
     _previewTimers: {},
@@ -237,7 +236,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         sourceName: source ? source.name || '' : '',
         headers: source ? source.first_row_headers !== false : true, impact: null,
         refreshing: false, dataRefreshed: false, refreshedAt: source ? source.refreshed_at : null,
-        columnsTab: 'columns', columnFilter: '', helpOpen: false, replaceFromList: changeSheet,
+        columnsTab: 'columns', columnFilter: '', replaceFromList: changeSheet,
         // Al editar no se elige la hoja: el flag guardado es el que se
         // conserva (y se reenvía al guardar). Al cambiarla se vuelve a preguntar.
         formQuestion: source && mode === 'edit' ? !!source.is_form_response : null,

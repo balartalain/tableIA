@@ -1,7 +1,7 @@
-{% comment %}Guía de métricas (modal del bloque «Métricas» del panel): qué son, agregaciones, campos
+{% comment %}Guía de métricas (tópico del centro de ayuda; lo abre también el «?» del bloque «Métricas»): qué son, agregaciones, campos
 calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget. Los límites salen de
 `capabilities` en sheets_reports/widgets/*.py; el mismo contenido está en docs/metricas.md.{% endcomment %}
-<div class="space-y-6 text-xs text-ink/80 leading-relaxed">
+<div class="space-y-6 text-sm text-ink/80 leading-relaxed">
 
   <!-- Qué es -->
   <section class="space-y-1.5">
@@ -21,7 +21,7 @@ calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget
     <h3 class="text-sm font-semibold text-ink">Partes de una métrica</h3>
     <dl class="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1">
       <dt class="font-semibold text-ink">Columna</dt>
-      <dd>Qué se resume: una columna de la hoja o un campo calculado. Con «Conteo» puede ser «Todas las filas».</dd>
+      <dd>Qué se resume: una columna de la hoja o un <a href="#help:campos-calculados">campo calculado</a>. Con «Conteo» puede ser «Todas las filas».</dd>
       <dt class="font-semibold text-ink">Agregación</dt>
       <dd>Cómo se resume: suma, promedio, conteo… (ver abajo).</dd>
       <dt class="font-semibold text-ink">Nombre a mostrar</dt>
@@ -105,10 +105,12 @@ calculados, condiciones por métrica, «Mostrar como» y qué admite cada widget
       <b>más antiguo</b> de una columna de tiempo.</p>
   </section>
 
-  <!-- Mostrar como (la misma ayuda que abre el icono junto al select) -->
+  <!-- Mostrar como: su propio tópico -->
   <section class="space-y-1.5">
     <h3 class="text-sm font-semibold text-ink">Mostrar como</h3>
-    {% include "sheets_reports/widgets/config/blocks/_window_help.html" %}
+    <p>Además del valor, una métrica se puede mostrar como <b>% del total</b>, <b>acumulado</b> o
+      <b>variación</b> respecto del grupo anterior. Las opciones, con ejemplos, están en
+      <a href="#help:mostrar-como">Mostrar como</a>.</p>
   </section>
 
   <!-- Por widget -->

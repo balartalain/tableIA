@@ -792,6 +792,8 @@ document.addEventListener('alpine:init', () => {
     openDrawer(id) {
       const w = this.widgets.find(x => x.id === id);
       if (!w) return;
+      // La ayuda ocupa el mismo lugar: editar un widget la cierra.
+      Alpine.store('help')?.close();
       this.editingId = id;
       this.editingType = w.type;
       this.drawerTab = 'data';

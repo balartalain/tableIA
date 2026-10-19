@@ -1,0 +1,106 @@
+{% comment %}Centro de ayuda (help-panel.js): a la derecha del lienzo, en el lugar del panel de edición
+(mientras está abierto, el panel del widget se oculta con su borrador intacto). Los tópicos y su
+orden salen de sheets_reports/help.py; cada uno es help/<slug>.html.{% endcomment %}
+{{ help_sections|json_script:"help-index" }}
+<aside id="help-panel" x-data aria-label="Ayuda"
+       x-bind:style="$store.help.isOpen ? `width: ${$store.help.width}px` : 'width: 0'"
+       x-bind:class="[$store.help.isOpen ? 'border-l' : 'border-l-0', $store.help.resizing ? '' : 'transition-[width] duration-300']"
+       x-bind:inert="!$store.help.isOpen"
+       x-on:transitionend.self="if ($event.propertyName === 'width') window.dispatchEvent(new Event('resize'))"
+       x-on:keydown.escape.stop="$store.help.close()"
+       class="relative z-[45] shrink-0 h-full bg-white border-line overflow-hidden">
+  <!-- Borde izquierdo: arrastrar cambia el ancho; doble clic lo devuelve al original. -->
+  <div role="separator" aria-orientation="vertical" tabindex="0" aria-label="Ancho de la ayuda"
+       title="Arrastra para cambiar el ancho (doble clic: ancho original)"
+       x-bind:aria-valuenow="$store.help.width"
+       x-on:pointerdown="$store.help.startResize($event)"
+       x-on:dblclick="$store.help.setWidth($store.help.defaultWidth)"
+       x-on:keydown="$store.help.onResizeKey($event)"
+       class="absolute left-0 top-0 z-10 h-full w-1.5 cursor-col-resize hover:bg-moss-100 focus:bg-moss-100 focus:outline-none"
+       x-bind:class="$store.help.resizing && 'bg-moss-300'"></div>
+
+  <!-- Ancho fijo por dentro: el contenido no se reacomoda mientras el panel se abre. -->
+  <div class="h-full flex flex-col" x-bind:style="`width: ${$store.help.width}px`">
+    <div class="shrink-0 flex items-center gap-1.5 pl-4 pr-3 py-3 border-b border-line">
+      <button type="button" x-show="$store.help.history.length" x-on:click="$store.help.back()"
+              aria-label="Atrás" title="Atrás" class="ui-btn ui-btn-icon shrink-0">
+        <i class="ti ti-arrow-left text-base" aria-hidden="true"></i>
+      </button>
+      <div class="min-w-0 flex-1">
+        <p class="ui-eyebrow truncate" x-text="$store.help.current ? $store.help.current.section_title : 'Centro de ayuda'"></p>
+        <h3 class="text-sm font-semibold text-ink truncate" x-text="$store.help.current ? $store.help.current.title : 'Ayuda'"></h3>
+      </div>
+      <button type="button" x-show="$store.help.topic" x-on:click="$store.help.showIndex()"
+              aria-label="Índice de la ayuda" title="Índice" class="ui-btn ui-btn-icon shrink-0">
+        <i class="ti ti-list text-base" aria-hidden="true"></i>
+      </button>
+      <button type="button" x-on:click="$store.help.close()" aria-label="Cerrar la ayuda" title="Cerrar"
+              class="ui-btn ui-btn-icon shrink-0">
+        <i class="ti ti-x text-base" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <label class="shrink-0 relative block px-4 py-2.5 border-b border-line">
+      <span class="sr-only">Buscar en la ayuda</span>
+      <i class="ti ti-search absolute left-[1.6rem] top-1/2 -translate-y-1/2 text-sm text-ink/40" aria-hidden="true"></i>
+      <input type="search" x-model="$store.help.query" placeholder="Buscar en la ayuda…" autocomplete="off"
+             class="ui-input ui-input-sm pl-8">
+    </label>
+
+    <div id="help-scroll" class="flex-1 min-h-0 overflow-y-auto">
+      <!-- Índice (y resultados de la búsqueda) -->
+      <nav x-show="!$store.help.topic || $store.help.searching" aria-label="Tópicos de la ayuda" class="px-4 py-4 space-y-5">
+        <template x-if="!$store.help.searching">
+          <p class="text-sm text-ink/70">Guías paso a paso para armar tus tableros. Elige un tópico o busca lo que necesitas.</p>
+        </template>
+        <template x-for="section in $store.help.sections" :key="section.key">
+          <div x-show="section.topics.some(t => $store.help.matches(t))" class="space-y-1">
+            <p class="ui-eyebrow flex items-center gap-1.5 pb-1">
+              <i class="ti text-sm" x-bind:class="section.icon" aria-hidden="true"></i>
+              <span x-text="section.title"></span>
+            </p>
+            <template x-for="t in section.topics" :key="t.slug">
+              <a x-show="$store.help.matches(t)" x-bind:href="`#help:${t.slug}`"
+                 class="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-sm text-ink/80 hover:bg-paper hover:text-ink">
+                <span x-text="t.title"></span>
+                <i class="ti ti-chevron-right text-xs text-ink/30" aria-hidden="true"></i>
+              </a>
+            </template>
+          </div>
+        </template>
+        <p x-show="$store.help.searching && !$store.help.results.length" class="text-sm text-ink/50">
+          No hay tópicos que coincidan con «<span x-text="$store.help.query"></span>».
+        </p>
+      </nav>
+
+      <!-- Tópicos: todos en la página (el buscador lee su texto), uno a la vista. -->
+      {% for section in help_sections %}{% for topic in section.topics %}
+      <article id="help-topic-{{ topic.slug }}" x-show="$store.help.topic === '{{ topic.slug }}' && !$store.help.searching" x-cloak
+               class="help-article px-5 py-5 [&_a[href^='#help:']]:text-moss-700 [&_a[href^='#help:']]:font-medium [&_a[href^='#help:']]:underline [&_a[href^='#help:']]:underline-offset-2">
+        <h2 class="text-lg font-semibold text-ink mb-3">{{ topic.title }}</h2>
+        {% include topic.template %}
+      </article>
+      {% endfor %}{% endfor %}
+    </div>
+
+    <!-- Anterior / Siguiente, en el orden del índice -->
+    <div x-show="$store.help.topic && !$store.help.searching" class="shrink-0 grid grid-cols-2 gap-2 px-4 py-3 border-t border-line">
+      <div>
+        <template x-if="$store.help.prev">
+          <a x-bind:href="`#help:${$store.help.prev.slug}`" class="group block rounded-md px-2.5 py-1.5 hover:bg-paper">
+            <span class="ui-eyebrow flex items-center gap-1"><i class="ti ti-arrow-left text-xs" aria-hidden="true"></i>Anterior</span>
+            <span class="block text-sm text-ink/80 group-hover:text-ink truncate" x-text="$store.help.prev.title"></span>
+          </a>
+        </template>
+      </div>
+      <div class="text-right">
+        <template x-if="$store.help.next">
+          <a x-bind:href="`#help:${$store.help.next.slug}`" class="group block rounded-md px-2.5 py-1.5 hover:bg-paper">
+            <span class="ui-eyebrow flex items-center justify-end gap-1">Siguiente<i class="ti ti-arrow-right text-xs" aria-hidden="true"></i></span>
+            <span class="block text-sm text-ink/80 group-hover:text-ink truncate" x-text="$store.help.next.title"></span>
+          </a>
+        </template>
+      </div>
+    </div>
+  </div>
+</aside>

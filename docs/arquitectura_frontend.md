@@ -480,8 +480,8 @@ de columnas:
   Número o Porcentaje. La fórmula se **arma con bloques** (ver abajo); con cada cambio,
   `previewCalculated` pide a `POST /api/sources/{id}/formula/` los primeros valores (o el total
   de la hoja) o el error, con lo que hay en el editor sin guardar. El ícono de ayuda abre
-  `source_formula_help.html`: los dos tipos con ejemplos, cuál elegir, cómo calcula cada
-  función y cómo se arma.
+  el tópico `campos-calculados` del centro de ayuda: los dos tipos con ejemplos, cuál elegir,
+  cómo calcula cada función y cómo se arma.
 
 - En `edit` y `replace`, nombre opcional de la fuente (vacío = el original).
 - **Actualizar datos**, junto al nombre (`refreshColumns()`): relee la pestaña de Google
@@ -575,6 +575,34 @@ Tres instancias de SortableJS:
 3. **Listas del drawer**: reordena columnas/dimensiones/pivotes/métricas. `onEnd` → actualiza el array del draft.
 
 Todas usan `forceFallback: true` + `fallbackOnBody: true` para arrastre consistente entre contenedores.
+
+## Centro de ayuda (`help-panel.js`, `help/`)
+
+La ayuda del editor es un panel a la derecha del lienzo (`help/_panel.html`), en el lugar del
+panel de edición. Se abre desde el menú del tablero › **Ayuda** o desde los botones
+<kbd>?</kbd> del panel del widget y del editor de la fuente.
+
+- **Tópicos**: `sheets_reports/help.py` los lista en orden (`SECTIONS` y `HELP_TOPICS`: slug,
+  sección, título y palabras para el buscador). Cada uno es `templates/sheets_reports/help/<slug>.html`.
+  Para agregar uno: una entrada en `HELP_TOPICS` y su partial. El índice, «Anterior / Siguiente»
+  y el buscador salen solos de ese orden.
+- **Enlaces**: en el contenido, `<a href="#help:<slug>">` o `#help:<slug>/<id>` (a una parte del
+  tópico, por su `id`). Desde un botón, `$store.help.open('<slug>')`. Un manejador delegado
+  intercepta los enlaces, así que el contenido es HTML sin JS. `test_help` falla si alguno apunta
+  a un tópico que no existe.
+- **Store** `Alpine.store('help')`:
+  - `open(slug, anchor)`, `back()` (historial), `showIndex()`, `close()`;
+  - `query` y `matches(topic)`: el buscador sobre título, palabras clave y texto, sin tildes;
+  - `prev` / `next`.
+- **Ancho**: arrastrando el borde izquierdo (o con las flechas, con el borde enfocado), entre
+  320 y 960 px, sin dejar el lienzo por debajo de 360 px; doble clic vuelve a 480. Se recuerda
+  en `localStorage['tableia:help-width']`. Al soltar se dispara `resize` para que los gráficos
+  vuelvan a medirse.
+- **Con el panel de edición**: abrir la ayuda oculta el panel del widget sin cerrarlo (su
+  borrador queda); al cerrarla vuelve tal como estaba. Abrir el panel de otro widget
+  (`openDrawer`) cierra la ayuda.
+- **Estilo del contenido**: `text-sm`, títulos `h4` y tablas como en los tópicos existentes; los
+  enlaces `#help:` se ven subrayados en verde.
 
 ## Design system
 

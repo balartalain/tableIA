@@ -1,10 +1,10 @@
 <!-- Pivotes: series / columnas cruzadas -->
-<div class="space-y-2" x-data="{ pivotsHelp: false }"{% if totals %}
+<div class="space-y-2"{% if totals %}
      x-init="$store.dashboard.registerStyleGroup('Totales', ['showColumnTotals', 'columnSubtotal1'])"{% endif %}>
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-1">
       <label class="block text-xs font-semibold text-ink/70">Pivotes</label>
-      <button type="button" x-on:click="pivotsHelp = true" aria-label="Ayuda de pivotes" title="¿Qué son los pivotes?"
+      <button type="button" x-on:click="$store.help.open('pivotes')" aria-label="Ayuda de pivotes" title="¿Qué son los pivotes?"
               class="p-0.5 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
         <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
       </button>
@@ -51,5 +51,4 @@
     </template>
   </div>
   <p class="text-[11px] text-ink/50">Desagregación extra: series en el gráfico, columnas en la tabla dinámica.</p>
-  {% include "sheets_reports/widgets/config/blocks/_help_modal.html" with flag="pivotsHelp" title="Pivotes" icon="ti-table" body="sheets_reports/widgets/config/blocks/_pivots_help.html" %}
 </div>

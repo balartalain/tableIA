@@ -58,6 +58,11 @@
           <i class="ti ti-settings text-base text-ink/50" aria-hidden="true"></i>
           <span>Configuración</span>
         </button>
+        <button type="button" x-on:click="open = false; $store.help.open()"
+                class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-paper text-ink/80 hover:text-ink text-left transition cursor-pointer">
+          <i class="ti ti-help-circle text-base text-ink/50" aria-hidden="true"></i>
+          <span>Ayuda</span>
+        </button>
         <div class="my-1 border-t border-line"></div>
         <a href="{% url 'home' %}"
            class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-paper text-ink/80 hover:text-ink text-left transition cursor-pointer">
@@ -345,8 +350,8 @@
   </main>
 
   <aside id="edit-drawer" x-data
-         x-bind:class="$store.dashboard.editingId ? 'w-[34rem] border-l' : 'w-0 border-l-0'"
-         x-bind:inert="!$store.dashboard.editingId"
+         x-bind:class="$store.dashboard.editingId && !$store.help.isOpen ? 'w-[34rem] border-l' : 'w-0 border-l-0'"
+         x-bind:inert="!$store.dashboard.editingId || $store.help.isOpen"
          class="shrink-0 h-full bg-white border-line overflow-hidden transition-[width] duration-300">
   <div class="w-[34rem] h-full flex flex-col">
     <div class="flex justify-between items-center px-5 py-4 border-b border-line">
@@ -431,6 +436,8 @@
     </div>
   </div>
   </aside>
+
+  {% include "sheets_reports/help/_panel.html" %}
 
   <!-- Telón de fondo (backdrop) a pantalla completa para el bottom sheet -->
   <div id="bottom-sheet-backdrop" x-data x-cloak
@@ -644,6 +651,7 @@
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/bottom-sheet.js' %}"></script>
+<script src="{% static 'sheets_reports/js/board_editor/help-panel.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/board-ruler.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/formula-builder.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/source-picker.js' %}"></script>

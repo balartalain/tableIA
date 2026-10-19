@@ -1,9 +1,9 @@
 <!-- Métricas -->
-<div class="space-y-2" x-data="{ metricsHelp: false, windowHelp: false }">
+<div class="space-y-2">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-1">
       <label class="block text-xs font-semibold text-ink/70">Métricas</label>
-      <button type="button" x-on:click="metricsHelp = true" aria-label="Ayuda de métricas" title="¿Qué son las métricas?"
+      <button type="button" x-on:click="$store.help.open('metricas')" aria-label="Ayuda de métricas" title="¿Qué son las métricas?"
               class="p-0.5 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
         <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
       </button>
@@ -76,7 +76,7 @@
                               x-bind:selected="o.value === ((metric.window && metric.window.type) || '')"></option>
                     </template>
                   </select>
-                  <button type="button" x-on:click="windowHelp = true" aria-label="Ayuda de Mostrar como" title="¿Qué es «Mostrar como»?"
+                  <button type="button" x-on:click="$store.help.open('mostrar-como')" aria-label="Ayuda de Mostrar como" title="¿Qué es «Mostrar como»?"
                           class="shrink-0 p-0.5 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
                     <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
                   </button>
@@ -131,6 +131,4 @@
   </div>
 
   <!-- Guías (una por bloque, no por métrica). -->
-  {% include "sheets_reports/widgets/config/blocks/_help_modal.html" with flag="metricsHelp" title="Guía de métricas" icon="ti-chart-bar" body="sheets_reports/widgets/config/blocks/_metrics_help.html" %}
-  {% include "sheets_reports/widgets/config/blocks/_help_modal.html" with flag="windowHelp" title="Mostrar como" icon="ti-percentage" body="sheets_reports/widgets/config/blocks/_window_help.html" %}
 </div>

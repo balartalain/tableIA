@@ -304,14 +304,12 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
          x-on:formula:drop.window="onFormulaDrop($event.detail)">
       <div class="flex items-center gap-2">
         <p class="text-xs text-ink/60">Fórmulas sobre las columnas de esta fuente, para usar en todos los widgets.</p>
-        <!-- Ayuda: qué son, los dos tipos con ejemplos y cómo se arman (la misma ventana que las
-             ayudas del panel de widgets). -->
-        <button type="button" x-on:click="helpOpen = true"
+        <!-- Ayuda: abre el tópico «Campos calculados» del centro de ayuda. -->
+        <button type="button" x-on:click="$store.help.open('campos-calculados')"
                 aria-label="Ayuda de campos calculados" title="¿Cómo funcionan?"
                 class="ui-btn ui-btn-icon hover:text-moss-700">
           <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
         </button>
-        {% include "sheets_reports/widgets/config/blocks/_help_modal.html" with flag="helpOpen" title="Campos calculados" icon="ti-math-function" body="sheets_reports/source_formula_help.html" %}
       </div>
 
       <div x-show="!calculated.length"

@@ -17,6 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from sheets_reports.engine.context import SheetContext
+from sheets_reports.help import help_sections
 from sheets_reports.models import Dashboard, DataSource, Widget
 from sheets_reports.services import google_drive, sheets
 from google_auth.services import current_app_user, template_context as google_oauth_context
@@ -91,6 +92,7 @@ def board_editor(request, dashboard_id):
         "dashboard": dashboard, "widget_manifest": _widget_manifest(),
         "formula_catalog": BUILDER_CATALOG,
         "google_oauth": google_oauth_context(request),
+        "help_sections": help_sections(),
     })
 
 
@@ -102,6 +104,7 @@ def board_new(request):
         "dashboard": None, "widget_manifest": _widget_manifest(),
         "formula_catalog": BUILDER_CATALOG,
         "google_oauth": google_oauth_context(request),
+        "help_sections": help_sections(),
     })
 
 

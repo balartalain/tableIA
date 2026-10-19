@@ -37,3 +37,6 @@ google_credentials.json
 # Cobertura de los tests
 .coverage
 htmlcov/
+
+# Videos de demostración (sheets_reports/tests/e2e/demo_videos.py)
+demo_videos/

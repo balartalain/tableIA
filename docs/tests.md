@@ -38,6 +38,36 @@ El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de l
 
 `FormulaBuilderTests`, el constructor de fórmulas por bloques: armar un SI solo con clics y guardarlo; arrastrar de verdad (mouse) un operador que envuelve un bloque, un valor a un hueco y un bloque al panel para quitarlo; «Generar con IA» (IA simulada) reemplaza el lienzo o muestra el motivo si no pudo.
 
+### Videos de demostración (`tests/e2e/demo_videos.py`, solo con `DEMO=1`)
+No es parte de la suite: el nombre no empieza con `test_`, así que solo corre si se lo nombra.
+Graba un `.webm` por flujo (y una captura del final) en `demo_videos/`, que está en `.gitignore`.
+
+```bash
+DEMO=1 venv/bin/python manage.py test sheets_reports.tests.e2e.demo_videos                                     # los 8
+DEMO=1 venv/bin/python manage.py test sheets_reports.tests.e2e.demo_videos.DemoVideos.test_05_generar_tablero_con_ia  # uno
+HEADED=1 DEMO=1 venv/bin/python manage.py test sheets_reports.tests.e2e.demo_videos                            # mirándolos
+```
+
+Los flujos son:
+1. Crear tablero.
+2. Nombres de columnas con IA.
+3. Agregar fuente.
+4. Agregar widgets.
+5. Generar tablero con IA.
+6. Asistente IA del widget.
+7. Análisis IA de un widget.
+8. Chat con los datos.
+
+Todo lo externo está simulado para que cada grabación salga igual:
+- **La hoja:** `demo_df()`, con 96 ventas, y sus pestañas.
+- **La cuenta de Google y el selector de Drive:** un `google.picker` falso que «elige» la hoja de la demo.
+- **Las respuestas de la IA:** son textos fijos (`AI_PLAN`, `ASSISTANT_ANSWER`, `INSIGHT`, `CHAT_ANSWERS`, …). Si cambian los datos de la demo, conviene revisar que esos textos sigan diciendo lo mismo que los números.
+
+Cómo se graba:
+- El cursor y los subtítulos de cada paso los dibuja `OVERLAY`, porque Playwright no muestra el mouse.
+- Cada video falla si la página tiene un error de JS.
+- Para pasarlos a mp4 (`brew install ffmpeg`): `ffmpeg -i demo_videos/01_crear_tablero.webm -c:v libx264 -crf 20 -pix_fmt yuv420p 01_crear_tablero.mp4`.
+
 ### Motor
 | Archivo | Qué prueba |
 |---|---|

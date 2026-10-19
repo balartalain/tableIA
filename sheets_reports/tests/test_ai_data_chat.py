@@ -183,25 +183,12 @@ class DashboardDataChatViewTests(TestCase):
         self.assertContains(r, "data-chat.js")
         self.assertContains(r, "dataChat()")
 
-    def test_bottom_sheet_z_index_mayor_que_icono_chatbot(self):
-        import re
+    def test_el_editor_no_muestra_el_chatbot(self):
+        """El chatbot es solo de la vista (board_view), no del editor."""
         r = self.client.get(reverse("board_editor", kwargs={"dashboard_id": self.dashboard.id}))
         self.assertEqual(r.status_code, 200)
-        html = r.content.decode("utf-8")
-
-        # Extraer z-index del bottom-sheet
-        sheet_match = re.search(r'id="bottom-sheet"[^>]*class="[^"]*z-(\d+)', html)
-        self.assertIsNotNone(sheet_match, "No se encontró z-index en #bottom-sheet")
-        sheet_z = int(sheet_match.group(1))
-
-        # Extraer z-index del botón/icono flotante del chatbot
-        btn_match = re.search(r'aria-label="Abrir chat con tus datos"[^>]*style="[^"]*z-index:\s*(\d+)', html)
-        if not btn_match:
-            btn_match = re.search(r'style="[^"]*z-index:\s*(\d+)[^"]*"[^>]*aria-label="Abrir chat con tus datos"', html)
-        self.assertIsNotNone(btn_match, "No se encontró z-index en el botón del chatbot")
-        btn_z = int(btn_match.group(1))
-
-        self.assertGreater(sheet_z, btn_z, f"El bottom-sheet (z-{sheet_z}) debe ser mayor que el icono del chatbot (z-{btn_z})")
+        self.assertNotContains(r, "data-chat.js")
+        self.assertNotContains(r, "dataChat()")
 
     def test_endpoint_funciona_sin_autenticacion(self):
         self.client.logout()

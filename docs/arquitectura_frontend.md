@@ -264,7 +264,7 @@ El componente Alpine `aiBoard()` gestiona la creación completa de un tablero en
 
 ### Chatbot analítico sobre los datos (`data-chat.js`)
 
-Componente Alpine `dataChat()` (`data_chat.html`), presente tanto en el editor (`board_editor.html`) como en la vista compartida (`board_view.html`):
+Componente Alpine `dataChat()` (`data_chat.html`), solo en la vista compartida (`board_view.html`); el editor no lo carga:
 - Se abre mediante un botón flotante en la esquina inferior derecha.
 - Envía las consultas a `POST /api/dashboard/{id}/data-chat/` con `{prompt, source_id?}`.
 - La respuesta incluye:

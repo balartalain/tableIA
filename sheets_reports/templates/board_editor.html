@@ -584,7 +584,6 @@
 </div>
 
 {% if dashboard %}{% include "sheets_reports/ai_board.html" %}{% endif %}
-{% if dashboard %}{% include "sheets_reports/data_chat.html" %}{% endif %}
 {% if dashboard %}{% include "sheets_reports/widget_ai_insight_modal.html" %}{% endif %}
 
 {{ widget_manifest|json_script:"widget-manifest" }}
@@ -641,7 +640,6 @@
 <script src="{% static 'sheets_reports/js/board_editor/widgets/cramer-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/widgets/scatter-widget.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/ai-board.js' %}"></script>
-{% if dashboard %}<script src="{% static 'sheets_reports/js/board_editor/data-chat.js' %}"></script>{% endif %}
 
 <script src="{% static 'sheets_reports/js/board_editor/dashboard-store.js' %}"></script>
 <script src="{% static 'sheets_reports/js/board_editor/filters.js' %}"></script>

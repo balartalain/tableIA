@@ -426,7 +426,7 @@ Renderiza: tabla dinámica con jerarquía de filas, subtotales por nivel, total 
 `totals`, `formatOf(field)`, `repeatRowLabels`, `paginate`/`pageSize`, `sortable` y `footerNote`.
 Cabecera multinivel con `colspan`/`rowspan`; las dimensiones se agrupan con `rowspan` y quedan
 fijas al hacer scroll (`position: sticky`, `data-dim`); el «Total general» va en el `<tfoot>`.
-`csv()` devuelve `{headers, rows}` para `downloadRowsAsCSV`. Estilos: `.tb-table` en `css/tabulator.css`.
+`csv()` devuelve `{headers, rows}` para `downloadRowsAsCSV`. Estilos: `css/data-table.css` (tokens `--dt-*` propios, sin depender de `tabulator.css`).
 
 ### TableWidget
 

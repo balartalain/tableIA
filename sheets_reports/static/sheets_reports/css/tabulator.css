@@ -210,114 +210,193 @@
   font-size: 13px;
 }
 /* ============================================================
-   Tabla dinámica (.tb-pivot): columnas anidadas y/o varios niveles de filas
+   Tabla de los widgets (.tb-table, utils/data-table.js): plana o dinámica (columnas
+   anidadas y/o varios niveles de filas). Mismos tonos que el reskin de Tabulator; lo fijo
+   (cabecera, dimensiones, total) usa sticky.
    ============================================================ */
 
-/* Separadores verticales. Cada columna dibuja SOLO su borde izquierdo: así el inicio de un
-   grupo lo engrosa en vez de sumar un segundo borde junto al derecho de la columna anterior
-   (eso producía bordes dobles). */
-.tabulator.tb-pivot .tabulator-header .tabulator-col,
-.tabulator.tb-pivot .tabulator-row .tabulator-cell {
-  border-right: none;
+/* Alto máximo = el de la tarjeta: la tabla mide lo que sus filas y solo con muchas scrollea;
+   el paginador queda debajo, fuera del scroll. */
+.tb-table-host {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+.tb-table-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tb-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  font-size: 13px;
+  color: var(--tb-ink);
+  background: #fff;
+}
+
+.tb-table th,
+.tb-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--tb-line);
   border-left: 1px solid var(--tb-line);
+  white-space: nowrap;
+  background: #fff;
 }
-
-/* La primera columna no lleva separador (borde de la tabla) */
-.tabulator.tb-pivot .tabulator-headers > .tabulator-col:first-child,
-.tabulator.tb-pivot .tabulator-row .tabulator-cell:first-child {
+/* El borde de la tabla es el de la primera dimensión, no la primera celda de cada <tr>: bajo
+   un rowspan, la primera celda de la fila es la de la segunda dimensión y lleva su borde. */
+.tb-table [data-dim="0"],
+.tb-table .tb-first {
   border-left: none;
 }
-
-/* Inicio de un grupo de columnas ("2026", "Total general"). El borde lo lleva la primera
-   columna hoja del grupo (.tb-group-start), igual en encabezado y celdas: un borde en el
-   propio grupo del encabezado se sumaría por fuera del ancho de sus hijos y correría las
-   cabeceras respecto de las celdas. El título del grupo se marca con una sombra interna,
-   que no ocupa lugar y cae sobre ese mismo borde. */
-.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group {
-  border-left: none;
-  box-shadow: inset 2px 0 0 var(--tb-line);
+.tb-table td.tb-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
-.tabulator.tb-pivot .tabulator-header .tabulator-col.tb-group-start:not(.tabulator-col-group) {
-  border-left: 2px solid var(--tb-line);
+.tb-table td.tb-dim {
+  text-align: left;
+  vertical-align: top;
 }
 
-.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group .tabulator-col-group-cols {
-  border-top: 1px solid var(--tb-line);
+/* ---------- Encabezado ---------- */
+.tb-table thead th {
+  position: sticky;
+  z-index: 2;
+  background: var(--tb-header-bg);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: normal;
+  vertical-align: bottom;
+  text-align: right;
+}
+.tb-table thead th.tb-dim {
+  text-align: left;
+}
+.tb-table thead th.tb-group {
+  text-align: center;
+  vertical-align: middle;
 }
 
-.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group > .tabulator-col-content .tabulator-col-title {
+/* ---------- Orden por clic (tablas planas) ---------- */
+.tb-table thead th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+.tb-table thead th[data-sort]:hover {
+  background: var(--board-primary-tint, var(--color-moss-tint));
+}
+.tb-table thead th[data-sort]::after {
+  content: "▲";
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 8px;
+  vertical-align: middle;
+  color: color-mix(in srgb, var(--tb-ink) 30%, transparent);
+}
+.tb-table thead th[aria-sort]::after {
   color: var(--tb-ink);
 }
-
-/* Mismo grosor que el borde del grupo en el encabezado: si difieren, las celdas quedan
-   corridas respecto de las cabeceras. */
-.tabulator.tb-pivot .tabulator-row .tabulator-cell.tb-group-start {
-  border-left: 2px solid var(--tb-line);
+.tb-table thead th[aria-sort="descending"]::after {
+  content: "▼";
 }
 
-/* Más compacta: las tablas dinámicas suelen tener muchas columnas */
-.tabulator.tb-pivot .tabulator-row {
-  min-height: 34px;
+/* ---------- Dimensiones fijas al hacer scroll horizontal ---------- */
+.tb-table [data-dim] {
+  position: sticky;
+  z-index: 1;
 }
-.tabulator.tb-pivot .tabulator-row .tabulator-cell {
-  padding: 6px 10px;
+.tb-table thead th[data-dim] {
+  z-index: 3;
 }
 
-/* Columnas "Total <valor>" (subtotal de un pivote) y "Total general" */
-.tabulator.tb-pivot .tabulator-row .tabulator-cell.tb-subtotal-col {
+/* ---------- Grupos y totales de columna ---------- */
+/* Inicio de un grupo ("2026", "Total general"): el título y su primera hoja. */
+.tb-table .tb-group-start {
+  border-left-width: 2px;
+}
+.tb-table td.tb-subtotal-col {
   background: var(--tb-paper);
   font-weight: 600;
 }
-.tabulator.tb-pivot .tb-total-col {
+.tb-table .tb-total-col {
   font-weight: 700;
 }
-/* "Total general": separador más marcado, solo al inicio del bloque (su grupo en el
-   encabezado, o la columna marcada tb-group-start); no en cada subcolumna. */
-.tabulator.tb-pivot .tabulator-header .tabulator-col.tb-total-col.tb-group-start:not(.tabulator-col-group),
-.tabulator.tb-pivot .tabulator-row .tabulator-cell.tb-total-col.tb-group-start {
-  border-left: 2px solid var(--tb-ink);
-}
-.tabulator.tb-pivot .tabulator-header .tabulator-col.tabulator-col-group.tb-total-col {
-  box-shadow: inset 2px 0 0 var(--tb-ink);
+.tb-table .tb-total-col.tb-group-start {
+  border-left-color: var(--tb-ink);
 }
 
-/* Filas de subtotal ("Total Norte"): más claras que el header. */
-.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal,
-.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal:hover {
-  background: var(--tb-subtotal-bg);
-  /*border-top: 1px solid var(--board-primary-tint, var(--color-moss-tint));*/
-  /*border-top: 1px solid var(--board-primary-100, var(--color-moss-100));*/
+/* ---------- Filas ---------- */
+.tb-table tbody tr:hover td {
+  background: var(--tb-paper);
 }
-.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal .tabulator-cell {
+.tb-table tbody tr.tb-subtotal-row td {
+  background: var(--tb-subtotal-bg);
   font-weight: 600;
-  background: transparent;
 }
 
-/* Columnas de filas fijas al hacer scroll horizontal: fondo opaco y separador */
-.tabulator.tb-pivot .tabulator-cell.tabulator-frozen,
-.tabulator.tb-pivot .tabulator-col.tabulator-frozen {
+/* ---------- «Total general» al pie ---------- */
+.tb-table tfoot td,
+.tb-table tfoot td.tb-subtotal-col {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--tb-header-bg);
+  font-weight: 700;
+  border-top: 2px solid var(--tb-ink);
+  border-bottom: none;
+}
+.tb-table tfoot td[data-dim] {
+  z-index: 3;
+}
+
+/* ---------- Barra de progreso ---------- */
+.tb-table .tb-progress {
+  display: inline-block;
+  width: 60px;
+  height: 8px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 4px;
+  background: var(--tb-line);
+  overflow: hidden;
+}
+.tb-table .tb-progress > span {
+  display: block;
+  height: 100%;
+}
+
+/* ---------- Paginador ---------- */
+.tb-pager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--tb-line);
+  font-size: 12px;
+  color: var(--tb-ink-muted);
+}
+.tb-pager-note {
+  margin-right: auto;
+  font-size: 11px;
+}
+.tb-pager button {
   background: #fff;
+  border: 1px solid var(--tb-line);
+  border-radius: 6px;
+  color: var(--tb-ink);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 9px;
 }
-.tabulator.tb-pivot .tabulator-row.tabulator-row-subtotal .tabulator-cell.tabulator-frozen {
-  background: var(--tb-subtotal-bg);
+.tb-pager button:hover:not(:disabled) {
+  background: var(--tb-paper);
 }
-.tabulator.tb-pivot .tabulator-row.tabulator-calcs .tabulator-cell.tabulator-frozen,
-.tabulator .tabulator-row.tabulator-calcs .tabulator-cell.tb-subtotal-col {
-  background: var(--tb-header-bg);
-}
-
-/* Columnas de dimensión/texto: mismo tono que el header. La variante congelada va después
-   para ganarle a la regla blanca de las columnas fijas. */
-.tabulator .tabulator-col.tb-dim.tabulator-frozen {
-  background: var(--tb-header-bg);
-}
-
-/* Tabulator pone por defecto un borde derecho gris de 2px en CADA columna fija, que se sumaba
-   al separador de la columna siguiente. Se reemplaza por una sombra de 1px: sin scroll cae
-   exactamente sobre el borde izquierdo de la columna siguiente (se ve una sola línea) y, al
-   desplazar, separa las columnas fijas del contenido que pasa por debajo. */
-.tabulator.tb-pivot .tabulator-header .tabulator-frozen.tabulator-frozen-left,
-.tabulator.tb-pivot .tabulator-row .tabulator-cell.tabulator-frozen.tabulator-frozen-left {
-  border-right: none;
-  box-shadow: 1px 0 0 var(--tb-line);
+.tb-pager button:disabled {
+  color: #C7C9C3;
+  cursor: not-allowed;
 }

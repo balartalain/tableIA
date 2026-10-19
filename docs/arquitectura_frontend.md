@@ -2,7 +2,7 @@
 
 ## Visión general
 
-El frontend es una aplicación **Alpine.js + Django templates** con renderizado imperativo de widgets vía **ApexCharts** (gráficos) y **Tabulator** (tablas). No usa un framework de build: los JS se cargan como scripts globales en orden de dependencia, y Alpine se inicializa con `defer`.
+El frontend es una aplicación **Alpine.js + Django templates** con renderizado imperativo de widgets vía **ApexCharts** (gráficos), una tabla HTML propia (`DataTable`, widgets de tabla) y **Tabulator** (tablas de fuentes y del envío de correos). No usa un framework de build: los JS se cargan como scripts globales en orden de dependencia, y Alpine se inicializa con `defer`.
 
 **Principios de diseño:**
 
@@ -46,6 +46,7 @@ static/sheets_reports/js/board_editor/
   utils/
     formatearEtiquetaApex.js  # Wrap de labels largos para ApexCharts
     number-format.js          # formatNumber: el formato de todo valor de datos
+    data-table.js             # DataTable: la <table> de los widgets table y dynamic_table
   widgets/
     kpi-widget.js             # KpiWidget (número + comparación + meta + sparkline)
     bar-widget.js             # BarWidget (barras + leyenda arrastrable)
@@ -64,7 +65,7 @@ En `board_editor.html` (y `board_view.html`), los scripts se cargan en orden:
 base.html:  formatearEtiquetaApex.js → Alpine.js (defer)
 board_editor.html:
   SortableJS → interact.js → ApexCharts → Tabulator → Virtual Select
-  utils/number-format.js → base-widget.js → widget-registry.js → widgets/*.js → dashboard-store.js → filters.js → board-editor-init.js
+  utils/number-format.js → utils/data-table.js → base-widget.js → widget-registry.js → widgets/*.js → dashboard-store.js → filters.js → board-editor-init.js
 ```
 
 Alpine carga con `defer` en `base.html`, pero los stores y widgets se registran antes de que Alpine arranque (los scripts inline se ejecutan antes que el defer).
@@ -413,17 +414,23 @@ Renderiza: gráfico de dona con etiquetas centrales (valor + total), leyenda opc
 
 ### DynamicTableWidget
 
-Renderiza: tabla dinámica con jerarquía de filas, subtotales por nivel, total general, columnas reordenables y formatos por columna.
+Renderiza: tabla dinámica con jerarquía de filas, subtotales por nivel, total general y formatos por columna, con el componente `DataTable` (`utils/data-table.js`).
 
-- `toTabulator()`: constructor recursivo de columnas (grupos, subtotales, totales).
-- `_displayRows()`: filas con subtotales visibles/ocultos según `style.showTotals`.
+- `_visibleColumns()` / `_visibleRows()`: columnas y filas de subtotal visibles según los flags de totales del estilo.
 - Formato de cada columna: `payload.formats` (el de su métrica o el de la columna en la fuente) y
   `payload.percent`; no hay formato por columna en la tabla.
-- `_wireTableEvents()`: `columnMoved` → guarda `style.columnOrder`.
+- `_mountTable(options)`: monta el `DataTable` en la tarjeta y conecta la descarga CSV (la comparte `TableWidget`).
+- Tabla plana (sin pivotes, una dimensión): orden por clic en el encabezado; un `style.columnOrder` guardado se respeta.
+
+**`DataTable`** recibe `columns` (árbol con `children`, `subtotal`, `total`), `rows`, `rowFields`,
+`totals`, `formatOf(field)`, `repeatRowLabels`, `paginate`/`pageSize`, `sortable` y `footerNote`.
+Cabecera multinivel con `colspan`/`rowspan`; las dimensiones se agrupan con `rowspan` y quedan
+fijas al hacer scroll (`position: sticky`, `data-dim`); el «Total general» va en el `<tfoot>`.
+`csv()` devuelve `{headers, rows}` para `downloadRowsAsCSV`. Estilos: `.tb-table` en `css/tabulator.css`.
 
 ### TableWidget
 
-Extiende `DynamicTableWidget`. Tabla simple sin jerarquía: columnas planas, paginación, formatos por columna.
+Extiende `DynamicTableWidget`. Tabla simple sin jerarquía (`DataTable` con `rowFields: []`): columnas planas, orden por clic, paginación, formatos por columna y aviso de filas truncadas.
 
 ### FilterWidget
 

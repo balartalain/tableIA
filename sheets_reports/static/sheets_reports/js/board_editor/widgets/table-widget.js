@@ -33,51 +33,19 @@
       const payload = data || this.constructor.mockData();
       this._lastData = payload;
 
-      if (this._table) {
-        this._table.destroy();
-        this._table = null;
-      }
-      const container = this.getContentContainer();
-      container.innerHTML = '';
-      container.style.backgroundColor = '#fff';
-      // Ocupa todo el alto bajo el título: la tabla arranca arriba aunque tenga pocas filas.
-      container.style.flex = '1 1 0%';
-      container.classList.remove('tb-pivot');
-      // La tabla va en un hijo con alto máximo = el del contenedor: mide lo que sus filas (el
-      // pie queda pegado a la última) y solo con muchas llega al fondo y hace scroll.
-      const host = document.createElement('div');
-      container.appendChild(host);
-
-      const formats = this.constructor.formats;
-      const columns = this._orderedColumns(payload.columns || []).map(col => {
-        // El de la columna en la fuente (moneda, %).
-        const format = (col.numeric && (payload.formats || {})[col.field]) || (col.numeric ? 'number' : 'text');
-        const result = {
-          title: col.header,
-          field: col.field,
-          ...(formats[format] || formats.text),
-          cssClass: col.numeric ? 'tb-num' : 'tb-dim',
-        };
-        if (col.numeric) result.headerHozAlign = 'right';
-        return result;
-      });
+      const columns = payload.columns || [];
+      const numeric = new Set(columns.filter(c => c.numeric).map(c => c.field));
       const rows = payload.rows || [];
-      this._table = new Tabulator(host, {
-        data: rows,
-        nestedFieldSeparator: false,
-        movableColumns: true,
-        columns,
-        layout: 'fitColumns',
-        columnHeaderVertAlign: 'bottom',
-        pagination: this.style.showPagination ?? true,
-        paginationSize: this.style.pageSize ?? 10,
-        maxHeight: '100%',
-        footerElement: payload.truncated
-          ? `<span class="text-[11px] text-ink/50 px-2">Mostrando ${rows.length.toLocaleString()} de ${Number(payload.total_rows).toLocaleString()} filas; usa filtros para acotar.</span>`
-          : undefined,
-        rowFormatter: (row) => this._formatRow(row),
+      this._mountTable({
+        columns: this._orderedColumns(columns),
+        rows,
+        // El de la columna en la fuente (moneda, %).
+        formatOf: (field) => numeric.has(field) ? ((payload.formats || {})[field] || 'number') : 'text',
+        sortable: true,
+        footerNote: payload.truncated
+          ? `Mostrando ${rows.length.toLocaleString()} de ${Number(payload.total_rows).toLocaleString()} filas; usa filtros para acotar.`
+          : '',
       });
-      this._wireTableEvents();
     }
   }
 

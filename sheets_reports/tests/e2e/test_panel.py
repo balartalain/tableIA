@@ -94,7 +94,7 @@ class PanelTests(StaticLiveServerTestCase):
     def open_editor(self, widget):
         self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
         card = self.page.locator(f'[data-widget-id="{widget.id}"]')
-        card.locator(".tabulator-row").first.wait_for()
+        card.locator(".tb-table tbody tr").first.wait_for()
         return card
 
     def open_panel(self, card):
@@ -108,9 +108,9 @@ class PanelTests(StaticLiveServerTestCase):
     def test_el_formato_de_la_fuente_llega_a_todas_las_columnas(self):
         """`ventas` es Moneda en la fuente: las celdas del pivote y el total muestran «$»."""
         card = self.open_editor(self.widget(fields(pivots=["mes"])))
-        cells = card.locator(".tabulator-row .tb-num").all_inner_texts()
+        cells = card.locator(".tb-table tbody .tb-num").all_inner_texts()
         self.assertTrue(cells and all(c.startswith("$") for c in cells if c.strip() not in ("", "-")), cells)
-        totals = card.locator(".tabulator-calcs .tb-num").all_inner_texts()
+        totals = card.locator(".tb-table tfoot .tb-num").all_inner_texts()
         self.assertTrue(totals and all(t.startswith("$") for t in totals if t.strip()), totals)
 
     def test_mostrar_como_desaparece_con_promedio(self):
@@ -146,12 +146,11 @@ class PanelTests(StaticLiveServerTestCase):
     def test_la_tabla_dinamica_llena_el_ancho_y_el_total_queda_pegado(self):
         card = self.open_editor(self.widget(fields(pivots=["mes"], metrics=[agg("total_ventas")]),
                                             style={"showColumnTotals": True}))
-        self.page.wait_for_timeout(300)   # el reparto del ancho corre tras construir la tabla
         sizes = card.evaluate("""el => {
-            const holder = el.querySelector('.tabulator-tableholder');
-            const table = el.querySelector('.tabulator-table');
-            const rows = el.querySelectorAll('.tabulator-tableholder .tabulator-row');
-            const footer = el.querySelector('.tabulator-footer');
+            const holder = el.querySelector('.tb-table-scroll');
+            const table = el.querySelector('.tb-table');
+            const rows = table.querySelectorAll('tbody tr');
+            const footer = table.querySelector('tfoot');
             return {holder: holder.clientWidth, table: table.scrollWidth,
                     gap: footer.getBoundingClientRect().top - rows[rows.length - 1].getBoundingClientRect().bottom};
         }""")
@@ -165,7 +164,7 @@ class PanelTests(StaticLiveServerTestCase):
                                           "formula": 'SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100'}]
         self.source.save()
         card = self.open_editor(self.widget(fields(dimensions=["mes"], metrics=[{"field": "% Hogar", "agg": "auto", "alias": "hogar"}])))
-        cells = card.locator(".tabulator-row .tb-num").all_inner_texts()
+        cells = card.locator(".tb-table tbody .tb-num").all_inner_texts()
         self.assertIn("15.15%", cells)
 
     def test_el_formateador_comun_de_numeros(self):

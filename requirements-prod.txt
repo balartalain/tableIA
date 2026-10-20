@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Solo para producción: servidor WSGI detrás de Apache (ver docs/deploy.md).
+gunicorn==26.2.0

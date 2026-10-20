@@ -11,6 +11,7 @@ import logging
 from django.contrib.auth import get_user_model, login as django_login, logout as django_logout
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
@@ -41,7 +42,7 @@ def _mark_connected(url: str) -> str:
 def login_page(request):
     """Página de inicio de sesión."""
     if request.user.is_authenticated:
-        return redirect(_safe_next(request.GET.get("next")) or "/")
+        return redirect(_safe_next(request.GET.get("next")) or "home")
     next_url = _safe_next(request.GET.get("next"))
     return render(request, "google_auth/login.html", {
         "configured": services.is_configured(),
@@ -69,7 +70,7 @@ def login(request):
 def callback(request):
     if request.GET.get("error"):
         logger.warning("OAuth de Google rechazado: %s", request.GET.get("error"))
-        return redirect(_safe_next(request.session.pop(NEXT_KEY, "")) or "/")
+        return redirect(_safe_next(request.session.pop(NEXT_KEY, "")) or "home")
     expected = request.session.get(STATE_KEY, "")
     state = request.GET.get("state", "")
     if not expected or state != expected:
@@ -84,7 +85,7 @@ def callback(request):
         }, status=400)
     request.session.pop(STATE_KEY, None)
     code_verifier = request.session.pop(CODE_VERIFIER_KEY, None)
-    next_url = _safe_next(request.session.pop(NEXT_KEY, "")) or "/"
+    next_url = _safe_next(request.session.pop(NEXT_KEY, "")) or reverse("home")
     try:
         credentials = services.exchange_code(
             request, request.GET.get("code", ""), state, code_verifier=code_verifier
@@ -115,8 +116,8 @@ def callback(request):
 
     services.save_credentials(user, credentials, email=email)
 
-    if next_url in ("/", "", "/login/"):
-        return redirect("/")
+    if next_url in (reverse("home"), reverse("login_page")):
+        return redirect("home")
     return redirect(_mark_connected(next_url))
 
 
@@ -124,7 +125,7 @@ def callback(request):
 def logout_view(request):
     """Cierra la sesión del usuario."""
     django_logout(request)
-    return redirect("/login/")
+    return redirect("login_page")
 
 
 @require_http_methods(["GET"])

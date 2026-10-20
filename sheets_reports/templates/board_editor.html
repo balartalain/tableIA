@@ -122,6 +122,7 @@
 
 {% block content %}
 
+{% if dashboard %}{% include "sheets_reports/_page_loader.html" %}{% endif %}
 <style>
   #dashboard-filters:empty { display: none; }
   .bg-dot-grid {

@@ -1,0 +1,14 @@
+<style>
+  /* Barra de carga de la página: un tramo que cruza de lado a lado mientras hay un request. */
+  #page-loader > div { animation: page-loader-slide 1.4s ease-in-out infinite; }
+  @keyframes page-loader-slide {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(350%); }
+  }
+</style>
+<!-- Visible desde el primer pintado; la ocultan board-view-init.js (vista) y dashboard-store.js
+     (editor) al terminar de cargar. -->
+<div id="page-loader" class="fixed top-0 inset-x-0 z-50 h-1 overflow-hidden" style="background-color: var(--board-primary-100, #CFE6D6);"
+     role="progressbar" aria-label="Cargando tablero">
+  <div class="h-full w-1/3" style="background-color: var(--board-primary, #1F8A5F);"></div>
+</div>

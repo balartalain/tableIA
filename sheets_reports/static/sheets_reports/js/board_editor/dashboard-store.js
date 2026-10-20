@@ -14,6 +14,15 @@ async function fetchJsonSafe(url, options = {}, timeoutMs = AI_FETCH_TIMEOUT_MS)
   }
 }
 
+// Barra de carga superior (_page_loader.html): visible desde el primer pintado, se oculta cuando
+// no queda ningún request del tablero en curso.
+let pendingLoads = 1;
+function setPageLoading(isLoading) {
+  pendingLoads = Math.max(0, pendingLoads + (isLoading ? 1 : -1));
+  const bar = document.getElementById('page-loader');
+  if (bar) bar.classList.toggle('hidden', pendingLoads === 0);
+}
+
 // `window.apiUrl` lo define base.html con el prefijo de despliegue (SCRIPT_NAME).
 
 const EMPTY_FIELDS = () => ({
@@ -313,7 +322,12 @@ document.addEventListener('alpine:init', () => {
     },
 
     async loadBoard() {
-      const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
+      let r, data;
+      try {
+        ({ r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS));
+      } finally {
+        setPageLoading(false);
+      }
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
       this._reportFilterErrors(data);
       this.sources = (data.dashboard && data.dashboard.sources) || [];
@@ -333,6 +347,7 @@ document.addEventListener('alpine:init', () => {
     async refreshData() {
       const saved = this.widgets.filter(w => w.id > 0 && w.fields);
       saved.forEach(w => w.setLoading(true));
+      setPageLoading(true);
       try {
         const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
         if (!r.ok || !data) {
@@ -356,6 +371,8 @@ document.addEventListener('alpine:init', () => {
         });
       } catch (e) {
         saved.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
+      } finally {
+        setPageLoading(false);
       }
     },
 

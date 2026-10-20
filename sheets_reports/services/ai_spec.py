@@ -423,6 +423,19 @@ def _without_title(form: dict) -> dict:
     return form
 
 
+def _current_for_ai(current: dict, widget_type: str | None) -> dict:
+    """El widget actual tal como lo ve la IA: sin título, sin claves vacías de `fields` y sin las
+    que su tipo no admite. El panel manda todas las claves (`pivots: []`, `limit: null`...) y,
+    como se le pide conservarlas, Gemini se cuelga (504) intentando devolver lo que su schema no
+    tiene."""
+    form = _without_title(current)
+    widget = WIDGETS.get(widget_type) if widget_type else None
+    if isinstance(form.get("fields"), dict):
+        form["fields"] = {k: v for k, v in form["fields"].items()
+                          if v not in (None, "", [], {}) and (widget is None or _admits_field(widget, k))}
+    return form
+
+
 def build_system_prompt(widgets=None) -> str:
     """El prompt de la IA: lo del core más lo que declara cada widget que la IA puede proponer
     (cuándo usarlo, qué admite, sus controles de estilo y sus ejemplos)."""
@@ -1044,7 +1057,7 @@ def _user_message(prompt: str, widget_type: str | None, ctx: SheetContext,
         parts.append(f"El tipo de widget está fijado en: {widget_type}.")
     if current:
         parts.append(MODIFY_PROMPT)
-        parts.append("current_widget:\n" + json.dumps(_without_title(current), ensure_ascii=False))
+        parts.append("current_widget:\n" + json.dumps(_current_for_ai(current, widget_type), ensure_ascii=False))
     previous = _history_text(history)
     if previous:
         parts.append(previous)

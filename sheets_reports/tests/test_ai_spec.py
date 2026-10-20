@@ -80,6 +80,17 @@ class GenerateWidgetFormTests(SimpleTestCase):
             self.assertNotIn("basura", contents)
             self.assertIn("Pedido del usuario:\nahora por mes", contents)
 
+    def test_el_widget_actual_va_sin_claves_vacias_ni_las_que_su_tipo_no_admite(self, _audit):
+        # El borrador del panel trae todas las claves; con ellas Gemini se colgaba (504).
+        current = {"title": "Filtros", "style": {"title": "Filtros", "layout": "horizontal"},
+                   "fields": {"dimensions": ["categoria"], "pivots": [], "metrics": [], "filters": [],
+                              "columns": [], "trend_by": None, "sort_by": None, "limit": None}}
+        message = ai_spec._user_message("filtra por región", "filter", sales_ctx(), current=current)
+        sent = json.loads(message.split("current_widget:\n", 1)[1].split("\n", 1)[0])
+        self.assertEqual(sent, {"fields": {"dimensions": ["categoria"]}, "style": {"layout": "horizontal"}})
+        for key in ("pivots", "metrics", "trend_by", "limit"):
+            self.assertNotIn(f'"{key}"', message)
+
     def test_sin_widget_actual_ni_historial_el_mensaje_no_cambia(self, _audit):
         with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", VALID_ARGS)) as call:
             generate_widget_form("ventas por categoría", None, sales_ctx())

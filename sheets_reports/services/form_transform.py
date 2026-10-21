@@ -224,25 +224,25 @@ def transform(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd
 
     inferred = {a["name"]: a["inferred_type"] for a in analyze(df, custom_separator)}
 
-    result_df = pd.DataFrame(index=df.index)
+    # Las columnas se juntan primero y el frame se arma de una vez: insertarlas una a una lo
+    # fragmenta y, con muchas casillas expandidas, hace lenta la carga de la fuente.
+    cols = {}
     if "_ID" in df.columns:
-        result_df["_ID"] = df["_ID"]
+        cols["_ID"] = df["_ID"]
 
     for col in df.columns:
         if col == "_ID":
             continue
         kind = inferred.get(col, "SCALAR")
         if kind in ("CHECKBOX", "CHECKBOX_GRID"):
-            expanded = _expand_checkbox_column(df[col], col)
-            for new_col in expanded.columns:
-                result_df[new_col] = expanded[new_col]
+            cols.update(_expand_checkbox_column(df[col], col).items())
         else:
             clean_col = _clean_header(col)
-            if clean_col in result_df.columns:
+            if clean_col in cols:
                 clean_col = col
-            result_df[clean_col] = df[col]
+            cols[clean_col] = df[col]
 
-    return result_df
+    return pd.DataFrame(cols, index=df.index)
 
 
 # Alias de compatibilidad

@@ -83,7 +83,7 @@
 <header id="app-header" class="border-b border-line bg-white">
   <div class="h-14 px-4 flex items-center gap-3">
     {% block header_leading %}{% endblock %}
-    <span class="shrink-0 w-7 h-7 rounded-md bg-moss-600 flex items-center justify-center text-white text-sm font-sans font-bold" aria-hidden="true">R</span>
+    <img src="{% static 'sheets_reports/img/reportia_icon.svg' %}" alt="" class="shrink-0 w-7 h-7" aria-hidden="true">
     <div class="min-w-0 flex-1 flex items-center">
       {% block header_title %}<span class="font-sans font-semibold text-base tracking-tight">Tableros IA</span>{% endblock %}
     </div>
@@ -92,7 +92,7 @@
       {% if request.user.is_authenticated %}
       <div x-data="{ open: false }" class="relative">
         <button type="button" @click="open = !open" @click.outside="open = false"
-                class="flex items-center gap-2 text-xs font-medium text-ink/80 hover:text-ink px-2 py-1 rounded-md hover:bg-paper transition cursor-pointer">
+                class="flex items-center gap-2 text-xs font-medium text-ink/80 hover:text-ink px-2 py-1 rounded-full hover:bg-paper transition cursor-pointer">
           <div class="w-7 h-7 rounded-full bg-moss-50 border border-moss-100 flex items-center justify-center text-xs font-bold text-moss-700 uppercase"
                title="{{ request.user.email }}">
             {{ request.user.email|slice:":2"|default:request.user.username|slice:":2" }}

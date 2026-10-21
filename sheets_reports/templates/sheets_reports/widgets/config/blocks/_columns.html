@@ -6,7 +6,7 @@
              x-text="$store.dashboard.columnsLabel"></label>
       <button type="button" x-show="$store.dashboard.drawerCapabilities.columns_scaled"
               x-on:click="$store.help.open('correlacion')" aria-label="Ayuda de la matriz de correlación" title="¿Cómo funciona la matriz de correlación?"
-              class="p-0.5 rounded-md text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+              class="p-0.5 rounded-full text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
         <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
       </button>
     </div>
@@ -53,7 +53,7 @@
                   x-on:click="$store.dashboard.openScaleEditor(col.field)"
                   x-bind:title="$store.dashboard.columnProfile(col.field) && $store.dashboard.columnProfile(col.field).uncertain
                     ? 'Escala detectada: puede que sus valores tengan un orden. Revísala.' : 'Cambiar la escala de la variable'"
-                  class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded border cursor-pointer"
+                  class="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full border cursor-pointer"
                   x-bind:class="$store.dashboard.columnProfile(col.field) && $store.dashboard.columnProfile(col.field).uncertain
                     ? 'border-amber-300 bg-amber-50 text-amber-800' : 'border-line bg-white text-ink/60 hover:text-ink'">
             <span x-text="$store.dashboard.scaleLabel($store.dashboard.columnScale(col.field))"></span><span

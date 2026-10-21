@@ -295,7 +295,7 @@
           rowFormatter: row => row.getElement().classList.add('cursor-pointer'),
           columns: [
             { title: 'Nombre', field: 'nombre', minWidth: 220, widthGrow: 3,
-              formatter: c => `<a href="${esc(this.boardUrl(c.getData()))}" class="font-medium text-ink hover:text-moss-600">${esc(c.getValue())}</a>` },
+              formatter: c => `<a href="${esc(this.boardUrl(c.getData()))}" class="font-medium text-ink">${esc(c.getValue())}</a>` },
             { title: 'Fuente', field: 'sources', minWidth: 200, widthGrow: 2,
               mutator: (value, data) => this.sourceLabel(data),
               formatter: c => `<span class="inline-flex items-center gap-1.5 text-ink/60"><i class="ti ti-table text-sm" aria-hidden="true"></i>${esc(c.getValue())}</span>` },

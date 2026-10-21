@@ -48,18 +48,18 @@ gráficos con matplotlib/seaborn.
       <div class="flex items-center gap-1">
         <button type="button" x-show="messages.length" x-on:click="clearHistory()"
                 title="Limpiar conversación" aria-label="Limpiar conversación"
-                class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
+                class="p-1.5 rounded-full text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
           <i class="ti ti-trash text-base" aria-hidden="true"></i>
         </button>
         <button type="button" x-on:click="maximized = !maximized"
                 x-bind:title="maximized ? 'Restaurar tamaño' : 'Maximizar a pantalla completa'"
                 x-bind:aria-label="maximized ? 'Restaurar tamaño' : 'Maximizar a pantalla completa'"
-                class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
+                class="p-1.5 rounded-full text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
           <i class="ti text-base" x-bind:class="maximized ? 'ti-minimize' : 'ti-maximize'" aria-hidden="true"></i>
         </button>
         <button type="button" x-on:click="open = false"
                 title="Cerrar chat" aria-label="Cerrar chat"
-                class="p-1.5 rounded-md text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
+                class="p-1.5 rounded-full text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
           <i class="ti ti-x text-base" aria-hidden="true"></i>
         </button>
       </div>
@@ -190,7 +190,7 @@ gráficos con matplotlib/seaborn.
 
         <button type="submit" x-bind:disabled="!prompt.trim() || loading"
                 title="Enviar pregunta" aria-label="Enviar"
-                class="absolute right-2 bottom-2 p-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer">
+                class="absolute right-2 bottom-2 p-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer">
           <i class="ti ti-arrow-up text-base leading-none"></i>
         </button>
       </div>

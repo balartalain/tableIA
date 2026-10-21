@@ -51,7 +51,7 @@
           <div class="flex justify-end">
             <button type="button" x-on:click="$store.dashboard.saveScaleEditor()"
                     x-bind:disabled="$store.dashboard.scaleEditor.saving"
-                    class="text-xs font-medium px-2.5 py-1 rounded-md bg-moss-600 text-white hover:bg-moss-700 disabled:opacity-50 cursor-pointer">
+                    class="text-xs font-medium px-2.5 py-1 rounded-full bg-moss-600 text-white hover:bg-moss-700 disabled:opacity-50 cursor-pointer">
               Guardar en la fuente
             </button>
           </div>
@@ -89,7 +89,7 @@
                     class="text-xs text-ink/60 hover:text-ink cursor-pointer">Descartar</button>
             <button type="button" x-show="$store.dashboard.scaleProposal.items.length"
                     x-on:click="$store.dashboard.acceptScaleProposal()"
-                    class="text-xs font-medium px-2.5 py-1 rounded-md bg-moss-600 text-white hover:bg-moss-700 cursor-pointer">
+                    class="text-xs font-medium px-2.5 py-1 rounded-full bg-moss-600 text-white hover:bg-moss-700 cursor-pointer">
               Aplicar en la fuente
             </button>
           </div>

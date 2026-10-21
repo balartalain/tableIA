@@ -621,3 +621,13 @@ class SinUsuarioTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Crear tablero")
         self.assertContains(r, "/tableros/nuevo/")
+
+    def test_menu_del_usuario_administrar_solo_para_staff(self):
+        user = get_user_model().objects.create_user("normal", "n@example.com", "pass")
+        self.client.force_login(user)
+        self.assertNotContains(self.client.get("/"), "Administrar")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        r = self.client.get("/")
+        self.assertContains(r, "Administrar")
+        self.assertContains(r, 'href="/admin/" target="_blank"')

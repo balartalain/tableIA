@@ -93,6 +93,13 @@
             <p class="font-semibold text-fg truncate">{{ request.user.email|default:request.user.username }}</p>
             <p class="text-xs text-fg-muted">Sesión activa</p>
           </div>
+          {% if request.user.is_staff %}
+          <a href="{% url 'admin:index' %}" target="_blank" rel="noopener"
+             class="flex items-center gap-2 px-3 py-2 text-fg hover:bg-surface-muted transition">
+            <i class="ti ti-settings text-sm"></i>
+            <span>Administrar</span>
+          </a>
+          {% endif %}
           <a href="{% url 'logout' %}"
              class="flex items-center gap-2 px-3 py-2 text-danger hover:bg-danger-bg transition">
             <i class="ti ti-logout text-sm"></i>

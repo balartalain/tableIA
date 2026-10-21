@@ -56,7 +56,8 @@ const RELATIVE_VALUES = [
   { value: '', label: 'Un valor…' },
   { value: 'current_year', label: 'Este año' },
   { value: 'previous_year', label: 'El año anterior' },
-  { value: 'current_month', label: 'Este mes (1-12)' },
+  { value: 'current_month', label: 'Este mes' },
+  { value: 'previous_month', label: 'El mes anterior' },
   // Periodos de los datos (`data`): solo en columnas de tiempo (schema.time_fields).
   { value: 'latest', label: 'El periodo más reciente', data: true },
   { value: 'previous', label: 'El periodo anterior', data: true },

@@ -1,4 +1,5 @@
 """Los pasos del motor: → agregación/pivote → fórmulas → ventanas → orden/límite."""
+import datetime
 from unittest import mock
 
 import pandas as pd
@@ -120,7 +121,8 @@ class FilterStepTests(SimpleTestCase):
             self.assertEqual(rows(field, "eq", "current_year"), [0])
             self.assertEqual(rows(field, "eq", "previous_year"), [1])
             self.assertEqual(rows(field, "gte", "previous_year"), [0, 1])
-            self.assertEqual(rows(field, "eq", "current_month"), [1] if today.month != 3 else [0, 1])
+            # Este mes es el de este año: el mismo mes del año anterior no entra.
+            self.assertEqual(rows(field, "eq", "current_month"), [0] if today.month == 3 else [])
         # El año suelto se compara tal cual, como antes; una categoría no deja filas.
         self.assertEqual(rows("anio", "eq", "current_year"), [0, 3])
         self.assertEqual(rows("categoria", "eq", "current_year"), [])
@@ -311,3 +313,49 @@ class NestedPivotTests(SimpleTestCase):
                     fields(dimensions=["a"], pivots=["b"], metrics=[agg("total", field="c")])),
                     widget_type="dynamic_table")
         self.assertIn("celdas", str(ctx.exception))
+
+
+class CalendarMonthTests(SimpleTestCase):
+    """«Este mes» y «el mes anterior» del calendario: año y mes en fechas y en año-mes; el
+    número de mes en meses sueltos."""
+    TODAY = datetime.date(2026, 1, 15)
+
+    def df(self):
+        return pd.DataFrame({
+            "ID": [1, 2, 3, 4],
+            "fecha": ["2026-01-05", "2025-12-20", "2025-01-10", None],
+            "anio_mes": ["2026-01", "2025-12", "2025-01", "2026-1"],
+            "mes": ["Enero", "Diciembre", "Enero", "Febrero"],
+            "num_mes": [1, 12, 1, 2],
+        })
+
+    def rows(self, field, relative, op="eq"):
+        from sheets_reports.engine.steps.filter import apply_filters, parse_conditions
+        with mock.patch("sheets_reports.engine.steps.filter.datetime") as clock:
+            clock.date.today.return_value = self.TODAY
+            clock.timedelta = datetime.timedelta
+            out = apply_filters(self.df(), parse_conditions([{"field": field, "op": op, "relative": relative}]))
+        return out["ID"].tolist()
+
+    def test_fecha_y_anio_mes_comparan_anio_y_mes(self):
+        for field in ("fecha", "anio_mes"):
+            with self.subTest(field=field):
+                # Enero de 2026, no el de 2025.
+                self.assertEqual(self.rows(field, "current_month"), [1, 4] if field == "anio_mes" else [1])
+                # En enero, el mes anterior es diciembre del año pasado.
+                self.assertEqual(self.rows(field, "previous_month"), [2])
+                self.assertEqual(self.rows(field, "previous_year"), [2, 3])
+
+    def test_meses_sueltos_comparan_el_numero(self):
+        for field in ("mes", "num_mes"):
+            with self.subTest(field=field):
+                self.assertEqual(self.rows(field, "current_month"), [1, 3])
+                self.assertEqual(self.rows(field, "previous_month"), [2])
+
+    def test_desde_el_mes_anterior(self):
+        self.assertEqual(self.rows("anio_mes", "previous_month", op="gte"), [1, 2, 4])
+
+    def test_anio_mes_se_normaliza(self):
+        from sheets_reports.utils.data import year_months
+        self.assertEqual(year_months(pd.Series(["2026-1", "2025-12", None])).tolist()[:2], ["2026-01", "2025-12"])
+        self.assertIsNone(year_months(pd.Series(["Hogar", "Ropa"])))

@@ -16,7 +16,7 @@ from typing import Any, ClassVar
 import pandas as pd
 
 from sheets_reports.engine.context import SheetContext
-from sheets_reports.utils.data import as_dates, is_number, sort_key, time_order, to_key
+from sheets_reports.utils.data import is_number, month_number, sort_key, time_order, to_key, year_months
 from sheets_reports.utils.registry import Registry
 from sheets_reports.utils.validation import (
     MAX_FILTERS, MAX_IN_VALUES, SCALAR, enum_of, field_enum, schema_errors, unique,
@@ -40,20 +40,45 @@ class RelativeValue:
         raise NotImplementedError
 
 
+def _month_names(series: pd.Series) -> pd.Series | None:
+    """El número de mes (1-12) de una columna de meses por nombre (Ene, Octubre…); None si no."""
+    if pd.api.types.is_numeric_dtype(series):
+        return None
+    values = [v for v in series.dropna().unique() if str(v).strip()]
+    if not values or not all(month_number(v) for v in values):
+        return None
+    return series.map(month_number)
+
+
 class _ClockValue(RelativeValue):
-    """Un año o un mes del reloj. En una columna de fechas completas se compara con esa parte
-    (`part`) de cada fecha; en una de años o meses sueltos, con el valor tal cual."""
+    """Un año o un mes del reloj (`period`: una fecha de ese año o mes). Con fechas completas o
+    año-mes («2026-10») se compara el periodo de cada fila: el año, o el año **y** el mes («este
+    mes» es octubre de este año, no octubre de cualquier año). Con años o meses sueltos (2026,
+    10, «Octubre»), el año o el número de mes tal cual."""
     part: ClassVar[str]
 
+    def period(self, today: datetime.date) -> datetime.date:
+        raise NotImplementedError
+
     def resolve(self, series, today):
-        return self.from_today(today)
+        target = self.period(today)
+        if self.part == "year":
+            return target.year
+        return target.strftime("%Y-%m") if year_months(series) is not None else target.month
 
     def comparable(self, series: pd.Series) -> pd.Series:
-        dates = as_dates(series)
-        return series if dates is None else getattr(dates.dt, self.part)
+        periods = year_months(series)
+        if periods is not None:
+            return pd.to_numeric(periods.str[:4], errors="coerce") if self.part == "year" else periods
+        if self.part == "month":
+            months = _month_names(series)
+            if months is not None:
+                return months
+        return series
 
-    def from_today(self, today: datetime.date):
-        raise NotImplementedError
+
+def _previous_month(today: datetime.date) -> datetime.date:
+    return today.replace(day=1) - datetime.timedelta(days=1)
 
 
 @RELATIVE_VALUES.register
@@ -61,8 +86,8 @@ class CurrentYear(_ClockValue):
     key = "current_year"
     part = "year"
 
-    def from_today(self, today):
-        return today.year
+    def period(self, today):
+        return today
 
 
 @RELATIVE_VALUES.register
@@ -70,8 +95,8 @@ class PreviousYear(_ClockValue):
     key = "previous_year"
     part = "year"
 
-    def from_today(self, today):
-        return today.year - 1
+    def period(self, today):
+        return today.replace(year=today.year - 1, day=1)
 
 
 @RELATIVE_VALUES.register
@@ -79,8 +104,18 @@ class CurrentMonth(_ClockValue):
     key = "current_month"
     part = "month"
 
-    def from_today(self, today):
-        return today.month
+    def period(self, today):
+        return today
+
+
+@RELATIVE_VALUES.register
+class PreviousMonth(_ClockValue):
+    """El mes anterior del calendario: en enero, diciembre del año pasado."""
+    key = "previous_month"
+    part = "month"
+
+    def period(self, today):
+        return _previous_month(today)
 
 
 class _DataValue(RelativeValue):
@@ -309,9 +344,9 @@ class _OrderComparison(_Comparison):
         if errors:
             return errors
         field = cond["field"]
-        # «Desde este año»: el año o el mes de una fecha sí se compara como número.
+        # «Desde este año»: el año o el mes de una fecha (o de un año-mes, «2026-10») sí se ordena.
         relative = RELATIVE_VALUES.get(cond["relative"]) if cond.get("relative") in RELATIVE_VALUES else None
-        if isinstance(relative, _ClockValue) and ctx.is_date(field):
+        if isinstance(relative, _ClockValue) and (ctx.is_date(field) or ctx.is_time(field)):
             return []
         if not ctx.is_numeric(field):
             return [f"{path}: la columna '{field}' no es numérica; '{self.key}' solo compara números."]

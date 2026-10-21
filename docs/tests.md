@@ -36,7 +36,7 @@ El servidor de pruebas atiende las peticiones de a una (`SerialLiveServerThread`
 
 El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de la fuente llega a todas las columnas de la tabla dinámica; «Mostrar como» desaparece al pasar a Promedio; la dimensión obligatoria no se puede quitar; sobre una columna de texto solo se cuenta; la tabla dinámica llena el ancho y el total queda pegado a las filas; un porcentaje de un campo calculado sale con 2 decimales; la tabla de fuentes («Sin usar», columnas incluidas, estado, confirmación al eliminar); el formateador común de números (`formatNumber`).
 
-`FormulaBuilderTests`, el constructor de fórmulas por bloques: armar un SI solo con clics y guardarlo; arrastrar de verdad (mouse) un operador que envuelve un bloque, un valor a un hueco y un bloque al panel para quitarlo; «Generar con IA» (IA simulada) reemplaza el lienzo o muestra el motivo si no pudo.
+`FormulaBuilderTests`, el constructor de fórmulas por bloques: armar un SI solo con clics y guardarlo; arrastrar de verdad (mouse) un operador que envuelve un bloque, un valor a un hueco y un bloque al panel para quitarlo; una función sin huecos (HOY) se dibuja con su nombre; «Generar con IA» (IA simulada) reemplaza el lienzo o muestra el motivo si no pudo.
 
 ### Videos de demostración (`tests/e2e/demo_videos.py`, solo con `DEMO=1`)
 No es parte de la suite: el nombre no empieza con `test_`, así que solo corre si se lo nombra.
@@ -72,7 +72,7 @@ Cómo se graba:
 ### Motor
 | Archivo | Qué prueba |
 |---|---|
-| `tests/engine/test_steps.py` | Los pasos: filtros, agregación, pivote, escalar, ventanas, orden/límite, metadatos y el resultado anidado de la tabla dinámica. |
+| `tests/engine/test_steps.py` | Los pasos: filtros (con los valores relativos: este mes y el mes anterior del calendario sobre fechas, año-mes y meses sueltos), agregación, pivote, escalar, ventanas, orden/límite, metadatos y el resultado anidado de la tabla dinámica. |
 | `tests/engine/test_formulas.py` | Lenguaje de fórmulas, cómo opera cada función, el árbol del constructor (`formula_tree`, `formula_text` con su ida y vuelta, el catálogo de piezas), las funciones de fecha (partes, `DATEDIFF`, `TODAY`, fechas que no lo son, el orden de meses, días y año-mes) y campos calculados (por fila y agregados) en el motor. |
 
 ### Fuentes de datos y API

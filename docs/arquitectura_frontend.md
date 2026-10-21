@@ -105,7 +105,7 @@ Es el archivo más grande (~1000 líneas). Contiene todo el estado y la lógica 
 
 - `EMPTY_FIELDS()`: factory de `{dimensions, pivots, metrics, filters, columns, trend_by, sort_by, limit}`.
 - `FILTER_OPS`: 12 operadores con `{value, label, needsValue, isList?, isRange?}`.
-- `RELATIVE_VALUES`: `current_year`, `previous_year`, `current_month` (del reloj) y los
+- `RELATIVE_VALUES`: `current_year`, `previous_year`, `current_month`, `previous_month` (del reloj) y los
   periodos de los datos (`data: true`) `latest` «El periodo más reciente», `previous` «El
   periodo anterior», `earliest` «El periodo más antiguo». `relativeOptionsFor(c)` ofrece los
   periodos solo si la columna de la condición está en `schema.time_fields`; al cambiar de

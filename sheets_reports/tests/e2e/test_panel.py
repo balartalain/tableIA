@@ -299,6 +299,15 @@ class FormulaBuilderTests(PanelTests):
         canvas.get_by_text("suelta aquí").wait_for()
         self.page.get_by_text("Completa los huecos").wait_for()
 
+    def test_una_funcion_sin_huecos_se_dibuja_con_su_nombre(self):
+        self.source.calculated_fields = [{"id": "h", "name": "Hoy", "formula": "TODAY()", "format": "number"}]
+        self.source.save()
+        self.open_calculated()
+        canvas = self.page.locator('[aria-label="Fórmula"]:visible')
+        block = canvas.locator("[data-fb-drag='']")
+        block.get_by_text("HOY", exact=True).wait_for()
+        self.assertNotIn("NaN", block.inner_text())
+
     def test_generar_con_ia_reemplaza_el_lienzo(self):
         self.source.calculated_fields = [{"id": "t", "name": "", "formula": "SUM([ventas])", "format": "number"}]
         self.source.save()

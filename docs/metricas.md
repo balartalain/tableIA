@@ -136,8 +136,10 @@ al total. Solo en widgets que admiten **más de una métrica**; con una sola, se
 del widget.
 
 Además de valores fijos, aceptan valores relativos: `current_year`, `previous_year`,
-`current_month` (según la fecha de hoy) y `latest`, `previous`, `earliest` (el periodo más
-reciente, el anterior o el más antiguo de una columna de tiempo).
+`current_month`, `previous_month` (según la fecha de hoy) y `latest`, `previous`, `earliest`
+(el periodo más reciente, el anterior o el más antiguo de una columna de tiempo). Sobre una
+columna de fechas o de año-mes («2026-10»), «este mes» y «el mes anterior» son de calendario y
+comparan año y mes; `latest` / `previous` son el último y el penúltimo periodo **con datos**.
 
 ## Mostrar como (ventanas)
 

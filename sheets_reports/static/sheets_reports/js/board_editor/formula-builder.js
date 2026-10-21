@@ -119,7 +119,8 @@ const FormulaBlocks = (() => {
       return slot;
     }
 
-    const leaf = !n.args.length || (n.kind === 'neg' && n.args[0] && n.args[0].kind === 'num');
+    // Una función sin huecos (HOY) no es hoja: se dibuja con su nombre y paréntesis.
+    const leaf = (n.kind !== 'func' && !n.args.length) || (n.kind === 'neg' && n.args[0] && n.args[0].kind === 'num');
     const ring = isSelected ? ' fb-selected ring-2 ring-accent ring-offset-1' : '';
     let block;
     if (leaf) {

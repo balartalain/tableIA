@@ -705,8 +705,13 @@ Helpers públicos: `cell_field(col_key, metric)` → `"__pivots.{clave}.{alias}"
   mismo módulo define los operadores (`FILTER_OPS`), los valores relativos
   (`RELATIVE_VALUES`), `Condition` y la validación (`condition_errors`), que también usan las
   métricas y los filtros del tablero.
-- Valores relativos: `current_year`, `previous_year` y `current_month` salen del reloj y
-  valen en cualquier columna. `latest` (el periodo más reciente), `previous` (el anterior) y
+- Valores relativos: `current_year`, `previous_year`, `current_month` y `previous_month` salen
+  del reloj (`_ClockValue.period`) y valen en cualquier columna. En una de fechas completas o de
+  año-mes (`utils/data.year_months`: «2026-10» de cada fila) comparan el periodo de cada fila:
+  el año, o el año **y** el mes (`current_month` es octubre de este año, no de cualquier año;
+  `previous_month` en enero es diciembre del año anterior). En una de años o meses sueltos
+  (2026, 10, «Octubre», con `month_number`) comparan el año o el número de mes tal cual. Con
+  `gte`/`lte` también ordenan sobre columnas de fecha o de tiempo («desde el mes anterior»). `latest` (el periodo más reciente), `previous` (el anterior) y
   `earliest` (el más antiguo) salen de los valores distintos de la columna en orden de tiempo
   (`utils/data.time_order`: años y otros números ascendentes, meses Ene→Dic, días Lun→Dom, año-mes `2026-03`, fechas en texto)
   y **solo valen en columnas de tiempo**:

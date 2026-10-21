@@ -135,6 +135,11 @@ def _plain(text) -> str:
     return "".join(c for c in text if unicodedata.category(c) != "Mn").rstrip(".")
 
 
+def month_number(value) -> int | None:
+    """El número (1-12) de un mes por nombre («Oct», «Octubre», «october»); None si no lo es."""
+    return None if value is None or (not isinstance(value, str) and pd.isna(value)) else MONTH_ORDER.get(_plain(value))
+
+
 def _natural_key(value):
     """Orden natural: los números dentro del texto se comparan como números ("2025-2" antes que "2025-10")."""
     return [(0, int(part), "") if part.isdigit() else (1, 0, part)
@@ -189,6 +194,22 @@ def as_dates(series: pd.Series) -> pd.Series | None:
     if dates.isna().any():
         return None
     return pd.to_datetime(text.map(dict(zip(values, dates))))
+
+
+def year_months(series: pd.Series) -> pd.Series | None:
+    """El año y mes («2026-10») de cada fila de una columna de fechas completas (`as_dates`) o de
+    año-mes («2026-10», «2026-3»), con NaN en los vacíos; None si la columna no es de esas."""
+    dates = as_dates(series)
+    if dates is not None:
+        return dates.dt.strftime("%Y-%m").where(dates.notna())
+    if pd.api.types.is_numeric_dtype(series):
+        return None
+    text = series.astype("string").str.strip()
+    values = [v for v in text.dropna().unique() if v]
+    if not values or not all(_YEAR_MONTH.match(v) for v in values):
+        return None
+    normal = {v: "{:04d}-{:02d}".format(*(int(p) for p in v.split("-"))) for v in values}
+    return text.map(normal).astype(object).where(text.isin(values))
 
 
 def date_fields(df: pd.DataFrame) -> list[str]:

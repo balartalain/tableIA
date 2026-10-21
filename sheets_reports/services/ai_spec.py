@@ -176,7 +176,8 @@ consulta.
       número no lleva ventanas: la participación es un campo calculado agregado (ej.
       SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100), y la variación frente
       al periodo anterior son dos métricas filtradas con relative "latest" y "previous" sobre la
-      columna de tiempo y style.compare con el alias de la anterior.
+      columna de tiempo (o "current_month" y "previous_month" sobre una columna de fecha) y
+      style.compare con el alias de la anterior.
 - sort_by: columna u alias por el que ordenar, con "-" delante para descendente (ej.
   "-total_ventas"). Null si no importa.
 
@@ -225,14 +226,16 @@ falta cambiar nada (usa los valores por defecto).
   (solo columnas numéricas). "in"/"not_in": lista de valores. "between": [desde, hasta]
   numérico. "contains": el texto contiene "value". "is_empty"/"not_empty": sin valor.
 - relative (en vez de value) para valores que dependen de la fecha o de los datos:
-  "current_year", "previous_year", "current_month" (del reloj); "latest" (el periodo más
+  "current_year", "previous_year", "current_month", "previous_month" (del reloj); "latest" (el periodo más
   reciente de la columna), "previous" (el anterior a ese) y "earliest" (el más antiguo), solo
   en columnas de tiempo (años, meses, fechas). Úsalo para "este año", "el último mes" en vez
   de fijar un número.
-- Los del reloj valen en una columna con el año o el mes suelto y en una columna (fecha): ahí
-  comparan el año o el mes de cada fecha (ej. {"field": "col_1", "op": "eq", "relative":
-  "current_year"} deja las filas con fecha de este año). En una columna (fecha), "latest" y
-  "previous" son una fecha exacta, no un año ni un mes: para comparar años usa los del reloj.
+- Los del reloj valen en una columna con el año o el mes suelto (2026, 10, "Octubre"), en una
+  columna (fecha) y en una de año-mes ("2026-10"): en las dos últimas comparan el año, o el año
+  y el mes, de cada fila (ej. {"field": "col_1", "op": "eq", "relative": "current_month"} deja
+  las filas de este mes de este año; "previous_month" es el mes anterior del calendario, en
+  enero diciembre del año pasado). En una columna (fecha), "latest" y "previous" son una fecha
+  exacta, no un año ni un mes: para comparar años o meses usa los del reloj.
 Para comparar periodos ("variación anual", "frente al año anterior") sin que el usuario diga
 cuáles, usa el año del reloj: una métrica con "current_year" y otra con "previous_year". Pon en
 el `label` de cada una su periodo ("Este año", "Año anterior") para que se lea qué se compara.

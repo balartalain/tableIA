@@ -179,16 +179,22 @@ partir de `REPORT_PATH`). Sin prefijo, usar `/` en lugar de `/tableria/` y dejar
 sudo apachectl configtest && sudo systemctl reload apache2
 ```
 
-## 9. Crontab del envío de correos
+## 9. Crontab
 
 Con `crontab -e` del usuario `tableia`:
 
 ```
+CRON_TZ=America/Santo_Domingo
 */5 * * * * cd /srv/TableIA && venv/bin/python manage.py send_campaign_emails
+0 0 * * * cd /srv/TableIA && venv/bin/python manage.py sync_gemini_files
 ```
 
-El intervalo debe coincidir con `CAMPAIGN_CRON_MINUTES`. Detalle en
-[`configuracion_correos.md` §1](configuracion_correos.md).
+- `send_campaign_emails`: el envío de correos. El intervalo debe coincidir con
+  `CAMPAIGN_CRON_MINUTES`. Detalle en [`configuracion_correos.md` §1](configuracion_correos.md).
+- `sync_gemini_files`: a las 12:00 AM resube a Gemini las fuentes que usan el chat de datos, para
+  que su archivo no expire y el chat no tenga que subirlo mientras el usuario espera.
+
+Cada corrida queda en el admin, en «Tareas en segundo plano».
 
 ## 10. Comprobar
 
@@ -197,6 +203,7 @@ El intervalo debe coincidir con `CAMPAIGN_CRON_MINUTES`. Detalle en
 - Entrar con Google, crear un tablero y elegir una hoja con el Picker.
 - Generar un widget con IA; queda registrado en `ai_audit.log`.
 - Probar un envío: `venv/bin/python manage.py send_campaign_emails --dashboard <id> --force`.
+- Probar la subida a Gemini: `venv/bin/python manage.py sync_gemini_files --source <id>`.
 - Logs de la app: `journalctl -u tableia -f`.
 
 ## Actualizar a una nueva versión

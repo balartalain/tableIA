@@ -64,7 +64,12 @@ def get_or_upload_source_file(source, df) -> Any:
         if existing:
             return existing
 
-    # Subir DataFrame a Gemini Files API
+    return _upload_source_file(source, df)
+
+
+def _upload_source_file(source, df) -> Any:
+    """Exporta el DataFrame a un CSV temporal, lo sube a Gemini Files API y guarda el nuevo ID
+    en la fuente."""
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
@@ -84,6 +89,22 @@ def get_or_upload_source_file(source, df) -> Any:
                 os.remove(tmp_path)
             except OSError:
                 pass
+
+
+def resync_source_file(source) -> bool:
+    """Resube la fuente a Gemini con los datos del caché (no relee la hoja) y borra el archivo
+    anterior; lo llama cada noche `sync_gemini_files` para que el chat no tenga que subirla
+    cuando expira. Sube antes de borrar: el chat nunca queda sin archivo. Una fuente vacía
+    solo pierde su archivo. Devuelve si subió."""
+    df = load_source(source)
+    if df.empty:
+        delete_source_gemini_file(source)
+        return False
+    old_id = (source.gemini_file_id or "").strip()
+    _upload_source_file(source, df)
+    if old_id and old_id != source.gemini_file_id:
+        gemini_delete_file(old_id)
+    return True
 
 
 def delete_source_gemini_file(source) -> None:

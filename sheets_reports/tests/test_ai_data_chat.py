@@ -88,6 +88,36 @@ class AskDataChatServiceTests(SimpleTestCase):
         self.assertEqual(mock_source.gemini_file_id, "")
         mock_source.save.assert_called_once_with(update_fields=["gemini_file_id"])
 
+    @mock.patch("sheets_reports.services.ai_data_chat.gemini_delete_file")
+    @mock.patch("sheets_reports.services.ai_data_chat.gemini_upload_file")
+    @mock.patch("sheets_reports.services.ai_data_chat.load_source")
+    def test_resync_sube_el_nuevo_y_borra_el_viejo(self, mock_load_source, mock_upload, mock_delete):
+        calls = mock.Mock()
+        calls.attach_mock(mock_upload, "upload")
+        calls.attach_mock(mock_delete, "delete")
+        mock_new_file = mock.Mock()
+        mock_new_file.name = "files/nuevo"
+        mock_upload.return_value = mock_new_file
+        mock_load_source.return_value = pd.DataFrame({"ventas": [100]})
+
+        mock_source = mock.Mock(gemini_file_id="files/viejo", pk=1)
+        self.assertTrue(ai_data_chat.resync_source_file(mock_source))
+
+        self.assertEqual(mock_source.gemini_file_id, "files/nuevo")
+        mock_delete.assert_called_once_with("files/viejo")
+        self.assertEqual([c[0] for c in calls.mock_calls], ["upload", "delete"])
+
+    @mock.patch("sheets_reports.services.ai_data_chat.gemini_delete_file")
+    @mock.patch("sheets_reports.services.ai_data_chat.gemini_upload_file")
+    @mock.patch("sheets_reports.services.ai_data_chat.load_source")
+    def test_resync_fuente_vacia_borra_el_archivo(self, mock_load_source, mock_upload, mock_delete):
+        mock_load_source.return_value = pd.DataFrame()
+        mock_source = mock.Mock(gemini_file_id="files/viejo", pk=1)
+        self.assertFalse(ai_data_chat.resync_source_file(mock_source))
+        mock_upload.assert_not_called()
+        mock_delete.assert_called_once_with("files/viejo")
+        self.assertEqual(mock_source.gemini_file_id, "")
+
     @mock.patch("sheets_reports.services.ai_data_chat.load_source")
     def test_ask_data_chat_empty_df(self, mock_load_source):
         mock_load_source.return_value = pd.DataFrame()

@@ -1,11 +1,13 @@
 """Tareas en segundo plano (`TaskRun`): el registro de una corrida con su estado y duración, la
-poda de las viejas y el registro que deja el comando del crontab."""
+poda de las viejas y el registro que dejan los comandos del crontab."""
 from unittest import mock
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 
-from sheets_reports.models import TaskRun
+from sheets_reports.models import Dashboard, DataSource, TaskRun
 
 
 class TaskRunTests(TestCase):
@@ -41,3 +43,42 @@ class TaskRunTests(TestCase):
         self.assertEqual(run.label, "Envío de correos")
         self.assertEqual(run.status, TaskRun.OK)
         self.assertIsNotNone(run.finished_at)
+
+
+class SyncGeminiFilesTests(TestCase):
+    def setUp(self):
+        user = get_user_model().objects.create_user("u", "u@a.com", "pass")
+        dashboard = Dashboard.objects.create(owner=user, nombre="Tablero")
+        self.con_chat = DataSource.objects.create(dashboard=dashboard, sheet_id="a", gemini_file_id="files/a")
+        self.otra = DataSource.objects.create(dashboard=dashboard, sheet_id="b", gemini_file_id="files/b")
+        self.sin_chat = DataSource.objects.create(dashboard=dashboard, sheet_id="c")
+
+    @mock.patch("sheets_reports.management.commands.sync_gemini_files.resync_source_file", return_value=True)
+    def test_sync_gemini_registra_la_corrida(self, mock_resync):
+        call_command("sync_gemini_files")
+        self.assertEqual({c.args[0].pk for c in mock_resync.call_args_list}, {self.con_chat.pk, self.otra.pk})
+        run = TaskRun.objects.get()
+        self.assertEqual(run.label, "Subida de fuentes a Gemini")
+        self.assertEqual(run.status, TaskRun.OK)
+        self.assertEqual(run.detail, "2 subidas, 0 vacías, 0 con error")
+
+    def test_sync_gemini_error_en_una_fuente_sigue_y_marca_error(self):
+        def resync(source):
+            if source.pk == self.con_chat.pk:
+                raise RuntimeError("cuota agotada")
+            return True
+
+        with mock.patch("sheets_reports.management.commands.sync_gemini_files.resync_source_file",
+                        side_effect=resync) as mock_resync:
+            with self.assertRaises(CommandError):
+                call_command("sync_gemini_files")
+        self.assertEqual(mock_resync.call_count, 2)
+        run = TaskRun.objects.get()
+        self.assertEqual(run.status, TaskRun.ERROR)
+        self.assertIn("1 subidas, 0 vacías, 1 con error", run.detail)
+        self.assertIn(f"fuente #{self.con_chat.pk}: RuntimeError: cuota agotada", run.detail)
+
+    def test_sync_gemini_sin_fuentes_con_chat(self):
+        DataSource.objects.update(gemini_file_id="")
+        call_command("sync_gemini_files")
+        self.assertEqual(TaskRun.objects.get().detail, "Ninguna fuente usa el chat.")

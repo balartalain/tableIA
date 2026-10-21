@@ -87,7 +87,7 @@ Cómo se graba:
 ### Tareas en segundo plano
 | Archivo | Qué prueba |
 |---|---|
-| `tests/test_tasks.py` | Las corridas del cron (`TaskRun`): registro con estado y duración, el mensaje de error que se relanza, la poda de las viejas y el registro que deja `send_campaign_emails`. |
+| `tests/test_tasks.py` | Las corridas del cron (`TaskRun`): registro con estado y duración, el mensaje de error que se relanza, la poda de las viejas y el registro que dejan `send_campaign_emails` y `sync_gemini_files` (una fuente que falla no corta las demás y deja la corrida en error). |
 
 ### IA
 | Archivo | Qué prueba |

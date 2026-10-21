@@ -122,7 +122,7 @@ sheets_reports/
   models.py                 # Dashboard, Widget, default_position, widget_type_choices
   views.py                  # Vistas HTTP (adaptadores sobre services/)
   views_email.py            # Vistas del envío de correos (adaptadores sobre services/mailing.py)
-  management/commands/      # send_campaign_emails: lo que ejecuta el crontab (configuracion_correos.md)
+  management/commands/      # lo que ejecuta el crontab: send_campaign_emails (configuracion_correos.md), sync_gemini_files (deploy.md §9)
   admin.py                  # Django Admin (Dashboard con inline de widgets)
   apps.py                   # ready(): valida la longitud de las claves de widget
 
@@ -852,6 +852,7 @@ Permite realizar consultas analíticas libres en lenguaje natural sobre los dato
   - **Consultas cuantitativas/estadísticas**: Activa la herramienta `code_execution` para cálculos numéricos exactos (`pandas`, `numpy`) y generación de gráficos (`matplotlib`, `seaborn`).
   - **Consultas cualitativas/texto libre**: Utiliza Python para extraer las respuestas abiertas de la columna y combina la comprensión de lenguaje natural de Gemini (LLM) para analizar semánticamente aspectos negativos/positivos, temas de quejas o sugerencias.
 - **Subida única y reutilización**: La referencia del archivo en Gemini se almacena en el campo `gemini_file_id` del modelo `DataSource`. Las siguientes consultas reutilizan el mismo archivo ya presente en Google (válido por 48 h) sin resubirlo por red.
+- **Resubida diaria**: el comando `sync_gemini_files` (crontab de las 12:00 AM) resube, con los datos del caché, las fuentes que tienen `gemini_file_id` (`resync_source_file`: sube el nuevo y después borra el viejo), así el archivo no llega a expirar. La subida en la consulta queda para la primera pregunta de una fuente, la que se editó o una noche en que el cron no corrió. Cada corrida queda en `TaskRun`.
 - **Invalidación**: Al actualizar la fuente (`source_refresh`) o alterar su estructura de columnas/fórmulas, el archivo remoto se elimina (`gemini_delete_file`) y el identificador se limpia automáticamente para regenerarse en la siguiente consulta.
 
 ### 9.4 Sugerencias del chat (`services/ai_suggestions.py`)

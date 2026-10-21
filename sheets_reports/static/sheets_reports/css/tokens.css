@@ -92,6 +92,9 @@
   --header-bg:     var(--color-surface);
   --header-text:   var(--color-text);
   --header-border: var(--color-border);
+  --header-dark-bg:     var(--color-primary);    /* header de la vista del tablero */
+  --header-dark-text:   var(--color-on-primary);
+  --header-dark-border: var(--color-accent);
 
   --sidebar-bg:          var(--color-surface);
   --sidebar-border:      var(--color-border);

@@ -731,7 +731,7 @@ componente de `tokens.css`.
 | Pieza | Clases |
 |---|---|
 | Botón | `ui-btn` + `ui-btn-primary` / `-secondary` / `-dark` / `-ghost` / `-danger` / `-danger-outline` / `-icon`; tamaños `ui-btn-sm`, `ui-btn-xs` |
-| Header y navegación | `ui-app-header`, `ui-sidebar`, `ui-nav-item` (enlace con el aspecto de `ui-btn-secondary`; activo con `.is-active` o `aria-current`), `ui-sidebar-label`, `ui-module-card` + `ui-module-icon` |
+| Header y navegación | `ui-app-header` (variante `ui-app-header-dark`: header de la vista del tablero), `ui-sidebar`, `ui-nav-item` (enlace con el aspecto de `ui-btn-secondary`; activo con `.is-active` o `aria-current`), `ui-sidebar-label`, `ui-module-card` + `ui-module-icon` |
 | Campo | `ui-label`, `ui-help`, `ui-input` (también para `<select>`), `ui-input-sm`, `ui-textarea`, `ui-check` |
 | Contenedor | `ui-card`, `ui-card-title`, `ui-eyebrow` (rótulo en mayúsculas), `ui-code-chip` |
 | Aviso | `ui-alert` + `ui-alert-error` / `-warn` / `-info` |

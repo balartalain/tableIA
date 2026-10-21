@@ -184,7 +184,6 @@ sudo apachectl configtest && sudo systemctl reload apache2
 Con `crontab -e` del usuario `tableia`:
 
 ```
-CRON_TZ=America/Santo_Domingo
 */5 * * * * cd /srv/TableIA && venv/bin/python manage.py send_campaign_emails
 0 0 * * * cd /srv/TableIA && venv/bin/python manage.py sync_gemini_files
 ```
@@ -193,6 +192,10 @@ CRON_TZ=America/Santo_Domingo
   `CAMPAIGN_CRON_MINUTES`. Detalle en [`configuracion_correos.md` §1](configuracion_correos.md).
 - `sync_gemini_files`: a las 12:00 AM resube a Gemini las fuentes que usan el chat de datos, para
   que su archivo no expire y el chat no tenga que subirlo mientras el usuario espera.
+
+El cron usa la hora del sistema, no la `TIME_ZONE` de Django. Con el servidor en
+`America/Santo_Domingo` (`timedatectl`), `0 0` es la medianoche local; si está en UTC, la
+medianoche de Santo Domingo (UTC−4) es `0 4 * * *`.
 
 Cada corrida queda en el admin, en «Tareas en segundo plano».
 

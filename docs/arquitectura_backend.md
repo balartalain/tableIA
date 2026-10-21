@@ -708,7 +708,7 @@ Helpers públicos: `cell_field(col_key, metric)` → `"__pivots.{clave}.{alias}"
 - Valores relativos: `current_year`, `previous_year` y `current_month` salen del reloj y
   valen en cualquier columna. `latest` (el periodo más reciente), `previous` (el anterior) y
   `earliest` (el más antiguo) salen de los valores distintos de la columna en orden de tiempo
-  (`utils/data.time_order`: años y otros números ascendentes, meses Ene→Dic, fechas en texto)
+  (`utils/data.time_order`: años y otros números ascendentes, meses Ene→Dic, días Lun→Dom, año-mes `2026-03`, fechas en texto)
   y **solo valen en columnas de tiempo**:
   - `SheetContext.time_fields` (con `utils/data.time_fields(df)`) las identifica; la
     validación (`_Comparison.check_value`) rechaza un periodo sobre otra columna (ej.
@@ -770,7 +770,7 @@ Se declara **dentro** de la métrica: `{"alias": "pct", "field": "monto", "agg":
 
 - Trabaja sobre el alias ya agregado (o el campo crudo si el alias no está en el frame).
 - `running_total` y `pct_change` dependen del orden: si la primera dimensión es de tiempo
-  (`utils/data.time_order`: números, meses o fechas en texto) se calculan de lo más antiguo a
+  (`utils/data.time_order`: números, meses, días de la semana, año-mes o fechas en texto) se calculan de lo más antiguo a
   lo más reciente, el mismo orden del eje del gráfico de líneas; el frame queda en ese orden
   y `sort_by` (paso 4) reordena después. Con otra dimensión (categorías) se respeta su orden.
 - Qué ventana admite cada widget lo declara `capabilities["windows"]` (§7); `form_errors`
@@ -995,6 +995,21 @@ Funciones de texto, fila a fila (`ROW_FUNCTIONS` da cuántas partes lleva cada u
 Un número entra como se ve en la hoja (`5`, no `5.0`). En el constructor de bloques se llaman
 CONCATENAR, MINÚSCULAS, MAYÚSCULAS, QUITAR ESPACIOS y CONTIENE (`BUILDER_CATALOG`, con
 `group: "texto"`).
+
+Funciones de fecha, fila a fila (`_date_function`) y utilizables dentro de una agregación. Leen
+la fecha con `_as_datetimes`: ISO (lo que deja una columna de tipo fecha) o día primero, con o
+sin hora; lo que no es una fecha (texto, vacío o un número: `2026` no es una fecha) da vacío.
+
+| Función | Qué da |
+|---|---|
+| `YEAR(f)` / `MONTH(f)` / `QUARTER(f)` / `DAY(f)` | Año, mes (1–12), trimestre (1–4) y día del mes, como números. |
+| `MONTH_NAME(f)` / `WEEKDAY_NAME(f)` | «Enero»…«Diciembre» / «Lunes»…«Domingo» (`MONTH_NAMES`, `WEEKDAY_NAMES`). `time_order` los reconoce, así que se ordenan como tiempo y la escala detectada es ordinal. |
+| `YEAR_MONTH(f)` | «2026-03»: agrupar por mes sin mezclar años. `time_order` lo ordena por año y mes, y `as_dates` no lo toma como fecha completa (es un periodo). |
+| `DATEDIFF(desde, hasta, unidad)` | Días, meses o años **completos** de `desde` a `hasta` (`_datediff`); negativo si `hasta` es anterior. La unidad es un texto fijo, `"days"`, `"months"` o `"years"` (también en español, `DATEDIFF_UNITS`); otra cosa la rechaza `_check_date_units`. |
+| `TODAY()` | La fecha de hoy en ISO (`AAAA-MM-DD`), el formato de las columnas de tipo fecha: se compara con ellas y entra en `DATEDIFF`. Se calcula cada vez que se carga la fuente: cambia con el día. |
+
+En el constructor van en el grupo `"fecha"`: AÑO, MES, NOMBRE DEL MES, TRIMESTRE, DÍA, DÍA DE LA
+SEMANA, AÑO-MES, DIFERENCIA DE FECHAS (huecos desde, hasta, unidad) y HOY (sin huecos).
 El constructor de bloques del editor trabaja con árboles; la gramática está solo aquí:
 - `formula_tree(texto)`: el árbol tal como está escrito (`{kind, value, args}`, sin resolver
   columnas; `None` si no se entiende). Las fuentes lo entregan en `calculated_fields[].tree`.

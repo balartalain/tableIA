@@ -86,6 +86,32 @@ escribirlos.{% endcomment %}
     </ul>
   </div>
 
+  <div class="space-y-1.5">
+    <p class="font-semibold text-fg">Fechas</p>
+    <p>Sobre una columna de fechas (en la hoja como <span class="font-mono">2026-03-15</span> o
+      <span class="font-mono">15/03/2026</span>). Lo que no es una fecha queda vacío.</p>
+    <table class="w-full text-xs">
+      <tbody class="divide-y divide-line">
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">YEAR / MONTH / DAY</td><td>Año, mes (1 a 12) y día del mes: 2026, 3, 15.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">QUARTER</td><td>Trimestre (1 a 4).</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">MONTH_NAME</td><td>«Marzo». Los gráficos los ordenan de enero a diciembre.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">WEEKDAY_NAME</td><td>«Domingo». Se ordenan de lunes a domingo.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">YEAR_MONTH</td><td>«2026-03»: para agrupar por mes sin juntar marzo de 2025 con marzo de 2026.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">DATEDIFF</td><td>Días, meses o años <b>completos</b> de una fecha a otra: <span class="font-mono">DATEDIFF(desde, hasta, "days")</span>, con <span class="font-mono">"days"</span>, <span class="font-mono">"months"</span> o <span class="font-mono">"years"</span>. Negativo si «hasta» es anterior.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">TODAY()</td><td>La fecha de hoy: cambia cada día.</td></tr>
+      </tbody>
+    </table>
+    <ul class="font-mono text-xs text-fg space-y-0.5 pl-2">
+      <li>YEAR_MONTH([Fecha]) <span class="font-sans text-fg-muted">— por fila: úsalo como dimensión para ver las ventas por mes</span></li>
+      <li>DATEDIFF([Fecha de nacimiento], TODAY(), "years") <span class="font-sans text-fg-muted">— la edad</span></li>
+      <li>AVG(DATEDIFF([Fecha pedido], [Fecha entrega], "days")) <span class="font-sans text-fg-muted">— días promedio de entrega</span></li>
+      <li>SUM(IF(YEAR([Fecha]) = 2026, 1, 0)) <span class="font-sans text-fg-muted">— cuántos son de 2026</span></li>
+    </ul>
+    <p>En el constructor están en <b>Funciones de Fecha</b>. La unidad de DIFERENCIA DE FECHAS
+      es un valor de <b>Texto</b>: <span class="font-mono">days</span>,
+      <span class="font-mono">months</span> o <span class="font-mono">years</span>.</p>
+  </div>
+
   <div class="space-y-1">
     <p class="font-semibold text-fg">No se mezclan</p>
     <p><span class="font-mono">SUM([Gasto_Real]) / [Presupuesto_Asignado]</span> no vale: compara un

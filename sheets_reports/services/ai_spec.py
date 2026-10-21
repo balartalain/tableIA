@@ -196,6 +196,10 @@ a su `name`. Se crea en la fuente al aplicar la propuesta y queda para todo el t
   Columnas entre corchetes ([Ventas]), textos entre comillas, + - * / ( ), comparaciones
   (= != > >= < <=), AND OR NOT e IF(condición, sí, no) dentro de las agregaciones. Para que
   una fila no cuente, el resultado del IF es EMPTY (no existe NULL): AVG(IF(cond, [x], EMPTY)).
+  Con fechas, dentro de la agregación: DATEDIFF(desde, hasta, "days"|"months"|"years") (lo que
+  va de una a otra), TODAY() (hoy) y YEAR, MONTH, QUARTER, DAY de una fecha. Ej.: días promedio
+  de entrega AVG(DATEDIFF([Fecha pedido], [Fecha entrega], "days")); pedidos de 2026
+  SUM(IF(YEAR([Fecha]) = 2026, 1, 0)).
   Ej.: SUM([Ventas]) - SUM([Costo]); SUM([Gasto]) / SUM([Presupuesto]) * 100;
   SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100;
   SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100.

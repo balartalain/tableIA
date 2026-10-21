@@ -13,11 +13,14 @@ Sintaxis: columnas por nombre (`Ventas`) o entre corchetes si tienen espacios o 
 comparaciones `= != <> > >= < <=`, `AND OR NOT`; funciones `IF(condición, sí, no)` y las
 agregaciones `SUM AVG COUNT COUNT_DISTINCT MIN MAX`. `EMPTY` deja la celda vacía y solo va
 como resultado de un IF: `IF([Recinto] = "Santiago", 1, EMPTY)`. De texto, fila a fila:
-`CONCAT(a, b)`, `LOWER(t)`, `UPPER(t)`, `TRIM(t)` y `CONTAINS(texto, parte)`. Un parser
-propio: nunca se ejecuta código.
+`CONCAT(a, b)`, `LOWER(t)`, `UPPER(t)`, `TRIM(t)` y `CONTAINS(texto, parte)`. De fecha, fila a
+fila: `YEAR`, `MONTH`, `MONTH_NAME`, `QUARTER`, `DAY`, `WEEKDAY_NAME`, `YEAR_MONTH`,
+`DATEDIFF(desde, hasta, "days"|"months"|"years")` y `TODAY()`. Un parser propio: nunca se
+ejecuta código.
 """
 from __future__ import annotations
 
+import datetime
 import re
 from dataclasses import dataclass
 from typing import Callable
@@ -36,7 +39,9 @@ AGGREGATE_FUNCTIONS = {
     "MAX": "max",
 }
 # Funciones fila a fila, con cuántas partes lleva cada una.
-ROW_FUNCTIONS = {"IF": 3, "CONCAT": 2, "LOWER": 1, "UPPER": 1, "TRIM": 1, "CONTAINS": 2}
+ROW_FUNCTIONS = {"IF": 3, "CONCAT": 2, "LOWER": 1, "UPPER": 1, "TRIM": 1, "CONTAINS": 2,
+                 "YEAR": 1, "MONTH": 1, "MONTH_NAME": 1, "QUARTER": 1, "DAY": 1,
+                 "WEEKDAY_NAME": 1, "YEAR_MONTH": 1, "DATEDIFF": 3, "TODAY": 0}
 _ROW_FUNCTION_USAGE = {
     "IF": "IF lleva tres partes: IF(condición, valor si se cumple, valor si no).",
     "CONCAT": "CONCAT lleva dos o más partes: CONCAT(texto, texto).",
@@ -44,7 +49,15 @@ _ROW_FUNCTION_USAGE = {
     "UPPER": "UPPER lleva un solo texto: UPPER([Columna]).",
     "TRIM": "TRIM lleva un solo texto: TRIM([Columna]).",
     "CONTAINS": "CONTAINS lleva dos partes: CONTAINS(texto, parte).",
+    **{name: f"{name} lleva una sola fecha: {name}([Fecha])."
+       for name in ("YEAR", "MONTH", "MONTH_NAME", "QUARTER", "DAY", "WEEKDAY_NAME", "YEAR_MONTH")},
+    "DATEDIFF": 'DATEDIFF lleva tres partes: DATEDIFF(desde, hasta, "days"), con "days", "months" o "years".',
+    "TODAY": "TODAY no lleva nada entre los paréntesis: TODAY().",
 }
+# Unidades de DATEDIFF (en inglés o en español) → la que se calcula.
+DATEDIFF_UNITS = {"days": "days", "dias": "days", "días": "days",
+                  "months": "months", "meses": "months",
+                  "years": "years", "años": "years", "anos": "years"}
 FORMATS = ("number", "percent")
 MAX_FORMULA_LENGTH = 1000
 
@@ -326,6 +339,15 @@ def _check_empty(node: Node, allowed: bool = False) -> None:
         _check_empty(arg, node.kind == "func" and node.value == "IF" and position > 0)
 
 
+def _check_date_units(node: Node) -> None:
+    """La unidad de DATEDIFF es un texto fijo («days», «months» o «years»), no una columna."""
+    for item in _walk(node):
+        if item.kind == "func" and item.value == "DATEDIFF":
+            unit = item.args[2]
+            if unit.kind != "str" or str(unit.value).strip().casefold() not in DATEDIFF_UNITS:
+                raise FormulaError('La unidad de DATEDIFF va entre comillas: "days", "months" o "years".')
+
+
 def _loose_columns(node: Node) -> list[str]:
     """Columnas que quedan fuera de toda agregación."""
     if node.kind == "func" and node.value in AGGREGATE_FUNCTIONS:
@@ -386,6 +408,7 @@ def compile_formula(text: str, columns, aggregated_names=()) -> Formula:
         used.append(real)
     tree = _resolve(tree, resolved)
     _check_empty(tree)
+    _check_date_units(tree)
     aggregated = _check_levels(tree)
     if aggregated:
         loose = _loose_columns(tree)
@@ -506,6 +529,15 @@ _FUNCTION_TITLES = {
     "CONTAINS": "Verdadero si el texto contiene la parte (distingue mayúsculas); va en una condición",
     "SUM": "Suma", "AVG": "Promedio", "COUNT": "Conteo (filas distintas)",
     "COUNT_DISTINCT": "Valores distintos", "MIN": "Mínimo", "MAX": "Máximo",
+    "YEAR": "El año de la fecha (2026)",
+    "MONTH": "El número del mes de la fecha (1 a 12)",
+    "MONTH_NAME": "El nombre del mes de la fecha (Enero…Diciembre); se ordena de enero a diciembre",
+    "QUARTER": "El trimestre de la fecha (1 a 4)",
+    "DAY": "El día del mes de la fecha (1 a 31)",
+    "WEEKDAY_NAME": "El día de la semana de la fecha (Lunes…Domingo); se ordena de lunes a domingo",
+    "YEAR_MONTH": "Año y mes de la fecha (2026-03): para agrupar por mes sin mezclar años",
+    "DATEDIFF": 'Cuánto va de una fecha a otra en "days", "months" o "years" completos; negativo si «hasta» es anterior',
+    "TODAY": "La fecha de hoy; cambia cada día",
 }
 BUILDER_CATALOG = {
     "functions": [
@@ -521,6 +553,18 @@ BUILDER_CATALOG = {
               ("UPPER", "MAYÚSCULAS", [""]),
               ("TRIM", "QUITAR ESPACIOS", [""]),
               ("CONTAINS", "CONTIENE", ["texto", "contiene"]))),
+        # De fecha: otro grupo.
+        *({"name": name, "label": label, "title": _FUNCTION_TITLES[name], "slots": slots, "group": "fecha"}
+          for name, label, slots in (
+              ("YEAR", "AÑO", [""]),
+              ("MONTH", "MES", [""]),
+              ("MONTH_NAME", "NOMBRE DEL MES", [""]),
+              ("QUARTER", "TRIMESTRE", [""]),
+              ("DAY", "DÍA", [""]),
+              ("WEEKDAY_NAME", "DÍA DE LA SEMANA", [""]),
+              ("YEAR_MONTH", "AÑO-MES", [""]),
+              ("DATEDIFF", "DIFERENCIA DE FECHAS", ["desde", "hasta", "unidad"]),
+              ("TODAY", "HOY", []))),
     ],
     "empty": {"label": "Vacío", "title": "Deja la celda vacía; solo como resultado de un SI"},
     "compare": [{"op": op, "symbol": {"!=": "≠", ">=": "≥", "<=": "≤"}.get(op, op), "title": "Comparación"}
@@ -691,6 +735,88 @@ def _text_function(name: str, values: list):
     return pd.Series([func(*cells) for cells in zip(*columns)], index=series.index, dtype=object).infer_objects()
 
 
+# Nombres que dan MONTH_NAME y WEEKDAY_NAME: los que reconoce el orden cronológico
+# (utils/data.time_order), así los gráficos los ordenan Enero→Diciembre y Lunes→Domingo.
+MONTH_NAMES = ("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
+               "Septiembre", "Octubre", "Noviembre", "Diciembre")
+WEEKDAY_NAMES = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+
+
+def _as_datetimes(series: pd.Series) -> pd.Series:
+    """Las fechas de una columna (ISO, día primero, con o sin hora); NaT donde no hay una fecha.
+    Los números no son fechas: 2026 no es el 1 de enero de 2026 ni un día contado desde 1970."""
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series.dt.tz_localize(None) if getattr(series.dt, "tz", None) else series
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+    text = series.astype("string").str.strip()
+    try:
+        return pd.to_datetime(text, errors="coerce", dayfirst=True, format="mixed")
+    except (ValueError, TypeError):  # p. ej. fechas con y sin zona horaria mezcladas
+        return text.map(lambda v: pd.to_datetime(v, errors="coerce", dayfirst=True)
+                        if not pd.isna(v) else pd.NaT).astype("datetime64[ns]")
+
+
+def _months_between(start: pd.Series, end: pd.Series) -> pd.Series:
+    """Meses completos de `start` a `end` (por día del mes); negativo si `end` es anterior."""
+    later = end >= start
+    low, high = start.where(later, end), end.where(later, start)
+    months = ((high.dt.year - low.dt.year) * 12 + high.dt.month - low.dt.month
+              - (high.dt.day < low.dt.day).astype(float))
+    return months.where(later, -months)
+
+
+def _datediff(start: pd.Series, end: pd.Series, unit) -> pd.Series:
+    start, end = start.dt.normalize(), end.dt.normalize()
+    unit = DATEDIFF_UNITS[str(unit).strip().casefold()]
+    if unit == "days":
+        return (end - start).dt.days.astype(float)
+    months = _months_between(start, end)
+    if unit == "months":
+        return months
+    return np.trunc(months / 12) + 0.0  # años completos, hacia cero también en negativo (sin -0)
+
+
+def _date_parts(name: str) -> Callable[[pd.Series], pd.Series]:
+    def names(values: pd.Series, labels: tuple) -> pd.Series:
+        return values.map(lambda i: np.nan if pd.isna(i) else labels[int(i)]).astype(object)
+    return {
+        "YEAR": lambda d: d.dt.year.astype(float),
+        "MONTH": lambda d: d.dt.month.astype(float),
+        "MONTH_NAME": lambda d: names(d.dt.month - 1, MONTH_NAMES),
+        "QUARTER": lambda d: d.dt.quarter.astype(float),
+        "DAY": lambda d: d.dt.day.astype(float),
+        "WEEKDAY_NAME": lambda d: names(d.dt.weekday, WEEKDAY_NAMES),
+        "YEAR_MONTH": lambda d: d.dt.strftime("%Y-%m").where(d.notna(), np.nan).astype(object),
+    }[name]
+
+
+DATE_FUNCTIONS = ("YEAR", "MONTH", "MONTH_NAME", "QUARTER", "DAY", "WEEKDAY_NAME", "YEAR_MONTH",
+                  "DATEDIFF", "TODAY")
+
+
+def _date_function(name: str, values: list, index=None):
+    """Una función de fecha sobre columnas o valores sueltos. TODAY() da la fecha de hoy en ISO
+    (AAAA-MM-DD), el mismo formato de las columnas de tipo fecha: se compara con ellas."""
+    if name == "TODAY":
+        return datetime.date.today().isoformat()
+    like = next((v for v in values if isinstance(v, pd.Series)), None)
+    single = like is None
+    if single:
+        like = pd.Series([0], index=[0])
+    dates = [_as_datetimes(v.reindex(like.index) if isinstance(v, pd.Series)
+                           else pd.Series([v] * len(like), index=like.index, dtype=object))
+             for v in values[:2 if name == "DATEDIFF" else 1]]
+    if name == "DATEDIFF":
+        result = _datediff(dates[0], dates[1], values[2])
+    else:
+        result = _date_parts(name)(dates[0])
+    if single:
+        value = result.iloc[0]
+        return np.nan if pd.isna(value) else value
+    return result
+
+
 def _broadcast(value, like: pd.Series):
     return value.reindex(like.index) if isinstance(value, pd.Series) else value
 
@@ -714,6 +840,8 @@ def _eval_row(node: Node, df: pd.DataFrame):
         return _if(*(_eval_row(a, df) for a in node.args), index=df.index)
     if node.value in _TEXT_FUNCTIONS:
         return _text_function(node.value, [_eval_row(a, df) for a in node.args])
+    if node.value in DATE_FUNCTIONS:
+        return _date_function(node.value, [_eval_row(a, df) for a in node.args])
     raise FormulaError(f"{node.value} es una agregación: no va en un campo por fila.")
 
 
@@ -746,6 +874,8 @@ def _eval_aggregate(node: Node, rows: pd.DataFrame):
         return _if(*(_eval_aggregate(a, rows) for a in node.args))
     if node.value in _TEXT_FUNCTIONS:
         return _text_function(node.value, [_eval_aggregate(a, rows) for a in node.args])
+    if node.value in DATE_FUNCTIONS:
+        return _date_function(node.value, [_eval_aggregate(a, rows) for a in node.args])
     raise FormulaError("Fórmula agregada inválida.")
 
 

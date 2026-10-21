@@ -73,7 +73,7 @@ Cómo se graba:
 | Archivo | Qué prueba |
 |---|---|
 | `tests/engine/test_steps.py` | Los pasos: filtros, agregación, pivote, escalar, ventanas, orden/límite, metadatos y el resultado anidado de la tabla dinámica. |
-| `tests/engine/test_formulas.py` | Lenguaje de fórmulas, cómo opera cada función, el árbol del constructor (`formula_tree`, `formula_text` con su ida y vuelta, el catálogo de piezas) y campos calculados (por fila y agregados) en el motor. |
+| `tests/engine/test_formulas.py` | Lenguaje de fórmulas, cómo opera cada función, el árbol del constructor (`formula_tree`, `formula_text` con su ida y vuelta, el catálogo de piezas), las funciones de fecha (partes, `DATEDIFF`, `TODAY`, fechas que no lo son, el orden de meses, días y año-mes) y campos calculados (por fila y agregados) en el motor. |
 
 ### Fuentes de datos y API
 | Archivo | Qué prueba |

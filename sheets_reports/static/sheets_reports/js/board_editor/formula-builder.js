@@ -151,7 +151,9 @@ const FormulaBlocks = (() => {
         const info = functionByName[n.value] || { label: n.value };
         const name = el('span', 'font-semibold text-primary font-mono', info.label);
         name.title = info.title || '';
-        block.append(name, el('span', 'text-fg-muted', '('), draw(n.args[0], [...path, 0], selected, actions),
+        // Sin huecos (HOY): solo el nombre con sus paréntesis.
+        block.append(name, el('span', 'text-fg-muted', '('),
+                     ...(n.args.length ? [draw(n.args[0], [...path, 0], selected, actions)] : []),
                      el('span', 'text-fg-muted', ')'));
       } else if (n.kind === 'not' || n.kind === 'neg') {
         const not = catalog.logic.find(o => o.op === 'NOT') || { symbol: 'NOT' };

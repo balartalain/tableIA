@@ -1,5 +1,7 @@
 """Campos calculados de la fuente: el lenguaje de fórmulas, los campos por fila (una columna
 más) y los agregados (una métrica que se evalúa por grupo en todo el motor)."""
+import datetime
+
 import pandas as pd
 from django.test import SimpleTestCase
 
@@ -387,3 +389,84 @@ class AggregatedFieldValidationTests(SimpleTestCase):
         as_dimension = fields(dimensions=["% Ejecución"],
                               metrics=[{"field": "Gasto_Real", "agg": "sum", "alias": "g"}])
         self.assertTrue(errors_for("bar", as_dimension, ctx=self.ctx()))
+
+
+class DateFunctionTests(SimpleTestCase):
+    """Funciones de fecha, fila a fila: partes de la fecha, diferencias y la fecha de hoy."""
+
+    def df(self) -> pd.DataFrame:
+        return pd.DataFrame({
+            "ID": [1, 2, 3, 4],
+            # ISO (columna de tipo fecha), día primero, vacía y un texto que no es fecha.
+            "Fecha": ["2026-03-15", "05/01/2025", None, "pendiente"],
+            "Entrega": ["2026-04-14", "2026-03-15", "2026-01-01", "2026-01-01"],
+            "Monto": [10.0, 20.0, 30.0, 40.0],
+        })
+
+    def rows(self, formula):
+        return compile_formula(formula, self.df().columns).evaluate_rows(self.df()).tolist()
+
+    def assertRows(self, formula, expected):
+        got = self.rows(formula)
+        self.assertEqual([None if pd.isna(v) else v for v in got], expected)
+
+    def test_partes_de_la_fecha(self):
+        self.assertRows("YEAR([Fecha])", [2026, 2025, None, None])
+        self.assertRows("MONTH([Fecha])", [3, 1, None, None])
+        self.assertRows("QUARTER([Fecha])", [1, 1, None, None])
+        self.assertRows("DAY([Fecha])", [15, 5, None, None])
+        self.assertRows("MONTH_NAME([Fecha])", ["Marzo", "Enero", None, None])
+        self.assertRows("WEEKDAY_NAME([Entrega])", ["Martes", "Domingo", "Jueves", "Jueves"])
+        self.assertRows("YEAR_MONTH([Fecha])", ["2026-03", "2025-01", None, None])
+
+    def test_un_numero_no_es_una_fecha(self):
+        self.assertRows("YEAR([Monto])", [None, None, None, None])
+
+    def test_datediff_dias_meses_y_anos_completos(self):
+        self.assertRows('DATEDIFF([Fecha], [Entrega], "days")', [30, 434, None, None])
+        # Del 15/3 al 14/4 no se completa el mes.
+        self.assertRows('DATEDIFF([Fecha], [Entrega], "months")', [0, 14, None, None])
+        self.assertRows('DATEDIFF([Fecha], [Entrega], "years")', [0, 1, None, None])
+        # Al revés, negativo; la unidad también en español.
+        self.assertRows('DATEDIFF([Entrega], [Fecha], "años")', [0, -1, None, None])
+        self.assertRows('DATEDIFF([Entrega], [Fecha], "días")', [-30, -434, None, None])
+
+    def test_today_es_la_fecha_de_hoy_en_iso(self):
+        today = datetime.date.today()
+        self.assertEqual(self.rows("TODAY()"), [today.isoformat()] * 4)
+        self.assertRows("YEAR(TODAY())", [today.year] * 4)
+
+    def test_dentro_de_una_agregacion(self):
+        formula = compile_formula('AVG(DATEDIFF([Fecha], [Entrega], "days"))', self.df().columns)
+        self.assertTrue(formula.aggregated)
+        self.assertEqual(formula.aggregate(self.df()), 232)
+        formula = compile_formula("SUM(IF(YEAR([Fecha]) = 2026, [Monto], 0))", self.df().columns)
+        self.assertEqual(formula.aggregate(self.df()), 10)
+
+    def test_errores(self):
+        cases = {
+            'DATEDIFF([Fecha], [Entrega], [Monto])': 'va entre comillas',
+            'DATEDIFF([Fecha], [Entrega], "weeks")': 'va entre comillas',
+            'DATEDIFF([Fecha], [Entrega])': 'tres partes',
+            "YEAR()": "una sola fecha",
+            "TODAY(1)": "no lleva nada",
+        }
+        for text, message in cases.items():
+            with self.subTest(text=text), self.assertRaisesMessage(FormulaError, message):
+                compile_formula(text, self.df().columns)
+
+    def test_el_constructor_las_escribe_y_las_lee(self):
+        for text in ('DATEDIFF([Fecha], TODAY(), "days")', "YEAR_MONTH([Fecha])"):
+            with self.subTest(text=text):
+                self.assertEqual(formula_text(formula_tree(text)), text)
+        catalog = {f["name"]: f for f in BUILDER_CATALOG["functions"]}
+        self.assertEqual(catalog["TODAY"]["slots"], [])
+        self.assertEqual(catalog["DATEDIFF"]["group"], "fecha")
+
+    def test_los_nombres_se_ordenan_como_tiempo(self):
+        from sheets_reports.utils.data import as_dates, time_order
+        self.assertEqual(time_order(["Viernes", "Lunes", "Domingo"]), ["Lunes", "Viernes", "Domingo"])
+        self.assertEqual(time_order(["Marzo", "Enero"]), ["Enero", "Marzo"])
+        # Año y mes: 2026-01 antes que 2026-03 (leído con el día primero saldría al revés).
+        self.assertEqual(time_order(["2026-03", "2025-12", "2026-01"]), ["2025-12", "2026-01", "2026-03"])
+        self.assertIsNone(as_dates(pd.Series(["2026-03", "2025-12"])))

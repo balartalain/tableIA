@@ -116,6 +116,17 @@ _MONTHS = [
     ("diciembre", "dic", "december", "dec"),
 ]
 MONTH_ORDER = {name: number for number, names in enumerate(_MONTHS, start=1) for name in names}
+# Número de día de la semana (lunes = 1) de sus nombres, como los meses.
+_WEEKDAYS = [
+    ("lunes", "lun", "monday", "mon"), ("martes", "tuesday", "tue"),
+    ("miercoles", "mie", "wednesday", "wed"), ("jueves", "jue", "thursday", "thu"),
+    ("viernes", "vie", "friday", "fri"), ("sabado", "sab", "saturday", "sat"),
+    ("domingo", "dom", "sunday", "sun"),
+]
+WEEKDAY_ORDER = {name: number for number, names in enumerate(_WEEKDAYS, start=1) for name in names}
+
+
+_YEAR_MONTH = re.compile(r"^\d{4}-\d{1,2}$")
 
 
 def _plain(text) -> str:
@@ -131,8 +142,8 @@ def _natural_key(value):
 
 
 def time_order(values: list) -> list | None:
-    """Los valores de lo más antiguo a lo más reciente si son de tiempo (números, meses o
-    fechas en texto, ISO o día primero); None si no lo son (categorías, nombres...)."""
+    """Los valores de lo más antiguo a lo más reciente si son de tiempo (números, meses, días de
+    la semana o fechas en texto, ISO o día primero); None si no lo son (categorías, nombres...)."""
     values = list(values)
     if not values:
         return values
@@ -140,6 +151,11 @@ def time_order(values: list) -> list | None:
         return sorted(values, key=sort_key)
     if all(_plain(v) in MONTH_ORDER for v in values):
         return sorted(values, key=lambda v: MONTH_ORDER[_plain(v)])
+    if all(_plain(v) in WEEKDAY_ORDER for v in values):
+        return sorted(values, key=lambda v: WEEKDAY_ORDER[_plain(v)])
+    # Año y mes (2026-03): leído como fecha con el día primero, «03» sería el día.
+    if all(_YEAR_MONTH.match(str(v).strip()) for v in values):
+        return sorted(values, key=lambda v: tuple(int(p) for p in str(v).strip().split("-")))
     dates = pd.to_datetime(pd.Series(values, dtype="string"), errors="coerce", dayfirst=True, format="mixed")
     if not dates.isna().any():
         return [values[i] for i in dates.argsort(kind="stable")]
@@ -163,6 +179,9 @@ def as_dates(series: pd.Series) -> pd.Series | None:
     text = series.astype("string").str.strip()
     values = [v for v in text.dropna().unique() if v]
     if not values or all(_plain(v) in MONTH_ORDER for v in values):
+        return None
+    # Año y mes (2026-03) no es una fecha completa: es un periodo, como un mes por nombre.
+    if all(_YEAR_MONTH.match(v) for v in values):
         return None
     if pd.to_numeric(pd.Series(values, dtype="string"), errors="coerce").notna().all():
         return None

@@ -540,9 +540,11 @@ huecos y rótulos, operadores con su símbolo y título) vienen de `BUILDER_CATA
   *Valores* (Número/Texto → `valuePiece`, y la ficha «Vacío» → `EMPTY_PIECE`, que deja la
   celda en blanco y solo vale como resultado de un SI: el servidor rechaza cualquier otro
   lugar con su mensaje); *Operadores* (`+ − × ÷`); *Condición* (comparación, Y, O, NO);
-  *Funciones* (SI y las agregaciones) y *Texto* (CONCATENAR, MINÚSCULAS, MAYÚSCULAS, QUITAR
-  ESPACIOS, CONTIENE). Los dos últimos grupos salen del catálogo (`FUNCTION_GROUPS`, por el
-  campo `group` de cada función). El panel tiene scroll propio.
+  *Funciones* (SI y las agregaciones), *Texto* (CONCATENAR, MINÚSCULAS, MAYÚSCULAS, QUITAR
+  ESPACIOS, CONTIENE) y *Fecha* (AÑO, MES, NOMBRE DEL MES, TRIMESTRE, DÍA, DÍA DE LA SEMANA,
+  AÑO-MES, DIFERENCIA DE FECHAS, HOY). Los grupos salen del catálogo (`FUNCTION_GROUPS`, por el
+  campo `group` de cada función). El panel tiene scroll propio. Una función sin huecos (HOY) se
+  dibuja como `HOY()`.
 - **Canvas**: `FormulaBlocks.render` dibuja el árbol (Alpine no tiene templates recursivos)
   desde un `x-effect`. SI es un bloque vertical con tres huecos rotulados; las agregaciones,
   `SUM( [ ] )`; comparaciones, aritmética y Y/O, `[ ] op [ ]` con el operador en un `select`

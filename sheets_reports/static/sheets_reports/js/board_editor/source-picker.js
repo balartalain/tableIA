@@ -139,9 +139,9 @@ function sourcePicker({ mode = 'create' } = {}) {
         label: op === 'NOT' ? `${symbol} [ ]` : `[ ] ${symbol} [ ]`, title, piece: FormulaBlocks.pieces.operator(op),
       })),
     ],
-    // Las funciones del catálogo en sus grupos de la paleta: SI y las agregaciones, y las de texto.
-    // `tall`: las de varios huecos, que se dibujan como bloque vertical (el color de SI).
-    FUNCTION_GROUPS: [['Agregaciones', undefined], ['Funciones de Texto', 'texto']].map(([title, group]) => ({
+    // Las funciones del catálogo en sus grupos de la paleta: SI y las agregaciones, las de texto
+    // y las de fecha. `tall`: las de varios huecos, que se dibujan como bloque vertical (el color de SI).
+    FUNCTION_GROUPS: [['Agregaciones', undefined], ['Funciones de Texto', 'texto'], ['Funciones de Fecha', 'fecha']].map(([title, group]) => ({
       title,
       pieces: FormulaBlocks.catalog.functions.filter(f => f.group === group).map(({ name, label, title, slots }) =>
         ({ label, title, tall: slots.length > 1, piece: FormulaBlocks.pieces.func(name) })),

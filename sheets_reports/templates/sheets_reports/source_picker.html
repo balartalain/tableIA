@@ -515,7 +515,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               </div>
 
               <!-- 6. Funciones de Texto -->
-              <div class="flex flex-col transition-all duration-300"
+              <div class="flex flex-col border-b border-line transition-all duration-300"
                    x-bind:class="activePaletteSection === 'text_functions' ? 'flex-1 min-h-0' : 'shrink-0'">
                 <button type="button" x-on:click="togglePaletteSection('text_functions')"
                         class="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-fg hover:text-fg hover:bg-surface-muted transition cursor-pointer select-none shrink-0">
@@ -530,6 +530,31 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                      class="flex-1 min-h-0 overflow-y-auto p-2.5 pt-0">
                   <div class="flex flex-wrap gap-1">
                     <template x-for="p in (FUNCTION_GROUPS[1] ? FUNCTION_GROUPS[1].pieces : [])" :key="p.label">
+                      <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
+                              x-bind:class="p.tall ? 'border-accent-soft-border bg-accent-soft text-accent-text' : 'border-line-strong bg-surface-muted text-primary'"
+                              class="rounded-lg border px-2 py-1 font-mono font-semibold cursor-grab"
+                              x-text="p.label"></button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 7. Funciones de Fecha -->
+              <div class="flex flex-col transition-all duration-300"
+                   x-bind:class="activePaletteSection === 'date_functions' ? 'flex-1 min-h-0' : 'shrink-0'">
+                <button type="button" x-on:click="togglePaletteSection('date_functions')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-fg hover:text-fg hover:bg-surface-muted transition cursor-pointer select-none shrink-0">
+                  <span>Funciones de Fecha</span>
+                  <i class="ti ti-chevron-down text-xs transition-transform duration-300"
+                     x-bind:class="activePaletteSection === 'date_functions' ? 'rotate-180 text-accent-text' : 'text-fg-muted'"></i>
+                </button>
+                <div x-show="activePaletteSection === 'date_functions'"
+                     x-transition:enter="transition-all duration-300 ease-out"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="flex-1 min-h-0 overflow-y-auto p-2.5 pt-0">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="p in (FUNCTION_GROUPS[2] ? FUNCTION_GROUPS[2].pieces : [])" :key="p.label">
                       <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
                               x-bind:class="p.tall ? 'border-accent-soft-border bg-accent-soft text-accent-text' : 'border-line-strong bg-surface-muted text-primary'"
                               class="rounded-lg border px-2 py-1 font-mono font-semibold cursor-grab"

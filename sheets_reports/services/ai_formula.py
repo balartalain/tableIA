@@ -59,6 +59,11 @@ Gramática:
   LOWER, UPPER y TRIM dan vacío si la celda está vacía; CONTAINS(texto, parte) va en una
   condición y distingue mayúsculas, igual que «=»: para ignorarlas, LOWER en el texto.
   Ej.: IF(CONTAINS(LOWER([comentario]), "plataforma"), 1, 0).
+- De fecha, fila a fila, sobre una columna de fechas (ISO o día primero; lo que no es una fecha
+  da vacío): YEAR, MONTH (1-12), MONTH_NAME (Enero…Diciembre), QUARTER (1-4), DAY,
+  WEEKDAY_NAME (Lunes…Domingo) y YEAR_MONTH ("2026-03", para agrupar por mes sin mezclar años).
+  DATEDIFF(desde, hasta, "days"|"months"|"years") da los días, meses o años completos (negativo si
+  «hasta» es anterior); TODAY() es la fecha de hoy. Los nombres de mes y día ya se ordenan solos.
 - Sin agregaciones la fórmula es por fila (una columna nueva, ej. una categoría o una resta).
   Con agregaciones es un cálculo entre totales: cada columna va dentro de una agregación
   (SUM([a]) / [b] no vale) y una agregación no va dentro de otra.
@@ -72,6 +77,9 @@ Ejemplos:
 - % de respuestas «Sí»: SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100
 - Participación de Hogar: SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100
 - Nivel por grado: IF([grado] <= 6, "A", IF([grado] <= 10, "B", "C"))
+- Mes de la venta: YEAR_MONTH([Fecha])
+- Días de entrega: DATEDIFF([Fecha pedido], [Fecha entrega], "days")
+- Edad: DATEDIFF([Fecha de nacimiento], TODAY(), "years")
 
 Responde en JSON:
 - Si se puede: {{"ok": true, "formula": "…", "name": "nombre corto del campo"}}.

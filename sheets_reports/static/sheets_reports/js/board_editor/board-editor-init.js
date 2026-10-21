@@ -174,8 +174,8 @@ async function generateRealBoardThumbnail() {
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} 190" width="${totalW}" height="190">
         <rect width="${totalW}" height="190" fill="#F7F8F4"/>
         <rect x="12" y="12" width="${totalW - 24}" height="166" rx="4" fill="#FFFFFF" stroke="#E3E5DE" stroke-dasharray="4 4"/>
-        <circle cx="${totalW / 2}" cy="82" r="16" fill="#EAF3EC"/>
-        <path d="M${totalW / 2 - 8} 82 h16 M${totalW / 2} 74 v16" stroke="#1F8A5F" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="${totalW / 2}" cy="82" r="16" fill="#FFF4E6"/>
+        <path d="M${totalW / 2 - 8} 82 h16 M${totalW / 2} 74 v16" stroke="#FE8200" stroke-width="2" stroke-linecap="round"/>
         <text x="${totalW / 2}" y="118" font-family="system-ui, -apple-system, sans-serif" font-size="9" fill="#14171F" opacity="0.45" text-anchor="middle">Tablero sin widgets</text>
       </svg>`
     );

@@ -45,9 +45,9 @@
         const barW = Math.max(3, (w - 34) * pcts[i % pcts.length]);
         const labelW = Math.max(8, (w - 44) * 0.5);
         rows += `
-        <rect x="${x + 5}" y="${ry + 1}" width="7" height="7" rx="1.5" fill="#EAF3EC"/>
+        <rect x="${x + 5}" y="${ry + 1}" width="7" height="7" rx="1.5" fill="${ctx.primary}" fill-opacity="0.12"/>
         <rect x="${x + 16}" y="${ry + 1.5}" width="${labelW}" height="2.6" rx="1.3" fill="#C7CBC2"/>
-        <rect x="${x + 16}" y="${ry + 6}" width="${barW}" height="2.2" rx="1.1" fill="#1F8A5F"/>
+        <rect x="${x + 16}" y="${ry + 6}" width="${barW}" height="2.2" rx="1.1" fill="${ctx.primary}"/>
         <rect x="${x + w - 12}" y="${ry + 1.5}" width="7" height="2.6" rx="1.3" fill="#8A8F86"/>`;
       }
       return rows;

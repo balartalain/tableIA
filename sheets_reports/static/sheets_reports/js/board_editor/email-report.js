@@ -160,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chart = new ApexCharts(document.getElementById('email-by-day-chart'), {
       ...options,
       chart: { type: 'bar', height: EMAIL_CHART_HEIGHT, fontFamily: 'inherit', toolbar: { show: false }, animations: { enabled: false } },
-      colors: [getComputedStyle(document.documentElement).getPropertyValue('--color-moss-500').trim() || '#1F8A5F'],
+      colors: [getComputedStyle(document.documentElement).getPropertyValue('--color-moss-500').trim() || '#FE8200'],
       plotOptions: { ...options.plotOptions, bar: { ...options.plotOptions.bar, dataLabels: { position: 'top' } } },
       grid: { borderColor: '#eee', strokeDashArray: 3 },
       tooltip: { y: { formatter: (v) => `${number(v)} correos` } },

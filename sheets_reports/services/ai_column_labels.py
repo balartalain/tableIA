@@ -22,10 +22,10 @@ RESPONSE_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "original": {"type": "string"},
+                    "id": {"type": "string"},
                     "clean": {"type": "string"},
                 },
-                "required": ["original", "clean"],
+                "required": ["id", "clean"],
             },
         },
     },
@@ -60,10 +60,10 @@ Reglas:
    - No incluyas corchetes, comillas ni signos de interrogación innecesarios.
    - Longitud ideal: 1 a 4 palabras (máximo 40 caracteres).
 6. Totalidad:
-   - Debes incluir exactamente una entrada para cada columna recibida, con su nombre original en "original" \
+   - Debes incluir exactamente una entrada para cada columna recibida, con su identificador (c1, c2, ...) en "id" \
      y el nombre propuesto en "clean".
 
-Lista de columnas originales:
+Lista de columnas originales (identificador: nombre):
 {columns}
 """
 
@@ -102,15 +102,19 @@ def suggest_column_labels(column_names: list[str]) -> dict[str, str]:
     Devuelve un diccionario {nombre_original: nombre_limpio} para la lista de columnas dada.
     Lanza SpecGenerationError si la IA no responde o no se pudo generar el resultado.
     """
-    # Filtrar nombres vacíos y la columna de sistema ID
-    valid_columns = [str(c).strip() for c in column_names if str(c).strip() and not is_id_column(str(c).strip())]
+    # Filtrar nombres vacíos y la columna de sistema ID. Las claves del resultado son los nombres
+    # tal como llegaron (con sus espacios), para que el editor los encuentre.
+    valid_columns = [str(c) for c in column_names if str(c).strip() and not is_id_column(str(c).strip())]
     # Mantener orden sin duplicados
     valid_columns = list(dict.fromkeys(valid_columns))
 
     if not valid_columns:
         return {}
 
-    lines = "\n".join(f"- {json.dumps(c, ensure_ascii=False)}" for c in valid_columns)
+    # Cada columna va con un identificador y la respuesta se asocia por él: la IA no repite
+    # bien los nombres largos (junta los espacios dobles, por ejemplo).
+    by_id = {f"c{i}": col for i, col in enumerate(valid_columns, start=1)}
+    lines = "\n".join(f"- {key}: {json.dumps(col, ensure_ascii=False)}" for key, col in by_id.items())
     prompt = COLUMN_LABELS_PROMPT.format(columns=lines)
 
     try:
@@ -130,11 +134,10 @@ def suggest_column_labels(column_names: list[str]) -> dict[str, str]:
     items = (answer or {}).get("columns") or []
     raw_mapping = {}
     for item in items:
-        if isinstance(item, dict) and "original" in item and "clean" in item:
-            orig = str(item["original"]).strip()
-            clean = str(item["clean"]).strip()
-            if orig:
-                raw_mapping[orig] = clean
+        if isinstance(item, dict) and "clean" in item:
+            col = by_id.get(str(item.get("id", "")).strip())
+            if col is not None:
+                raw_mapping[col] = str(item["clean"]).strip()
 
     # Asegurar que todas las columnas recibidas tengan una respuesta y sean únicas
     return _ensure_unique_labels(raw_mapping, valid_columns)

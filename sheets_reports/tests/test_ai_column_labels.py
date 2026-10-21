@@ -14,18 +14,9 @@ class SuggestColumnLabelsServiceTests(SimpleTestCase):
     def test_devuelve_mapeo_limpio(self):
         fake_response = {
             "columns": [
-                {
-                    "original": "¿En qué medida está satisfecho con la atención al cliente?",
-                    "clean": "Atención al cliente",
-                },
-                {
-                    "original": "¿En qué medida está satisfecho con la velocidad de entrega?",
-                    "clean": "Velocidad de entrega",
-                },
-                {
-                    "original": "Fecha",
-                    "clean": "Fecha",
-                },
+                {"id": "c1", "clean": "Atención al cliente"},
+                {"id": "c2", "clean": "Velocidad de entrega"},
+                {"id": "c3", "clean": "Fecha"},
             ]
         }
         cols = [
@@ -45,6 +36,27 @@ class SuggestColumnLabelsServiceTests(SimpleTestCase):
             },
         )
         self.assertEqual(ask.call_count, 1)
+        self.assertIn('- c2: "¿En qué medida está satisfecho con la velocidad de entrega?"', ask.call_args[0][0])
+
+    def test_nombres_con_espacios_dobles_o_en_los_bordes(self):
+        # La respuesta se asocia por identificador, no por el nombre que repita la IA.
+        cols = ["Pregunta larga  [Recomendaría la UAPA]", "Región "]
+        fake_response = {"columns": [
+            {"id": "c1", "clean": "Recomendaría la UAPA"},
+            {"id": "c2", "clean": "Región"},
+        ]}
+        with mock.patch(ASK, return_value=fake_response):
+            labels = suggest_column_labels(cols)
+        self.assertEqual(labels, {
+            "Pregunta larga  [Recomendaría la UAPA]": "Recomendaría la UAPA",
+            "Región ": "Región",
+        })
+
+    def test_ignora_ids_desconocidos_y_conserva_el_nombre_faltante(self):
+        fake_response = {"columns": [{"id": "c9", "clean": "Otra"}, {"id": "c1", "clean": "Ventas netas"}]}
+        with mock.patch(ASK, return_value=fake_response):
+            labels = suggest_column_labels(["Ventas", "Costo"])
+        self.assertEqual(labels, {"Ventas": "Ventas netas", "Costo": "Costo"})
 
     def test_desambigua_si_la_ia_propone_duplicados(self):
         raw = {
@@ -59,12 +71,12 @@ class SuggestColumnLabelsServiceTests(SimpleTestCase):
         self.assertEqual(unique["Pregunta 3"], "Satisfacción (3)")
 
     def test_ignora_columna_de_sistema_id_y_vacias(self):
-        with mock.patch(ASK, return_value={"columns": [{"original": "Ventas", "clean": "Ventas"}]}) as ask:
+        with mock.patch(ASK, return_value={"columns": [{"id": "c1", "clean": "Ventas"}]}) as ask:
             labels = suggest_column_labels(["id", "", "   ", "Ventas"])
 
         self.assertEqual(labels, {"Ventas": "Ventas"})
         call_prompt = ask.call_args[0][0]
-        self.assertNotIn('"id"', call_prompt)
+        self.assertNotIn(': "id"', call_prompt)
         self.assertIn("Ventas", call_prompt)
 
     def test_retorna_vacio_si_no_hay_columnas_validas(self):

@@ -77,8 +77,8 @@
   <div class="hidden sm:flex items-center gap-2.5 shrink-0">
     <button id="sources-btn" type="button" aria-label="Gestionar fuente de datos" title="Gestionar fuente de datos"
             x-on:click="$store.bottomSheet.openSources()"
-            class="bg-white border border-line hover:bg-paper text-ink/75 hover:text-ink py-1.5 px-3 rounded-full font-medium text-xs transition cursor-pointer flex items-center gap-2 shadow-2xs">
-      <i class="ti ti-database text-sm text-moss-600" aria-hidden="true"></i>
+            class="bg-white border border-line hover:bg-paper text-ink/75 hover:text-ink py-1.5 px-3 rounded-full font-medium text-sm transition cursor-pointer flex items-center gap-1.5 shadow-2xs">
+      <i class="ti ti-database text-base text-moss-600" aria-hidden="true"></i>
       <span>Gestionar fuentes</span>
       <span x-show="$store.dashboard.sources && $store.dashboard.sources.length"
             x-text="$store.dashboard.sources.length"

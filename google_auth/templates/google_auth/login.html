@@ -7,11 +7,11 @@
 
 {% block content %}
 <div class="min-h-screen w-full flex flex-col lg:flex-row bg-white">
-  
+
   <!-- LADO IZQUIERDO: DEMOSTRACIÓN DE TABLERO DECORATIVO (Solo escritorio, 60% de ancho) -->
   <div class="hidden lg:flex lg:w-[60%] relative flex-col justify-between p-8 xl:p-12 bg-slate-100/70 border-r border-slate-200 overflow-hidden select-none"
        style="background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 24px 24px;">
-    
+
     <!-- Resplandor ambiental decorativo (glows) -->
     <div class="absolute top-1/4 -left-20 w-96 h-96 bg-purple-200/40 rounded-full filter blur-3xl pointer-events-none"></div>
     <div class="absolute bottom-1/4 right-10 w-96 h-96 bg-violet-200/40 rounded-full filter blur-3xl pointer-events-none"></div>
@@ -19,12 +19,10 @@
     <!-- Encabezado del producto -->
     <div class="relative z-10 flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <span class="w-9 h-9 rounded-xl bg-gradient-to-br from-moss-500 to-moss-700 flex items-center justify-center text-white text-base font-sans font-bold shadow-sm">
-          Ta
-        </span>
+        <img src="{% static 'sheets_reports/img/reportia_icon.svg' %}" alt="" class="w-9 h-9 shadow-sm rounded-[0.55rem]" aria-hidden="true">
         <span class="font-sans font-bold text-xl tracking-tight text-ink">Tabler</span>
         <span class="font-mono text-[10px] font-bold bg-moss-50 text-moss-700 border border-moss-200 px-2 py-0.5 rounded-md uppercase tracking-wide">
-          AI
+          IA
         </span>
       </div>
     </div>
@@ -34,7 +32,7 @@
       <div class="relative group transform -rotate-1 hover:rotate-0 transition-all duration-500 ease-out max-w-2xl w-full">
         <!-- Sombra decorativa trasera -->
         <div class="absolute -inset-1 bg-gradient-to-r from-moss-500/20 to-purple-500/20 rounded-3xl blur-xl opacity-75 group-hover:opacity-100 transition duration-500"></div>
-        
+
         <!-- Tarjeta marco de la app -->
         <div class="relative bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-2xl p-2.5 shadow-2xl overflow-hidden">
           <!-- Barra superior de cromo estilo ventana -->
@@ -66,7 +64,7 @@
 
   <!-- LADO DERECHO: FORMULARIO DE INICIAR SESIÓN (40% de ancho) -->
   <div class="w-full lg:w-[40%] flex flex-col justify-between p-6 sm:p-10 lg:p-12 xl:p-16 bg-white min-h-screen">
-    
+
     <!-- Header móvil -->
     <div class="lg:hidden flex items-center justify-between mb-8">
       <div class="flex items-center gap-2.5">

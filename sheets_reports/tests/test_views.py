@@ -492,6 +492,26 @@ class ViewsTests(TestCase):
         self.assertContains(r, "drawerDraft.style.stacked")
         self.assertContains(self.client.get("/"), "Tableros IA")
 
+    def test_tablero_lleva_su_tema(self, _df):
+        # El lienzo (editor y vista) es un `.tablero` con su preset y los colores propios
+        # validados: solo variables --tb-* con un hex; el resto no llega al HTML.
+        self.dashboard.custom_colors = {
+            "--tb-chart-1": "#c02626",
+            "--color-primary": "#000000",
+            "--tb-chart-2": "red",
+            "--tb-chart-3": "#123456;background:url(x)",
+            "--tb-x}body{": "#123456",
+        }
+        self.dashboard.save()
+        for url in (f"/tableros/{self.dashboard.id}/edit/", f"/tableros/{self.dashboard.id}/view/"):
+            r = self.client.get(url)
+            self.assertContains(r, 'data-board-theme="institucional"')
+            self.assertContains(r, 'style="--tb-chart-1:#c02626"')
+            for rejected in ("--color-primary:", "--tb-chart-2:", "url(x)", "body{"):
+                self.assertNotContains(r, rejected)
+            self.assertContains(r, "tablero-theme.css")
+            self.assertContains(r, "chart-theme.js")
+
 
 class DashboardCrudTests(TestCase):
     def setUp(self):
@@ -529,16 +549,18 @@ class DashboardCrudTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertFalse(Dashboard.objects.filter(id=self.dashboard.id).exists())
 
-    def test_editar_primary_color(self):
-        r = self.client.put(
-            f"/api/dashboards/{self.dashboard.id}/",
-            json.dumps({"primary_color": "#0284C7"}),
-            content_type="application/json",
-        )
+    def test_tema_institucional_por_defecto(self):
+        r = self.client.get(f"/api/dashboards/{self.dashboard.id}/")
+        self.assertEqual(r.json()["theme"], "institucional")
+
+    def test_editar_tema(self):
+        url = f"/api/dashboards/{self.dashboard.id}/"
+        r = self.client.put(url, json.dumps({"theme": "institucional"}), content_type="application/json")
         self.assertEqual(r.status_code, 200)
+        r = self.client.put(url, json.dumps({"theme": "verde"}), content_type="application/json")
+        self.assertEqual(r.status_code, 400)
         self.dashboard.refresh_from_db()
-        self.assertEqual(self.dashboard.primary_color, "#0284C7")
-        self.assertEqual(r.json()["primary_color"], "#0284C7")
+        self.assertEqual(self.dashboard.theme, "institucional")
 
     def test_duplica_con_sus_fuentes_y_widgets(self):
         self.source.name, self.source.first_row_headers = "Mis ventas", False

@@ -1,38 +1,29 @@
 /* ============================================================
-   Tabulator — reskin para que combine con las tarjetas del tablero
-   Cárgalo DESPUÉS del CSS oficial de Tabulator (tabulator.min.css /
-   tabulator_simple.min.css) para que estas reglas ganen la cascada.
+   Tabulator de la APP (listado del home, vista previa de fuentes, seguimiento de correos).
+   Cárgalo DESPUÉS del CSS oficial de Tabulator. Colores y tamaños: tokens de tokens.css.
+   Las tablas de los widgets no son Tabulator: las estiliza tablero-theme.css (.tb-table).
    ============================================================ */
 
-:root {
-  --tb-ink: var(--color-ink);
-  --tb-ink-muted: #8A8F98;
-  --tb-line: var(--color-line);
-  --tb-paper: var(--color-paper);
-  --tb-accent: var(--board-primary, var(--color-header));
-  --tb-accent-hover: var(--board-primary-600, var(--color-moss-600));
-  /* Encabezado y fila de totales. */
-  --tb-header-bg: color-mix(in srgb, var(--board-primary, var(--color-moss-500)) 30%, white);
-}
-
-/* Contenedor general: sin borde/sombra propios — ya vive dentro de tu card */
+/* Contenedor general: sin borde/sombra propios, ya vive dentro de una tarjeta */
 .tabulator {
   border: none;
   background: transparent;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  font-size: 13px;
-  color: var(--tb-ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  color: var(--color-text);
 }
 
 /* ---------- Encabezado ---------- */
-.tabulator .tabulator-header {
-  background: var(--tb-header-bg);
-  border-bottom: 1px solid var(--tb-line);
-  font-weight: 600;
-}
-
+.tabulator .tabulator-header,
 .tabulator .tabulator-header .tabulator-col {
-  background: var(--tb-header-bg);
+  background: var(--table-header-bg);
+  color: var(--table-header-text);
+  border-color: var(--table-border);
+}
+.tabulator .tabulator-header {
+  border-bottom: 1px solid var(--table-border);
+}
+.tabulator .tabulator-header .tabulator-col {
   border-right: none;
 }
 
@@ -41,37 +32,26 @@
 .tabulator .tabulator-header .tabulator-col .tabulator-col-content {
   padding: 8px 10px;
 }
-
-.tabulator .tabulator-header .tabulator-col-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tb-ink);
-  text-transform: none;
+.tabulator .tabulator-header .tabulator-col .tabulator-col-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--table-header-text);
 }
 .tabulator-col .tabulator-col-content .tabulator-col-title {
   white-space: normal !important;
 }
 
-/* Tablas de la app (home, vista previa de fuentes): encabezado neutro, no el color del tablero. */
-.tb-app .tabulator-header,
-.tb-app .tabulator-header .tabulator-col {
-  background: var(--tb-paper);
-}
-.tb-app .tabulator-header .tabulator-col-title {
-  color: var(--tb-ink-muted);
-}
-.tb-app .tabulator-col.tabulator-sortable:hover {
-  background: var(--tb-paper);
-}
 /* Listado (tableros del home): filas más altas, con el contenido centrado. */
-.tabulator.tb-list .tabulator-header .tabulator-col .tabulator-col-content {
+.tabulator.app-tabulator-list .tabulator-header .tabulator-col .tabulator-col-content {
   padding: 12px 16px;
 }
-.tabulator.tb-list .tabulator-row .tabulator-cell {
+.tabulator.app-tabulator-list .tabulator-row .tabulator-cell {
   padding: 10px 16px;
   line-height: 32px;
 }
-.tabulator.tb-list .tabulator-row .tabulator-cell .ui-btn {
+.tabulator.app-tabulator-list .tabulator-row .tabulator-cell .ui-btn {
   vertical-align: middle;
 }
 /* Números: cifras del mismo ancho para que encolumnen */
@@ -79,9 +59,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Flechitas de orden — apagadas por defecto, visibles al hover/activo */
+/* Flechitas de orden: atenuadas por defecto, marcadas en la columna ordenada */
 .tabulator .tabulator-col-sorter {
-  color: color-mix(in srgb, var(--tb-ink) 45%, transparent);
+  color: var(--color-text-subtle);
 }
 /* Flecha más chica (la de Tabulator es un triángulo de 12×6 px) y menos espacio reservado
    para ella a la derecha del título. */
@@ -92,37 +72,33 @@
   padding-right: 16px;
 }
 .tabulator .tabulator-col.tabulator-sortable:hover {
-  background: var(--board-primary-tint, var(--color-moss-tint));
+  background: var(--table-row-hover);
 }
 .tabulator .tabulator-col-sorter.tabulator-col-sorter-element[aria-sort="ascending"],
 .tabulator .tabulator-col-sorter.tabulator-col-sorter-element[aria-sort="descending"] {
-  color: var(--tb-ink);
+  color: var(--table-header-text);
 }
 
 /* ---------- Filas ---------- */
-.tabulator .tabulator-row {
-  background: #fff;
-  border-bottom: 1px solid var(--tb-line);
+.tabulator .tabulator-row,
+.tabulator .tabulator-row.tabulator-row-even {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--table-border);
   min-height: 38px;
 }
-
-.tabulator .tabulator-row.tabulator-row-even {
-  background: #fff; /* sin cebra: look plano consistente con el resto */
+.tabulator .tabulator-row:hover,
+.tabulator .tabulator-row.tabulator-selectable:hover {
+  background: var(--table-row-hover);
 }
-
-.tabulator .tabulator-row:hover {
-  background: var(--tb-paper);
-}
-
 .tabulator .tabulator-row .tabulator-cell {
   padding: 8px 10px;
   border-right: none;
-  font-size: 13px;
-  color: var(--tb-ink);
+  border-color: var(--table-border);
+  font-size: var(--fs-sm);
+  color: var(--color-text);
 }
-
 .tabulator .tabulator-row.tabulator-selected {
-  background: var(--color-moss-50);
+  background: var(--color-accent-soft);
 }
 
 /* ---------- Footer / paginación ---------- */
@@ -130,11 +106,11 @@
    solo compensa su padding por defecto; con otro valor los totales quedan corridos
    respecto de las columnas. El espacio va en el paginador. */
 .tabulator .tabulator-footer {
-  background: #fff;
-  border-top: 1px solid var(--tb-line);
+  background: var(--color-surface);
+  border-top: 1px solid var(--table-border);
+  color: var(--color-text-muted);
   padding: 0;
 }
-
 .tabulator .tabulator-footer .tabulator-footer-contents {
   padding: 8px 10px;
 }
@@ -148,16 +124,15 @@
   border: none;
   background: transparent !important;
 }
-
 .tabulator .tabulator-row.tabulator-calcs {
   background: transparent !important;
-  border-top: 2px solid var(--tb-ink);
+  border-top: 2px solid var(--table-header-text);
   border-bottom: none;
 }
-
 .tabulator .tabulator-row.tabulator-calcs .tabulator-cell {
-  font-weight: 700;
-  background: var(--tb-header-bg);
+  font-weight: var(--fw-bold);
+  background: var(--table-total-bg);
+  color: var(--color-heading);
 }
 
 /* A la derecha; a la izquierda queda el aviso del pie si lo hay («Mostrando N de M filas»). */
@@ -169,52 +144,47 @@
   margin-left: auto;
   gap: 4px;
 }
-
 .tabulator .tabulator-footer label {
-  font-size: 12px;
-  color: var(--tb-ink-muted);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
 }
 
-/* Botones First/Prev/Next/Last y números de página — reseteo total del look "navegador" */
+/* Botones First/Prev/Next/Last y números de página: reseteo del look "navegador" */
 .tabulator .tabulator-page {
-  background: #fff;
-  border: 1px solid var(--tb-line);
-  border-radius: 6px;
-  color: var(--tb-ink);
-  font-size: 12px;
-  font-weight: 500;
+  background: var(--color-surface);
+  border: 1px solid var(--table-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
   padding: 4px 9px;
   margin: 0;
   transition: background-color .12s, color .12s, border-color .12s;
 }
-
 .tabulator .tabulator-page:hover:not(:disabled) {
-  background: var(--tb-paper);
-  border-color: var(--tb-line);
+  background: var(--color-surface-muted);
 }
-
-.tabulator .tabulator-page.active {
-  background: var(--tb-accent);
-  border-color: var(--tb-accent);
-  color: #fff !important;
+.tabulator .tabulator-footer .tabulator-page.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary) !important;
 }
-
 .tabulator .tabulator-page:disabled {
-  color: color-mix(in srgb, var(--tb-ink) 30%, transparent);
+  color: var(--color-text-subtle);
   cursor: not-allowed;
 }
 
-/* Selector de "cantidad por página", si lo usas */
+/* Selector de "cantidad por página" */
 .tabulator .tabulator-footer .tabulator-page-size {
-  border: 1px solid var(--tb-line);
-  border-radius: 6px;
-  font-size: 12px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
   padding: 3px 6px;
-  color: var(--tb-ink);
+  color: var(--color-text);
 }
 
 /* Placeholder de "sin datos" */
 .tabulator .tabulator-placeholder {
-  color: var(--tb-ink-muted);
-  font-size: 13px;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
 }

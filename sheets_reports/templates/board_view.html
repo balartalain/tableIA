@@ -1,39 +1,29 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block extra_head %}
+<link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
+<link href="{% static 'sheets_reports/css/app-tabulator.css' %}" rel="stylesheet">
+<link href="{% static 'sheets_reports/css/tablero-theme.css' %}" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/virtual-select-plugin@1.0.39/dist/virtual-select.min.css" rel="stylesheet">
+{% endblock %}
+
 {% block title %}{{ dashboard.nombre }} — Tabler IA{% endblock %}
 
 {% block header %}
-<script>
-  (function() {
-    const color = "{{ dashboard.primary_color|default:'#1F8A5F'|escapejs }}";
-    const root = document.documentElement;
-    if (typeof window.chroma === 'function') {
-      const c = window.chroma(color);
-      root.style.setProperty('--board-primary', color);
-      root.style.setProperty('--board-primary-600', c.darken(0.35).hex());
-      root.style.setProperty('--board-primary-700', c.darken(0.7).hex());
-      root.style.setProperty('--board-primary-100', c.brighten(1.4).desaturate(0.4).hex());
-    } else {
-      root.style.setProperty('--board-primary', color);
-      root.style.setProperty('--board-primary-600', color);
-      root.style.setProperty('--board-primary-700', color);
-      root.style.setProperty('--board-primary-100', color);
-    }
-  })();
-</script>
-<header class="text-white transition-colors" style="background-color: var(--board-primary-600, #166B49); border-bottom: 1px solid var(--board-primary-700, #0F5138);">
+<header class="ui-app-header">
   <div class="mx-auto px-6 h-16 flex items-center justify-between">
     <div class="flex items-center gap-3">
-      <span class="font-sans font-semibold text-lg tracking-tight">{{ dashboard.nombre }}</span>
+      <img src="{% static 'sheets_reports/img/reportia_icon.svg' %}" alt="" class="shrink-0 w-7 h-7" aria-hidden="true">
+      <span class="font-sans font-semibold text-lg text-heading">{{ dashboard.nombre }}</span>
       {% if dashboard.is_template %}
-      <span class="text-[11px] font-semibold bg-white/20 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider">Plantilla</span>
+      <span class="ui-badge ui-badge-accent uppercase tracking-label">Plantilla</span>
       {% endif %}
     </div>
     {% if dashboard.is_template %}
     <div class="flex items-center gap-2">
       <button id="use-template-btn" type="button" onclick="useTemplate({{ dashboard.id }})"
-              class="bg-white hover:bg-paper font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-full transition shadow flex items-center gap-1.5 cursor-pointer" style="color: var(--board-primary-700, #0F5138);">
+              class="ui-btn ui-btn-primary">
         <i class="ti ti-pencil text-base" aria-hidden="true"></i>
         <span>Editar</span>
       </button>
@@ -45,13 +35,10 @@
 
 {% block content %}
 
-<style>
-  #dashboard-filters:empty { display: none; }
-</style>
 {% include "sheets_reports/_page_loader.html" %}
 {% if email_enabled %}
 <!-- Con el envío de correos activado: el tablero o el reporte del envío (email-report.js). -->
-<nav id="view-tabs" role="tablist" aria-label="Reportes" class="ui-tabs bg-white px-6">
+<nav id="view-tabs" role="tablist" aria-label="Reportes" class="ui-tabs bg-surface px-6">
   <button type="button" role="tab" data-tab="charts" aria-controls="tab-charts"
           class="view-tab ui-tab">
     <i class="ti ti-layout-dashboard text-base" aria-hidden="true"></i>Tablero
@@ -62,7 +49,8 @@
   </button>
 </nav>
 {% endif %}
-<div id="tab-charts" class="mx-auto p-6">
+<!-- El tablero (filtros y lienzo) toma su tema de tablero-theme.css. -->
+<div id="tab-charts" class="tablero mx-auto p-6" {% include "sheets_reports/_board_theme_attrs.html" %}>
   <!-- Caja de filtros: siempre arriba, fuera del grid. -->
   <div id="dashboard-filters" class="mb-4 flex flex-wrap items-center gap-2.5 w-full max-w-full"></div>
   <div id="dashboard-canvas" class="flex flex-col gap-6">
@@ -72,30 +60,30 @@
 <div id="tab-emails" class="mx-auto p-6 space-y-6 hidden">
   <p id="email-report-error" role="alert" class="ui-alert ui-alert-error hidden"></p>
   <!-- En qué está el envío -->
-  <div id="email-status" role="status" class="flex items-start gap-3 border border-line rounded-md bg-white p-4">
-    <i id="email-status-icon" class="ti ti-clock text-xl text-ink/50" aria-hidden="true"></i>
+  <div id="email-status" role="status" class="flex items-start gap-3 border border-line rounded-md bg-surface p-4">
+    <i id="email-status-icon" class="ti ti-clock text-lg text-fg-muted" aria-hidden="true"></i>
     <div class="min-w-0">
-      <p id="email-status-title" class="text-sm font-semibold text-ink">—</p>
-      <p id="email-status-detail" class="mt-0.5 text-xs text-ink/60 break-words"></p>
+      <p id="email-status-title" class="text-sm font-semibold text-fg">—</p>
+      <p id="email-status-detail" class="mt-0.5 text-xs text-fg-muted break-words"></p>
     </div>
   </div>
   <div class="grid grid-cols-12 gap-4">
     <section class="col-span-12 md:col-span-4 ui-card shadow-sm p-4">
       <h2 class="ui-eyebrow pb-2">Notificados</h2>
-      <p class="font-semibold text-ink">
+      <p class="font-semibold text-fg">
         <span id="email-kpi-sent" class="text-4xl">—</span>
-        <span class="text-sm text-ink/50">de <span id="email-kpi-total">—</span> destinatarios</span>
+        <span class="text-sm text-fg-muted">de <span id="email-kpi-total">—</span> destinatarios</span>
       </p>
-      <div class="mt-4 flex h-2 gap-0.5 rounded-full overflow-hidden bg-paper" aria-hidden="true">
-        <div id="email-bar-sent" class="h-full bg-moss-500" style="width: 0"></div>
-        <div id="email-bar-failed" class="h-full bg-red-500" style="width: 0"></div>
+      <div class="mt-4 flex h-2 gap-0.5 rounded-full overflow-hidden bg-app" aria-hidden="true">
+        <div id="email-bar-sent" class="h-full bg-primary" style="width: 0"></div>
+        <div id="email-bar-failed" class="h-full bg-danger" style="width: 0"></div>
       </div>
-      <ul class="mt-3 space-y-1 text-xs text-ink/70">
-        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-moss-500" aria-hidden="true"></span><span id="email-legend-sent"></span></li>
-        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-paper border border-line" aria-hidden="true"></span><span id="email-legend-pending"></span></li>
-        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-500" aria-hidden="true"></span><span id="email-legend-failed"></span></li>
+      <ul class="mt-3 space-y-1 text-xs text-fg">
+        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-primary" aria-hidden="true"></span><span id="email-legend-sent"></span></li>
+        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-app border border-line" aria-hidden="true"></span><span id="email-legend-pending"></span></li>
+        <li class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-danger" aria-hidden="true"></span><span id="email-legend-failed"></span></li>
       </ul>
-      <p id="email-kpi-end" class="mt-3 text-xs text-ink/60"></p>
+      <p id="email-kpi-end" class="mt-3 text-xs text-fg-muted"></p>
     </section>
     <section class="col-span-12 md:col-span-8 ui-card shadow-sm p-4">
       <h2 class="ui-eyebrow pb-2">Enviados por día</h2>
@@ -128,7 +116,6 @@
 
 <script>
   window.DASHBOARD_ID = {{ dashboard.id }};
-  window.DASHBOARD_PRIMARY_COLOR = "{{ dashboard.primary_color|default:'#1F8A5F'|escapejs }}";
   async function useTemplate(id) {
     const btn = document.getElementById('use-template-btn');
     if (btn) {
@@ -154,11 +141,8 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@6.4.0/dist/apexcharts.min.js"></script>
-<link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
-<link href="{% static 'sheets_reports/css/tabulator.css' %}" rel="stylesheet">
-<link href="{% static 'sheets_reports/css/data-table.css' %}" rel="stylesheet">
+<script src="{% static 'sheets_reports/js/chart-theme.js' %}"></script>
 <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
-<link href="https://cdn.jsdelivr.net/npm/virtual-select-plugin@1.0.39/dist/virtual-select.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/virtual-select-plugin@1.0.39/dist/virtual-select.min.js"></script>
 
 <script src="{% static 'sheets_reports/js/board_editor/utils/number-format.js' %}"></script>

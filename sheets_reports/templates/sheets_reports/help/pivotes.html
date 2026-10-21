@@ -1,7 +1,7 @@
 {% comment %}Ayuda de «Pivotes» (tópico del centro de ayuda; lo abre también el «?» del bloque). Límites por widget de
 `capabilities["pivots"]` en sheets_reports/widgets/*.py; con pivote los gráficos admiten una métrica
 (form_errors en services/ai_spec.py).{% endcomment %}
-<div class="space-y-5 text-sm text-ink/80 leading-relaxed">
+<div class="space-y-5 text-sm text-fg leading-relaxed">
 
   <div class="space-y-1">
     <p>Un <b>pivote</b> es una segunda agrupación que <b>cruza</b> la dimensión: cada grupo de la
@@ -12,12 +12,12 @@
 
   <!-- Ejemplo -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink">Ejemplo</h4>
+    <h4 class="font-semibold text-fg">Ejemplo</h4>
     <p>Suma de <span class="font-mono">Gasto_Real</span>, dimensión <span class="font-mono">Campus</span>,
       pivote <span class="font-mono">Categoria_Gasto</span>:</p>
     <div class="overflow-x-auto">
-      <table class="w-full text-[11px]">
-        <thead class="text-ink/50">
+      <table class="w-full text-xs">
+        <thead class="text-fg-muted">
           <tr class="border-b border-line">
             <th class="text-left font-medium py-1 pr-3">Campus</th>
             <th class="text-right font-medium py-1 pr-3">Licencias Software</th>
@@ -25,7 +25,7 @@
             <th class="text-right font-medium py-1">Total general</th>
           </tr>
         </thead>
-        <tbody class="font-mono divide-y divide-line/60">
+        <tbody class="font-mono divide-y divide-line">
           <tr><td class="py-1 pr-3 font-sans">Santiago</td><td class="text-right pr-3">5 000</td><td class="text-right pr-3">2 000</td><td class="text-right">7 000</td></tr>
           <tr><td class="py-1 pr-3 font-sans">Santo Domingo</td><td class="text-right pr-3">1 500</td><td class="text-right pr-3">2 000</td><td class="text-right">3 500</td></tr>
           <tr><td class="py-1 pr-3 font-sans">Nagua</td><td class="text-right pr-3">—</td><td class="text-right pr-3">1 000</td><td class="text-right">1 000</td></tr>
@@ -37,17 +37,17 @@
 
   <!-- En cada widget -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink">En cada widget</h4>
+    <h4 class="font-semibold text-fg">En cada widget</h4>
     <div class="overflow-x-auto">
-      <table class="w-full text-[11px]">
-        <thead class="text-ink/50">
+      <table class="w-full text-xs">
+        <thead class="text-fg-muted">
           <tr class="border-b border-line">
             <th class="text-left font-medium py-1 pr-3">Widget</th>
             <th class="text-left font-medium py-1 pr-3">Pivotes</th>
             <th class="text-left font-medium py-1">Qué hace</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-line/60">
+        <tbody class="divide-y divide-line">
           <template x-for="w in [
               ['dynamic_table', 'Tabla Dinámica', '0 a 2', 'Columnas por cada valor; con dos pivotes, el segundo se anida dentro del primero. Cada métrica se repite bajo cada valor.'],
               ['bar', 'Gráfico de Barras', '0 a 1', 'Una serie (color) por valor: barras agrupadas o apiladas (opción «Apilado»).'],
@@ -56,11 +56,11 @@
               ['kpi', 'Tarjeta KPI', '—', 'No admite pivote.'],
               ['table', 'Tabla', '—', 'No admite pivote.'],
             ]" :key="w[0]">
-            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-moss-50' : ''">
-              <td class="py-1 pr-3 font-semibold text-ink whitespace-nowrap">
+            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-accent-soft' : ''">
+              <td class="py-1 pr-3 font-semibold text-fg whitespace-nowrap">
                 <span x-text="w[1]"></span>
                 <span x-show="$store.dashboard.editingType === w[0]"
-                      class="ml-1 text-[10px] font-semibold rounded-full bg-moss-500 text-white px-1.5 py-0.5">Este widget</span>
+                      class="ui-badge ui-badge-accent ml-1">Este widget</span>
               </td>
               <td class="pr-3" x-text="w[2]"></td>
               <td x-text="w[3]"></td>
@@ -73,7 +73,7 @@
 
   <!-- Reglas -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink">Qué cambia al agregar un pivote</h4>
+    <h4 class="font-semibold text-fg">Qué cambia al agregar un pivote</h4>
     <ul class="list-disc pl-4 space-y-1">
       <li><b>Gráficos</b>: con pivote admiten <b>una sola métrica</b> (cada serie ya es un valor del pivote).</li>
       <li><b>Mostrar como</b>: solo quedan «% del total de la columna» y «% del total de la fila»; este
@@ -86,7 +86,7 @@
   </div>
 
   <div class="space-y-1">
-    <h4 class="font-semibold text-ink">Pivote o dimensión</h4>
+    <h4 class="font-semibold text-fg">Pivote o dimensión</h4>
     <p>Lo que quieres leer hacia abajo va como <b>dimensión</b> (filas, eje); lo que quieres comparar
       lado a lado va como <b>pivote</b> (columnas, series). Intercambiarlos da los mismos números
       girados. Más en <a href="#help:dimensiones">Dimensiones</a>.</p>

@@ -1,15 +1,15 @@
 <!-- Visor JSON de solo lectura -->
-<details class="text-[11px]">
-  <summary class="cursor-pointer text-ink/50 hover:text-ink/70 select-none">Ver JSON del widget</summary>
+<details class="text-xs">
+  <summary class="cursor-pointer text-fg-muted hover:text-fg select-none">Ver JSON del widget</summary>
   <div class="mt-2 space-y-2">
     <div>
-      <div class="font-semibold text-ink/60 mb-0.5">fields</div>
-      <pre class="font-mono text-[11px] bg-paper border border-line rounded p-2 max-h-56 overflow-auto whitespace-pre"
+      <div class="font-semibold text-fg-muted mb-0.5">fields</div>
+      <pre class="font-mono text-xs bg-app border border-line rounded p-2 max-h-56 overflow-auto whitespace-pre"
            x-text="JSON.stringify($store.dashboard.drawerDraft.fields, null, 2)"></pre>
     </div>
     <div>
-      <div class="font-semibold text-ink/60 mb-0.5">style</div>
-      <pre class="font-mono text-[11px] bg-paper border border-line rounded p-2 max-h-56 overflow-auto whitespace-pre"
+      <div class="font-semibold text-fg-muted mb-0.5">style</div>
+      <pre class="font-mono text-xs bg-app border border-line rounded p-2 max-h-56 overflow-auto whitespace-pre"
            x-text="JSON.stringify($store.dashboard.drawerDraft.style, null, 2)"></pre>
     </div>
   </div>

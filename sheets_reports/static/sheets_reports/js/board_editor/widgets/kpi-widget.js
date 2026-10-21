@@ -1,7 +1,7 @@
 (function () {
-  const STATUS_CLASS = { good: 'text-emerald-600', warn: 'text-amber-600', bad: 'text-red-600' };
-  const STATUS_BAR = { good: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-red-500' };
-  const SPARK_COLOR = '#16a34a';
+  // Estado contra la meta: color del valor y relleno de la barra (tablero-theme.css).
+  const STATUS_CLASS = { good: 'tb-status-good', warn: 'tb-status-warn', bad: 'tb-status-bad' };
+  const STATUS_BAR = { good: 'tb-fill-good', warn: 'tb-fill-warn', bad: 'tb-fill-bad' };
 
   class KpiWidget extends BaseWidget {
     static type = 'kpi';
@@ -30,7 +30,7 @@
       const { x, y, w, h, primary, el } = ctx;
       let val = '';
       if (el) {
-        const v = el.querySelector('.text-2xl, .text-3xl, .text-4xl, .kpi-value');
+        const v = el.querySelector('.tb-kpi-value');
         if (v) val = v.textContent.trim();
       }
       const display = BaseWidget.escapeHTML((val || '1.250').slice(0, 12));
@@ -58,14 +58,14 @@
       if (!compare) return '';
       const esc = BaseWidget.escapeHTML;
       const delta = compare.mode === 'abs' ? compare.delta : compare.delta_pct;
-      const color = compare.better === true ? 'text-emerald-700 bg-emerald-50'
-        : compare.better === false ? 'text-red-700 bg-red-50' : 'text-ink/50 bg-paper';
+      const variant = compare.better === true ? 'tb-delta-up'
+        : compare.better === false ? 'tb-delta-down' : 'tb-delta-flat';
       const arrow = delta > 0 ? '▲' : delta < 0 ? '▼' : '';
       const text = delta == null ? '—'
         : compare.mode === 'abs' ? this.format(delta, { percent, signed: true })
           : this.format(delta, { percent: true, signed: true });
       const title = `${compare.label}: ${this.format(compare.value, { percent })}`;
-      return `<span class="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${color}" title="${esc(title)}">
+      return `<span class="tb-delta ${variant} mt-2" title="${esc(title)}">
           ${arrow ? `<span aria-hidden="true">${arrow}</span>` : ''}${esc(String(text))}
           <span class="font-normal opacity-70">respecto a ${esc(compare.label)}</span>
         </span>`;
@@ -76,17 +76,15 @@
       const esc = BaseWidget.escapeHTML;
       const pct = target.pct;
       const width = pct == null ? 0 : Math.max(0, Math.min(100, pct));
-      const statusClass = STATUS_BAR[status];
-      const barClass = statusClass || '';
-      const barStyle = statusClass ? `width:${width}%` : `width:${width}%; background-color:${this.getPrimaryColor()}`;
+      const barClass = STATUS_BAR[status] || '';
       const text = pct == null ? 'Sin datos para la meta'
         : `${this.format(pct, { percent: true })} de ${esc(target.label.toLowerCase())} (${esc(String(this.format(target.value, { percent })))})`;
       return `<div class="mt-3 w-full max-w-[16rem]">
-          <div class="h-1.5 w-full rounded-full bg-line overflow-hidden" role="progressbar"
+          <div class="tb-progress w-full" role="progressbar"
                aria-valuemin="0" aria-valuemax="100" aria-valuenow="${width}">
-            <div class="h-full rounded-full ${barClass}" style="${barStyle}"></div>
+            <span class="${barClass}" style="width:${width}%"></span>
           </div>
-          <span class="mt-1 block text-[11px] text-ink/50">${text}</span>
+          <span class="tb-kpi-sub mt-1 block">${text}</span>
         </div>`;
     }
 
@@ -101,13 +99,13 @@
       // El formato de la métrica principal lo manda el servidor; los decimales, prefijo y sufijo, el estilo.
       const percent = payload.format === 'percent' || payload.format === 'progress';
       this._currency = payload.format === 'currency' && !this.style.prefix;
-      const statusClass = STATUS_CLASS[payload.status] || 'text-ink';
+      const statusClass = STATUS_CLASS[payload.status] || '';
       const valueText = this.format(payload.value, { percent });
 
       const main = payload.text
-        ? `<span class="text-2xl font-black tracking-tight text-center leading-tight ${statusClass}">${esc(payload.text)}</span>
-           <span class="text-sm font-semibold text-ink/60 mt-0.5">${esc(String(valueText))}</span>`
-        : `<span class="text-2xl font-black tracking-tight ${statusClass}">${esc(String(valueText))}</span>`;
+        ? `<span class="tb-kpi-value text-center ${statusClass}">${esc(payload.text)}</span>
+           <span class="text-sm font-semibold tb-text-muted mt-0.5">${esc(String(valueText))}</span>`
+        : `<span class="tb-kpi-value ${statusClass}">${esc(String(valueText))}</span>`;
 
       if (this._chart) {
         this._chart.destroy();
@@ -118,7 +116,7 @@
       container.innerHTML = `
         <div class="flex flex-col items-center justify-center flex-1 min-h-0 w-full">
           ${main}
-          <span class="text-[11px] font-semibold text-ink/40 mt-0.5 uppercase tracking-wide text-center">${esc(payload.label || '')}</span>
+          <span class="tb-kpi-label mt-1 text-center">${esc(payload.label || '')}</span>
           ${this._compareHTML(payload.compare, percent)}
           ${this._targetHTML(payload.target, payload.status, percent)}
         </div>
@@ -128,18 +126,17 @@
     }
 
     _renderTrend(el, trend, percent) {
-      this._chart = new ApexCharts(el, {
+      this._chart = new ApexCharts(el, BaseWidget.mergeOptions(this.themeOptions(), {
         chart: { type: 'area', height: 48, sparkline: { enabled: true }, fontFamily: 'inherit', animations: { enabled: false } },
         series: [{ name: this.title, data: trend.data }],
         labels: trend.categories,
         stroke: { curve: 'smooth', width: 2 },
         fill: { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0 } },
-        colors: [this.getPrimaryColor()],
         tooltip: {
           x: { show: true },
           y: { formatter: (v) => this.format(v, { percent }), title: { formatter: () => '' } },
         },
-      });
+      }));
       this._chart.render();
     }
   }

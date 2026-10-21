@@ -9,33 +9,33 @@ Se resalta automáticamente al pasar el cursor, arrastrar módulos o redimension
        x-on:mouseenter="onMouseEnterRuler()"
        x-on:mouseleave="onMouseLeaveRuler()"
        role="region" aria-label="Regla de columnas del lienzo"
-       class="sticky top-0 z-20 h-7 shrink-0 grid grid-cols-12 gap-4 px-4 bg-white/90 backdrop-blur-xs border-b border-line shadow-[0_1px_2px_rgba(0,0,0,0.02)] select-none">
+       class="sticky top-0 z-20 h-7 shrink-0 grid grid-cols-12 gap-4 px-4 bg-surface backdrop-blur-xs border-b border-line shadow-sm select-none">
     <template x-for="col in columns" :key="col">
       <div :data-col="col"
            x-on:mouseenter="onMouseEnterCol(col)"
            x-on:mouseleave="onMouseLeaveCol()"
            class="relative h-full flex flex-col items-center justify-between pt-0.5 pb-0 transition-all duration-150 rounded-t cursor-default"
            :class="isColActive(col)
-             ? 'bg-moss-50/90 text-moss-700 font-bold border-b-2 border-moss-500'
-             : 'text-ink/40 hover:text-ink/80 hover:bg-paper/80 border-b border-transparent'">
+             ? 'bg-accent-soft text-accent-text font-bold border-b-2 border-accent'
+             : 'text-fg-muted hover:text-fg hover:bg-surface-muted border-b border-transparent'">
 
         <!-- Número de columna -->
-        <span class="text-[10px] font-mono leading-none tracking-tight transition-transform"
-              :class="isColActive(col) ? 'scale-105 font-bold text-moss-700' : ''"
+        <span class="text-xs font-mono leading-none tracking-tight transition-transform"
+              :class="isColActive(col) ? 'scale-105 font-bold text-accent-text' : ''"
               x-text="col"></span>
 
         <!-- Graduaciones estilo regla milimétrica / CAD -->
         <div class="w-full flex justify-between items-end px-0.5 pointer-events-none">
           <span class="w-[1px] h-1.5 transition-colors"
-                :class="isColActive(col) ? 'bg-moss-400' : 'bg-line'"></span>
+                :class="isColActive(col) ? 'bg-accent' : 'bg-line'"></span>
           <span class="w-[1px] h-0.5 transition-colors"
-                :class="isColActive(col) ? 'bg-moss-300' : 'bg-line/40'"></span>
+                :class="isColActive(col) ? 'bg-accent' : 'bg-line'"></span>
           <span class="w-[1px] h-1 transition-colors"
-                :class="isColActive(col) ? 'bg-moss-300' : 'bg-line/70'"></span>
+                :class="isColActive(col) ? 'bg-accent' : 'bg-line'"></span>
           <span class="w-[1px] h-0.5 transition-colors"
-                :class="isColActive(col) ? 'bg-moss-300' : 'bg-line/40'"></span>
+                :class="isColActive(col) ? 'bg-accent' : 'bg-line'"></span>
           <span class="w-[1px] h-1.5 transition-colors"
-                :class="isColActive(col) ? 'bg-moss-400' : 'bg-line'"></span>
+                :class="isColActive(col) ? 'bg-accent' : 'bg-line'"></span>
         </div>
       </div>
     </template>
@@ -49,10 +49,10 @@ Se resalta automáticamente al pasar el cursor, arrastrar módulos o redimension
     <template x-for="col in columns" :key="col">
       <div class="h-full flex flex-col justify-start py-2 transition-colors duration-150 rounded-sm"
            :class="isColActive(col)
-             ? 'bg-moss-500/[0.06] border-x border-dashed border-moss-500/40 shadow-[inset_0_0_12px_rgba(31,138,95,0.05)]'
-             : 'border-x border-dashed border-line/35 bg-ink/[0.008]'">
+             ? 'bg-accent-soft border-x border-dashed border-accent'
+             : 'border-x border-dashed border-line'">
         <div class="flex justify-center pt-1" x-show="isColActive(col)" x-cloak>
-          <span class="text-[9px] font-mono font-bold text-moss-700 bg-white/95 border border-moss-300/80 rounded px-1.5 py-0.2 shadow-xs"
+          <span class="text-xs font-mono font-bold text-accent-text bg-surface border border-accent rounded px-1.5 py-0.2 shadow-xs"
                 x-text="`Col ${col}`"></span>
         </div>
       </div>

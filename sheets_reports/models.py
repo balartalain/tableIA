@@ -1,8 +1,14 @@
+import re
 from contextlib import contextmanager
 
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+
+
+# Validación de Dashboard.custom_colors antes de llevarlos al atributo style.
+TB_VARIABLE_RE = re.compile(r"--tb-[a-z0-9-]+")
+HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 def default_position():
@@ -30,11 +36,18 @@ class Dashboard(models.Model):
         default="",
         help_text="Miniatura del tablero (data-URL de un SVG) para la galería de plantillas.",
     )
-    primary_color = models.CharField(
-        max_length=20,
-        default="#1F8A5F",
+    THEME_INSTITUCIONAL = "institucional"
+    THEME_CHOICES = [(THEME_INSTITUCIONAL, "Institucional")]
+    theme = models.CharField(
+        max_length=30,
+        choices=THEME_CHOICES,
+        default=THEME_INSTITUCIONAL,
+        help_text="Preset de colores del tablero (data-board-theme en tablero-theme.css).",
+    )
+    custom_colors = models.JSONField(
+        default=dict,
         blank=True,
-        help_text="Color primario del tema del tablero.",
+        help_text="Colores propios del tablero: {\"--tb-chart-1\": \"#1d3594\", …}. Pisan los del tema.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -45,6 +58,18 @@ class Dashboard(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    @property
+    def style_variables(self):
+        """`custom_colors` como declaraciones CSS para el atributo style del tablero
+        ("--tb-chart-1:#1d3594;--tb-chart-2:#ff8301"). Solo pasan las variables --tb-* con un
+        color hex de 6 dígitos: cualquier otra cosa se descarta y no llega al HTML."""
+        colors = self.custom_colors if isinstance(self.custom_colors, dict) else {}
+        return ";".join(
+            f"{name}:{value}" for name, value in colors.items()
+            if isinstance(name, str) and isinstance(value, str)
+            and TB_VARIABLE_RE.fullmatch(name) and HEX_COLOR_RE.fullmatch(value)
+        )
 
 
 class DataSource(models.Model):

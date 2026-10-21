@@ -1,42 +1,42 @@
 (function () {
-  // La fuerza de la relación según |r| (escala de Evans): la misma para el color de las
-  // celdas, el tooltip, «Lo más relacionado» y la leyenda del panel (window.CORRELATION_SCALE).
-  // `min`: desde qué |r| empieza el nivel. «Muy débil» es un solo tono, sin signo.
-  const DEFAULT_DIVERGENT = BaseWidget.generateDivergentScale('#1F8A5F', '#DC2626', '#F4F3EF', 4);
+  // La fuerza de la relación según |r| (escala de Evans): la misma para el color de las celdas,
+  // el tooltip, «Lo más relacionado» y la leyenda del panel (correlationScale). `min`: desde qué
+  // |r| empieza el nivel. «Muy débil» es el neutro; cada uno de los demás, un tono por signo.
   const SCALE = [
-    { min: 0, label: 'Muy débil', negative: DEFAULT_DIVERGENT.neutral, positive: DEFAULT_DIVERGENT.neutral },
-    { min: 0.2, label: 'Débil', negative: DEFAULT_DIVERGENT.negative[0], positive: DEFAULT_DIVERGENT.positive[0] },
-    { min: 0.4, label: 'Moderada', negative: DEFAULT_DIVERGENT.negative[1], positive: DEFAULT_DIVERGENT.positive[1] },
-    { min: 0.6, label: 'Fuerte', negative: DEFAULT_DIVERGENT.negative[2], positive: DEFAULT_DIVERGENT.positive[2] },
-    { min: 0.8, label: 'Muy fuerte', negative: DEFAULT_DIVERGENT.negative[3], positive: DEFAULT_DIVERGENT.positive[3] },
+    { min: 0, label: 'Muy débil' },
+    { min: 0.2, label: 'Débil' },
+    { min: 0.4, label: 'Moderada' },
+    { min: 0.6, label: 'Fuerte' },
+    { min: 0.8, label: 'Muy fuerte' },
   ];
-  window.CORRELATION_SCALE = SCALE;
+  const CUTS = SCALE.slice(1).map(level => level.min);
 
-  // Tramos de color de -1 a 1 (9: cuatro por signo y «muy débil» en el centro).
-  const RANGES = [
-    ...SCALE.slice(1).reverse().map((level, k, list) => ({
-      from: -(k === 0 ? 1 : list[k - 1].min), to: -level.min, color: level.negative, name: level.label,
-    })),
-    { from: -SCALE[1].min, to: SCALE[1].min, color: SCALE[0].positive, name: SCALE[0].label },
-    ...SCALE.slice(1).map((level, k, list) => ({
-      from: level.min, to: k === list.length - 1 ? 1 : list[k + 1].min, color: level.positive, name: level.label,
-    })),
-  ];
-  // Celdas sin valor: centinelas fuera de [-1, 1] con su propio tramo (un null, ApexCharts lo
-  // pintaría con el color del tramo más bajo). HIDDEN: arriba de la diagonal con «solo la
-  // mitad inferior»; NO_DATA: el par no tiene filas suficientes o una columna es constante.
-  const HIDDEN = 2;
-  const NO_DATA = 3;
-  const SENTINEL_RANGES = [
-    { from: 1.5, to: 2.5, color: '#ffffff', name: ' ' },
-    { from: 2.5, to: 3.5, color: '#e4e2dc', name: 'Sin datos' },
+  // Los niveles con sus colores del tablero y el del texto escrito encima.
+  function correlationScale(el) {
+    const d = ChartTheme.read(el).diverging;
+    return SCALE.map((level, i) => (i === 0
+      ? { ...level, negative: d.zero, positive: d.zero, negativeOn: d.zeroOn, positiveOn: d.zeroOn }
+      : { ...level, negative: d.neg[i - 1], positive: d.pos[i - 1], negativeOn: d.negOn[i - 1], positiveOn: d.posOn[i - 1] }));
+  }
+  window.correlationScale = correlationScale;
+
+  // Nivel de un coeficiente, con los cortes de SCALE.
+  function levelOf(r) {
+    return [...SCALE].reverse().find(l => Math.abs(r) >= l.min) || SCALE[0];
+  }
+
+  // Nombre de cada tramo de divergingScale (de −1 a +1), para la leyenda del gráfico.
+  const RANGE_NAMES = [
+    ...SCALE.slice(1).reverse().map(level => `${level.label} (−)`),
+    SCALE[0].label,
+    ...SCALE.slice(1).map(level => `${level.label} (+)`),
   ];
   // La medida de cada par (`measures`): el método elegido, o Spearman con una ordinal.
   const MEASURE_LABELS = { pearson: 'Pearson', spearman: 'Spearman' };
 
   // La fuerza de la relación en palabras, con los cortes de SCALE.
   function strength(r) {
-    const level = [...SCALE].reverse().find(l => Math.abs(r) >= l.min) || SCALE[0];
+    const level = levelOf(r);
     return `${level.label.toLowerCase()}, ${r >= 0 ? 'positiva' : 'negativa'}`;
   }
 
@@ -75,7 +75,8 @@
     async thumbnailContent(ctx) {
       const svg = await this.apexThumbnail(ctx);
       if (svg) return svg;
-      return BaseWidget.thumbGrid(ctx, ['#f4f3ef', '#d3e4f2', '#acccea', '#7fb0dd', '#f9d8cf', '#f4b2a4', '#ec8a7c']);
+      const d = ctx.theme.diverging;
+      return BaseWidget.thumbGrid(ctx, [d.pos[3], d.pos[1], d.zero, d.neg[1], d.neg[3], d.pos[2], d.zero]);
     }
 
     getProperties() {
@@ -104,7 +105,7 @@
       const container = this.getContentContainer();
       container.className = 'flex flex-col h-full min-h-0';
       if (size < 2) {
-        container.innerHTML = '<p class="m-auto text-xs text-ink/40">Elige al menos dos variables.</p>';
+        container.innerHTML = '<p class="m-auto text-xs tb-text-muted">Elige al menos dos variables.</p>';
         return;
       }
       // ApexCharts mide el 100 % de alto contra el padre del elemento donde se monta: la caja
@@ -127,26 +128,17 @@
         };
       });
 
-      const posColor = this.getPrimaryColor();
-      const negColor = '#DC2626';
-      const scaleData = BaseWidget.generateDivergentScale(posColor, negColor, '#F4F3EF', 4);
-      const scaleLevels = [
-        { min: 0, label: 'Muy débil', negative: scaleData.neutral, positive: scaleData.neutral },
-        { min: 0.2, label: 'Débil', negative: scaleData.negative[0], positive: scaleData.positive[0] },
-        { min: 0.4, label: 'Moderada', negative: scaleData.negative[1], positive: scaleData.positive[1] },
-        { min: 0.6, label: 'Fuerte', negative: scaleData.negative[2], positive: scaleData.positive[2] },
-        { min: 0.8, label: 'Muy fuerte', negative: scaleData.negative[3], positive: scaleData.positive[3] },
-      ];
-      window.CORRELATION_SCALE = scaleLevels;
-      const colorRanges = [
-        ...scaleLevels.slice(1).reverse().map((level, k, list) => ({
-          from: -(k === 0 ? 1 : list[k - 1].min), to: -level.min, color: level.negative, name: level.label,
-        })),
-        { from: -scaleLevels[1].min, to: scaleLevels[1].min, color: scaleLevels[0].positive, name: scaleLevels[0].label },
-        ...scaleLevels.slice(1).map((level, k, list) => ({
-          from: level.min, to: k === list.length - 1 ? 1 : list[k + 1].min, color: level.positive, name: level.label,
-        })),
-      ];
+      const theme = this.themeColors();
+      const levels = correlationScale(this.el);
+      const colorRanges = ChartTheme.divergingScale(this.el, CUTS).ranges
+        .map((range, k) => ({ ...range, name: RANGE_NAMES[k] }));
+      // El valor escrito en la celda, legible sobre el tono de su nivel.
+      const labelColor = ({ seriesIndex, dataPointIndex, w }) => {
+        const val = w.globals.series[seriesIndex][dataPointIndex];
+        if (val == null || Math.abs(val) > 1) return theme.label;
+        const level = levels[SCALE.indexOf(levelOf(val))];
+        return val < 0 ? level.negativeOn : level.positiveOn;
+      };
 
       const options = {
         chart: { type: 'heatmap', height: '100%', width: '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar(),
@@ -169,11 +161,11 @@
             },
           },
         },
-        stroke: { width: 1, colors: ['#ffffff'] },
+        stroke: { width: 1, colors: [theme.stroke] },
         legend: { show: true, position: 'right' },
         dataLabels: {
           enabled: showValues,
-          style: { fontSize: '11px', fontWeight: 500, colors: ['#1f2328'] },
+          style: { fontSize: '11px', fontWeight: 500, colors: [labelColor] },
           formatter: (val) => (val == null || Math.abs(val) > 1 ? '' : formatNumber(val, { decimals: 2 })),
         },
         xaxis: { labels: { rotate: -45, trim: true, style: { fontSize: '10px' } }, tooltip: { enabled: false } },
@@ -200,22 +192,22 @@
               const body = measure === 'same_variable'
                 ? 'Categorías de la misma variable: no se comparan'
                 : `Sin datos suficientes${n < 3 ? ` (${n} ${n === 1 ? 'fila' : 'filas'})` : ' (una de las columnas no varía)'}`;
-              return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug"><div class="font-semibold text-ink/80 mb-0.5">${pair}</div><div class="text-ink/60">${body}</div></div>`;
+              return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug"><div class="font-semibold tb-text mb-0.5">${pair}</div><div class="tb-text-muted">${body}</div></div>`;
             }
             return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug">
-              <div class="font-semibold text-ink/80 pb-1 mb-1 border-b border-line/60">${pair}</div>
+              <div class="font-semibold tb-text pb-1 mb-1 border-b tb-border">${pair}</div>
               <div class="flex items-center gap-2 my-0.5">
-                <span class="font-bold text-sm text-ink">${formatNumber(r, { decimals: 2 })}</span>
-                <span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-paper border border-line text-ink/80">${strength(r)}</span>
+                <span class="font-bold text-sm tb-text">${formatNumber(r, { decimals: 2 })}</span>
+                <span class="text-xs font-medium px-1.5 py-0.5 rounded tb-surface-muted border tb-border tb-text">${strength(r)}</span>
               </div>
-              <div class="text-[11px] text-ink/50">${MEASURE_LABELS[measure] || measure} · ${n} filas analizadas</div>
-              ${dummies.map(text => `<div class="text-[11px] text-ink/50">${text}</div>`).join('')}
-              ${unmatched.map(text => `<div class="text-[11px] text-amber-700">${text}</div>`).join('')}
+              <div class="text-xs tb-text-muted">${MEASURE_LABELS[measure] || measure} · ${n} filas analizadas</div>
+              ${dummies.map(text => `<div class="text-xs tb-text-muted">${text}</div>`).join('')}
+              ${unmatched.map(text => `<div class="text-xs tb-status-warn">${text}</div>`).join('')}
             </div>`;
           },
         },
       };
-      this._chart = new ApexCharts(container.querySelector('.correlation-chart'), options);
+      this._chart = new ApexCharts(container.querySelector('.correlation-chart'), BaseWidget.mergeOptions(this.themeOptions(), options));
       this._chart.render();
     }
   }

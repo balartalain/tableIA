@@ -119,8 +119,9 @@ class BarChartWidget(BaseWidget):
             output["ungrouped"] = True
         if horizontal:
             output["horizontal"] = True
+        reference_lines = self._reference_lines(reference_lines)
         if reference_lines:
-            output["referenceLines"] = self._build_annotations(reference_lines, horizontal)
+            output["referenceLines"] = reference_lines
 
         return output
 
@@ -137,22 +138,16 @@ class BarChartWidget(BaseWidget):
         percent = ["Total"] if metrics and all(metric_alias(m) in percent_all for m in metrics) else []
         return [metric_label(m) for m in metrics], [{"name": "Total", "data": values}], percent
 
-    def _build_annotations(self, lines, horizontal):
-        annotations = {"xaxis": [], "yaxis": []}
-        key = "x" if horizontal else "y"
+    REFERENCE_KINDS = {"value", "avg", "max", "min"}
+
+    @classmethod
+    def _reference_lines(cls, lines):
+        """Las líneas de referencia válidas, sin presentación: el frontend calcula su valor
+        (promedio, máximo…) sobre las series dibujadas y las colorea con el tema del tablero."""
+        valid = []
         for line in lines:
-            if line.get("kind") == "value" and line.get("value") is not None:
-                color = line.get("color", "#d97706")
-                annotations["xaxis" if horizontal else "yaxis"].append({
-                    key: line["value"],
-                    "borderColor": color,
-                    "strokeDashArray": 4,
-                    "label": {
-                        "text": line.get("label", f"Meta: {line['value']}"),
-                        "borderColor": color,
-                        "orientation": "horizontal",
-                        "position": "top" if horizontal else "right",
-                        "style": {"color": "#fff", "background": color, "fontSize": "10px"},
-                    },
-                })
-        return annotations
+            kind = line.get("kind")
+            if kind not in cls.REFERENCE_KINDS or (kind == "value" and line.get("value") is None):
+                continue
+            valid.append({key: line[key] for key in ("kind", "value", "label", "series") if key in line})
+        return valid

@@ -8,8 +8,6 @@
     return [...ordered, ...remaining];
   }
 
-  const COLOR_PALETTE = BaseWidget.CHART_COLORS;
-
   class BarWidget extends BaseWidget {
     static type = 'bar';
     static palette = {
@@ -34,7 +32,7 @@
 
     _colorsFor(series) {
       this._seriesColors.clear();
-      const palette = this.getSeriesColors(series.length);
+      const palette = this.seriesColors(series.length);
       series.forEach((s, i) => {
         this._seriesColors.set(s.name, palette[i % palette.length]);
       });
@@ -88,8 +86,9 @@
       const allPercent = BaseWidget.allSeriesPercent(payload, series);
       const percentAxis = { formatter: allPercent ? (val) => formatNumber(val, { percent: true, decimals: 0 }) : BaseWidget.axisNumber };
 
+      const theme = this.themeColors();
       const reference = BaseWidget.referenceAnnotations(payload.referenceLines || [], series, {
-        horizontal, format: BaseWidget.referenceFormat(allPercent),
+        horizontal, format: BaseWidget.referenceFormat(allPercent), theme,
       });
       const valueRange = {
         min: (min) => Math.min(min, 0, reference.min ?? 0),
@@ -99,7 +98,7 @@
       const roundLabel = (val) => (val == null || isNaN(val) ? val : formatNumber(val, { decimals: 0 }));
       const template = this.style.dataLabelFormatter;
       const withTemplate = (format) => (val) => (val == null ? val : template.replace('{value}', format(val)));
-      const palette = payload.ungrouped ? this.getSeriesColors(categories.length) : this.getSeriesColors(series.length);
+      const palette = this.seriesColors(payload.ungrouped ? categories.length : series.length);
 
       const options = {
         chart: { type: 'bar', stacked: !!this.style.stacked, height: '100%', width: this.style.chartWidth || '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
@@ -131,15 +130,16 @@
             : BaseWidget.percentAwareFormatter(payload.percent, roundLabel, 0),
           offsetY: !horizontal && !this.style.stacked ? -20 : 0,
           offsetX: horizontal && !this.style.stacked ? 20 : 0,
+          // Apiladas: la etiqueta va dentro de la barra, con el texto legible sobre su color.
           style: {
             fontSize: '11px',
-            colors: ['#333'],
+            colors: this.style.stacked
+              ? series.map((s, i) => theme.onCategorical[theme.categorical.indexOf(this._seriesColors.get(s.name) || palette[i % palette.length])] || theme.label)
+              : [theme.label],
           },
-          dropShadow: {
-            enabled: false, top: 1, left: 1, blur: 1, color: '#000000', opacity: 0.7
-          }
+          dropShadow: { enabled: false },
         },
-        stroke: { show: true, width: 1, colors: ['#fff'] },
+        stroke: { show: true, width: 1, colors: [theme.stroke] },
         tooltip: {
           shared: true, intersect: false,
           y: { formatter: template ? withTemplate((val) => val) : BaseWidget.percentAwareFormatter(payload.percent) },

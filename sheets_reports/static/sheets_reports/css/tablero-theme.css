@@ -1,0 +1,390 @@
+/* =====================================================================
+   tablero-theme.css — Tema de los TABLEROS (todo lo que va dentro del lienzo)
+   Se aplica al contenedor del lienzo:
+     <div id="dashboard-canvas" class="tablero" data-board-theme="institucional">
+   Prioridad (de menor a mayor):
+     1. Valores por defecto (.tablero)       → institucional, heredan de tokens.css
+     2. Preset  ([data-board-theme="…"])    → paletas predefinidas (hoy solo institucional)
+     3. Inline  (style="--tb-chart-1: …")   → colores del tablero (Dashboard.custom_colors)
+   Dentro del lienzo solo se usan estas variables y clases .tb-*; nunca utilidades de color
+   de la app. Los gráficos leen las variables con ChartTheme (js/chart-theme.js).
+   ===================================================================== */
+
+.tablero {
+  /* ── Lienzo y tarjetas de widget ── */
+  --tb-bg:             var(--color-bg-app);
+  --tb-card-bg:        var(--color-surface);
+  --tb-card-border:    var(--color-border);
+  --tb-card-radius:    var(--radius-lg);
+  --tb-card-shadow:    var(--shadow-sm);
+  --tb-title-text:     var(--color-text-muted);   /* "GRÁFICO DE BARRAS", etiqueta superior */
+  --tb-text:           var(--color-text);
+  --tb-text-muted:     var(--color-text-muted);
+  --tb-text-subtle:    var(--color-text-subtle);  /* íconos y marcas, no texto para leer */
+  --tb-surface-muted:  var(--color-surface-muted);
+  --tb-scrim:          var(--color-scrim);        /* velo mientras el widget carga */
+  --tb-link:           var(--color-accent-text);
+  --tb-font:           var(--font-sans);
+
+  /* ── Estados (KPI contra meta, barras de progreso, ranking «peor») ── */
+  --tb-status-good:    var(--status-success);
+  --tb-status-good-bg: var(--status-success-bg);
+  --tb-status-warn:    var(--status-warning);
+  --tb-status-warn-bg: var(--status-warning-bg);
+  --tb-status-bad:     var(--status-danger);
+  --tb-status-bad-bg:  var(--status-danger-bg);
+
+  /* ── KPI ── */
+  --tb-kpi-value:      var(--color-heading);
+  --tb-kpi-up:         var(--tb-status-good);
+  --tb-kpi-up-bg:      var(--tb-status-good-bg);
+  --tb-kpi-down:       var(--tb-status-bad);
+  --tb-kpi-down-bg:    var(--tb-status-bad-bg);
+  --tb-kpi-flat:       var(--color-text-muted);
+  --tb-kpi-flat-bg:    var(--color-surface-muted);
+  --tb-kpi-track:      var(--neutral-100);
+  --tb-kpi-fill:       var(--brand-orange-500);
+
+  /* ── Tablas, tablas dinámicas y ranking (mismo estilo que la app) ── */
+  --tb-table-header-bg:    var(--table-header-bg);
+  --tb-table-header-text:  var(--table-header-text);
+  --tb-table-header-hover: var(--brand-navy-100);
+  --tb-table-row-hover:    var(--table-row-hover);
+  --tb-table-border:       var(--table-border);
+  --tb-table-total-bg:     var(--table-total-bg);
+  --tb-table-total-text:   var(--color-heading);
+  --tb-table-subtotal-bg:  var(--neutral-50);
+  --tb-bar-fill:           var(--tb-chart-1);      /* barras dentro de celdas y del ranking */
+  --tb-bar-track:          var(--neutral-100);
+
+  /* ── Controles del lienzo (caja de filtros) ── */
+  --tb-control-bg:           var(--color-surface);
+  --tb-control-border:       var(--color-border);
+  --tb-control-border-focus: var(--color-accent);
+
+  /* ── Gráficos: paleta categórica (series y categorías) ── */
+  --tb-chart-1: var(--brand-navy-600);
+  --tb-chart-2: var(--brand-orange-500);
+  --tb-chart-3: var(--brand-navy-400);
+  --tb-chart-4: var(--brand-orange-300);
+  --tb-chart-5: var(--neutral-500);
+  --tb-chart-6: var(--brand-navy-800);
+  /* Texto sobre cada color de la paleta (etiquetas dentro de porciones y barras apiladas):
+     navy sobre naranjas y tonos claros, blanco sobre navy oscuros. */
+  --tb-chart-1-on: var(--neutral-0);
+  --tb-chart-2-on: var(--brand-navy-800);
+  --tb-chart-3-on: var(--brand-navy-900);
+  --tb-chart-4-on: var(--brand-navy-800);
+  --tb-chart-5-on: var(--brand-navy-900);
+  --tb-chart-6-on: var(--neutral-0);
+
+  /* ── Gráficos: líneas de referencia, tendencia y bordes de celdas/porciones ── */
+  --tb-chart-ref:      var(--neutral-800);
+  --tb-chart-ref-text: var(--neutral-0);
+  --tb-chart-stroke:   var(--color-surface);
+
+  /* ── Gráficos: secuencial, de menos a más (mapas de calor, V de Cramér 0→1) ── */
+  --tb-seq-1: var(--brand-navy-50);
+  --tb-seq-2: var(--brand-navy-200);
+  --tb-seq-3: var(--brand-navy-400);
+  --tb-seq-4: var(--brand-navy-600);
+  --tb-seq-5: var(--brand-navy-800);
+  --tb-seq-1-on: var(--brand-navy-900);   /* valor escrito sobre cada tono */
+  --tb-seq-2-on: var(--brand-navy-900);
+  --tb-seq-3-on: var(--brand-navy-900);
+  --tb-seq-4-on: var(--neutral-0);
+  --tb-seq-5-on: var(--neutral-0);
+
+  /* ── Gráficos: divergente, negativo ↔ positivo (matriz de correlación −1→+1) ──
+     Un neutro y cuatro tonos por lado, del más débil (1) al más fuerte (4). Los positivos son
+     los de la escala secuencial, así el tono más fuerte coincide con el de la V de Cramér. */
+  --tb-div-zero:    var(--neutral-100);
+  --tb-div-zero-on: var(--brand-navy-900);
+  --tb-div-neg-1:   var(--status-danger-100);
+  --tb-div-neg-2:   var(--status-danger-300);
+  --tb-div-neg-3:   var(--status-danger-500);
+  --tb-div-neg-4:   var(--status-danger);
+  --tb-div-pos-1:   var(--tb-seq-2);
+  --tb-div-pos-2:   var(--tb-seq-3);
+  --tb-div-pos-3:   var(--tb-seq-4);
+  --tb-div-pos-4:   var(--tb-seq-5);
+  --tb-div-neg-1-on: var(--brand-navy-900);  /* valor escrito sobre cada tono */
+  --tb-div-neg-2-on: var(--brand-navy-900);
+  --tb-div-neg-3-on: var(--brand-navy-900);
+  --tb-div-neg-4-on: var(--neutral-0);
+  --tb-div-pos-1-on: var(--tb-seq-2-on);
+  --tb-div-pos-2-on: var(--tb-seq-3-on);
+  --tb-div-pos-3-on: var(--tb-seq-4-on);
+  --tb-div-pos-4-on: var(--tb-seq-5-on);
+
+  /* ── Gráficos: ejes, cuadrícula y etiquetas ── */
+  --tb-chart-axis:  var(--color-text-muted);
+  --tb-chart-grid:  var(--color-border);
+  --tb-chart-label: var(--color-text);
+
+  color: var(--tb-text);
+  font-family: var(--tb-font);
+}
+
+/* ═══ PRESETS ═══
+   "institucional" usa los valores por defecto. Para agregar otro preset, sobrescribe aquí
+   solo las variables que cambian. */
+.tablero[data-board-theme="institucional"] { }
+
+
+/* ═══ COMPONENTES DEL TABLERO ═══ */
+
+/* Caja de filtros: sin filtros no ocupa lugar. */
+.tablero #dashboard-filters:empty { display: none; }
+
+/* Tarjeta de widget */
+.tablero .tb-widget {
+  background: var(--tb-card-bg);
+  border: 1px solid var(--tb-card-border);
+  border-radius: var(--tb-card-radius);
+  box-shadow: var(--tb-card-shadow);
+}
+.tablero .tb-widget-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--tb-title-text);
+}
+
+/* Texto y superficies dentro de los widgets */
+.tablero .tb-text        { color: var(--tb-text); }
+.tablero .tb-text-muted  { color: var(--tb-text-muted); }
+.tablero .tb-text-subtle { color: var(--tb-text-subtle); }
+.tablero .tb-text-bad    { color: var(--tb-status-bad); }
+.tablero .tb-link        { color: var(--tb-link); }
+.tablero .tb-surface-muted { background: var(--tb-surface-muted); }
+.tablero .tb-track       { background: var(--tb-bar-track); }
+.tablero .tb-border      { border-color: var(--tb-card-border); }
+.tablero .tb-scrim       { background: var(--tb-scrim); }
+.tablero .tb-swatch      { display: inline-block; flex: none; width: 1em; height: 1em; border-radius: var(--radius-pill); }
+
+/* KPI */
+.tablero .tb-kpi-value { font-size: var(--fs-kpi); font-weight: var(--fw-bold); color: var(--tb-kpi-value); line-height: 1.1; }
+.tablero .tb-kpi-label { font-size: var(--fs-xs); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--tb-text-muted); }
+.tablero .tb-kpi-sub   { font-size: var(--fs-xs); color: var(--tb-text-muted); }
+.tablero .tb-delta     { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: var(--radius-pill); font-size: var(--fs-xs); font-weight: var(--fw-semibold); }
+.tablero .tb-delta-up   { background: var(--tb-kpi-up-bg);   color: var(--tb-kpi-up); }
+.tablero .tb-delta-down { background: var(--tb-kpi-down-bg); color: var(--tb-kpi-down); }
+.tablero .tb-delta-flat { background: var(--tb-kpi-flat-bg); color: var(--tb-kpi-flat); }
+.tablero .tb-status-good { color: var(--tb-status-good); }
+.tablero .tb-status-warn { color: var(--tb-status-warn); }
+.tablero .tb-status-bad  { color: var(--tb-status-bad); }
+
+/* Barras de progreso (meta del KPI y celdas de tabla) */
+.tablero .tb-progress   { height: 8px; border-radius: 4px; background: var(--tb-kpi-track); overflow: hidden; }
+.tablero .tb-progress > span { display: block; height: 100%; border-radius: 4px; background: var(--tb-kpi-fill); }
+.tablero .tb-progress > span.tb-fill-good { background: var(--tb-status-good); }
+.tablero .tb-progress > span.tb-fill-warn { background: var(--tb-status-warn); }
+.tablero .tb-progress > span.tb-fill-bad  { background: var(--tb-status-bad); }
+
+/* Ranking y barras dentro de celdas */
+.tablero .tb-bar       { height: 8px; border-radius: 4px; background: var(--tb-bar-track); overflow: hidden; }
+.tablero .tb-bar > span { display: block; height: 100%; border-radius: 4px; background: var(--tb-bar-fill); }
+.tablero .tb-bar > span.tb-bar-lead { background: var(--tb-chart-2); }
+.tablero .tb-bar > span.tb-fill-bad { background: var(--tb-status-bad); }
+.tablero .tb-rank-pos  { font-weight: var(--fw-bold); color: var(--tb-text-muted); }
+
+/* Estados del widget: cargando, vacío, error, sin configurar */
+.tablero .tb-spinner { color: var(--tb-chart-1); }
+.tablero .tb-retry {
+  border: 1px solid var(--tb-card-border); border-radius: var(--radius-pill);
+  color: var(--tb-link); background: var(--tb-card-bg);
+}
+.tablero .tb-retry:hover { background: var(--tb-surface-muted); }
+
+/* Caja de filtros (VirtualSelect dentro del lienzo) */
+.tablero .vscomp-toggle-button { background: var(--tb-control-bg); border-color: var(--tb-control-border); }
+.tablero .vselect.focused .vscomp-toggle-button,
+.tablero .vselect:focus .vscomp-toggle-button { border-color: var(--tb-control-border-focus); }
+
+
+/* ═══ TABLA DE LOS WIDGETS «table» y «dynamic_table» (.tb-table, utils/data-table.js) ═══
+   Plana o dinámica (columnas anidadas y/o varios niveles de filas). Lo fijo (cabecera,
+   dimensiones, total) usa sticky. */
+
+/* Alto máximo = el de la tarjeta: la tabla mide lo que sus filas y solo con muchas scrollea;
+   el paginador queda debajo, fuera del scroll. */
+.tablero .tb-table-host {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+.tablero .tb-table-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tablero .tb-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--tb-font);
+  font-size: var(--fs-sm);
+  color: var(--tb-text);
+  background: var(--tb-card-bg);
+}
+
+.tablero .tb-table th,
+.tablero .tb-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--tb-table-border);
+  border-left: 1px solid var(--tb-table-border);
+  white-space: nowrap;
+  background: var(--tb-card-bg);
+}
+/* El borde de la tabla es el de la primera dimensión, no la primera celda de cada <tr>: bajo
+   un rowspan, la primera celda de la fila es la de la segunda dimensión y lleva su borde. */
+.tablero .tb-table [data-dim="0"],
+.tablero .tb-table .tb-first {
+  border-left: none;
+}
+.tablero .tb-table td.tb-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tablero .tb-table td.tb-dim {
+  text-align: left;
+  vertical-align: top;
+}
+
+/* ---------- Encabezado ---------- */
+.tablero .tb-table thead th {
+  position: sticky;
+  z-index: 2;
+  background: var(--tb-table-header-bg);
+  color: var(--tb-table-header-text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  white-space: normal;
+  vertical-align: bottom;
+  text-align: right;
+}
+.tablero .tb-table thead th.tb-dim {
+  text-align: left;
+}
+.tablero .tb-table thead th.tb-group {
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* ---------- Orden por clic (tablas planas) ---------- */
+.tablero .tb-table thead th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+.tablero .tb-table thead th[data-sort]:hover {
+  background: var(--tb-table-header-hover);
+}
+.tablero .tb-table thead th[data-sort]::after {
+  content: "▲";
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 8px;
+  vertical-align: middle;
+  color: var(--tb-text-subtle);
+}
+.tablero .tb-table thead th[aria-sort]::after {
+  color: var(--tb-table-header-text);
+}
+.tablero .tb-table thead th[aria-sort="descending"]::after {
+  content: "▼";
+}
+
+/* ---------- Dimensiones fijas al hacer scroll horizontal ---------- */
+.tablero .tb-table [data-dim] {
+  position: sticky;
+  z-index: 1;
+}
+.tablero .tb-table thead th[data-dim] {
+  z-index: 3;
+}
+
+/* ---------- Grupos y totales de columna ---------- */
+/* Inicio de un grupo ("2026", "Total general"): el título y su primera hoja. */
+.tablero .tb-table .tb-group-start {
+  border-left-width: 2px;
+}
+.tablero .tb-table td.tb-subtotal-col {
+  background: var(--tb-table-subtotal-bg);
+  font-weight: var(--fw-semibold);
+}
+.tablero .tb-table .tb-total-col {
+  font-weight: var(--fw-bold);
+}
+.tablero .tb-table .tb-total-col.tb-group-start {
+  border-left-color: var(--tb-table-header-text);
+}
+
+/* ---------- Filas ---------- */
+.tablero .tb-table tbody tr:hover td {
+  background: var(--tb-table-row-hover);
+}
+.tablero .tb-table tbody tr.tb-subtotal-row td {
+  background: var(--tb-table-subtotal-bg);
+  font-weight: var(--fw-semibold);
+}
+
+/* ---------- «Total general» al pie ---------- */
+.tablero .tb-table tfoot td,
+.tablero .tb-table tfoot td.tb-subtotal-col {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--tb-table-total-bg);
+  color: var(--tb-table-total-text);
+  font-weight: var(--fw-bold);
+  border-top: 2px solid var(--tb-table-header-text);
+  border-bottom: none;
+}
+.tablero .tb-table tfoot td[data-dim] {
+  z-index: 3;
+}
+
+/* ---------- Barra de progreso en celdas ---------- */
+.tablero .tb-table .tb-progress {
+  display: inline-block;
+  width: 60px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* ---------- Paginador ---------- */
+.tablero .tb-pager {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--tb-table-border);
+  font-size: var(--fs-xs);
+  color: var(--tb-text-muted);
+}
+.tablero .tb-pager-note {
+  margin-right: auto;
+}
+.tablero .tb-pager button {
+  background: var(--tb-card-bg);
+  border: 1px solid var(--tb-table-border);
+  border-radius: var(--radius-sm);
+  color: var(--tb-text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  padding: 2px 9px;
+}
+.tablero .tb-pager button:hover:not(:disabled) {
+  background: var(--tb-table-row-hover);
+}
+.tablero .tb-pager button:disabled {
+  color: var(--tb-text-subtle);
+  cursor: not-allowed;
+}

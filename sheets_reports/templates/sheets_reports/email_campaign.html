@@ -2,10 +2,10 @@
 programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% endcomment %}
 <div x-data="emailCampaign()" class="h-full flex flex-col gap-4">
 
-  <p x-show="loading" class="text-xs text-ink/50">
+  <p x-show="loading" class="text-xs text-fg-muted">
     <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando…
   </p>
-  <p x-show="error" x-text="error" role="alert" class="text-sm text-red-600"></p>
+  <p x-show="error" x-text="error" role="alert" class="text-sm text-danger"></p>
 
   <div x-show="!loading" class="flex-1 min-h-0 overflow-auto grid grid-cols-1 lg:grid-cols-2 gap-4 content-start">
 
@@ -13,12 +13,12 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
     <section class="ui-card p-4 space-y-3">
       <div class="flex items-center justify-between gap-3">
         <h4 class="ui-eyebrow">Destinatarios</h4>
-        <span class="text-xs text-ink/60">
+        <span class="text-xs text-fg-muted">
           <span x-text="report.total.toLocaleString('es')"></span> cargados ·
           <span x-text="report.sent.toLocaleString('es')"></span> notificados
         </span>
       </div>
-      <p class="text-xs text-ink/60">Un archivo CSV con un correo electrónico por fila. Los correos nuevos se agregan a la lista; los que ya estaban conservan su estado.</p>
+      <p class="text-xs text-fg-muted">Un archivo CSV con un correo electrónico por fila. Los correos nuevos se agregan a la lista; los que ya estaban conservan su estado.</p>
       <div class="flex flex-wrap items-center gap-2">
         <label class="ui-btn ui-btn-primary"
                x-bind:class="uploading && 'opacity-60 pointer-events-none'">
@@ -31,7 +31,7 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
       </div>
       <div x-show="confirmClear" x-cloak role="alertdialog" aria-label="Confirmar vaciado"
            class="ui-alert ui-alert-error p-3 space-y-2">
-        <p class="text-sm text-red-900">¿Vaciar la lista? Se pierde también quién ya fue notificado y el envío se desactiva.</p>
+        <p class="text-sm text-danger">¿Vaciar la lista? Se pierde también quién ya fue notificado y el envío se desactiva.</p>
         <div class="flex justify-end gap-2">
           <button type="button" x-on:click="confirmClear = false"
                   class="ui-btn ui-btn-secondary ui-btn-sm">Cancelar</button>
@@ -39,13 +39,13 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
                   class="ui-btn ui-btn-danger ui-btn-sm">Vaciar</button>
         </div>
       </div>
-      <div x-show="uploadResult" x-cloak class="text-xs text-ink/70 space-y-1">
+      <div x-show="uploadResult" x-cloak class="text-xs text-fg space-y-1">
         <p>
           <span class="font-semibold" x-text="uploadResult && uploadResult.added"></span> agregados ·
           <span x-text="uploadResult && uploadResult.duplicates"></span> ya estaban ·
           <span x-text="uploadResult && uploadResult.invalid_count"></span> no son un correo
         </p>
-        <p x-show="uploadResult && uploadResult.invalid_count" class="text-red-600"
+        <p x-show="uploadResult && uploadResult.invalid_count" class="text-danger"
            x-text="uploadResult && `No válidos: ${uploadResult.invalid.join(', ')}${uploadResult.invalid_count > uploadResult.invalid.length ? '…' : ''}`"></p>
       </div>
     </section>
@@ -53,7 +53,7 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
     <!-- Remitentes -->
     <section class="ui-card p-4 space-y-3">
       <h4 class="ui-eyebrow">Remitentes</h4>
-      <p class="text-xs text-ink/60">Cuentas de Gmail que envían. La contraseña es la <strong>contraseña de aplicación</strong> que genera Google para la cuenta, no la del correo.</p>
+      <p class="text-xs text-fg-muted">Cuentas de Gmail que envían. La contraseña es la <strong>contraseña de aplicación</strong> que genera Google para la cuenta, no la del correo.</p>
       <template x-for="(s, index) in form.senders" :key="index">
         <div class="flex flex-wrap items-center gap-2">
           <input type="email" x-model="s.email" placeholder="correo@gmail.com" x-bind:aria-label="`Correo del remitente ${index + 1}`"
@@ -63,19 +63,19 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
                  x-bind:aria-label="`Contraseña de aplicación del remitente ${index + 1}`"
                  class="ui-input flex-1 w-auto min-w-[12rem]">
           <button type="button" x-on:click="removeSender(index)" title="Quitar remitente" x-bind:aria-label="`Quitar remitente ${index + 1}`"
-                  class="ui-btn ui-btn-icon hover:text-red-600 hover:bg-red-50">
+                  class="ui-btn ui-btn-icon hover:text-danger hover:bg-danger-bg">
             <i class="ti ti-trash text-base" aria-hidden="true"></i>
           </button>
         </div>
       </template>
       <div class="flex items-center gap-2 pt-1">
         <button type="button" x-on:click="addSender()"
-                class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 px-2 text-moss-700 hover:text-moss-700">
+                class="ui-btn ui-btn-ghost ui-btn-sm -ml-2 px-2 text-accent-text hover:text-accent-text">
           <i class="ti ti-plus text-base" aria-hidden="true"></i>Agregar remitente
         </button>
         <button type="button" x-on:click="showPasswordHelp = true"
                 title="¿Cómo obtener la contraseña de aplicación?" aria-label="Ayuda para contraseña de aplicación"
-                class="ui-btn ui-btn-icon hover:text-moss-700">
+                class="ui-btn ui-btn-icon hover:text-accent-text">
           <i class="ti ti-help-circle text-lg" aria-hidden="true"></i>
         </button>
       </div>
@@ -106,22 +106,22 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
       </div>
       <p x-show="riskySendTime" x-cloak role="status"
          class="ui-alert ui-alert-warn text-xs flex items-start gap-1.5">
-        <i class="ti ti-alert-triangle text-base text-amber-600 shrink-0" aria-hidden="true"></i>
+        <i class="ti ti-alert-triangle text-base text-warning shrink-0" aria-hidden="true"></i>
         <span>No se recomienda una hora tan cercana a medianoche: con el cron actual puede no
           ejecutarse. Elige una hora anterior a <span class="font-semibold" x-text="riskyFromLabel"></span>.</span>
       </p>
       <div x-show="form.frequency === 'weekly'" class="flex flex-wrap gap-1.5" role="group" aria-label="Días de envío">
         <template x-for="d in WEEKDAYS" :key="d.value">
           <button type="button" x-on:click="toggleDay(d.value)" x-text="d.label" x-bind:aria-pressed="form.weekdays.includes(d.value)"
-                  x-bind:class="form.weekdays.includes(d.value) ? 'bg-moss-500 text-white border-moss-500' : 'bg-white text-ink/70 border-line hover:bg-paper'"
+                  x-bind:class="form.weekdays.includes(d.value) ? 'bg-accent text-accent-on border-accent' : 'bg-surface text-fg border-line hover:bg-surface-muted'"
                   class="ui-btn ui-btn-sm"></button>
         </template>
       </div>
-      <p class="text-xs text-ink/60">
+      <p class="text-xs text-fg-muted">
         Desde la hora indicada, los correos salen uno a uno (aproximadamente uno por segundo) hasta llegar al máximo del día; Gmail admite unos 500 correos al día por cuenta.
         <span x-show="timeZone">La hora es de <span x-text="timeZone"></span>.</span>
       </p>
-      <p x-show="nextRunLabel" x-cloak class="text-xs text-ink/70">Próximo envío: <span class="font-semibold" x-text="nextRunLabel"></span></p>
+      <p x-show="nextRunLabel" x-cloak class="text-xs text-fg">Próximo envío: <span class="font-semibold" x-text="nextRunLabel"></span></p>
     </section>
 
     <!-- Mensaje -->
@@ -134,7 +134,7 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
       </label>
       <div>
         <span class="ui-label mb-1">Cuerpo</span>
-        <p class="text-xs text-ink/50 mb-1.5">Admite imágenes (hasta 300 KB cada una).</p>
+        <p class="text-xs text-fg-muted mb-1.5">Admite imágenes (hasta 300 KB cada una).</p>
         <div class="email-editor rounded-md">
           <div x-ref="bodyEditor"></div>
         </div>
@@ -149,7 +149,7 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
         </button>
       </div>
       <p x-show="testMessage" x-cloak x-text="testMessage" role="status"
-         x-bind:class="testFailed ? 'text-red-600' : 'text-moss-700'" class="text-xs"></p>
+         x-bind:class="testFailed ? 'text-danger' : 'text-accent-text'" class="text-xs"></p>
     </section>
   </div>
 
@@ -158,7 +158,7 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
     <label class="inline-flex items-center gap-2 cursor-pointer text-sm">
       <input type="checkbox" class="ui-check w-4 h-4" x-model="form.enabled">
       <span class="font-medium">Activar el envío de correos</span>
-      <span class="text-xs text-ink/50">Suma la pestaña «Seguimiento de correos» a la vista compartida.</span>
+      <span class="text-xs text-fg-muted">Suma la pestaña «Seguimiento de correos» a la vista compartida.</span>
     </label>
     <button type="button" x-on:click="save()" x-bind:disabled="saving"
             class="ui-btn ui-btn-primary">
@@ -191,12 +191,12 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
         <!-- Cabecera -->
         <div class="ui-modal-header">
           <div class="flex items-center gap-2.5 min-w-0">
-            <span class="w-9 h-9 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <i class="ti ti-key text-xl" aria-hidden="true"></i>
+            <span class="w-9 h-9 rounded-md bg-warning-bg text-warning flex items-center justify-center shrink-0">
+              <i class="ti ti-key text-lg" aria-hidden="true"></i>
             </span>
             <div class="min-w-0">
               <h3 id="sender-help-title" class="ui-modal-title truncate">Contraseña de Aplicación de Google</h3>
-              <p class="text-[11px] text-ink/50 truncate">Instrucciones de configuración para remitentes de correo</p>
+              <p class="text-xs text-fg-muted truncate">Instrucciones de configuración para remitentes de correo</p>
             </div>
           </div>
           <button type="button" x-on:click="showPasswordHelp = false"
@@ -207,14 +207,14 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
         </div>
 
         <!-- Contenido -->
-        <div class="ui-modal-body space-y-4 text-xs text-ink/80 leading-relaxed">
+        <div class="ui-modal-body space-y-4 text-xs text-fg leading-relaxed">
 
           <!-- Advertencia importante -->
           <div class="ui-alert ui-alert-warn p-3.5 flex items-start gap-2.5">
-            <i class="ti ti-alert-triangle text-lg text-amber-600 shrink-0 mt-0.5" aria-hidden="true"></i>
+            <i class="ti ti-alert-triangle text-lg text-warning shrink-0 mt-0.5" aria-hidden="true"></i>
             <div class="space-y-1">
               <p class="font-bold text-xs">No es la contraseña personal de tu correo</p>
-              <p class="text-[11px] leading-normal text-amber-800">
+              <p class="text-xs leading-normal text-warning">
                 Por seguridad, Google no permite usar la contraseña habitual con la que inicias sesión.
                 Debes generar una <strong>Contraseña de Aplicación</strong> de 16 caracteres.
               </p>
@@ -223,20 +223,20 @@ programación y mensaje. Lo maneja `emailCampaign()` (email-campaign.js). {% end
 
           <!-- Pasos detallados -->
           <div class="space-y-2.5">
-            <h4 class="font-bold text-ink text-xs uppercase tracking-wider">¿Cómo obtenerla en Google / Google Cloud?</h4>
+            <h4 class="font-bold text-fg text-xs uppercase tracking-wider">¿Cómo obtenerla en Google / Google Cloud?</h4>
 
-            <ol class="space-y-2.5 list-decimal list-inside text-ink/90">
+            <ol class="space-y-2.5 list-decimal list-inside text-fg">
               <li class="pl-1">
                 <strong>Verificación en 2 pasos:</strong> Asegúrate de tener activada la <em>Verificación en dos pasos</em> en la seguridad de tu cuenta de Google.
               </li>
               <li class="pl-1">
-                <strong>Ingresar a Contraseñas de aplicaciones:</strong> Ve a tu <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" class="text-moss-700 underline font-semibold hover:text-moss-600">Cuenta de Google &rarr; Seguridad &rarr; Contraseñas de aplicaciones</a> (o búscala en la barra de búsqueda de tu cuenta de Google).
+                <strong>Ingresar a Contraseñas de aplicaciones:</strong> Ve a tu <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" class="text-accent-text underline font-semibold hover:text-accent-text">Cuenta de Google &rarr; Seguridad &rarr; Contraseñas de aplicaciones</a> (o búscala en la barra de búsqueda de tu cuenta de Google).
               </li>
               <li class="pl-1">
-                <strong>Crear nombre:</strong> Asigna un nombre a la aplicación (ejemplo: <code class="bg-paper px-1.5 py-0.5 rounded text-moss-700 font-mono">TableIA</code>) y haz clic en <strong>Crear</strong>.
+                <strong>Crear nombre:</strong> Asigna un nombre a la aplicación (ejemplo: <code class="bg-app px-1.5 py-0.5 rounded text-accent-text font-mono">TableIA</code>) y haz clic en <strong>Crear</strong>.
               </li>
               <li class="pl-1">
-                <strong>Obtener clave de 16 letras:</strong> Google generará una contraseña única de 16 caracteres (ejemplo: <code class="bg-paper px-1.5 py-0.5 rounded font-mono font-bold text-ink">abcd efgh ijkl mnop</code>).
+                <strong>Obtener clave de 16 letras:</strong> Google generará una contraseña única de 16 caracteres (ejemplo: <code class="bg-app px-1.5 py-0.5 rounded font-mono font-bold text-fg">abcd efgh ijkl mnop</code>).
               </li>
               <li class="pl-1">
                 <strong>Copiar e ingresar:</strong> Copia esa clave de 16 letras (sin espacios) y pégala en el campo de contraseña del remitente.

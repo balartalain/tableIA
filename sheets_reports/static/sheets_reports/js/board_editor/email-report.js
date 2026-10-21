@@ -11,10 +11,10 @@ const EMAIL_STATUS_BADGES = { pending: 'ui-badge-neutral', sent: 'ui-badge-succe
 
 // La franja de estado: icono y colores de cada `state` del reporte.
 const EMAIL_STATE_STYLES = {
-  running: { box: 'bg-moss-50 border-moss-100', icon: 'ti-loader-2 animate-spin text-moss-700' },
-  scheduled: { box: 'bg-white border-line', icon: 'ti-clock text-ink/50' },
-  stopped: { box: 'bg-red-50 border-red-200', icon: 'ti-alert-triangle text-red-600' },
-  done: { box: 'bg-moss-50 border-moss-100', icon: 'ti-circle-check text-moss-700' },
+  running: { box: 'bg-accent-soft border-accent-soft-border', icon: 'ti-loader-2 animate-spin text-accent-text' },
+  scheduled: { box: 'bg-surface border-line', icon: 'ti-clock text-fg-muted' },
+  stopped: { box: 'bg-danger-bg border-danger', icon: 'ti-alert-triangle text-danger' },
+  done: { box: 'bg-accent-soft border-accent-soft-border', icon: 'ti-circle-check text-accent-text' },
 };
 const EMAIL_CHART_HEIGHT = 240;
 
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const logsTable = () => remoteTable('#email-logs-table', 'logs/', [
     { title: 'Fecha', field: 'created_at', headerSort: false, width: 150, formatter: dateTime },
     { title: 'Mensaje', field: 'message', headerSort: false, minWidth: 280, tooltip: true, formatter: (cell) => {
-      if (cell.getData().level === 'error') cell.getElement().classList.add('text-red-700');
+      if (cell.getData().level === 'error') cell.getElement().classList.add('text-danger');
       return cell.getValue();
     } },
     { title: 'Destinatario', field: 'recipient_email', headerSort: false, minWidth: 180 },
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
         : `Hasta ${number(data.per_sender_limit)} correos por remitente al día.`;
     }
     document.getElementById('email-status').className = `flex items-start gap-3 border rounded-md p-4 ${style.box}`;
-    document.getElementById('email-status-icon').className = `ti text-xl ${style.icon}`;
+    document.getElementById('email-status-icon').className = `ti text-lg ${style.icon}`;
     document.getElementById('email-status-title').textContent = title;
     document.getElementById('email-status-detail').textContent = detail;
   };
@@ -139,6 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Barras de enviados por día, con la línea de la capacidad diaria.
+  // Es un gráfico de la app (no del lienzo): colores de tokens.css, resueltos para ApexCharts.
+  const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const renderChart = (stats) => {
     const days = stats.by_day;
     const top = Math.max(stats.daily_capacity, ...days.map(d => d.sent));
@@ -150,19 +152,20 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       yaxis: { min: 0, max: Math.ceil(top * 1.15), forceNiceScale: true, labels: { formatter: (v) => number(Math.round(v)) } },
       plotOptions: { bar: { borderRadius: 4, borderRadiusApplication: 'end', columnWidth: `${Math.min(60, Math.max(days.length, 1) * 8)}%` } },
-      dataLabels: { enabled: days.length <= 12, offsetY: -18, style: { colors: ['#333'], fontWeight: 600 } },
+      dataLabels: { enabled: days.length <= 12, offsetY: -18, style: { colors: [token('--color-text')], fontWeight: 600 } },
       annotations: { yaxis: [{
-        y: stats.daily_capacity, borderColor: '#6b7280', strokeDashArray: 4,
-        label: { text: `Capacidad diaria: ${number(stats.daily_capacity)}`, borderWidth: 0, style: { color: '#4b5563', background: 'transparent' } },
+        y: stats.daily_capacity, borderColor: token('--color-text-muted'), strokeDashArray: 4,
+        label: { text: `Capacidad diaria: ${number(stats.daily_capacity)}`, borderWidth: 0, style: { color: token('--color-text-muted'), background: 'transparent' } },
       }] },
     };
     if (chart) return chart.updateOptions(options);
     chart = new ApexCharts(document.getElementById('email-by-day-chart'), {
       ...options,
-      chart: { type: 'bar', height: EMAIL_CHART_HEIGHT, fontFamily: 'inherit', toolbar: { show: false }, animations: { enabled: false } },
-      colors: [getComputedStyle(document.documentElement).getPropertyValue('--color-moss-500').trim() || '#FE8200'],
+      chart: { type: 'bar', height: EMAIL_CHART_HEIGHT, fontFamily: 'inherit', foreColor: token('--color-text-muted'),
+               toolbar: { show: false }, animations: { enabled: false } },
+      colors: [token('--color-primary')],
       plotOptions: { ...options.plotOptions, bar: { ...options.plotOptions.bar, dataLabels: { position: 'top' } } },
-      grid: { borderColor: '#eee', strokeDashArray: 3 },
+      grid: { borderColor: token('--color-border'), strokeDashArray: 3 },
       tooltip: { y: { formatter: (v) => `${number(v)} correos` } },
       noData: { text: 'Todavía no se envió ningún correo.' },
     });

@@ -10,8 +10,8 @@ gráficos con matplotlib/seaborn.
       <button type="button" x-on:click="open = !open"
               title="Consultar datos con IA" aria-label="Abrir chat con tus datos"
               style="position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 30;"
-              class="h-12 w-12 rounded-full bg-violet-600 hover:bg-violet-700 text-white shadow-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer">
-        <i class="ti text-2xl" x-bind:class="open ? 'ti-x' : 'ti-sparkles'" aria-hidden="true"></i>
+              class="h-12 w-12 rounded-full bg-accent hover:bg-accent-hover text-accent-on shadow-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer">
+        <i class="ti text-xl" x-bind:class="open ? 'ti-x' : 'ti-sparkles'" aria-hidden="true"></i>
       </button>
 
       <!-- Ventana emergente del Chat -->
@@ -26,20 +26,20 @@ gráficos con matplotlib/seaborn.
              ? 'position: fixed; top: 1rem; bottom: 5rem; left: 1rem; right: 1rem; z-index: 50;'
              : 'position: fixed; bottom: 5rem; right: 1.5rem; z-index: 50;'"
            x-bind:class="maximized
-             ? 'w-auto h-auto max-w-none max-h-none rounded-xl'
-             : 'w-[24rem] sm:w-[27rem] max-w-[calc(100vw-2rem)] h-[35rem] max-h-[80vh] rounded-2xl'"
-           class="bg-white border border-line shadow-2xl flex flex-col overflow-hidden transition-all duration-200">
+             ? 'w-auto h-auto max-w-none max-h-none rounded-lg'
+             : 'w-[24rem] sm:w-[27rem] max-w-[calc(100vw-2rem)] h-[35rem] max-h-[80vh] rounded-lg'"
+           class="bg-surface border border-line shadow-2xl flex flex-col overflow-hidden transition-all duration-200">
 
     <!-- Cabecera del chat -->
-    <div class="px-4 py-3 bg-paper/60 border-b border-line flex items-center justify-between gap-2 shrink-0">
+    <div class="px-4 py-3 bg-app border-b border-line flex items-center justify-between gap-2 shrink-0">
       <div class="flex items-center gap-2 min-w-0">
-        <span class="w-7 h-7 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center shrink-0">
+        <span class="w-7 h-7 rounded-lg bg-accent-soft text-accent-text flex items-center justify-center shrink-0">
           <i class="ti ti-sparkles text-base" aria-hidden="true"></i>
         </span>
         <div class="min-w-0">
-          <h3 class="text-xs font-bold text-ink truncate">Asistente de datos</h3>
-          <p class="text-[10px] text-ink/50 truncate flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+          <h3 class="text-xs font-bold text-fg truncate">Asistente de datos</h3>
+          <p class="text-xs text-fg-muted truncate flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-success shrink-0"></span>
             <span x-text="currentSourceLabel"></span>
           </p>
         </div>
@@ -48,18 +48,18 @@ gráficos con matplotlib/seaborn.
       <div class="flex items-center gap-1">
         <button type="button" x-show="messages.length" x-on:click="clearHistory()"
                 title="Limpiar conversación" aria-label="Limpiar conversación"
-                class="p-1.5 rounded-full text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
+                class="p-1.5 rounded-full text-fg-muted hover:text-fg hover:bg-surface-muted transition cursor-pointer">
           <i class="ti ti-trash text-base" aria-hidden="true"></i>
         </button>
         <button type="button" x-on:click="maximized = !maximized"
                 x-bind:title="maximized ? 'Restaurar tamaño' : 'Maximizar a pantalla completa'"
                 x-bind:aria-label="maximized ? 'Restaurar tamaño' : 'Maximizar a pantalla completa'"
-                class="p-1.5 rounded-full text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
+                class="p-1.5 rounded-full text-fg-muted hover:text-fg hover:bg-surface-muted transition cursor-pointer">
           <i class="ti text-base" x-bind:class="maximized ? 'ti-minimize' : 'ti-maximize'" aria-hidden="true"></i>
         </button>
         <button type="button" x-on:click="open = false"
                 title="Cerrar chat" aria-label="Cerrar chat"
-                class="p-1.5 rounded-full text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
+                class="p-1.5 rounded-full text-fg-muted hover:text-fg hover:bg-surface-muted transition cursor-pointer">
           <i class="ti ti-x text-base" aria-hidden="true"></i>
         </button>
       </div>
@@ -70,34 +70,34 @@ gráficos con matplotlib/seaborn.
 
       <!-- Estado inicial / Bienvenida -->
       <div x-show="!messages.length && !loading" class="space-y-4 py-3 text-center">
-        <div class="w-12 h-12 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center mx-auto border border-violet-100">
-          <i class="ti ti-robot text-2xl" aria-hidden="true"></i>
+        <div class="w-12 h-12 rounded-lg bg-accent-soft text-accent-text flex items-center justify-center mx-auto border border-accent-soft-border">
+          <i class="ti ti-robot text-xl" aria-hidden="true"></i>
         </div>
         <div class="space-y-1">
-          <h4 class="font-semibold text-ink text-sm">¿Qué quieres saber de tus datos?</h4>
-          <p class="text-[11px] text-ink/60 max-w-xs mx-auto">
+          <h4 class="font-semibold text-fg text-sm">¿Qué quieres saber de tus datos?</h4>
+          <p class="text-xs text-fg-muted max-w-xs mx-auto">
             La IA ejecutará código en Python con <code>pandas</code> y <code>matplotlib</code> sobre tu fuente de datos para darte respuestas exactas y gráficos.
           </p>
         </div>
 
         <!-- Preguntas sugeridas -->
         <div class="space-y-1.5 text-left pt-2">
-          <p class="text-[10px] font-semibold uppercase tracking-wider text-ink/40 px-1">Sugerencias rápidas:</p>
+          <p class="text-xs font-semibold uppercase tracking-wider text-fg-muted px-1">Sugerencias rápidas:</p>
           <div class="flex flex-col gap-1.5">
             <button type="button" x-on:click="send('¿Cuál es el resumen general de este conjunto de datos?')"
-                    class="w-full text-left p-2 rounded-lg border border-line bg-white hover:border-violet-300 hover:bg-violet-50/50 text-[11px] text-ink/80 transition cursor-pointer flex items-center justify-between">
+                    class="w-full text-left p-2 rounded-lg border border-line bg-surface hover:border-accent-soft-border hover:bg-accent-soft text-xs text-fg transition cursor-pointer flex items-center justify-between">
               <span>¿Cuál es el resumen general de los datos?</span>
-              <i class="ti ti-arrow-right text-ink/30 text-xs"></i>
+              <i class="ti ti-arrow-right text-fg-subtle text-xs"></i>
             </button>
             <button type="button" x-on:click="send('Muestra un gráfico con la distribución de las variables principales.')"
-                    class="w-full text-left p-2 rounded-lg border border-line bg-white hover:border-violet-300 hover:bg-violet-50/50 text-[11px] text-ink/80 transition cursor-pointer flex items-center justify-between">
+                    class="w-full text-left p-2 rounded-lg border border-line bg-surface hover:border-accent-soft-border hover:bg-accent-soft text-xs text-fg transition cursor-pointer flex items-center justify-between">
               <span>Genera un gráfico con las variables principales</span>
-              <i class="ti ti-arrow-right text-ink/30 text-xs"></i>
+              <i class="ti ti-arrow-right text-fg-subtle text-xs"></i>
             </button>
             <button type="button" x-on:click="send('¿Cuáles son los valores más altos o destacados en las columnas numéricas?')"
-                    class="w-full text-left p-2 rounded-lg border border-line bg-white hover:border-violet-300 hover:bg-violet-50/50 text-[11px] text-ink/80 transition cursor-pointer flex items-center justify-between">
+                    class="w-full text-left p-2 rounded-lg border border-line bg-surface hover:border-accent-soft-border hover:bg-accent-soft text-xs text-fg transition cursor-pointer flex items-center justify-between">
               <span>¿Cuáles son los valores más destacados?</span>
-              <i class="ti ti-arrow-right text-ink/30 text-xs"></i>
+              <i class="ti ti-arrow-right text-fg-subtle text-xs"></i>
             </button>
           </div>
         </div>
@@ -109,9 +109,9 @@ gráficos con matplotlib/seaborn.
           <!-- Mensaje del usuario -->
           <template x-if="m.role === 'user'">
             <div class="flex justify-end">
-              <div class="max-w-[85%] rounded-2xl rounded-tr-sm bg-violet-600 text-white px-3.5 py-2 shadow-sm space-y-1">
+              <div class="max-w-[85%] rounded-lg rounded-tr-sm bg-accent text-accent-on px-3.5 py-2 shadow-sm space-y-1">
                 <p class="whitespace-pre-wrap leading-relaxed" x-text="m.text"></p>
-                <p class="text-[9px] text-white/60 text-right" x-text="m.timestamp"></p>
+                <p class="text-xs text-accent-on text-right" x-text="m.timestamp"></p>
               </div>
             </div>
           </template>
@@ -119,16 +119,16 @@ gráficos con matplotlib/seaborn.
           <!-- Mensaje de la IA (asistente) -->
           <template x-if="m.role === 'assistant'">
             <div class="flex justify-start">
-              <div class="max-w-[95%] rounded-2xl rounded-tl-sm bg-white border border-line p-3.5 shadow-sm space-y-2.5 text-ink/90">
+              <div class="max-w-[95%] rounded-lg rounded-tl-sm bg-surface border border-line p-3.5 shadow-sm space-y-2.5 text-fg">
 
                 <!-- Texto con formato Markdown/HTML -->
-                <div class="prose prose-xs max-w-none text-ink leading-relaxed space-y-1" x-html="renderContent(m.text)"></div>
+                <div class="prose prose-xs max-w-none text-fg leading-relaxed space-y-1" x-html="renderContent(m.text)"></div>
 
                 <!-- Gráficos generados por código Python -->
                 <template x-if="m.images && m.images.length">
                   <div class="space-y-2 pt-1">
                     <template x-for="(img, iIdx) in m.images" :key="iIdx">
-                      <div class="rounded-lg border border-line overflow-hidden bg-paper/40 p-1">
+                      <div class="rounded-lg border border-line overflow-hidden bg-app p-1">
                         <img x-bind:src="img" alt="Gráfico generado por la IA"
                              class="h-auto rounded mx-auto"
                              x-bind:class="maximized ? 'max-h-[60vh] object-contain' : 'w-full'">
@@ -139,23 +139,23 @@ gráficos con matplotlib/seaborn.
 
                 <!-- Código Python ejecutado (colapsable) -->
                 <template x-if="m.code && m.code.length">
-                  <details class="rounded-md border border-line/70 bg-paper/70 p-2 text-[11px]">
-                    <summary class="cursor-pointer font-mono font-medium text-ink/70 hover:text-ink select-none flex items-center justify-between">
+                  <details class="rounded-md border border-line bg-app p-2 text-xs">
+                    <summary class="cursor-pointer font-mono font-medium text-fg hover:text-fg select-none flex items-center justify-between">
                       <span class="flex items-center gap-1.5">
                         <i class="ti ti-code text-xs"></i>
                         <span>Ver código Python ejecutado</span>
                       </span>
-                      <i class="ti ti-chevron-down text-xs text-ink/40"></i>
+                      <i class="ti ti-chevron-down text-xs text-fg-muted"></i>
                     </summary>
                     <div class="mt-2 space-y-1">
                       <template x-for="(c, cIdx) in m.code" :key="cIdx">
-                        <pre class="p-2 bg-ink/90 text-emerald-400 font-mono text-[10px] rounded overflow-x-auto leading-normal" x-text="c"></pre>
+                        <pre class="p-2 bg-primary text-primary-on font-mono text-xs rounded overflow-x-auto leading-normal" x-text="c"></pre>
                       </template>
                     </div>
                   </details>
                 </template>
 
-                <p class="text-[9px] text-ink/40 text-right" x-text="m.timestamp"></p>
+                <p class="text-xs text-fg-muted text-right" x-text="m.timestamp"></p>
               </div>
             </div>
           </template>
@@ -163,13 +163,13 @@ gráficos con matplotlib/seaborn.
       </template>
 
       <!-- Estado de carga mientras la IA ejecuta el código -->
-      <div x-show="loading" class="flex items-center gap-2 p-3 bg-violet-50/60 border border-violet-100 rounded-xl text-violet-800">
-        <i class="ti ti-loader-2 text-base animate-spin text-violet-600 shrink-0"></i>
-        <span class="text-[11px] leading-tight">Consultando la fuente de datos…</span>
+      <div x-show="loading" class="flex items-center gap-2 p-3 bg-accent-soft border border-accent-soft-border rounded-lg text-accent-text">
+        <i class="ti ti-loader-2 text-base animate-spin text-accent-text shrink-0"></i>
+        <span class="text-xs leading-tight">Consultando la fuente de datos…</span>
       </div>
 
       <!-- Error -->
-      <div x-show="error" role="alert" class="p-2.5 rounded-lg border border-red-200 bg-red-50 text-[11px] text-red-700 space-y-1">
+      <div x-show="error" role="alert" class="p-2.5 rounded-lg border border-danger bg-danger-bg text-xs text-danger space-y-1">
         <p class="font-semibold flex items-center gap-1">
           <i class="ti ti-alert-circle"></i>
           <span>No se pudo procesar la consulta</span>
@@ -179,22 +179,22 @@ gráficos con matplotlib/seaborn.
     </div>
 
     <!-- Barra de entrada de texto -->
-    <form x-on:submit.prevent="send()" class="p-3 bg-white border-t border-line shrink-0 space-y-2">
-      <div class="relative flex items-center rounded-xl border border-line bg-paper/40 focus-within:border-violet-500 focus-within:bg-white transition-all">
+    <form x-on:submit.prevent="send()" class="p-3 bg-surface border-t border-line shrink-0 space-y-2">
+      <div class="relative flex items-center rounded-lg border border-line bg-app focus-within:border-accent focus-within:bg-surface transition-all">
         <textarea x-model="prompt" rows="2" maxlength="2000"
                   x-bind:disabled="loading"
                   x-on:keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); send(); }"
                   placeholder="Escribe tu pregunta sobre los datos…"
                   aria-label="Pregunta sobre la fuente"
-                  class="w-full bg-transparent px-3 py-2 text-xs text-ink placeholder:text-ink/40 focus:outline-none resize-none disabled:opacity-60"></textarea>
+                  class="w-full bg-transparent px-3 py-2 text-xs text-fg placeholder:text-fg-muted focus:outline-none resize-none disabled:opacity-60"></textarea>
 
         <button type="submit" x-bind:disabled="!prompt.trim() || loading"
                 title="Enviar pregunta" aria-label="Enviar"
-                class="absolute right-2 bottom-2 p-1.5 rounded-full bg-violet-600 hover:bg-violet-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer">
+                class="absolute right-2 bottom-2 p-1.5 rounded-full bg-accent hover:bg-accent-hover text-accent-on disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer">
           <i class="ti ti-arrow-up text-base leading-none"></i>
         </button>
       </div>
-      <p class="text-[10px] text-ink/40 text-center leading-tight">
+      <p class="text-xs text-fg-muted text-center leading-tight">
         Presiona Enter para enviar. La IA calcula números reales mediante Python.
       </p>
     </form>

@@ -9,8 +9,6 @@
     };
     static defaults = { title: 'Widget', width: 'md:col-span-6', height: 300 };
     static minHeight = 150;
-    static DEFAULT_PRIMARY_COLOR = '#1F8A5F';
-    static CHART_COLORS = ['#1F8A5F'];
 
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
 
@@ -90,7 +88,6 @@
       { value: 'min', label: 'Mínimo' },
     ];
     static REFERENCE_DEFAULT_LABELS = { avg: 'Promedio', max: 'Máx.', min: 'Mín.' };
-    static REFERENCE_COLOR = '#d97706';
 
     static referenceValue(line, series) {
       if (line.kind === 'value') {
@@ -106,11 +103,13 @@
       return null;
     }
 
-    static referenceAnnotations(lines, series, { horizontal = false, format = (v) => v } = {}) {
+    // `theme`: ChartTheme.read() del lienzo del widget (color de la línea y de su rótulo).
+    static referenceAnnotations(lines, series, { horizontal = false, format = (v) => v, theme } = {}) {
+      const t = theme || ChartTheme.read();
       const items = (lines || []).map((line) => {
         const value = BaseWidget.referenceValue(line, series);
         if (value == null) return null;
-        const color = line.color || BaseWidget.REFERENCE_COLOR;
+        const color = t.ref;
         const name = (line.label || '').trim() || BaseWidget.REFERENCE_DEFAULT_LABELS[line.kind] || '';
         const text = name ? `${name}: ${format(value)}` : `${format(value)}`;
         return {
@@ -122,7 +121,7 @@
             borderColor: color,
             orientation: 'horizontal',
             ...(horizontal ? { position: 'top' } : { position: 'right', textAnchor: 'end' }),
-            style: { color: '#fff', background: color, fontSize: '10px' },
+            style: { color: t.refText, background: color, fontSize: '10px' },
           },
         };
       }).filter(Boolean);
@@ -144,7 +143,7 @@
     </svg>`;
 
     downloadButtonHTML(title = 'Descargar CSV') {
-      return `<button class="download-csv-btn text-ink/40 hover:text-moss-600 transition cursor-pointer p-0.5" title="${title}">
+      return `<button class="download-csv-btn text-fg-muted hover:text-accent-text transition cursor-pointer p-0.5" title="${title}">
         ${BaseWidget.DOWNLOAD_ICON_SVG}
       </button>`;
     }
@@ -188,62 +187,31 @@
     // (generateRealBoardThumbnail) y le pasa un `ctx`; el widget devuelve el SVG interior de
     // su tarjeta (el cromo y el título los pinta el generador). Datos de reserva permitidos.
 
-    // Obtiene el color base primario del tablero o del widget
-    getPrimaryColor() {
-      const store = window.Alpine && Alpine.store('dashboard');
-      if (store && store.primaryColor) {
-        return store.primaryColor;
-      }
-      return BaseWidget.DEFAULT_PRIMARY_COLOR;
+    // Colores del lienzo resueltos (ChartTheme lee las variables --tb-* de su `.tablero`).
+    themeColors() {
+      return ChartTheme.read(this.el);
     }
 
-    // Método de compatibilidad para recuperar el color primario
-    getChartColors() {
-      return [this.getPrimaryColor()];
+    // Opciones base de ApexCharts del tema del tablero; cada widget las mezcla con las suyas.
+    themeOptions() {
+      return ChartTheme.baseOptions(this.el);
     }
 
-    // Genera N tonos para series, categorías y porciones. Si count=1, usa el color base.
-    // Si count > 1, escala de forma continua desde el color primario hasta un tono suave.
-    getSeriesColors(count = 1) {
-      const primary = this.getPrimaryColor();
-      if (count <= 1) return [primary];
-
-      if (typeof window.chroma === 'function') {
-        const light = window.chroma(primary).brighten(1.2).hex();
-        return window.chroma.scale([primary, light]).mode('lab').colors(count);
-      }
-      return [primary];
+    // Paleta categórica del tablero, repetida hasta `count` colores.
+    seriesColors(count = 1) {
+      const palette = this.themeColors().categorical;
+      return Array.from({ length: Math.max(1, count) }, (_, i) => palette[i % palette.length]);
     }
 
-    // Genera una escala cromática unidireccional (0 a 1) usando chroma.js
-    static generateSequentialScale(targetColor = '#1F8A5F', neutralColor = '#F4F3EF', steps = 5) {
-      if (typeof window.chroma === 'function') {
-        return window.chroma.scale([neutralColor, targetColor]).mode('lab').colors(steps);
-      }
-      return ['#F4F3EF', '#CFE6D6', '#9EC7AA', '#4FA87D', targetColor];
+    // Color de texto legible sobre cada color de seriesColors(count).
+    seriesTextColors(count = 1) {
+      const on = this.themeColors().onCategorical;
+      return Array.from({ length: Math.max(1, count) }, (_, i) => on[i % on.length]);
     }
 
-    // Genera una escala cromática divergente (-1 a +1) usando chroma.js
-    static generateDivergentScale(positiveColor = '#1F8A5F', negativeColor = '#DC2626', neutralColor = '#F4F3EF', stepsPerSide = 4) {
-      if (typeof window.chroma === 'function') {
-        const posColors = window.chroma.scale([neutralColor, positiveColor]).mode('lab').colors(stepsPerSide + 1);
-        const negColors = window.chroma.scale([neutralColor, negativeColor]).mode('lab').colors(stepsPerSide + 1);
-        return {
-          negative: negColors.slice(1),
-          neutral: neutralColor,
-          positive: posColors.slice(1),
-        };
-      }
-      return {
-        negative: ['#F9D8CF', '#F4B2A4', '#EC8A7C', negativeColor],
-        neutral: neutralColor,
-        positive: ['#D3E4F2', '#ACCCEA', '#7FB0DD', positiveColor],
-      };
-    }
-
-    // Paleta de la miniatura derivada dinámicamente del color del tablero.
+    // Paleta de la miniatura: la categórica del tablero.
     thumbnailPalette() {
-      return this.getSeriesColors(6);
+      return this.themeColors().categorical;
     }
 
     // Contenido interior de la miniatura. Por defecto, nada (el generador dibuja barras).
@@ -254,7 +222,7 @@
 
     // Barras verticales genéricas (reserva del generador y base de algunos esquemáticos).
     static thumbBars({ x, y, w, h, colors }) {
-      const palette = colors && colors.length ? colors : BaseWidget.CHART_COLORS;
+      const palette = colors && colors.length ? colors : ChartTheme.read().categorical;
       const count = Math.min(6, Math.max(2, Math.floor(w / 12)));
       const bw = Math.max(2.5, (w - 16 - (count - 1) * 3) / count);
       const heights = [0.4, 0.85, 0.3, 0.7, 0.55, 0.65];
@@ -390,17 +358,17 @@
     }
 
     static dragHandleHTML() {
-      return `<div class="drag-handle cursor-move text-ink/30 hover:text-ink/60 absolute left-1 top-0 bottom-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity z-20 text-[1rem] leading-none">⣿</div>`;
+      return `<div class="drag-handle cursor-move text-fg-subtle hover:text-fg-muted absolute left-1 top-0 bottom-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity z-20 text-base leading-none">⣿</div>`;
     }
 
     static actionButtonsHTML() {
-      return `<div class="absolute -top-2.5 -right-2.5 flex items-center space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white border border-line rounded-md shadow-sm px-1 py-0.5 z-30">
-        <button class="edit-widget-btn text-ink/40 hover:text-moss-600 transition cursor-pointer p-0.5">
+      return `<div class="absolute -top-2.5 -right-2.5 flex items-center space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-surface border border-line rounded-md shadow-sm px-1 py-0.5 z-30">
+        <button class="edit-widget-btn text-fg-muted hover:text-accent-text transition cursor-pointer p-0.5">
           <svg viewBox="0 0 14 14" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.5 1.5a1.41 1.41 0 0 1 2 2L4.5 11.5l-3 1 1-3Z"/>
           </svg>
         </button>
-        <button class="delete-widget-btn text-ink/40 hover:text-red-600 transition cursor-pointer p-0.5">
+        <button class="delete-widget-btn text-fg-muted hover:text-danger transition cursor-pointer p-0.5">
           <svg viewBox="0 0 14 14" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 3l8 8M11 3l-8 8"/>
           </svg>
@@ -481,8 +449,8 @@
     }
 
     loaderOverlayHTML() {
-      return `<div class="widget-loader absolute inset-0 bg-white/80 flex items-center justify-center rounded z-30 hidden">
-        <svg class="animate-spin h-5 w-5 text-moss-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      return `<div class="widget-loader tb-scrim absolute inset-0 flex items-center justify-center rounded-lg z-30 hidden">
+        <svg class="tb-spinner animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
@@ -491,22 +459,22 @@
 
     buildStandardCardElement() {
       const el = document.createElement('div');
-      el.className = `col-span-12 ${this.width} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative group`;
+      el.className = `tb-widget col-span-12 ${this.width} p-4 flex flex-col justify-between relative group`;
       el.style.height = this.height + 'px';
       el.style.setProperty('--ghost-span', this._ghostSpanFromWidth());
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       el.innerHTML = `
         ${BaseWidget.dragHandleHTML()}
-        <div class="flex items-center border-line pb-2 mb-2 select-none gap-1 min-w-0">
-          <span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40 truncate">${BaseWidget.escapeHTML(this.title)}</span>
+        <div class="flex items-center pb-2 mb-2 select-none gap-1 min-w-0">
+          <span class="title-display tb-widget-title truncate">${BaseWidget.escapeHTML(this.title)}</span>
           ${this.aiInsightButtonHTML()}
         </div>
         <div id="chart-${this.id}" class="flex-1 w-full min-h-0"></div>
         ${this.loaderOverlayHTML()}
         ${BaseWidget.actionButtonsHTML()}
         <div class="resize-handle absolute bottom-1 right-1 w-4 h-4 cursor-se-resize z-10 opacity-60 hover:opacity-100 transition">
-          <svg viewBox="0 0 10 10" class="w-full h-full text-ink/30" fill="none">
+          <svg viewBox="0 0 10 10" class="w-full h-full text-fg-subtle" fill="none">
             <line x1="2" y1="8" x2="8" y2="2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <line x1="4" y1="8" x2="8" y2="4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
@@ -537,12 +505,12 @@
 
     buildReadOnlyElement() {
       const el = document.createElement('div');
-      el.className = `col-span-12 ${this.width} bg-white border border-line rounded shadow-sm p-4 flex flex-col justify-between relative`;
+      el.className = `tb-widget col-span-12 ${this.width} p-4 flex flex-col justify-between relative`;
       el.style.height = this.height + 'px';
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       const titleHTML = this.title
-        ? `<div class="flex items-center border-line pb-2 mb-2 select-none gap-1 min-w-0"><span class="title-display text-[10px] font-bold uppercase tracking-wider text-ink/40 truncate">${BaseWidget.escapeHTML(this.title)}</span>${this.aiInsightButtonHTML()}</div>`
+        ? `<div class="flex items-center pb-2 mb-2 select-none gap-1 min-w-0"><span class="title-display tb-widget-title truncate">${BaseWidget.escapeHTML(this.title)}</span>${this.aiInsightButtonHTML()}</div>`
         : (this.chart_type !== 'filter' ? `<div class="flex pb-2 mb-2">${this.aiInsightButtonHTML()}</div>` : '');
       el.innerHTML = `${titleHTML}<div id="chart-${this.id}" class="flex-1 w-full min-h-0"></div>${this.loaderOverlayHTML()}
         <div class="actions-slot absolute top-2 right-2 z-30 flex items-center gap-1"></div>`;
@@ -606,6 +574,19 @@
       };
     }
 
+    // Mezcla profunda de opciones de ApexCharts: los objetos se combinan, el resto (arrays,
+    // funciones, valores) lo pisa `extra`.
+    static mergeOptions(base, extra) {
+      const isPlain = (v) => v && typeof v === 'object' && !Array.isArray(v);
+      const out = { ...base };
+      Object.entries(extra || {}).forEach(([key, value]) => {
+        out[key] = isPlain(value) && isPlain(out[key]) ? BaseWidget.mergeOptions(out[key], value) : value;
+      });
+      return out;
+    }
+
+    // Todo gráfico del lienzo parte de las opciones del tema (ChartTheme): colores, ejes,
+    // cuadrícula y leyenda; el widget solo declara lo suyo.
     renderApexChart(container, options) {
       if (this._chart) {
         this._chart.destroy();
@@ -613,7 +594,7 @@
       }
       container.innerHTML = '<div style="height:100%;width:100%;"></div>';
       const mountEl = container.firstElementChild;
-      this._chart = new ApexCharts(mountEl, options);
+      this._chart = new ApexCharts(mountEl, BaseWidget.mergeOptions(this.themeOptions(), options));
       return this._chart.render();
     }
 
@@ -626,8 +607,8 @@
       }
       container.innerHTML = `
         <div class="h-full w-full flex flex-col items-center justify-center text-center gap-2 px-3">
-          <span class="text-xs text-red-600">${BaseWidget.escapeHTML(message || 'Error al cargar los datos')}</span>
-          ${retryable ? `<button type="button" class="retry-widget-btn text-xs font-medium text-moss-700 border border-moss-300 hover:bg-moss-tint rounded-md px-3 py-1 transition cursor-pointer">Reintentar</button>` : ''}
+          <span class="tb-text-bad text-xs">${BaseWidget.escapeHTML(message || 'Error al cargar los datos')}</span>
+          ${retryable ? `<button type="button" class="retry-widget-btn tb-retry text-xs font-medium px-3 py-1 transition cursor-pointer">Reintentar</button>` : ''}
         </div>
       `;
       if (retryable) {
@@ -640,15 +621,15 @@
       if (!container) return;
       container.innerHTML = `
         <div class="h-full w-full flex flex-col items-center justify-center text-center gap-1 px-4">
-          <i class="ti ti-sparkles text-xl text-moss-500" aria-hidden="true"></i>
-          <span class="text-xs text-ink/50">Abre el panel de edición para elegir columnas y métricas, o descríbelo con IA.</span>
+          <i class="ti ti-sparkles text-lg tb-link" aria-hidden="true"></i>
+          <span class="text-xs tb-text-muted">Abre el panel de edición para elegir columnas y métricas, o descríbelo con IA.</span>
         </div>`;
     }
 
     showEmptyState() {
       const container = this.getContentContainer();
       if (!container) return;
-      container.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400 text-sm">Sin datos para mostrar</div>';
+      container.innerHTML = '<div class="tb-text-muted flex items-center justify-center h-full text-sm">Sin datos para mostrar</div>';
     }
 
     applyRender(entry) {
@@ -671,7 +652,7 @@
 
     aiInsightButtonHTML() {
       if (this.chart_type === 'filter' || !this.id || this.id <= 0) return '';
-      return `<button type="button" class="widget-ai-insight-btn p-0.5 rounded-md text-ink/35 hover:text-amber-600 hover:bg-amber-50 transition cursor-pointer shrink-0 inline-flex items-center justify-center" title="Ver análisis con IA" aria-label="Ver análisis con IA">
+      return `<button type="button" class="widget-ai-insight-btn p-0.5 rounded-md text-fg-subtle hover:text-accent-text hover:bg-accent-soft transition cursor-pointer shrink-0 inline-flex items-center justify-center" title="Ver análisis con IA" aria-label="Ver análisis con IA">
         <i class="ti ti-bulb text-lg" aria-hidden="true"></i>
       </button>`;
     }

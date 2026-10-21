@@ -167,69 +167,6 @@ document.addEventListener('alpine:init', () => {
     widgets: [],
     // El tablero ya se pidió al servidor: hasta entonces el lienzo vacío no es «vacío».
     boardLoaded: false,
-    primaryColor: window.DASHBOARD_PRIMARY_COLOR || '#1F8A5F',
-
-    init() {
-      this.applyThemeVariables(this.primaryColor);
-    },
-
-    // Actualiza las variables CSS de la paleta del tablero (--board-primary-*) sin alterar la interfaz de la app
-    applyThemeVariables(color) {
-      const base = color || '#1F8A5F';
-      const root = document.documentElement;
-
-      if (typeof window.chroma === 'function') {
-        const c = window.chroma(base);
-        const p500 = base;
-        const p600 = c.darken(0.35).hex();
-        const p700 = c.darken(0.7).hex();
-        const p300 = c.brighten(0.6).hex();
-        const p100 = c.brighten(1.4).desaturate(0.4).hex();
-        const p50 = c.brighten(1.8).desaturate(0.6).hex();
-
-        root.style.setProperty('--board-primary', p500);
-        root.style.setProperty('--board-primary-600', p600);
-        root.style.setProperty('--board-primary-700', p700);
-        root.style.setProperty('--board-primary-300', p300);
-        root.style.setProperty('--board-primary-100', p100);
-        root.style.setProperty('--board-primary-50', p50);
-        root.style.setProperty('--board-primary-tint', `color-mix(in srgb, ${p500} 10%, white)`);
-      } else {
-        root.style.setProperty('--board-primary', base);
-        root.style.setProperty('--board-primary-600', base);
-        root.style.setProperty('--board-primary-700', base);
-        root.style.setProperty('--board-primary-300', base);
-        root.style.setProperty('--board-primary-100', base);
-        root.style.setProperty('--board-primary-50', base);
-        root.style.setProperty('--board-primary-tint', `color-mix(in srgb, ${base} 10%, white)`);
-      }
-    },
-
-    // Cambia el color primario del tablero, actualiza las variables CSS y re-renderiza los gráficos.
-    setPrimaryColor(color) {
-      this.primaryColor = color || '#1F8A5F';
-      this.applyThemeVariables(this.primaryColor);
-      this.widgets.forEach(w => {
-        if (w && typeof w.draw === 'function') {
-          w.draw(w._lastData);
-        }
-      });
-    },
-
-    // Guarda el nuevo color primario en el servidor y aplica el cambio al instante.
-    async savePrimaryColor(color) {
-      this.setPrimaryColor(color);
-      if (!this.dashboardId) return;
-      try {
-        await fetch(apiUrl(`/api/dashboards/${this.dashboardId}/`), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ primary_color: color }),
-        });
-      } catch (e) {
-        console.warn('No se pudo guardar el color del tablero:', e);
-      }
-    },
     editingId: null,
     editingType: null,
     dashboardId: window.DASHBOARD_ID,
@@ -331,9 +268,6 @@ document.addEventListener('alpine:init', () => {
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
       this._reportFilterErrors(data);
       this.sources = (data.dashboard && data.dashboard.sources) || [];
-      if (data.dashboard && data.dashboard.primary_color) {
-        this.setPrimaryColor(data.dashboard.primary_color);
-      }
       // Instancias reales (mount/applyRender/setLoading), no objetos planos.
       this.widgets = data.widgets
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))

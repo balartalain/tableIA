@@ -1,7 +1,7 @@
 {% comment %}Ayuda de «Mostrar como» (`metric.window`): tópico del centro de ayuda; lo abre también el
 icono junto al select de cada métrica. Las ventanas por widget salen de `capabilities["windows"]`
 en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-store.js).{% endcomment %}
-<div class="space-y-5 text-sm text-ink/80 leading-relaxed">
+<div class="space-y-5 text-sm text-fg leading-relaxed">
 
   <div class="space-y-1">
     <p>Transforma la métrica <b>ya calculada</b> comparándola con los demás valores del widget. No
@@ -11,11 +11,11 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
 
   <!-- Las opciones, sobre un mismo ejemplo -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink">Las opciones, con un ejemplo</h4>
+    <h4 class="font-semibold text-fg">Las opciones, con un ejemplo</h4>
     <p>Suma de <span class="font-mono">Solicitudes_Atendidas</span> por <span class="font-mono">Campus</span>:</p>
     <div class="overflow-x-auto">
-      <table class="w-full text-[11px]">
-        <thead class="text-ink/50">
+      <table class="w-full text-xs">
+        <thead class="text-fg-muted">
           <tr class="border-b border-line">
             <th class="text-left font-medium py-1 pr-3">Campus</th>
             <th class="text-right font-medium py-1 pr-3">Valor</th>
@@ -24,7 +24,7 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
             <th class="text-right font-medium py-1">Variación vs anterior</th>
           </tr>
         </thead>
-        <tbody class="font-mono divide-y divide-line/60">
+        <tbody class="font-mono divide-y divide-line">
           <tr><td class="py-1 pr-3 font-sans">Santiago</td><td class="text-right pr-3">120</td><td class="text-right pr-3">60 %</td><td class="text-right pr-3">120</td><td class="text-right">—</td></tr>
           <tr><td class="py-1 pr-3 font-sans">Santo Domingo</td><td class="text-right pr-3">60</td><td class="text-right pr-3">30 %</td><td class="text-right pr-3">180</td><td class="text-right">−50 %</td></tr>
           <tr><td class="py-1 pr-3 font-sans">Nagua</td><td class="text-right pr-3">20</td><td class="text-right pr-3">10 %</td><td class="text-right pr-3">200</td><td class="text-right">−66,7 %</td></tr>
@@ -33,24 +33,24 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
     </div>
     <dl class="space-y-1.5 pt-1">
       <div>
-        <dt class="font-semibold text-ink">% del total de la columna</dt>
+        <dt class="font-semibold text-fg">% del total de la columna</dt>
         <dd>Qué parte del total representa cada valor: 120 de 200 = 60 %. La columna suma 100 %.
           Con pivote, cada celda se divide entre el total de su columna del pivote.</dd>
       </div>
       <div>
-        <dt class="font-semibold text-ink">% del total de la fila</dt>
+        <dt class="font-semibold text-fg">% del total de la fila</dt>
         <dd>Solo con pivote: qué parte de su fila es cada celda, y cada fila suma 100 %. Ej. con
           pivote <span class="font-mono">Categoria_Gasto</span>: de las solicitudes de Santiago,
           qué % fue de cada categoría.</dd>
       </div>
       <div>
-        <dt class="font-semibold text-ink">Acumulado</dt>
+        <dt class="font-semibold text-fg">Acumulado</dt>
         <dd>Suma cada valor con todos los anteriores: 120, 120 + 60 = 180, 180 + 20 = 200. Sigue el
           orden de las filas; si agrupas por una columna de tiempo (mes, año, fecha), el orden es
           cronológico. Útil para «cuánto llevamos en el año».</dd>
       </div>
       <div>
-        <dt class="font-semibold text-ink">Variación vs anterior</dt>
+        <dt class="font-semibold text-fg">Variación vs anterior</dt>
         <dd>El % de cambio respecto a la fila anterior: (60 − 120) / 120 = −50 %. La primera fila
           queda vacía porque no tiene anterior. Tiene sentido con una dimensión de tiempo
           («crecimiento mes a mes»).</dd>
@@ -60,7 +60,7 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
 
   <!-- Reglas -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink">¿Por qué no aparecen todas las opciones?</h4>
+    <h4 class="font-semibold text-fg">¿Por qué no aparecen todas las opciones?</h4>
     <ul class="list-disc pl-4 space-y-1">
       <li>Cada widget admite solo las que puede dibujar bien (tabla de abajo).</li>
       <li><b>% del total de la fila</b> necesita un pivote: sin él cada fila tiene un solo valor y
@@ -78,17 +78,17 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
 
   <!-- Por widget -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink">Disponibles en cada widget</h4>
+    <h4 class="font-semibold text-fg">Disponibles en cada widget</h4>
     <div class="overflow-x-auto">
-      <table class="w-full text-[11px]">
-        <thead class="text-ink/50">
+      <table class="w-full text-xs">
+        <thead class="text-fg-muted">
           <tr class="border-b border-line">
             <th class="text-left font-medium py-1 pr-3">Widget</th>
             <th class="text-left font-medium py-1 pr-3">Sin pivote</th>
             <th class="text-left font-medium py-1">Con pivote</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-line/60">
+        <tbody class="divide-y divide-line">
           <template x-for="w in [
               ['bar', 'Gráfico de Barras', '% columna, acumulado, variación', '% columna, % fila'],
               ['line', 'Gráfico de Líneas', '% columna, acumulado, variación', '% columna'],
@@ -96,11 +96,11 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
               ['kpi', 'Tarjeta KPI', 'Ninguna (un solo número)', '—'],
               ['donut', 'Gráfico de Dona', 'Ninguna (ya muestra proporciones)', '—'],
             ]" :key="w[0]">
-            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-moss-50' : ''">
-              <td class="py-1 pr-3 font-semibold text-ink whitespace-nowrap">
+            <tr x-bind:class="$store.dashboard.editingType === w[0] ? 'bg-accent-soft' : ''">
+              <td class="py-1 pr-3 font-semibold text-fg whitespace-nowrap">
                 <span x-text="w[1]"></span>
                 <span x-show="$store.dashboard.editingType === w[0]"
-                      class="ml-1 text-[10px] font-semibold rounded-full bg-moss-500 text-white px-1.5 py-0.5">Este widget</span>
+                      class="ui-badge ui-badge-accent ml-1">Este widget</span>
               </td>
               <td class="pr-3" x-text="w[2]"></td>
               <td x-text="w[3]"></td>
@@ -113,7 +113,7 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
 
   <!-- Alternativas -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink">Cuando no está disponible</h4>
+    <h4 class="font-semibold text-fg">Cuando no está disponible</h4>
     <ul class="list-disc pl-4 space-y-1">
       <li><b>Una participación en un KPI</b> («qué % del gasto es de Santiago»): crea un campo
         calculado agregado, ej.

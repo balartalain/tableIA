@@ -1,7 +1,5 @@
 (function () {
-  const COLORS = BaseWidget.CHART_COLORS;
   // Sin color por categoría: puntos en el primer color y la tendencia en el de las referencias.
-  const SINGLE_TREND_COLOR = BaseWidget.REFERENCE_COLOR;
   const trendName = (name) => `${name || 'Filas'} · tendencia`;
 
   class ScatterWidget extends BaseWidget {
@@ -67,7 +65,7 @@
       if (showTrend && payload.trend && payload.trend.r != null) {
         parts.push(`r = ${formatNumber(payload.trend.r, { decimals: 2 })}${payload.color ? ' (todas)' : ''}`);
       }
-      return `<div class="shrink-0 pt-1 text-[11px] text-ink/50 tabular-nums">${parts.join(' · ')}</div>`;
+      return `<div class="shrink-0 pt-1 text-xs tb-text-muted tabular-nums">${parts.join(' · ')}</div>`;
     }
 
     draw(data, style, title) {
@@ -85,12 +83,12 @@
       const container = this.getContentContainer();
       container.className = 'flex flex-col h-full min-h-0';
       if (!payload.x || !payload.y) {
-        container.innerHTML = '<p class="m-auto text-xs text-ink/40">Elige dos columnas numéricas: la del eje X y la del eje Y.</p>';
+        container.innerHTML = '<p class="m-auto text-xs tb-text-muted">Elige dos columnas numéricas: la del eje X y la del eje Y.</p>';
         return;
       }
       const groups = payload.groups || [];
       if (!groups.length) {
-        container.innerHTML = '<p class="m-auto text-xs text-ink/40">Ninguna fila tiene valor en las dos columnas.</p>';
+        container.innerHTML = '<p class="m-auto text-xs tb-text-muted">Ninguna fila tiene valor en las dos columnas.</p>';
         return;
       }
       // ApexCharts mide el 100 % de alto contra el padre del elemento donde se monta: la caja
@@ -103,7 +101,8 @@
       // Primero una serie de puntos por grupo y después, si hay, la recta de cada uno (mismo
       // color que sus puntos). Así el índice de la serie es el del grupo en tooltip y leyenda.
       const colored = !!payload.color;
-      const palette = this.getSeriesColors(groups.length);
+      const theme = this.themeColors();
+      const palette = this.seriesColors(groups.length);
       const pointColors = groups.map((_, i) => palette[i % palette.length]);
       const series = groups.map(g => ({ name: g.name || 'Filas', type: 'scatter', data: g.points }));
       const colors = [...pointColors];
@@ -112,7 +111,7 @@
         if (!t) return;
         const at = (x) => t.slope * x + t.intercept;
         series.push({ name: trendName(g.name), type: 'line', data: [[t.from, at(t.from)], [t.to, at(t.to)]] });
-        colors.push(colored ? pointColors[i] : SINGLE_TREND_COLOR);
+        colors.push(colored ? pointColors[i] : theme.ref);
       });
       const lines = series.length - groups.length;
       const esc = BaseWidget.escapeHTML;
@@ -165,18 +164,18 @@
             if (!group) return '';
             const [x, y] = group.points[dataPointIndex];
             const r = showTrend && group.trend && group.trend.r != null && colored
-              ? ` <span class="text-ink/50">(r = ${formatNumber(group.trend.r, { decimals: 2 })})</span>` : '';
+              ? ` <span class="tb-text-muted">(r = ${formatNumber(group.trend.r, { decimals: 2 })})</span>` : '';
             const head = colored
-              ? `<div class="font-semibold flex items-center gap-1.5"><span class="inline-block h-2 w-2 rounded-full" style="background:${pointColors[seriesIndex]}"></span>${esc(group.name)}${r}</div>`
+              ? `<div class="font-semibold flex items-center gap-1.5"><span class="tb-swatch" style="background:${pointColors[seriesIndex]}"></span>${esc(group.name)}${r}</div>`
               : '';
             return `<div class="px-2.5 py-1.5 text-xs tabular-nums">${head}
-                <div><span class="text-ink/60">${esc(payload.x.label)}:</span> <b>${formatNumber(x)}</b></div>
-                <div><span class="text-ink/60">${esc(payload.y.label)}:</span> <b>${formatNumber(y)}</b></div>
+                <div><span class="tb-text-muted">${esc(payload.x.label)}:</span> <b>${formatNumber(x)}</b></div>
+                <div><span class="tb-text-muted">${esc(payload.y.label)}:</span> <b>${formatNumber(y)}</b></div>
               </div>`;
           },
         },
       };
-      const chart = new ApexCharts(container.querySelector('.scatter-chart'), options);
+      const chart = new ApexCharts(container.querySelector('.scatter-chart'), BaseWidget.mergeOptions(this.themeOptions(), options));
       this._chart = chart;
       chart.render().then(() => {
         if (colored) this._wireLegend(container, chart, groups, showTrend);

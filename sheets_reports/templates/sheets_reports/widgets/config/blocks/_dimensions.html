@@ -3,30 +3,30 @@
      x-init="$store.dashboard.registerStyleGroup('Totales', ['showTotals', 'rowSubtotal1', 'rowSubtotal2'])"{% endif %}>
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-1">
-      <label class="block text-xs font-semibold text-ink/70"
+      <label class="block text-xs font-semibold text-fg"
              x-text="$store.dashboard.drawerCapabilities.dimensions_label || 'Dimensiones'"></label>
       <!-- En el widget de filtros estas son las columnas del filtro: la ayuda no aplica. -->
       <button type="button" x-on:click="$store.help.open('dimensiones')" aria-label="Ayuda de dimensiones" title="¿Qué son las dimensiones?"
               x-show="!$store.dashboard.drawerCapabilities.dimensions_label"
-              class="p-0.5 rounded-full text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+              class="p-0.5 rounded-full text-fg-muted hover:text-accent-text hover:bg-surface-muted cursor-pointer">
         <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
       </button>
     </div>
     <button type="button" x-on:click="$store.dashboard.addDimension()"
             x-bind:disabled="$store.dashboard.drawerDraft.fields.dimensions.length >= $store.dashboard.maxDimensions"
-            class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+            class="text-xs font-medium text-accent-text hover:text-accent-text disabled:opacity-40 cursor-pointer flex items-center gap-1">
       <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
     </button>
   </div>
   <div class="space-y-1" data-column-list="dimensions">
     <template x-for="(col, idx) in $store.dashboard.drawerDraft.fields.dimensions" :key="'dim-' + idx">
       <div class="space-y-1" data-column-row>
-        <div class="flex gap-1.5 items-center rounded-lg bg-paper/70 border border-line/60 p-1.5">
-          <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none"
+        <div class="flex gap-1.5 items-center rounded-lg bg-app border border-line p-1.5">
+          <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-fg-subtle hover:text-fg-muted select-none"
              aria-hidden="true" title="Arrastra para reordenar"></i>
           <select x-vselect x-model="$store.dashboard.drawerDraft.fields.dimensions[idx]"
                   aria-label="Dimensión"
-                  class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">
             <option value="" x-show="!col" x-text="'— elegir —'"></option>
             <template x-if="$store.dashboard.dimensionCalculatedOptions(idx).length">
               <optgroup label="Columnas">
@@ -52,18 +52,18 @@
           <!-- La última dimensión obligatoria (barras, tabla dinámica…) no se puede quitar. -->
           <button type="button" x-on:click="$store.dashboard.removeDimension(idx)"
                   x-show="$store.dashboard.drawerDraft.fields.dimensions.length > $store.dashboard.minDimensions"
-                  class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none"
+                  class="text-fg-muted hover:text-danger transition cursor-pointer px-1 text-base leading-none"
                   title="Quitar dimensión" aria-label="Quitar dimensión">×</button>
         </div>
         {% if totals %}
         <!-- Totales de cada nivel de filas: 0 = total general, 1 y 2 = subtotales. -->
         <template x-if="col && idx < 3">
-          <label class="flex items-center gap-1.5 pl-1.5 text-[11px] text-ink/60 cursor-pointer"
+          <label class="flex items-center gap-1.5 pl-1.5 text-xs text-fg-muted cursor-pointer"
                  x-bind:title="idx === 0 ? 'Fila «Total general» al pie de la tabla'
                                : 'Subtotal «Total …» de cada ' + ($store.dashboard.drawerDraft.fields.dimensions[idx - 1] || 'grupo')">
             <input type="checkbox"
                    x-model="$store.dashboard.drawerDraft.style[['showTotals', 'rowSubtotal1', 'rowSubtotal2'][idx]]"
-                   class="h-3.5 w-3.5 rounded border-line text-moss-600 focus:ring-moss-500">
+                   class="h-3.5 w-3.5 rounded border-line text-accent-text focus:ring-accent">
             Mostrar totales
           </label>
         </template>
@@ -71,6 +71,6 @@
       </div>
     </template>
   </div>
-  <p class="text-[11px] text-ink/50"
+  <p class="text-xs text-fg-muted"
      x-text="$store.dashboard.drawerCapabilities.dimensions_hint || 'Columnas por las que agrupar (filas de la tabla).'"></p>
 </div>

@@ -38,22 +38,22 @@ function renderPalette(sidebarEl) {
   sidebarEl.innerHTML = PALETTE_GROUPS.map(group => {
     const rows = entries.filter(e => (e.category || 'data') === group.id);
     if (!rows.length) return '';
-    return `<p class="rail-group text-[10px] font-bold uppercase tracking-wider text-ink/40 pt-3 first:pt-0 pb-1.5 px-1"
+    return `<p class="rail-group ui-sidebar-label pt-3 first:pt-0 pb-1.5 px-1"
                data-group="${group.id}">${group.label}</p>` + rows.map(entry => `
-      <div class="rail-item flex items-center gap-2.5 p-2 mb-1.5 bg-white hover:bg-paper border border-line rounded-lg cursor-grab active:cursor-grabbing transition-colors"
+      <div class="rail-item ui-module-card mb-1.5 active:cursor-grabbing transition-colors"
            data-type="${entry.type}" data-group="${group.id}"
            data-search="${esc(searchText(`${entry.label} ${entry.description}`))}"
            title="${esc(`${entry.label} — ${entry.description}`)}"
            style="--ghost-span: ${entry.ghostSpan};">
-        <span class="rail-icon shrink-0 w-[30px] h-[30px] rounded-md bg-paper border border-line/70 text-ink/70 flex items-center justify-center">
-          <i class="ti ${entry.icon} text-[17px]" aria-hidden="true"></i>
+        <span class="rail-icon ui-module-icon">
+          <i class="ti ${entry.icon} text-base" aria-hidden="true"></i>
         </span>
         <span class="rail-text min-w-0 flex-1">
-          <span class="block truncate text-sm font-semibold text-ink">${esc(entry.label)}</span>
-          <span class="block truncate text-[11px] text-ink/50">${esc(entry.description)}</span>
+          <span class="block truncate text-sm font-semibold text-fg">${esc(entry.label)}</span>
+          <span class="block truncate text-xs text-fg-muted">${esc(entry.description)}</span>
         </span>
       </div>`).join('');
-  }).join('') + '<p class="rail-empty hidden px-1 py-2 text-xs text-ink/50">Sin resultados</p>';
+  }).join('') + '<p class="rail-empty hidden px-1 py-2 text-xs text-fg-muted">Sin resultados</p>';
 }
 
 // Filtra las filas visibles por nombre/descripción sin volver a pintar (no toca Sortable).
@@ -165,6 +165,8 @@ async function generateRealBoardThumbnail() {
   const availableW = totalW - (padding * 2);
 
   const canvasEl = document.getElementById('dashboard-canvas');
+  // Colores del tema del tablero, resueltos: el SVG va como <img> y no ve las variables CSS.
+  const theme = ChartTheme.read(canvasEl);
   const widgetEls = canvasEl
     ? Array.from(canvasEl.querySelectorAll('.canvas-row-body > [data-widget-id]'))
     : [];
@@ -172,11 +174,11 @@ async function generateRealBoardThumbnail() {
   if (!widgetEls.length) {
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} 190" width="${totalW}" height="190">
-        <rect width="${totalW}" height="190" fill="#F7F8F4"/>
-        <rect x="12" y="12" width="${totalW - 24}" height="166" rx="4" fill="#FFFFFF" stroke="#E3E5DE" stroke-dasharray="4 4"/>
-        <circle cx="${totalW / 2}" cy="82" r="16" fill="#FFF4E6"/>
-        <path d="M${totalW / 2 - 8} 82 h16 M${totalW / 2} 74 v16" stroke="#FE8200" stroke-width="2" stroke-linecap="round"/>
-        <text x="${totalW / 2}" y="118" font-family="system-ui, -apple-system, sans-serif" font-size="9" fill="#14171F" opacity="0.45" text-anchor="middle">Tablero sin widgets</text>
+        <rect width="${totalW}" height="190" fill="${theme.bg}"/>
+        <rect x="12" y="12" width="${totalW - 24}" height="166" rx="4" fill="${theme.card}" stroke="${theme.border}" stroke-dasharray="4 4"/>
+        <circle cx="${totalW / 2}" cy="82" r="16" fill="${theme.track}"/>
+        <path d="M${totalW / 2 - 8} 82 h16 M${totalW / 2} 74 v16" stroke="${theme.categorical[1]}" stroke-width="2" stroke-linecap="round"/>
+        <text x="${totalW / 2}" y="118" font-family="system-ui, -apple-system, sans-serif" font-size="9" fill="${theme.textMuted}" text-anchor="middle">Tablero sin widgets</text>
       </svg>`
     );
   }
@@ -225,20 +227,17 @@ async function generateRealBoardThumbnail() {
     const rawTitle = (el.querySelector('.title-display')?.textContent || (widget && widget.title) || '').trim();
     const title = BaseWidget.escapeHTML(rawTitle.length > 26 ? rawTitle.slice(0, 25) + '…' : rawTitle);
 
-    // Tarjeta base (mismo look que los widgets: blanco, borde line, radio 4).
-    innerSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="#FFFFFF" stroke="#E3E5DE" stroke-width="1"/>`;
+    // Tarjeta base (mismo look que los widgets: fondo y borde de la tarjeta del tema).
+    innerSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${theme.card}" stroke="${theme.border}" stroke-width="1"/>`;
     if (title) {
-      innerSvg += `<text x="${x + 5}" y="${y + 9}" font-family="system-ui, -apple-system, sans-serif" font-size="6" font-weight="700" fill="#14171F" opacity="0.45">${title}</text>`;
+      innerSvg += `<text x="${x + 5}" y="${y + 9}" font-family="system-ui, -apple-system, sans-serif" font-size="6" font-weight="700" fill="${theme.textMuted}">${title}</text>`;
     }
 
-    // La paleta sale del propio widget o del color del tablero.
-    const boardPrimary = (store && store.primaryColor) || BaseWidget.DEFAULT_PRIMARY_COLOR;
+    // La paleta sale del propio widget o del tema del tablero.
     const palette = (widget && typeof widget.thumbnailPalette === 'function')
       ? widget.thumbnailPalette()
-      : [boardPrimary];
-    const primary = (widget && typeof widget.getPrimaryColor === 'function')
-      ? widget.getPrimaryColor()
-      : boardPrimary;
+      : theme.categorical;
+    const primary = palette[0];
 
     // Caja real del gráfico (para incrustar su SVG de ApexCharts), si la hay.
     const content = apexRect ? {
@@ -248,7 +247,7 @@ async function generateRealBoardThumbnail() {
       h: Math.max(12, Math.round(apexRect.height * scale)),
     } : null;
 
-    const ctx = { x, y, w, h, scale, el, apexEl, content, colors: palette, primary };
+    const ctx = { x, y, w, h, scale, el, apexEl, content, colors: palette, primary, theme };
 
     // Cada widget dibuja su propio contenido; si no implementa nada, barras genéricas.
     let contentSvg = '';
@@ -262,7 +261,7 @@ async function generateRealBoardThumbnail() {
     innerSvg += contentSvg || BaseWidget.thumbBars(ctx);
   }
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}"><rect width="${totalW}" height="${totalH}" fill="#F7F8F4"/>${innerSvg}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}"><rect width="${totalW}" height="${totalH}" fill="${theme.bg}"/>${innerSvg}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
@@ -360,7 +359,7 @@ function showToast(message) {
   }
 
   const toast = document.createElement('div');
-  toast.className = 'bg-ink text-white text-sm font-medium px-4 py-2.5 rounded shadow-lg opacity-0 transition-opacity duration-200';
+  toast.className = 'bg-primary text-primary-on text-sm font-medium px-4 py-2.5 rounded shadow-lg opacity-0 transition-opacity duration-200';
   toast.textContent = message;
   container.appendChild(toast);
 
@@ -419,7 +418,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     entries = await store.loadBoard();
   } catch (e) {
-    canvasEl.insertAdjacentHTML('beforebegin', `<p class="text-sm text-red-600 mb-3">${BaseWidget.escapeHTML(e.message)}</p>`);
+    canvasEl.insertAdjacentHTML('beforebegin', `<p class="text-sm text-danger mb-3">${BaseWidget.escapeHTML(e.message)}</p>`);
   }
 
   // Espera al siguiente rAF para que Alpine haya renderizado las filas .canvas-row en el DOM

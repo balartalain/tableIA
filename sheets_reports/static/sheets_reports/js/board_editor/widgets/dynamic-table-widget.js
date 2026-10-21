@@ -45,7 +45,7 @@
         let rows = '';
         for (let i = 0; i < lines; i++) {
           const ly = top + 9 + i * 7;
-          rows += `<line x1="${x + 6}" y1="${ly}" x2="${x + w - 6}" y2="${ly}" stroke="#E3E5DE" stroke-width="1.5"/>`;
+          rows += `<line x1="${x + 6}" y1="${ly}" x2="${x + w - 6}" y2="${ly}" stroke="${ctx.theme.border}" stroke-width="1.5"/>`;
         }
         return `<rect x="${x + 6}" y="${top}" width="${w - 12}" height="3" rx="1" fill="${primary}" opacity="0.35"/>${rows}`;
       }
@@ -95,7 +95,6 @@
         }
         const container = this.getContentContainer();
         container.innerHTML = '';
-        container.style.backgroundColor = '#fff';
         // Ocupa todo el alto bajo el título: la tabla arranca arriba aunque tenga pocas filas.
         container.style.flex = '1 1 0%';
         // La tabla va en un hijo con alto máximo = el del contenedor: mide lo que sus filas (el

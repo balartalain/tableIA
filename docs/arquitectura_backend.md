@@ -193,7 +193,17 @@ Tablero de reportes. Sus datos vienen de una o varias fuentes (`DataSource`).
 | `nombre` | `CharField(255)` | Nombre descriptivo |
 | `owner` | `FK → settings.AUTH_USER_MODEL` | `on_delete=CASCADE`, `related_name="dashboards"` |
 | `last_opened_at` | `DateTimeField(null=True)` | Última apertura en el editor |
+| `is_template` | `BooleanField` | Plantilla de solo lectura |
+| `thumbnail` | `TextField` | Miniatura (data-URL de un SVG) para la galería de plantillas |
+| `theme` | `CharField(30)` | Preset de colores del tablero (`THEME_CHOICES`; hoy solo `institucional`, el default) |
+| `custom_colors` | `JSONField(dict)` | Colores propios: `{"--tb-chart-1": "#rrggbb", …}`; pisan los del preset |
 | `created_at` | `DateTimeField(auto_now_add=True)` | |
+
+`style_variables` (propiedad) arma el atributo `style` del contenedor del tablero a partir de
+`custom_colors`: solo pasan las claves `--tb-[a-z0-9-]+` con un valor `#rrggbb`; lo demás se
+descarta y no llega al HTML (evita inyectar CSS). `PUT /api/dashboards/{id}/` acepta `theme`
+dentro de `THEME_CHOICES` (otro valor → 400); duplicar o usar una plantilla copia `theme` y
+`custom_colors`.
 
 ### 4.1b `DataSource` (`models.py`)
 
@@ -561,8 +571,9 @@ Todos los tipos tienen `ai_enabled = True`.
 
 Los tres usan `chart_series()` para `(categories, pairs)` y `percent_aliases()`.
 
-- **`bar`**: `horizontal`, `stacked`; `reference_lines` → `referenceLines` (anotaciones
-  ApexCharts con `kind: "value"`, color `#d97706`, label «Meta: {valor}»).
+- **`bar`**: `horizontal`, `stacked`; `reference_lines` → `referenceLines`: las líneas válidas
+  (`kind` en `value`/`avg`/`max`/`min`; `value` con valor) con `kind`, `value`, `label` y
+  `series`. Sin presentación: el frontend calcula su valor y las colorea con el tema.
 - **`line`**: `curve`, `showMarkers`, `showGrid`; si no hay `sort_by`,
   reordena el eje con `chronological()` (best-effort).
 - **`donut`**: una sola serie (`pairs[0]`); `labelMode`, `donutSize`, `showLegend` (front).

@@ -6,22 +6,21 @@
 {% block header %}{% endblock %}
 
 {% block content %}
-<div class="min-h-screen w-full flex flex-col lg:flex-row bg-white">
+<div class="min-h-screen w-full flex flex-col lg:flex-row bg-surface">
 
   <!-- LADO IZQUIERDO: DEMOSTRACIÓN DE TABLERO DECORATIVO (Solo escritorio, 60% de ancho) -->
-  <div class="hidden lg:flex lg:w-[60%] relative flex-col justify-between p-8 xl:p-12 bg-slate-100/70 border-r border-slate-200 overflow-hidden select-none"
-       style="background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 24px 24px;">
+  <div class="ui-dot-grid hidden lg:flex lg:w-[60%] relative flex-col justify-between p-8 xl:p-12 border-r border-line overflow-hidden select-none">
 
     <!-- Resplandor ambiental decorativo (glows) -->
-    <div class="absolute top-1/4 -left-20 w-96 h-96 bg-purple-200/40 rounded-full filter blur-3xl pointer-events-none"></div>
-    <div class="absolute bottom-1/4 right-10 w-96 h-96 bg-violet-200/40 rounded-full filter blur-3xl pointer-events-none"></div>
+    <div class="absolute top-1/4 -left-20 w-96 h-96 bg-accent-soft rounded-full filter blur-3xl pointer-events-none"></div>
+    <div class="absolute bottom-1/4 right-10 w-96 h-96 bg-accent-soft rounded-full filter blur-3xl pointer-events-none"></div>
 
     <!-- Encabezado del producto -->
     <div class="relative z-10 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <img src="{% static 'sheets_reports/img/reportia_icon.svg' %}" alt="" class="w-9 h-9 shadow-sm rounded-[0.55rem]" aria-hidden="true">
-        <span class="font-sans font-bold text-xl tracking-tight text-ink">Tabler</span>
-        <span class="font-mono text-[10px] font-bold bg-moss-50 text-moss-700 border border-moss-200 px-2 py-0.5 rounded-md uppercase tracking-wide">
+        <span class="font-sans font-bold text-lg tracking-tight text-fg">Tabler</span>
+        <span class="font-mono text-xs font-bold bg-accent-soft text-accent-text border border-accent-soft-border px-2 py-0.5 rounded-md uppercase tracking-wide">
           IA
         </span>
       </div>
@@ -31,74 +30,74 @@
     <div class="relative z-10 my-auto py-8 flex items-center justify-center">
       <div class="relative group transform -rotate-1 hover:rotate-0 transition-all duration-500 ease-out max-w-2xl w-full">
         <!-- Sombra decorativa trasera -->
-        <div class="absolute -inset-1 bg-gradient-to-r from-moss-500/20 to-purple-500/20 rounded-3xl blur-xl opacity-75 group-hover:opacity-100 transition duration-500"></div>
+        <div class="absolute -inset-1 bg-accent-soft-border rounded-lg blur-xl opacity-75 group-hover:opacity-100 transition duration-500"></div>
 
         <!-- Tarjeta marco de la app -->
-        <div class="relative bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-2xl p-2.5 shadow-2xl overflow-hidden">
+        <div class="relative bg-surface backdrop-blur-md border border-line rounded-lg p-2.5 shadow-2xl overflow-hidden">
           <!-- Barra superior de cromo estilo ventana -->
-          <div class="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 mb-2 bg-slate-50/60 rounded-t-xl">
+          <div class="flex items-center justify-between px-3 py-1.5 border-b border-line mb-2 bg-app rounded-t-lg">
             <div class="flex items-center gap-1.5">
-              <span class="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block"></span>
-              <span class="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block"></span>
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400/80 inline-block"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-danger inline-block"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-warning inline-block"></span>
+              <span class="w-2.5 h-2.5 rounded-full bg-success inline-block"></span>
             </div>
-            <span class="text-[11px] font-mono text-slate-400">report-ia.app/dashboard</span>
+            <span class="text-xs font-mono text-fg-muted">report-ia.app/dashboard</span>
             <div class="w-10"></div>
           </div>
           <img src="{% static 'sheets_reports/img/bg_login.png' %}"
                alt="Demostración de Tablero"
-               class="w-full h-auto rounded-xl object-cover shadow-sm">
+               class="w-full h-auto rounded-lg object-cover shadow-sm">
         </div>
       </div>
     </div>
 
     <!-- Pie de página izquierdo -->
-    <div class="relative z-10 flex items-center justify-between text-xs text-slate-400">
+    <div class="relative z-10 flex items-center justify-between text-xs text-fg-muted">
       <p>© {{ now|date:"Y"|default:"2026" }} Tabler IA. Todos los derechos reservados.</p>
       <div class="flex items-center gap-4">
-        <a href="#" class="hover:text-slate-600 transition">Privacidad</a>
-        <a href="#" class="hover:text-slate-600 transition">Términos</a>
+        <a href="#" class="hover:text-fg-muted transition">Privacidad</a>
+        <a href="#" class="hover:text-fg-muted transition">Términos</a>
       </div>
     </div>
   </div>
 
   <!-- LADO DERECHO: FORMULARIO DE INICIAR SESIÓN (40% de ancho) -->
-  <div class="w-full lg:w-[40%] flex flex-col justify-between p-6 sm:p-10 lg:p-12 xl:p-16 bg-white min-h-screen">
+  <div class="w-full lg:w-[40%] flex flex-col justify-between p-6 sm:p-10 lg:p-12 xl:p-16 bg-surface min-h-screen">
 
     <!-- Header móvil -->
     <div class="lg:hidden flex items-center justify-between mb-8">
       <div class="flex items-center gap-2.5">
-        <span class="w-8 h-8 rounded-lg bg-moss-600 flex items-center justify-center text-white text-sm font-bold shadow-xs">R</span>
-        <span class="font-sans font-bold text-lg text-ink">Tabler IA</span>
+        <span class="w-8 h-8 rounded-lg bg-accent-hover flex items-center justify-center text-accent-on text-sm font-bold shadow-xs">R</span>
+        <span class="font-sans font-bold text-lg text-fg">Tabler IA</span>
       </div>
-      <span class="font-mono text-[10px] font-bold bg-moss-50 text-moss-700 border border-moss-200 px-1.5 py-0.5 rounded-md uppercase">AI</span>
+      <span class="font-mono text-xs font-bold bg-accent-soft text-accent-text border border-accent-soft-border px-1.5 py-0.5 rounded-md uppercase">AI</span>
     </div>
 
     <!-- Contenido centrado -->
     <div class="my-auto w-full max-w-md mx-auto space-y-6">
       <!-- Encabezado -->
       <div>
-        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-ink">Bienvenido de nuevo</h1>
-        <p class="mt-2 text-sm text-ink/60">Bienvenido a Tabler IA. Ingresa tus credenciales para acceder a tus tableros e insights.</p>
+        <h1 class="text-xl sm:text-3xl font-bold tracking-tight text-fg">Bienvenido de nuevo</h1>
+        <p class="mt-2 text-sm text-fg-muted">Bienvenido a Tabler IA. Ingresa tus credenciales para acceder a tus tableros e insights.</p>
       </div>
 
       <!-- Autenticación Social (Google) -->
       <div class="space-y-3">
         {% if configured %}
           <a href="{% url 'google_auth:login' %}{% if next %}?next={{ next|urlencode }}{% endif %}"
-             class="w-full h-11 px-4 rounded-xl bg-white hover:bg-paper border border-line text-ink font-semibold text-sm inline-flex items-center justify-center gap-3 shadow-xs hover:shadow-sm transition-all duration-150 cursor-pointer group">
+             class="w-full h-11 px-4 rounded-lg bg-surface hover:bg-surface-muted border border-line text-fg font-semibold text-sm inline-flex items-center justify-center gap-3 shadow-xs hover:shadow-sm transition-all duration-150 cursor-pointer group">
             <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
             </svg>
-            <span class="group-hover:text-ink font-semibold transition">Continuar con Google</span>
+            <span class="group-hover:text-fg font-semibold transition">Continuar con Google</span>
           </a>
         {% else %}
-          <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+          <div class="p-3.5 rounded-lg bg-warning-bg border border-warning text-xs text-warning">
             <div class="flex items-center gap-2 font-semibold mb-1">
-              <i class="ti ti-alert-triangle text-amber-600 text-base" aria-hidden="true"></i>
+              <i class="ti ti-alert-triangle text-warning text-base" aria-hidden="true"></i>
               OAuth no configurado
             </div>
             <p class="leading-relaxed opacity-90">
@@ -111,7 +110,7 @@
       <!-- Separador -->
       <div class="relative flex py-2 items-center">
         <div class="flex-grow border-t border-line"></div>
-        <span class="flex-shrink mx-4 text-xs text-ink/40 font-medium">o con correo</span>
+        <span class="flex-shrink mx-4 text-xs text-fg-muted font-medium">o con correo</span>
         <div class="flex-grow border-t border-line"></div>
       </div>
 
@@ -119,25 +118,25 @@
       <form method="post" action="#" onsubmit="return false;" class="space-y-4">
         <!-- Campo Correo -->
         <div class="space-y-1.5">
-          <label class="block text-xs font-semibold text-ink/70">Correo electrónico</label>
+          <label class="block text-xs font-semibold text-fg">Correo electrónico</label>
           <div class="relative flex items-center">
             <input type="email" required placeholder="tu@empresa.com"
-                   class="w-full h-11 pl-3.5 pr-10 text-sm border border-line rounded-xl bg-white focus:outline-none focus:border-moss-500 focus:ring-1 focus:ring-moss-500 transition">
-            <i class="ti ti-mail text-lg text-ink/40 absolute right-3 pointer-events-none" aria-hidden="true"></i>
+                   class="w-full h-11 pl-3.5 pr-10 text-sm border border-line rounded-lg bg-surface focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition">
+            <i class="ti ti-mail text-lg text-fg-muted absolute right-3 pointer-events-none" aria-hidden="true"></i>
           </div>
         </div>
 
         <!-- Campo Contraseña con Alpine.js -->
         <div x-data="{ showPass: false }" class="space-y-1.5">
           <div class="flex items-center justify-between">
-            <label class="block text-xs font-semibold text-ink/70">Contraseña</label>
-            <a href="#" class="text-xs font-semibold text-moss-700 hover:text-moss-800 transition">¿Olvidaste tu contraseña?</a>
+            <label class="block text-xs font-semibold text-fg">Contraseña</label>
+            <a href="#" class="text-xs font-semibold text-accent-text hover:text-accent-text transition">¿Olvidaste tu contraseña?</a>
           </div>
           <div class="relative flex items-center">
             <input :type="showPass ? 'text' : 'password'" required placeholder="••••••••"
-                   class="w-full h-11 pl-3.5 pr-10 text-sm border border-line rounded-xl bg-white focus:outline-none focus:border-moss-500 focus:ring-1 focus:ring-moss-500 transition">
+                   class="w-full h-11 pl-3.5 pr-10 text-sm border border-line rounded-lg bg-surface focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition">
             <button type="button" @click="showPass = !showPass"
-                    class="absolute right-3 text-ink/40 hover:text-ink/70 transition p-1 cursor-pointer">
+                    class="absolute right-3 text-fg-muted hover:text-fg transition p-1 cursor-pointer">
               <i class="ti text-lg" :class="showPass ? 'ti-eye-off' : 'ti-eye'" aria-hidden="true"></i>
             </button>
           </div>
@@ -145,15 +144,15 @@
 
         <!-- Checkbox Remember Me -->
         <div class="flex items-center justify-between pt-1">
-          <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-ink/70">
-            <input type="checkbox" class="w-4 h-4 rounded border-line text-moss-600 focus:ring-moss-500 accent-moss-600 cursor-pointer">
+          <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-fg">
+            <input type="checkbox" class="w-4 h-4 rounded border-line text-accent-text focus:ring-accent accent-accent cursor-pointer">
             <span>Recordar este dispositivo</span>
           </label>
         </div>
 
         <!-- Botón Principal de Envío -->
         <button type="submit"
-                class="w-full h-11 rounded-xl bg-moss-600 hover:bg-moss-700 text-white font-semibold text-sm inline-flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all duration-150 cursor-pointer">
+                class="w-full h-11 rounded-lg bg-accent-hover hover:bg-accent text-accent-on font-semibold text-sm inline-flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all duration-150 cursor-pointer">
           <span>Iniciar sesión</span>
           <i class="ti ti-arrow-right text-base" aria-hidden="true"></i>
         </button>
@@ -161,7 +160,7 @@
     </div>
 
     <!-- Pie de página móvil -->
-    <div class="lg:hidden mt-8 text-center text-xs text-slate-400">
+    <div class="lg:hidden mt-8 text-center text-xs text-fg-muted">
       <p>© {{ now|date:"Y"|default:"2026" }} Tabler IA. Todos los derechos reservados.</p>
     </div>
 

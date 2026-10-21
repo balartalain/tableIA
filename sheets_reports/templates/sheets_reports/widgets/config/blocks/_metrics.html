@@ -2,31 +2,31 @@
 <div class="space-y-2">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-1">
-      <label class="block text-xs font-semibold text-ink/70">Métricas</label>
+      <label class="block text-xs font-semibold text-fg">Métricas</label>
       <button type="button" x-on:click="$store.help.open('metricas')" aria-label="Ayuda de métricas" title="¿Qué son las métricas?"
-              class="p-0.5 rounded-full text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+              class="p-0.5 rounded-full text-fg-muted hover:text-accent-text hover:bg-surface-muted cursor-pointer">
         <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
       </button>
     </div>
     <button type="button" x-on:click="$store.dashboard.addMetric()"
             x-bind:disabled="$store.dashboard.drawerDraft.fields.metrics.length >= $store.dashboard.metricsLimit"
             x-bind:title="$store.dashboard.metricsLimitedByPivot ? 'Con pivote, una sola métrica' : ''"
-            class="text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+            class="text-xs font-medium text-accent-text hover:text-accent-text disabled:opacity-40 cursor-pointer flex items-center gap-1">
       <i class="ti ti-plus text-sm" aria-hidden="true"></i> Agregar
     </button>
   </div>
-  <p x-show="!$store.dashboard.drawerDraft.fields.metrics.length" class="text-[11px] text-ink/50">
+  <p x-show="!$store.dashboard.drawerDraft.fields.metrics.length" class="text-xs text-fg-muted">
     Sin métricas: el widget lista las dimensiones tal cual.
   </p>
   <div class="space-y-1.5" data-column-list="metrics">
     <template x-for="(metric, idx) in $store.dashboard.drawerDraft.fields.metrics" :key="idx">
-      <div class="flex gap-2 items-start rounded-lg bg-paper/70 border border-line/60 p-2" data-column-row>
-        <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-ink/30 hover:text-ink/60 select-none mt-0.5"
+      <div class="flex gap-2 items-start rounded-lg bg-app border border-line p-2" data-column-row>
+        <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-fg-subtle hover:text-fg-muted select-none mt-0.5"
            aria-hidden="true" title="Arrastra para reordenar"></i>
         <div class="flex-1 min-w-0 space-y-1.5">
           <div class="space-y-1.5">
             <select x-vselect x-model="metric.field" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Columna"
-                    class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                    class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">
               <template x-if="metric.agg === 'count'">
                 <option value="">Todas las filas</option>
               </template>
@@ -58,7 +58,7 @@
               <select x-vselect x-model="metric.agg" x-on:change="$store.dashboard.onMetricFieldChange(metric)" aria-label="Agregación"
                       x-bind:disabled="metric.agg === 'auto'"
                       x-bind:title="metric.agg === 'auto' ? 'La agregación viene en la fórmula del campo calculado' : ''"
-                      class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500 disabled:bg-paper disabled:text-ink/60">
+                      class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent disabled:bg-app disabled:text-fg-muted">
                 <template x-for="o in $store.dashboard.metricAggOptions(metric)" :key="o.value">
                   <option x-bind:value="o.value" x-text="o.label" x-bind:selected="metric.agg === o.value"></option>
                 </template>
@@ -69,7 +69,7 @@
                   <select x-vselect="(metric.window && metric.window.type) || ''" x-bind:value="(metric.window && metric.window.type) || ''"
                           x-on:change="$store.dashboard.setMetricWindow(metric, $event.target.value)"
                           aria-label="Mostrar como" title="Mostrar como"
-                          class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                          class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">
                     <template x-for="o in $store.dashboard.metricWindowOptions(metric)" :key="o.value">
                       <option x-bind:value="o.value"
                               x-text="'Mostrar: ' + o.label.charAt(0).toLowerCase() + o.label.slice(1)"
@@ -77,7 +77,7 @@
                     </template>
                   </select>
                   <button type="button" x-on:click="$store.help.open('mostrar-como')" aria-label="Ayuda de Mostrar como" title="¿Qué es «Mostrar como»?"
-                          class="shrink-0 p-0.5 rounded-full text-ink/60 hover:text-moss-700 hover:bg-paper cursor-pointer">
+                          class="shrink-0 p-0.5 rounded-full text-fg-muted hover:text-accent-text hover:bg-surface-muted cursor-pointer">
                     <i class="ti ti-help-circle text-lg leading-none" aria-hidden="true"></i>
                   </button>
                 </div>
@@ -87,7 +87,7 @@
             <select x-vselect="metric.format || ''" x-bind:value="metric.format || ''"
                     x-on:change="$event.target.value ? metric.format = $event.target.value : delete metric.format"
                     aria-label="Formato" title="Cómo se muestran los valores de esta métrica"
-                    class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                    class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">
               <template x-for="o in $store.dashboard.metricFormatOptions" :key="o.value">
                 <option x-bind:value="o.value" x-text="'Formato: ' + o.label"
                         x-bind:selected="o.value === (metric.format || '')"></option>
@@ -97,21 +97,21 @@
             <!-- Condiciones propias: la métrica resume solo esas filas (ej. ventas de Electrónica
                  junto al total). Plegable; abierto si ya trae condiciones. -->
             <template x-if="$store.dashboard.hasMetricFilters">
-              <div x-data="{ open: (metric.filters || []).length > 0 }" class="rounded border border-line/60 bg-white/70">
+              <div x-data="{ open: (metric.filters || []).length > 0 }" class="rounded border border-line bg-surface">
                 <button type="button" x-on:click="open = !open" x-bind:aria-expanded="open ? 'true' : 'false'"
                         class="w-full flex items-center gap-1.5 px-2 py-1 text-left cursor-pointer select-none">
-                  <i class="ti ti-chevron-right text-xs text-ink/50 transition-transform" x-bind:class="open ? 'rotate-90' : ''" aria-hidden="true"></i>
-                  <span class="text-[11px] font-semibold text-ink/60">Solo filas donde…</span>
-                  <span class="ml-auto min-w-0 truncate text-[11px] text-ink/45"
+                  <i class="ti ti-chevron-right text-xs text-fg-muted transition-transform" x-bind:class="open ? 'rotate-90' : ''" aria-hidden="true"></i>
+                  <span class="text-xs font-semibold text-fg-muted">Solo filas donde…</span>
+                  <span class="ml-auto min-w-0 truncate text-xs text-fg-muted"
                         x-text="(metric.filters || []).length ? (metric.filters.length === 1 ? '1 condición' : metric.filters.length + ' condiciones') : 'todas las filas'"></span>
                 </button>
-                <div x-show="open" class="space-y-1 border-t border-line/60 p-1.5">
+                <div x-show="open" class="space-y-1 border-t border-line p-1.5">
                   <template x-for="(c, ci) in metric.filters || []" :key="c._k">
                     {% include "sheets_reports/widgets/config/blocks/_condition_row.html" with list="metric.filters" %}
                   </template>
                   <button type="button" x-on:click="$store.dashboard.addMetricFilter(metric)"
                           x-bind:disabled="(metric.filters || []).length >= 20"
-                          class="text-[11px] font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+                          class="text-xs font-medium text-accent-text hover:text-accent-text disabled:opacity-40 cursor-pointer flex items-center gap-1">
                     <i class="ti ti-plus text-sm" aria-hidden="true"></i> Condición
                   </button>
                 </div>
@@ -122,10 +122,10 @@
         <input type="text" x-model="metric.label" aria-label="Nombre a mostrar"
                x-bind:title="'Se muestra: ' + $store.dashboard.metricName(metric)"
                x-bind:placeholder="$store.dashboard.metricName(metric)"
-               class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+               class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">
       </div>
       <button type="button" x-on:click="$store.dashboard.removeMetric(idx)"
-              class="text-ink/40 hover:text-red-600 transition cursor-pointer px-1 text-base leading-none" title="Quitar métrica" aria-label="Quitar métrica">×</button>
+              class="text-fg-muted hover:text-danger transition cursor-pointer px-1 text-base leading-none" title="Quitar métrica" aria-label="Quitar métrica">×</button>
     </div>
   </template>
   </div>

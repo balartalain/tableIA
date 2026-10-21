@@ -12,46 +12,46 @@
          De ella depende cómo se mide cada par. -->
     <div class="space-y-2" x-data>
       <template x-if="$store.dashboard.scaleEditor">
-        <div class="space-y-2 rounded border border-line/60 bg-paper/60 p-3">
+        <div class="space-y-2 rounded border border-line bg-app p-3">
           <div class="flex items-center justify-between gap-2">
-            <label class="block text-xs font-semibold text-ink/70 truncate"
+            <label class="block text-xs font-semibold text-fg truncate"
                    x-text="'Escala de «' + $store.dashboard.scaleEditor.field + '»'"></label>
             <button type="button" x-on:click="$store.dashboard.scaleEditor = null"
-                    class="text-ink/40 hover:text-ink/70 cursor-pointer text-base leading-none" aria-label="Cerrar">×</button>
+                    class="text-fg-muted hover:text-fg cursor-pointer text-base leading-none" aria-label="Cerrar">×</button>
           </div>
           <select x-vselect="$store.dashboard.scaleEditor.scale" x-bind:value="$store.dashboard.scaleEditor.scale"
                   x-on:change="$store.dashboard.onScaleEditorChange($event.target.value)"
                   aria-label="Escala"
-                  class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-white focus:outline-none focus:border-moss-500">
+                  class="w-full text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">
             <template x-for="o in $store.dashboard.scaleOptions($store.dashboard.scaleEditor.field)" :key="o.value">
               <option x-bind:value="o.value" x-text="o.label"></option>
             </template>
           </select>
           <template x-if="$store.dashboard.scaleEditor.scale === 'ordinal'">
             <div class="space-y-1">
-              <p class="text-[11px] text-ink/50">Orden de los valores, de menor a mayor:</p>
+              <p class="text-xs text-fg-muted">Orden de los valores, de menor a mayor:</p>
               <template x-for="(value, i) in $store.dashboard.scaleEditor.order" :key="value">
                 <div class="flex items-center gap-1 text-xs">
-                  <span class="w-5 text-right tabular-nums text-ink/40" x-text="i + 1"></span>
-                  <span class="flex-1 min-w-0 truncate rounded border border-line/60 bg-white px-1.5 py-0.5" x-text="value"></span>
+                  <span class="w-5 text-right tabular-nums text-fg-muted" x-text="i + 1"></span>
+                  <span class="flex-1 min-w-0 truncate rounded border border-line bg-surface px-1.5 py-0.5" x-text="value"></span>
                   <button type="button" x-on:click="$store.dashboard.moveOrderValue(i, -1)" x-bind:disabled="i === 0"
-                          class="px-1 text-ink/50 hover:text-ink disabled:opacity-30 cursor-pointer" aria-label="Subir">
+                          class="px-1 text-fg-muted hover:text-fg disabled:opacity-30 cursor-pointer" aria-label="Subir">
                     <i class="ti ti-chevron-up" aria-hidden="true"></i>
                   </button>
                   <button type="button" x-on:click="$store.dashboard.moveOrderValue(i, 1)"
                           x-bind:disabled="i === $store.dashboard.scaleEditor.order.length - 1"
-                          class="px-1 text-ink/50 hover:text-ink disabled:opacity-30 cursor-pointer" aria-label="Bajar">
+                          class="px-1 text-fg-muted hover:text-fg disabled:opacity-30 cursor-pointer" aria-label="Bajar">
                     <i class="ti ti-chevron-down" aria-hidden="true"></i>
                   </button>
                 </div>
               </template>
             </div>
           </template>
-          <p class="text-[11px] text-red-600" x-show="$store.dashboard.scaleEditor.error" x-text="$store.dashboard.scaleEditor.error"></p>
+          <p class="text-xs text-danger" x-show="$store.dashboard.scaleEditor.error" x-text="$store.dashboard.scaleEditor.error"></p>
           <div class="flex justify-end">
             <button type="button" x-on:click="$store.dashboard.saveScaleEditor()"
                     x-bind:disabled="$store.dashboard.scaleEditor.saving"
-                    class="text-xs font-medium px-2.5 py-1 rounded-full bg-moss-600 text-white hover:bg-moss-700 disabled:opacity-50 cursor-pointer">
+                    class="ui-btn ui-btn-primary ui-btn-xs">
               Guardar en la fuente
             </button>
           </div>
@@ -59,37 +59,37 @@
       </template>
 
       <div class="flex items-center justify-between gap-2">
-        <p class="text-[11px] text-ink/50">Una nominal suma una fila por categoría (hasta 10). Si sus valores tienen orden, márcala como ordinal.</p>
+        <p class="text-xs text-fg-muted">Una nominal suma una fila por categoría (hasta 10). Si sus valores tienen orden, márcala como ordinal.</p>
         <button type="button" x-on:click="$store.dashboard.classifyScales()"
                 x-bind:disabled="!$store.dashboard.drawerDraft.fields.columns.length || ($store.dashboard.scaleProposal && $store.dashboard.scaleProposal.loading)"
-                class="shrink-0 text-xs font-medium text-moss-700 hover:text-moss-800 disabled:opacity-40 cursor-pointer flex items-center gap-1">
+                class="shrink-0 text-xs font-medium text-accent-text hover:text-accent-text disabled:opacity-40 cursor-pointer flex items-center gap-1">
           <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
           <span x-text="$store.dashboard.scaleProposal && $store.dashboard.scaleProposal.loading ? 'Clasificando…' : 'Clasificar con IA'"></span>
         </button>
       </div>
       <template x-if="$store.dashboard.scaleProposal && !$store.dashboard.scaleProposal.loading">
-        <div class="space-y-2 rounded border border-line/60 bg-paper/60 p-3 text-xs">
-          <p class="text-red-600" x-show="$store.dashboard.scaleProposal.error" x-text="$store.dashboard.scaleProposal.error"></p>
-          <p class="text-ink/60" x-show="!$store.dashboard.scaleProposal.error && !$store.dashboard.scaleProposal.items.length">
+        <div class="space-y-2 rounded border border-line bg-app p-3 text-xs">
+          <p class="text-danger" x-show="$store.dashboard.scaleProposal.error" x-text="$store.dashboard.scaleProposal.error"></p>
+          <p class="text-fg-muted" x-show="!$store.dashboard.scaleProposal.error && !$store.dashboard.scaleProposal.items.length">
             La IA está de acuerdo con las escalas actuales.
           </p>
           <ul class="space-y-1.5" x-show="$store.dashboard.scaleProposal.items.length">
             <template x-for="p in $store.dashboard.scaleProposal.items" :key="p.field">
               <li>
-                <span class="font-medium text-ink/80" x-text="p.field"></span>:
+                <span class="font-medium text-fg" x-text="p.field"></span>:
                 <span x-text="$store.dashboard.scaleLabel($store.dashboard.columnScale(p.field))"></span>
                 → <span class="font-medium" x-text="$store.dashboard.scaleLabel(p.scale)"></span>
-                <span class="text-ink/50" x-show="p.order" x-text="p.order ? '(' + p.order.join(' < ') + ')' : ''"></span>
-                <div class="text-[11px] text-ink/50" x-text="p.reason"></div>
+                <span class="text-fg-muted" x-show="p.order" x-text="p.order ? '(' + p.order.join(' < ') + ')' : ''"></span>
+                <div class="text-xs text-fg-muted" x-text="p.reason"></div>
               </li>
             </template>
           </ul>
           <div class="flex justify-end gap-2">
             <button type="button" x-on:click="$store.dashboard.scaleProposal = null"
-                    class="text-xs text-ink/60 hover:text-ink cursor-pointer">Descartar</button>
+                    class="text-xs text-fg-muted hover:text-fg cursor-pointer">Descartar</button>
             <button type="button" x-show="$store.dashboard.scaleProposal.items.length"
                     x-on:click="$store.dashboard.acceptScaleProposal()"
-                    class="text-xs font-medium px-2.5 py-1 rounded-full bg-moss-600 text-white hover:bg-moss-700 cursor-pointer">
+                    class="ui-btn ui-btn-primary ui-btn-xs">
               Aplicar en la fuente
             </button>
           </div>
@@ -103,9 +103,9 @@
          class="space-y-3">
       <div>
         <div class="flex items-center justify-between mb-1">
-          <label class="block text-xs font-semibold text-ink/70">Método</label>
+          <label class="block text-xs font-semibold text-fg">Método</label>
           <template x-if="$store.dashboard.isCorrelationLockedToSpearman">
-            <span class="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+            <span class="inline-flex items-center gap-1 text-xs font-medium text-warning bg-warning-bg px-1.5 py-0.5 rounded border border-warning">
               <i class="ti ti-lock text-xs"></i>
               Fijado en Spearman
             </span>
@@ -114,54 +114,54 @@
         <select x-vselect
                 x-model="$store.dashboard.drawerDraft.style.method"
                 x-bind:disabled="$store.dashboard.isCorrelationLockedToSpearman"
-                class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-moss-500">
+                class="w-full text-sm border border-line rounded-md px-3 py-2 focus:outline-none focus:border-accent">
           <option value="pearson">Pearson (relación lineal)</option>
           <option value="spearman">Spearman (por rangos)</option>
         </select>
         <template x-if="$store.dashboard.isCorrelationLockedToSpearman">
-          <p class="mt-1 text-[11px] text-amber-700 leading-normal">
+          <p class="mt-1 text-xs text-warning leading-normal">
             Al incluir variables ordinales o cualitativas, el cálculo utiliza automáticamente correlación de Spearman (por rangos).
           </p>
         </template>
         <template x-if="!$store.dashboard.isCorrelationLockedToSpearman">
-          <ul class="mt-1 list-disc pl-4 space-y-0.5 text-[11px] text-ink/50">
-            <li><span class="font-semibold text-ink/60">Pearson:</span> mide si los valores suben o bajan juntos en línea recta. Úsalo con datos sin valores extremos.</li>
-            <li><span class="font-semibold text-ink/60">Spearman:</span> compara el orden de los valores, no su tamaño: aguanta valores extremos y relaciones que no son una línea recta.</li>
+          <ul class="mt-1 list-disc pl-4 space-y-0.5 text-xs text-fg-muted">
+            <li><span class="font-semibold text-fg-muted">Pearson:</span> mide si los valores suben o bajan juntos en línea recta. Úsalo con datos sin valores extremos.</li>
+            <li><span class="font-semibold text-fg-muted">Spearman:</span> compara el orden de los valores, no su tamaño: aguanta valores extremos y relaciones que no son una línea recta.</li>
           </ul>
         </template>
       </div>
 
       <!-- Respuestas no evaluables ("No aplica", etc.) -->
-      <div class="space-y-2 rounded border border-line/60 bg-paper/60 p-3">
-        <label class="flex items-center gap-2 text-xs font-semibold text-ink/70 cursor-pointer select-none">
+      <div class="space-y-2 rounded border border-line bg-app p-3">
+        <label class="flex items-center gap-2 text-xs font-semibold text-fg cursor-pointer select-none">
           <input type="checkbox" x-model="$store.dashboard.drawerDraft.style.ignoreNonApplicable"
-                 class="h-4 w-4 rounded border-line text-moss-600 focus:ring-moss-500">
+                 class="h-4 w-4 rounded border-line text-accent-text focus:ring-accent">
           <span>Ignorar respuestas no evaluables</span>
         </label>
         <div x-show="$store.dashboard.drawerDraft.style.ignoreNonApplicable" class="space-y-1.5 pt-1">
-          <label class="block text-[11px] font-medium text-ink/60">Valores a ignorar:</label>
+          <label class="block text-xs font-medium text-fg-muted">Valores a ignorar:</label>
           <select x-vselect
                   multiple
                   data-allow-new-option="true"
                   placeholder="Elegir o escribir respuestas a ignorar…"
                   x-model="$store.dashboard.ignoredValuesList"
-                  class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-white focus:outline-none focus:border-moss-500">
+                  class="w-full text-xs border border-line rounded-md px-2 py-1.5 bg-surface focus:outline-none focus:border-accent">
             <template x-for="val in $store.dashboard.availableIgnoredOptions" :key="val">
               <option x-bind:value="val" x-text="val"></option>
             </template>
           </select>
-          <p class="text-[11px] text-ink/50 leading-tight">
+          <p class="text-xs text-fg-muted leading-tight">
             Los valores que coincidan (sin distinguir mayúsculas ni espacios) se tratan como vacíos al medir cada par, sin borrar la fila de otras variables.
           </p>
         </div>
       </div>
     </div>
-    <!-- Cómo se lee: la escala de fuerza de correlation-widget.js (window.CORRELATION_SCALE), la
-         misma que colorea las celdas y nombra la fuerza en el tooltip. -->
-    <div class="space-y-2 rounded border border-line/60 bg-paper/60 p-3"
+    <!-- Cómo se lee: la escala de fuerza de correlation-widget.js (correlationScale), con los
+         colores del tablero: la misma que colorea las celdas y nombra la fuerza en el tooltip. -->
+    <div class="space-y-2 rounded border border-line bg-app p-3"
          x-data="{
            get levels() {
-             const scale = window.CORRELATION_SCALE || [];
+             const scale = window.correlationScale ? window.correlationScale() : [];
              const fmt = v => String(v).replace('.', ',');
              return scale.map((level, i) => ({
                ...level,
@@ -171,24 +171,24 @@
              }));
            },
          }">
-      <label class="block text-xs font-semibold text-ink/70">Cómo se lee</label>
+      <label class="block text-xs font-semibold text-fg">Cómo se lee</label>
       <ul class="space-y-1">
         <template x-for="level in levels" :key="level.label">
-          <li class="flex items-center gap-2 text-[11px] text-ink/70">
+          <li class="flex items-center gap-2 text-xs text-fg">
             <span class="flex shrink-0" aria-hidden="true">
-              <span class="h-3.5 w-5 rounded-l-sm border border-line/60" x-bind:style="`background:${level.negative}`"></span>
-              <span class="h-3.5 w-5 rounded-r-sm border border-l-0 border-line/60" x-bind:style="`background:${level.positive}`"></span>
+              <span class="h-3.5 w-5 rounded-l-sm border border-line" x-bind:style="`background:${level.negative}`"></span>
+              <span class="h-3.5 w-5 rounded-r-sm border border-l-0 border-line" x-bind:style="`background:${level.positive}`"></span>
             </span>
             <span class="font-medium w-20" x-text="level.label"></span>
-            <span class="tabular-nums text-ink/50" x-text="level.range"></span>
+            <span class="tabular-nums text-fg-muted" x-text="level.range"></span>
           </li>
         </template>
       </ul>
-      <p class="text-[11px] text-ink/50">Valor absoluto de la correlación (de 0 a 1). Verde: cuando una sube, la otra también. Rojo: cuando una sube, la otra baja. Gris: sin datos suficientes.</p>
-      <ul class="list-disc pl-4 space-y-0.5 text-[11px] text-ink/50">
-        <li><span class="font-semibold text-ink/60">Entre números:</span> el método elegido (Pearson o Spearman).</li>
-        <li><span class="font-semibold text-ink/60">Con una ordinal:</span> Spearman, según el orden de sus valores.</li>
-        <li><span class="font-semibold text-ink/60">Con una nominal:</span> cada categoría es una fila que vale 1 si la respuesta es de esa categoría y 0 si no; se usa Spearman. Una de Sí/No es una sola fila, la del «Sí». Entre categorías de la misma variable no se compara.</li>
+      <p class="text-xs text-fg-muted">Valor absoluto de la correlación (de 0 a 1). Azul: cuando una sube, la otra también. Rojo: cuando una sube, la otra baja. Gris: sin datos suficientes.</p>
+      <ul class="list-disc pl-4 space-y-0.5 text-xs text-fg-muted">
+        <li><span class="font-semibold text-fg-muted">Entre números:</span> el método elegido (Pearson o Spearman).</li>
+        <li><span class="font-semibold text-fg-muted">Con una ordinal:</span> Spearman, según el orden de sus valores.</li>
+        <li><span class="font-semibold text-fg-muted">Con una nominal:</span> cada categoría es una fila que vale 1 si la respuesta es de esa categoría y 0 si no; se usa Spearman. Una de Sí/No es una sola fila, la del «Sí». Entre categorías de la misma variable no se compara.</li>
       </ul>
     </div>
     {% include B|add:"_filters.html" with label="Condición" %}

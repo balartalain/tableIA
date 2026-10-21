@@ -53,8 +53,14 @@ class BarCompileTests(SimpleTestCase):
             {"kind": "value"},
             {"kind": "mediana"},
         ]})
-        self.assertEqual(len(out["referenceLines"]["yaxis"]), 1)
-        self.assertEqual(out["referenceLines"]["yaxis"][0]["y"], 400)
+        self.assertEqual(out["referenceLines"], [{"kind": "value", "value": 400, "label": "Meta"}])
+
+    def test_lineas_de_referencia_sin_color(self):
+        # El color de la línea es del tema del tablero (frontend), no del payload.
+        out = compiled("bar", fields(), {"reference_lines": [
+            {"kind": "avg", "color": "#d97706"},
+        ]})
+        self.assertEqual(out["referenceLines"], [{"kind": "avg"}])
 
     def test_porcentajes_se_marcan_para_el_formato(self):
         # El frontend reconoce las series por nombre, no por alias.

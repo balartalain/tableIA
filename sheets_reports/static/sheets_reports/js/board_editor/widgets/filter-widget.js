@@ -60,7 +60,7 @@
       const { x, y, w, primary } = ctx;
       const bw = Math.min(Math.max(20, w - 12), 60);
       return `
-        <rect x="${x + 6}" y="${y + 14}" width="${bw}" height="12" rx="2" fill="#FFFFFF" stroke="#E3E5DE"/>
+        <rect x="${x + 6}" y="${y + 14}" width="${bw}" height="12" rx="2" fill="${ctx.theme.card}" stroke="${ctx.theme.border}"/>
         <rect x="${x + 10}" y="${y + 18}" width="${Math.max(6, bw - 20)}" height="3" rx="1.5" fill="${primary}" opacity="0.4"/>`;
     }
 

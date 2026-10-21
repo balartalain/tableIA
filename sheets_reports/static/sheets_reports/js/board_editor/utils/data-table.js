@@ -10,7 +10,8 @@
 // - `sortable`: clic en el encabezado ordena (asc → desc → original); solo en tablas planas.
 // - `footerNote`: aviso a la izquierda del paginador.
 class DataTable {
-  static PROGRESS = { min: 0, max: 100, colors: ['#ef4444', '#f59e0b', '#10b981'] };
+  // Relleno de la barra por tercio, de menos a más (clases de tablero-theme.css).
+  static PROGRESS = { min: 0, max: 100, fills: ['tb-fill-bad', 'tb-fill-warn', 'tb-fill-good'] };
   static NUMBER_OPTIONS = { number: {}, currency: { currency: true }, percent: { percent: true } };
 
   constructor(host, {
@@ -146,10 +147,10 @@ class DataTable {
     if (format === 'text') return esc(value == null ? '' : String(value));
     if (format === 'progress') {
       if (value == null || value === '') return '-';
-      const { min, max, colors } = DataTable.PROGRESS;
+      const { min, max, fills } = DataTable.PROGRESS;
       const pct = Math.max(0, Math.min(100, ((Number(value) - min) / (max - min)) * 100)) || 0;
-      const color = colors[Math.min(colors.length - 1, Math.floor(pct / (100 / colors.length)))];
-      return `<span class="tb-progress"><span style="width:${pct}%;background:${color}"></span></span>`
+      const fill = fills[Math.min(fills.length - 1, Math.floor(pct / (100 / fills.length)))];
+      return `<span class="tb-progress"><span class="${fill}" style="width:${pct}%"></span></span>`
         + `<span class="tb-progress-legend">${esc(formatNumber(value, { percent: true }))}</span>`;
     }
     return esc(formatNumber(value, DataTable.NUMBER_OPTIONS[format] || {}));

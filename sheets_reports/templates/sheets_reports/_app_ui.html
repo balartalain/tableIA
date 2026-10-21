@@ -1,86 +1,163 @@
 {% comment %}
-Componentes de la app (home, fuentes, configuración, correo): una sola versión de cada botón,
-campo, tarjeta, modal, pestaña, badge y tabla. El tablero y los widgets no los usan.
+Componentes de la app (header, home, fuentes, configuración, correo, modales): una sola versión
+de cada botón, campo, tarjeta, modal, pestaña, badge y tabla. Lo que va dentro del lienzo usa
+tablero-theme.css (.tb-*), no estas clases.
 
 Va dentro de <head> como `text/tailwindcss`: el CDN de Tailwind la procesa (sin build) y deja
 estas clases en la capa `components`, debajo de las utilidades, así que una utilidad suelta
-(`w-64`, `hover:text-red-600`) las ajusta en un caso puntual. Las reglas sobre descendientes
-van con `:where()` para no ganarle en especificidad a esas utilidades.
+(`w-64`, `hover:text-danger`) las ajusta en un caso puntual. Las reglas sobre descendientes
+van con `:where()` para no ganarle en especificidad a esas utilidades. Los colores salen de
+tokens.css (variables `--color-*` y de componente), nunca de un valor suelto.
 {% endcomment %}
 <style type="text/tailwindcss">
+  @layer base {
+    body { @apply bg-app text-fg font-sans text-base antialiased; }
+    h1 { @apply text-xl font-bold text-heading; }
+    h2 { @apply text-lg font-semibold text-heading; }
+    h3 { @apply text-md font-semibold text-heading; }
+    a { @apply text-accent-text; }
+    :focus-visible { outline: 3px solid var(--color-focus-ring); outline-offset: 1px; }
+    [x-cloak] { display: none !important; }
+  }
+
   @layer components {
     /* ---------- Botones: .ui-btn + una variante (+ un tamaño) ---------- */
     .ui-btn {
       @apply inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-full border border-transparent
-             text-sm font-medium whitespace-nowrap transition cursor-pointer
-             disabled:opacity-40 disabled:cursor-not-allowed;
+             text-sm font-semibold whitespace-nowrap no-underline transition-colors cursor-pointer
+             disabled:opacity-50 disabled:cursor-not-allowed;
     }
     .ui-btn-sm { @apply h-8 px-3 text-xs; }
-    .ui-btn-xs { @apply h-6 px-2 gap-1 text-[11px]; }
-    /* Principal: fondo muy claro, texto en el color principal y borde suave (como «Generar con IA» en violeta). */
-    .ui-btn-primary { @apply bg-moss-50 border-moss-100 text-moss-500 hover:bg-moss-100; }
-    .ui-btn-primary :where(.ti) { @apply text-moss-500; }
-    .ui-btn-secondary { @apply bg-white border-line text-ink/70 hover:bg-paper hover:text-ink; }
-    .ui-btn-ghost { @apply text-ink/60 hover:bg-paper hover:text-ink; }
-    .ui-btn-danger { @apply bg-red-600 text-white hover:bg-red-700; }
-    .ui-btn-danger-outline { @apply bg-white border-red-300 text-red-700 hover:bg-red-600 hover:border-red-600 hover:text-white; }
-    /* Solo ícono: cuadrado, gris hasta el hover. */
-    .ui-btn-icon { @apply w-8 h-8 px-0 text-ink/50 hover:text-ink hover:bg-paper; }
+    .ui-btn-xs { @apply h-6 px-2 gap-1 text-xs; }
+    /* Principal: naranja con texto navy (nunca blanco). Una por zona. */
+    .ui-btn-primary { background: var(--btn-primary-bg); color: var(--btn-primary-text); }
+    .ui-btn-primary:hover:not(:disabled) { background: var(--btn-primary-bg-hover); }
+    .ui-btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-text); border-color: var(--btn-secondary-border); }
+    .ui-btn-secondary:hover:not(:disabled) { @apply bg-surface-muted; }
+    /* Oscuro: acción fuerte que no es la principal. */
+    .ui-btn-dark { background: var(--btn-dark-bg); color: var(--btn-dark-text); }
+    .ui-btn-dark:hover:not(:disabled) { @apply bg-primary-hover; }
+    .ui-btn-ghost { @apply bg-transparent text-fg-muted; }
+    .ui-btn-ghost:hover:not(:disabled) { @apply bg-surface-muted text-fg; }
+    .ui-btn-danger { @apply bg-danger-bg text-danger border-danger; }
+    .ui-btn-danger-outline { @apply bg-surface border-danger text-danger; }
+    .ui-btn-danger-outline:hover:not(:disabled) { @apply bg-danger-bg; }
+    /* Solo ícono: cuadrado, atenuado hasta el hover. */
+    .ui-btn-icon { @apply w-8 h-8 px-0 rounded-md bg-transparent text-fg-muted; }
+    .ui-btn-icon:hover:not(:disabled) { @apply bg-surface-muted text-primary; }
+
+    /* ---------- Header y navegación lateral ---------- */
+    .ui-app-header { background: var(--header-bg); color: var(--header-text); border-bottom: 1px solid var(--header-border); }
+    .ui-sidebar { background: var(--sidebar-bg); border-right: 1px solid var(--sidebar-border); }
+    /* Ítem de navegación: un enlace con el aspecto de .ui-btn-secondary, alineado a la izquierda
+       y a todo el ancho. Activo con .is-active o aria-current="page". */
+    .ui-nav-item {
+      @apply flex items-center gap-2.5 w-full h-9 px-4 rounded-full border text-sm font-semibold
+             no-underline transition-colors cursor-pointer;
+      background: var(--btn-secondary-bg); color: var(--btn-secondary-text); border-color: var(--btn-secondary-border);
+    }
+    .ui-nav-item:hover { @apply bg-surface-muted; }
+    .ui-nav-item.is-active, .ui-nav-item[aria-current="page"] {
+      background: var(--sidebar-active-bg); color: var(--sidebar-active-text); border-color: var(--sidebar-active-border);
+    }
+    .ui-sidebar-label { @apply text-xs font-semibold uppercase tracking-label text-fg-muted; }
+    .ui-module-card { @apply flex items-center gap-3 px-3 py-2 bg-surface border border-line rounded-md cursor-grab; }
+    .ui-module-card:hover { @apply border-line-strong shadow-sm; }
+    .ui-module-icon { @apply grid place-items-center w-8 h-8 rounded-sm shrink-0;
+      background: var(--module-icon-bg); color: var(--module-icon-text); }
 
     /* ---------- Formularios ---------- */
-    .ui-label { @apply block text-xs font-semibold text-ink/70; }
+    .ui-label { @apply block text-xs font-semibold text-fg; }
+    .ui-help { @apply text-xs text-fg-muted; }
     .ui-input {
-      @apply w-full h-9 px-3 rounded-md border border-line bg-white text-sm text-ink
-             placeholder:text-ink/40 focus:outline-none focus:border-moss-500 transition
-             disabled:bg-paper disabled:text-ink/50;
+      @apply w-full h-9 px-3 rounded-md text-sm text-fg placeholder:text-fg-subtle transition
+             disabled:bg-app disabled:text-fg-subtle;
+      background: var(--input-bg); border: 1px solid var(--input-border);
     }
     .ui-input-sm { @apply h-8 px-2.5 text-xs; }
     .ui-textarea {
-      @apply w-full px-3 py-2 rounded-md border border-line bg-white text-sm text-ink
-             placeholder:text-ink/40 focus:outline-none focus:border-moss-500 transition;
+      @apply w-full px-3 py-2 rounded-md text-sm text-fg placeholder:text-fg-subtle transition;
+      background: var(--input-bg); border: 1px solid var(--input-border);
     }
-    .ui-check { @apply accent-moss-500 cursor-pointer; }
+    .ui-input:focus, .ui-textarea:focus { outline: 3px solid var(--color-focus-ring); border-color: var(--input-border-focus); }
+    .ui-check { @apply w-4 h-4 cursor-pointer; accent-color: var(--color-accent); }
 
     /* ---------- Contenedores ---------- */
-    .ui-card { @apply bg-white border border-line rounded-md; }
-    .ui-card-title { @apply text-sm font-semibold text-ink; }
+    .ui-card { @apply bg-surface border border-line rounded-lg shadow-sm; }
+    .ui-card-title { @apply text-md font-semibold text-heading; }
     /* Rótulo pequeño en mayúsculas: encabezados de sección, de tabla y de dato. */
-    .ui-eyebrow { @apply text-[11px] font-semibold uppercase tracking-wider text-ink/50; }
+    .ui-eyebrow { @apply text-xs font-semibold uppercase tracking-label text-fg-muted; }
+    .ui-code-chip { @apply font-mono text-xs px-1.5 py-0.5 rounded-sm bg-surface-muted text-primary; }
 
     .ui-alert { @apply rounded-md border px-3 py-2.5 text-sm; }
-    .ui-alert-error { @apply border-red-200 bg-red-50 text-red-700; }
-    .ui-alert-warn { @apply border-amber-200 bg-amber-50 text-amber-800; }
-    .ui-alert-info { @apply border-moss-100 bg-moss-50 text-moss-700; }
+    .ui-alert-error { @apply border-danger bg-danger-bg text-danger; }
+    .ui-alert-warn { @apply border-warning bg-warning-bg text-warning; }
+    .ui-alert-info { @apply border-accent-soft-border bg-accent-soft text-accent-text; }
 
     /* ---------- Badges ---------- */
-    .ui-badge { @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap; }
-    .ui-badge-neutral { @apply bg-paper border-line text-ink/60; }
-    .ui-badge-success { @apply bg-moss-50 border-moss-100 text-moss-700; }
-    .ui-badge-danger { @apply bg-red-50 border-red-200 text-red-700; }
-    .ui-badge-warn { @apply bg-amber-50 border-amber-200 text-amber-800; }
-    .ui-badge-info { @apply bg-sky-50 border-sky-200 text-sky-700; }
+    .ui-badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap; }
+    .ui-badge-neutral { @apply bg-surface-muted text-fg-muted; }
+    .ui-badge-success { @apply bg-success-bg text-success; }
+    .ui-badge-danger { @apply bg-danger-bg text-danger; }
+    .ui-badge-warn { @apply bg-warning-bg text-warning; }
+    .ui-badge-accent, .ui-badge-info { @apply bg-accent-soft text-accent-text; }
 
     /* ---------- Modal ---------- */
-    .ui-modal-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40; }
-    .ui-modal { @apply w-full max-w-md max-h-[90vh] flex flex-col bg-white border border-line rounded-md shadow-xl overflow-hidden; }
+    .ui-modal-backdrop { @apply fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay; }
+    .ui-modal { @apply w-full max-w-md max-h-[90vh] flex flex-col bg-surface border border-line rounded-lg shadow-md overflow-hidden; }
     .ui-modal-header { @apply shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-b border-line; }
-    .ui-modal-title { @apply text-sm font-semibold text-ink; }
+    .ui-modal-title { @apply text-md font-semibold text-heading; }
     .ui-modal-body { @apply flex-1 min-h-0 overflow-y-auto px-5 py-4; }
-    .ui-modal-footer { @apply shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-line bg-paper/60; }
+    .ui-modal-footer { @apply shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-line bg-app; }
+
+    /* ---------- Paneles inferiores (Configuración, Fuentes) ---------- */
+    .ui-panel { @apply bg-surface rounded-t-lg shadow-md; }
+    .ui-panel-header { @apply flex items-center justify-between px-6 py-4 border-b border-line; }
+    .ui-panel-title { @apply text-md font-semibold text-heading; }
+    .ui-danger-zone { @apply p-5 rounded-lg bg-danger-bg text-danger border border-danger; }
 
     /* ---------- Pestañas (subrayado) ---------- */
     .ui-tabs { @apply flex gap-1 border-b border-line; }
     .ui-tab {
-      @apply -mb-px inline-flex items-center gap-1.5 px-3 py-2.5 border-b-2 border-transparent
-             text-sm font-medium text-ink/60 hover:text-ink transition cursor-pointer;
+      @apply -mb-px inline-flex items-center gap-1.5 px-3 py-2.5 border-b-[3px] border-transparent
+             text-sm font-medium transition-colors cursor-pointer;
+      color: var(--tab-text);
     }
-    .ui-tab[aria-selected="true"], .ui-tab.is-active { @apply border-moss-500 text-moss-700; }
+    .ui-tab:hover { @apply text-fg; }
+    .ui-tab[aria-selected="true"], .ui-tab.is-active { @apply font-semibold;
+      color: var(--tab-active-text); border-bottom-color: var(--tab-active-border); }
 
     /* ---------- Tabla HTML simple (listados) ---------- */
     .ui-table { @apply w-full text-sm; }
-    .ui-table :where(thead) { @apply sticky top-0 z-10 bg-paper text-left; }
-    .ui-table :where(th) { @apply px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink/50; }
+    .ui-table :where(thead) { @apply sticky top-0 z-10 text-left; background: var(--table-header-bg); }
+    .ui-table :where(th) { @apply px-3 py-2 text-xs font-semibold uppercase tracking-label whitespace-nowrap;
+      color: var(--table-header-text); }
     .ui-table :where(td) { @apply px-3 py-2.5; }
-    .ui-table :where(tbody tr) { @apply border-t border-line; }
+    .ui-table :where(tbody tr) { border-top: 1px solid var(--table-border); }
+    .ui-table :where(tbody tr:hover) { background: var(--table-row-hover); }
+
+    /* ---------- Fondo de puntos (lienzo del editor, login) ---------- */
+    .ui-dot-grid {
+      background-color: var(--color-bg-app);
+      background-image: radial-gradient(var(--color-dot-grid) 1.2px, transparent 1.2px);
+      background-size: 20px 20px;
+    }
+
+    /* ---------- Barra de carga de la página: un tramo que cruza mientras hay un request ---------- */
+    .ui-page-loader { @apply fixed top-0 inset-x-0 z-50 h-1 overflow-hidden bg-accent-soft-border; }
+    .ui-page-loader > div { @apply h-full w-1/3 bg-accent; animation: ui-page-loader-slide 1.4s ease-in-out infinite; }
+    @keyframes ui-page-loader-slide {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(350%); }
+    }
+
+    /* ---------- Selects con buscador (x-vselect, vselect.js) ---------- */
+    .vscomp-toggle-button { @apply rounded-md; }
+    .vscomp-dropbox { @apply rounded-sm overflow-hidden; }
+    /* El select nativo queda oculto y el VirtualSelect ocupa su lugar. */
+    .vselect-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .vselect { min-width: 0; }
+    .vselect .vscomp-toggle-button { border-color: var(--input-border); font-size: inherit; }
+    .vselect.focused .vscomp-toggle-button, .vselect:focus .vscomp-toggle-button { border-color: var(--input-border-focus); box-shadow: none; }
   }
 </style>

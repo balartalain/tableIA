@@ -5,7 +5,7 @@ Ventana modal emergente con el análisis interpretativo del widget generado con 
   <template x-teleport="body">
     <div x-show="open" 
          x-on:keydown.escape.window="open = false"
-         class="fixed inset-0 z-50 bg-ink/40 backdrop-blur-xs flex items-center justify-center p-4"
+         class="fixed inset-0 z-50 bg-overlay backdrop-blur-xs flex items-center justify-center p-4"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
@@ -15,7 +15,7 @@ Ventana modal emergente con el análisis interpretativo del widget generado con 
 
       <div x-on:click.outside="open = false"
            role="dialog" aria-modal="true"
-           class="bg-white rounded-2xl w-full max-w-xl max-h-[85vh] flex flex-col border border-line shadow-2xl overflow-hidden"
+           class="bg-surface rounded-lg w-full max-w-xl max-h-[85vh] flex flex-col border border-line shadow-2xl overflow-hidden"
            x-transition:enter="transition ease-out duration-200"
            x-transition:enter-start="opacity-0 scale-95 translate-y-2"
            x-transition:enter-end="opacity-100 scale-100 translate-y-0"
@@ -24,14 +24,14 @@ Ventana modal emergente con el análisis interpretativo del widget generado con 
            x-transition:leave-end="opacity-0 scale-95 translate-y-2">
 
         <!-- Cabecera -->
-        <div class="px-5 py-3.5 bg-paper/60 border-b border-line flex items-center justify-between gap-3 shrink-0">
+        <div class="px-5 py-3.5 bg-app border-b border-line flex items-center justify-between gap-3 shrink-0">
           <div class="flex items-center gap-2.5 min-w-0">
-            <span class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-              <i class="ti ti-bulb text-xl" aria-hidden="true"></i>
+            <span class="w-9 h-9 rounded-lg bg-warning-bg text-warning flex items-center justify-center shrink-0">
+              <i class="ti ti-bulb text-lg" aria-hidden="true"></i>
             </span>
             <div class="min-w-0">
-              <h3 class="text-xs font-bold text-ink truncate" x-text="title || 'Análisis del gráfico'"></h3>
-              <p class="text-[10px] text-ink/50 truncate">Interpretación analítica de los datos</p>
+              <h3 class="text-xs font-bold text-fg truncate" x-text="title || 'Análisis del gráfico'"></h3>
+              <p class="text-xs text-fg-muted truncate">Interpretación analítica de los datos</p>
             </div>
           </div>
 
@@ -40,43 +40,43 @@ Ventana modal emergente con el análisis interpretativo del widget generado con 
                     x-bind:title="copied ? '¡Copiado!' : 'Copiar texto'"
                     x-bind:aria-label="copied ? '¡Copiado!' : 'Copiar texto'"
                     class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full transition cursor-pointer text-xs"
-                    x-bind:class="copied ? 'text-emerald-600 bg-emerald-50 font-medium' : 'text-ink/40 hover:text-ink hover:bg-paper'">
-              <i class="ti text-base" x-bind:class="copied ? 'ti-check text-emerald-600' : 'ti-copy'" aria-hidden="true"></i>
+                    x-bind:class="copied ? 'text-success bg-success-bg font-medium' : 'text-fg-muted hover:text-fg hover:bg-surface-muted'">
+              <i class="ti text-base" x-bind:class="copied ? 'ti-check text-success' : 'ti-copy'" aria-hidden="true"></i>
               <span x-show="copied" x-transition.opacity>¡Copiado!</span>
             </button>
             <button type="button" x-on:click="open = false"
                     title="Cerrar" aria-label="Cerrar"
-                    class="p-1.5 rounded-full text-ink/40 hover:text-ink hover:bg-paper transition cursor-pointer">
+                    class="p-1.5 rounded-full text-fg-muted hover:text-fg hover:bg-surface-muted transition cursor-pointer">
               <i class="ti ti-x text-base" aria-hidden="true"></i>
             </button>
           </div>
         </div>
 
         <!-- Contenido -->
-        <div class="flex-1 min-h-0 overflow-y-auto p-5 text-xs text-ink/90 leading-relaxed">
+        <div class="flex-1 min-h-0 overflow-y-auto p-5 text-xs text-fg leading-relaxed">
           <!-- Loader -->
           <div x-show="loading" class="py-12 flex flex-col items-center justify-center gap-3 text-center">
-            <div class="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center">
-              <i class="ti ti-loader-2 text-2xl animate-spin text-violet-600"></i>
+            <div class="w-10 h-10 rounded-lg bg-accent-soft text-accent-text flex items-center justify-center">
+              <i class="ti ti-loader-2 text-xl animate-spin text-accent-text"></i>
             </div>
             <div class="space-y-1">
-              <p class="font-semibold text-ink text-xs">Analizando datos del gráfico con IA…</p>
-              <p class="text-[11px] text-ink/50 max-w-xs">Identificando tendencias, máximos, mínimos y conclusiones clave.</p>
+              <p class="font-semibold text-fg text-xs">Analizando datos del gráfico con IA…</p>
+              <p class="text-xs text-fg-muted max-w-xs">Identificando tendencias, máximos, mínimos y conclusiones clave.</p>
             </div>
           </div>
 
           <!-- Error -->
-          <div x-show="error && !loading" class="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 space-y-1" role="alert">
+          <div x-show="error && !loading" class="p-3 rounded-lg border border-danger bg-danger-bg text-danger space-y-1" role="alert">
             <p class="font-semibold flex items-center gap-1">
               <i class="ti ti-alert-circle"></i>
               <span>No se pudo generar el análisis</span>
             </p>
             <p x-text="error"></p>
-            <button type="button" x-on:click="fetchInsight(widgetId, title)" class="mt-2 text-[11px] underline font-medium cursor-pointer">Reintentar</button>
+            <button type="button" x-on:click="fetchInsight(widgetId, title)" class="mt-2 text-xs underline font-medium cursor-pointer">Reintentar</button>
           </div>
 
           <!-- Texto Markdown -->
-          <div x-show="insight && !loading" class="prose prose-xs max-w-none text-ink leading-relaxed space-y-2" x-html="renderMarkdown(insight)"></div>
+          <div x-show="insight && !loading" class="prose prose-xs max-w-none text-fg leading-relaxed space-y-2" x-html="renderMarkdown(insight)"></div>
         </div>
       </div>
     </div>

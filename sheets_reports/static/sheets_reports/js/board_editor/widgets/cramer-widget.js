@@ -1,22 +1,21 @@
 (function () {
-  // La fuerza de la asociación según V de Cramér (de 0 a 1):
-  // La misma para el color de las celdas, el tooltip, «Lo más asociado» y la leyenda del panel (window.CRAMER_SCALE).
-  const DEFAULT_STEPS = BaseWidget.generateSequentialScale('#1F8A5F', '#F4F3EF', 5);
+  // La fuerza de la asociación según V de Cramér (de 0 a 1): la misma para el color de las
+  // celdas, el tooltip, «Lo más asociado» y la leyenda del panel (cramerScale). Cada nivel
+  // toma un tono de la escala secuencial del tablero (--tb-seq-1…5), del más claro al más oscuro.
   const SCALE = [
-    { min: 0, max: 0.1, label: 'Muy débil', color: DEFAULT_STEPS[0] },
-    { min: 0.1, max: 0.3, label: 'Débil', color: DEFAULT_STEPS[1] },
-    { min: 0.3, max: 0.5, label: 'Moderada', color: DEFAULT_STEPS[2] },
-    { min: 0.5, max: 0.8, label: 'Fuerte', color: DEFAULT_STEPS[3] },
-    { min: 0.8, max: 1.0, label: 'Muy fuerte', color: DEFAULT_STEPS[4] },
+    { min: 0, max: 0.1, label: 'Muy débil' },
+    { min: 0.1, max: 0.3, label: 'Débil' },
+    { min: 0.3, max: 0.5, label: 'Moderada' },
+    { min: 0.5, max: 0.8, label: 'Fuerte' },
+    { min: 0.8, max: 1.0, label: 'Muy fuerte' },
   ];
-  window.CRAMER_SCALE = SCALE;
 
-  const HIDDEN = 2;
-  const NO_DATA = 3;
-  const SENTINEL_RANGES = [
-    { from: 1.5, to: 2.5, color: '#ffffff', name: ' ' },
-    { from: 2.5, to: 3.5, color: '#e4e2dc', name: 'Sin datos' },
-  ];
+  // Los niveles con su color y el del texto escrito encima.
+  function cramerScale(el) {
+    const t = ChartTheme.read(el);
+    return SCALE.map((level, i) => ({ ...level, color: t.sequential[i], on: t.onSequential[i] }));
+  }
+  window.cramerScale = cramerScale;
 
   function strength(v) {
     const level = [...SCALE].reverse().find(l => v >= l.min) || SCALE[0];
@@ -51,11 +50,11 @@
       return this.buildStandardCardElement();
     }
 
-    // Miniatura: el SVG real del heatmap y, si no se puede, una rejilla en el color del tablero.
+    // Miniatura: el SVG real del heatmap y, si no se puede, una rejilla con la escala del tablero.
     async thumbnailContent(ctx) {
       const svg = await this.apexThumbnail(ctx);
       if (svg) return svg;
-      return BaseWidget.thumbGrid(ctx, BaseWidget.generateSequentialScale(ctx.primary));
+      return BaseWidget.thumbGrid(ctx, ctx.theme.sequential);
     }
 
     getProperties() {
@@ -82,7 +81,7 @@
       const container = this.getContentContainer();
       container.className = 'flex flex-col h-full min-h-0';
       if (size < 2) {
-        container.innerHTML = '<p class="m-auto text-xs text-ink/40">Elige al menos dos columnas categóricas.</p>';
+        container.innerHTML = '<p class="m-auto text-xs tb-text-muted">Elige al menos dos columnas categóricas.</p>';
         return;
       }
 
@@ -101,19 +100,18 @@
         };
       });
 
-      const baseColor = this.getPrimaryColor();
-      const steps = BaseWidget.generateSequentialScale(baseColor, '#F4F3EF', 5);
-      const scaleLevels = [
-        { min: 0, max: 0.1, label: 'Muy débil', color: steps[0] },
-        { min: 0.1, max: 0.3, label: 'Débil', color: steps[1] },
-        { min: 0.3, max: 0.5, label: 'Moderada', color: steps[2] },
-        { min: 0.5, max: 0.8, label: 'Fuerte', color: steps[3] },
-        { min: 0.8, max: 1.0, label: 'Muy fuerte', color: steps[4] },
-      ];
-      window.CRAMER_SCALE = scaleLevels;
+      const theme = this.themeColors();
+      const scaleLevels = cramerScale(this.el);
       const colorRanges = scaleLevels.map(level => ({
         from: level.min, to: level.max, color: level.color, name: level.label,
       }));
+      // El valor escrito en la celda, legible sobre el tono de su nivel.
+      const labelColor = ({ seriesIndex, dataPointIndex, w }) => {
+        const val = w.globals.series[seriesIndex][dataPointIndex];
+        if (val == null || val > 1) return theme.label;
+        const level = [...scaleLevels].reverse().find(l => val >= l.min) || scaleLevels[0];
+        return level.on;
+      };
 
       const options = {
         chart: {
@@ -142,11 +140,11 @@
             },
           },
         },
-        stroke: { width: 1, colors: ['#ffffff'] },
+        stroke: { width: 1, colors: [theme.stroke] },
         legend: { show: true, position: 'right' },
         dataLabels: {
           enabled: showValues,
-          style: { fontSize: '11px', fontWeight: 500, colors: ['#1f2328'] },
+          style: { fontSize: '11px', fontWeight: 500, colors: [labelColor] },
           formatter: (val) => (val == null || val > 1 ? '' : formatNumber(val, { decimals: 2 })),
         },
         xaxis: { labels: { rotate: -45, trim: true, style: { fontSize: '10px' } }, tooltip: { enabled: false } },
@@ -163,20 +161,20 @@
             const pair = `${esc(variables[i].label)} × ${esc(variables[j].label)}`;
             if (r == null) {
               const body = `Sin datos suficientes${n < 3 ? ` (${n} ${n === 1 ? 'fila' : 'filas'})` : ' (columna con una sola categoría)'}`;
-              return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug"><div class="font-semibold text-ink/80 mb-0.5">${pair}</div><div class="text-ink/60">${body}</div></div>`;
+              return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug"><div class="font-semibold tb-text mb-0.5">${pair}</div><div class="tb-text-muted">${body}</div></div>`;
             }
             return `<div class="px-2.5 py-1.5 text-xs max-w-[280px] whitespace-normal break-words leading-snug">
-              <div class="font-semibold text-ink/80 pb-1 mb-1 border-b border-line/60">${pair}</div>
+              <div class="font-semibold tb-text pb-1 mb-1 border-b tb-border">${pair}</div>
               <div class="flex items-center gap-2 my-0.5">
-                <span class="font-bold text-sm text-ink">V = ${formatNumber(r, { decimals: 2 })}</span>
-                <span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-paper border border-line text-ink/80">${strength(r)}</span>
+                <span class="font-bold text-sm tb-text">V = ${formatNumber(r, { decimals: 2 })}</span>
+                <span class="text-xs font-medium px-1.5 py-0.5 rounded tb-surface-muted border tb-border tb-text">${strength(r)}</span>
               </div>
-              <div class="text-[11px] text-ink/50">${n} filas analizadas</div>
+              <div class="text-xs tb-text-muted">${n} filas analizadas</div>
             </div>`;
           },
         },
       };
-      this._chart = new ApexCharts(container.querySelector('.cramer-chart'), options);
+      this._chart = new ApexCharts(container.querySelector('.cramer-chart'), BaseWidget.mergeOptions(this.themeOptions(), options));
       this._chart.render();
     }
   }

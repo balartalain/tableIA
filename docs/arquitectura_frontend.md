@@ -16,7 +16,9 @@ El frontend es una aplicación **Alpine.js + Django templates** con renderizado 
 
 ```
 templates/
-  base.html                   # Tailwind, design system, apiUrl(), header
+  base.html                   # Tailwind (nombres de tokens), tokens.css, apiUrl(), header
+  sheets_reports/_app_ui.html # Componentes ui-* de la app (capa components de Tailwind)
+  sheets_reports/_board_theme_attrs.html  # data-board-theme + colores propios del tablero
   board_editor.html           # Editor: rail + canvas + drawer (pestañas, pie y el panel del tipo)
   sheets_reports/widgets/config/
     _<tipo>_config.html       # Panel de cada tipo: «Configurar» + «Personalizar» (7 partials)
@@ -27,6 +29,15 @@ templates/
     source_manager.html       # Gestor de fuentes del tablero (bottom sheet)
     source_picker.html        # Selector de hoja → pestaña → columnas (crear, agregar, editar, cambiar hoja)
     email_campaign.html       # Envío de correos: destinatarios, remitentes, programación y mensaje
+
+static/sheets_reports/css/
+  tokens.css                  # Tokens de la app: marca → semánticos → componentes
+  tablero-theme.css           # Tema de los tableros (--tb-*) y estilos de lo que va en el lienzo
+  app-tabulator.css           # Tabulator de la app (home, fuentes, seguimiento de correos)
+  board-editor.css            # Layout propio del editor (riel, arrastre, fórmulas, correo)
+
+static/sheets_reports/js/
+  chart-theme.js              # ChartTheme: colores de ApexCharts desde las variables --tb-*
 
 static/sheets_reports/js/board_editor/
   widget-registry.js          # WidgetRegistry (Map tipo → clase)
@@ -64,7 +75,7 @@ En `board_editor.html` (y `board_view.html`), los scripts se cargan en orden:
 ```
 base.html:  formatearEtiquetaApex.js → Alpine.js (defer)
 board_editor.html:
-  SortableJS → interact.js → ApexCharts → Tabulator → Virtual Select
+  SortableJS → interact.js → ApexCharts → chart-theme.js → Tabulator → Virtual Select
   utils/number-format.js → utils/data-table.js → base-widget.js → widget-registry.js → widgets/*.js → dashboard-store.js → filters.js → board-editor-init.js
 ```
 
@@ -326,7 +337,7 @@ fromServer(w) → new WidgetClass(raw)
 ### DOM estándar
 
 `buildStandardCardElement()` genera:
-- `.widget-card` con `data-widget-id`, `data-type`
+- `.tb-widget` con `data-widget-id`, `data-type`; el título es `.tb-widget-title`
 - `.drag-handle` (Sortable handle)
 - `.widget-title` (barra de título)
 - `#chart-{id}` (contenedor de contenido)
@@ -344,7 +355,16 @@ Al soltar: `position` se actualiza, `_dirty = true`, `store.scheduleLayoutSave()
 
 ### Renderizado de gráficos
 
-`renderApexChart(container, options)`: destruye el chart anterior, crea `new ApexCharts`, devuelve `.render()`.
+`renderApexChart(container, options)`: destruye el chart anterior, crea `new ApexCharts` con
+`mergeOptions(themeOptions(), options)` y devuelve `.render()`. Los widgets que montan su
+propio gráfico (dispersión, matrices, sparkline del KPI) hacen la misma mezcla.
+
+Colores (ver «Tema de los tableros»):
+- `themeColors()`: `ChartTheme.read(this.el)`, los colores del tablero ya resueltos.
+- `themeOptions()`: opciones base de ApexCharts del tema (paleta, ejes, cuadrícula, leyenda).
+- `seriesColors(n)` / `seriesTextColors(n)`: la paleta categórica repetida hasta `n` y el color
+  de texto legible sobre cada uno (etiquetas dentro de porciones y barras apiladas).
+- `mergeOptions(base, extra)`: mezcla profunda de objetos; arrays y valores los pisa `extra`.
 
 Utilidades compartidas:
 - `percentAwareFormatter()`: añade `%` a series de porcentaje.
@@ -376,8 +396,9 @@ Renderiza: número grande + etiqueta + badge de comparación + barra de progreso
 
 - `format(value, {percent, signed})`: `formatNumber` con el formato de la métrica principal
   (`payload.format`: porcentaje, moneda…) y los decimales, abreviar, prefijo y sufijo del estilo.
-- `_compareHTML()`: delta con flecha y color.
-- `_targetHTML()`: barra de progreso con porcentaje.
+- `_compareHTML()`: delta con flecha (`.tb-delta` + `-up` / `-down` / `-flat` según `better`).
+- `_targetHTML()`: barra de progreso (`.tb-progress`) con porcentaje; el estado contra la meta
+  elige el relleno (`.tb-fill-good` / `-warn` / `-bad`) y el color del valor (`.tb-status-*`).
 - `_renderTrend()`: ApexCharts area sparkline (height 48).
 
 ### BarWidget
@@ -385,7 +406,7 @@ Renderiza: número grande + etiqueta + badge de comparación + barra de progreso
 Renderiza: gráfico de barras con apilado, modo horizontal, data labels, líneas de referencia y leyenda arrastrable.
 
 - `_wireLegendDrag()`: SortableJS en la leyenda. Al reordenar, guarda `style.seriesOrder` (lista de nombres de serie) y `draw()` ordena las series desde `style`.
-- Colores estables por serie (`_seriesColors` Map).
+- Colores estables por serie (`_seriesColors` Map, de `seriesColors()`).
 
 ### LineWidget
 
@@ -393,15 +414,18 @@ Renderiza: gráfico de líneas con curva suave, markers, data labels y líneas d
 
 ### ScatterWidget
 
-Renderiza: gráfico de dispersión (ApexCharts mixto): una serie `scatter` por grupo de `payload.groups` (color `CHART_COLORS[i]`) y, con `style.showTrend`, una serie `line` discontinua con la recta de cada grupo en su mismo color (sin color por categoría, la recta va en el color de las referencias). Sin animación (ApexCharts deja a medias el trazo discontinuo). Ejes numéricos con el nombre de cada columna; tooltip con el grupo, su `r` y los dos valores. Pie con las filas dibujadas («Muestra de N de M filas» si el backend muestreó) y la `r` global.
+Renderiza: gráfico de dispersión (ApexCharts mixto): una serie `scatter` por grupo de `payload.groups` (color `seriesColors()[i]`) y, con `style.showTrend`, una serie `line` discontinua con la recta de cada grupo en su mismo color (sin color por categoría, la recta va en el color de las referencias). Sin animación (ApexCharts deja a medias el trazo discontinuo). Ejes numéricos con el nombre de cada columna; tooltip con el grupo, su `r` y los dos valores. Pie con las filas dibujadas («Muestra de N de M filas» si el backend muestreó) y la `r` global.
 
 - Leyenda solo con color y solo con los grupos (`customLegendItems`); `_wireLegend()` oculta o muestra a la vez los puntos y la recta del grupo pulsado (listener delegado en el contenedor: ApexCharts rehace la leyenda en cada `toggleSeries`).
 
 ### CorrelationWidget
 
-Renderiza: mapa de calor (ApexCharts) de `payload.matrix`. Cada celda se colorea por la fuerza
-de la relación (`CORRELATION_SCALE`, la misma escala que «Cómo se lee» del panel), con una
-gama para positiva y otra para negativa. Las celdas sin valor usan centinelas fuera de rango.
+Renderiza: mapa de calor (ApexCharts) de `payload.matrix`, coloreado con
+`ChartTheme.divergingScale(el, CUTS)`: los cortes de la escala de Evans (`SCALE`), un neutro
+(«muy débil») y un tono por nivel y signo, nueve tramos de −1 a +1. La misma `SCALE` da la
+fuerza en palabras del tooltip, y `window.correlationScale()` devuelve sus niveles con sus
+colores para «Cómo se lee» del panel. El valor escrito en la celda toma el color de texto de su
+tono (`--tb-div-*-on`).
 Cada fila es una de `payload.variables`: una variable o una categoría de una nominal (dummy,
 con `value` y `group`). El tooltip nombra el par, la fuerza, la medida (`measures[i][j]`:
 Pearson o Spearman), las filas usadas y qué significa el 0/1 de una dummy, y avisa de las filas
@@ -426,7 +450,9 @@ Renderiza: tabla dinámica con jerarquía de filas, subtotales por nivel, total 
 `totals`, `formatOf(field)`, `repeatRowLabels`, `paginate`/`pageSize`, `sortable` y `footerNote`.
 Cabecera multinivel con `colspan`/`rowspan`; las dimensiones se agrupan con `rowspan` y quedan
 fijas al hacer scroll (`position: sticky`, `data-dim`); el «Total general» va en el `<tfoot>`.
-`csv()` devuelve `{headers, rows}` para `downloadRowsAsCSV`. Estilos: `css/data-table.css` (tokens `--dt-*` propios, sin depender de `tabulator.css`).
+`csv()` devuelve `{headers, rows}` para `downloadRowsAsCSV`. Estilos: `.tb-table` en
+`tablero-theme.css`, con las variables `--tb-table-*`. Las celdas de progreso llevan
+`.tb-progress` con el relleno por tercio (`DataTable.PROGRESS.fills`).
 
 ### TableWidget
 
@@ -602,7 +628,7 @@ panel de edición. Se abre desde el menú del tablero › **Ayuda** o desde los 
   borrador queda); al cerrarla vuelve tal como estaba. Abrir el panel de otro widget
   (`openDrawer`) cierra la ayuda.
 - **Estilo del contenido**: `text-sm`, títulos `h4` y tablas como en los tópicos existentes; los
-  enlaces `#help:` se ven subrayados en verde.
+  enlaces `#help:` se ven subrayados.
 - **Videos**: `HELP_VIDEOS` (en `help.py`) asocia un tópico a su video de demostración
   (`static/sheets_reports/help/videos/<nombre>.webm` y su portada `.png`) y su duración.
   - El tópico muestra **Ver video**: un `<video preload="none">` que se descarga recién al reproducirlo.
@@ -614,41 +640,119 @@ panel de edición. Se abre desde el menú del tablero › **Ayuda** o desde los 
 
 ## Design system
 
-- **Tailwind CSS** vía CDN con paleta personalizada: `ink`, `paper`, `header`, `line`, `moss` (50-700 + tint), `clay` (50-600).
-- **Tabler Icons** (`ti ti-*`).
-- **CSS custom properties** en `:root` para toda la paleta.
-- **`[x-cloak]`** global para ocultar elementos antes de que Alpine arranque.
+Dos hojas de estilo con variables propias: la de la **app** (todo lo que rodea al tablero) y la
+de los **tableros** (todo lo que va dentro del lienzo). Hoy el tablero hereda los valores de la
+app, pero sus variables son independientes: un tablero puede cambiar las suyas sin tocar la app.
+
+- **Tailwind CSS** vía CDN (sin build). `tailwind.config` (en `base.html`) solo da nombres que
+  apuntan a variables: colores `primary`, `accent`, `app`, `surface`, `line`, `fg`, `heading`,
+  `overlay`, `scrim`, `success`, `danger`, `warning`; la escala `fontSize` (`xs`…`xl`),
+  `borderRadius`, `boxShadow` y `tracking-label`. Ningún valor vive en la config.
+- **Tabler Icons** (`ti ti-*`) y la fuente de la marca (Google Fonts) en `base.html`.
+- Orden de carga: `tokens.css` → CDN de Tailwind → `_app_ui.html` → (editor y vista)
+  CSS de Tabulator → `app-tabulator.css` → `tablero-theme.css`; ApexCharts → `chart-theme.js`
+  → widgets. Los CSS de cada página van en `{% block extra_head %}`.
+
+Reglas:
+- Ningún color fuera de `tokens.css` y `tablero-theme.css`: ni en plantillas, ni en JS, ni en
+  `style=""`, ni en clases arbitrarias. Las excepciones son los logos de terceros (Google) y el
+  `style` con las variables del tablero (`_board_theme_attrs.html`).
+- Si falta un color o un tamaño se agrega como token, de abajo hacia arriba.
+- Los modificadores de opacidad (`bg-primary/50`) no funcionan con estas variables: una
+  transparencia es un token (`--color-overlay`, `--color-scrim`).
+- Nombres: `--{componente o categoría}-{parte}-{variante}-{estado}`.
+
+### Tokens de la app (`tokens.css`)
+
+Tres capas en `:root`; plantillas y componentes nunca usan la primera:
+1. **Marca** (`--brand-*`, `--neutral-*`, `--status-*`): los valores.
+2. **Semánticos** (`--color-*`, `--fs-*`, `--fw-*`, `--radius-*`, `--shadow-*`): el rol.
+3. **Componentes** (`--header-*`, `--sidebar-*`, `--btn-*`, `--table-*`, `--tab-*`, `--input-*`,
+   `--dropzone-*`): lo que leen `_app_ui.html`, `app-tabulator.css` y `board-editor.css`.
+
+Contraste: el texto sobre el acento usa `--color-on-accent`, nunca el blanco; el texto con el
+color del acento sobre fondo claro usa `--color-accent-text`. `--color-text-subtle` es para
+placeholders, deshabilitados e íconos, no para texto que haya que leer.
+
+### Tema de los tableros (`tablero-theme.css`, `chart-theme.js`)
+
+El contenedor del tablero lleva `class="tablero"` y los atributos de
+`_board_theme_attrs.html`: en el editor `#board-scroll` (filtros + lienzo), en la vista
+`#tab-charts`. La muestra del tema en Configuración es otro `.tablero` con los mismos atributos.
+Prioridad, de menor a mayor:
+1. Valores por defecto en `.tablero` (heredan de `tokens.css`).
+2. Preset: `.tablero[data-board-theme="…"]` (`Dashboard.theme`).
+3. En línea: `style="--tb-…"` (`Dashboard.style_variables`).
+
+Dentro del lienzo solo se usan variables `--tb-*` y clases `.tb-*`; las utilidades de layout de
+Tailwind sí. Los controles de edición de la tarjeta (asa, editar, borrar, IA, descargar) y la
+regla y las filas del editor son de la app y usan sus clases.
+
+| Grupo | Variables | Clases |
+|---|---|---|
+| Tarjeta y texto | `--tb-card-*`, `--tb-title-text`, `--tb-text*`, `--tb-surface-muted`, `--tb-scrim`, `--tb-link` | `.tb-widget`, `.tb-widget-title`, `.tb-text`, `.tb-text-muted`, `.tb-text-subtle`, `.tb-text-bad`, `.tb-link`, `.tb-surface-muted`, `.tb-border`, `.tb-track`, `.tb-scrim`, `.tb-swatch`, `.tb-spinner`, `.tb-retry` |
+| Estados | `--tb-status-good/warn/bad(-bg)` | `.tb-status-*`, `.tb-fill-*` |
+| KPI | `--tb-kpi-*` | `.tb-kpi-value`, `.tb-kpi-label`, `.tb-kpi-sub`, `.tb-delta-*`, `.tb-progress` |
+| Tablas y ranking | `--tb-table-*`, `--tb-bar-*` | `.tb-table` (y sus partes), `.tb-pager`, `.tb-bar`, `.tb-bar-lead`, `.tb-rank-pos` |
+| Filtros | `--tb-control-*` | VirtualSelect dentro de `.tablero` |
+| Gráficos | `--tb-chart-1…6` (+ `-on`), `--tb-chart-ref(-text)`, `--tb-chart-stroke`, `--tb-seq-1…5` (+ `-on`), `--tb-div-*`, `--tb-chart-axis/grid/label` | — |
+
+`chart-theme.js` expone `window.ChartTheme`. ApexCharts necesita colores resueltos (calcula
+tonos y rangos a partir de ellos), así que `read(el)` lee con `getComputedStyle` las variables
+del `.tablero` que contiene a `el` (o el primero de la página). No hay opciones globales
+(`window.Apex`): cada gráfico las pide al armarse.
+- `read(el)`: paleta categórica y sus colores de texto, secuencial, divergente, ejes, referencia,
+  tarjeta, texto, pista.
+- `color(name, el)`: un token suelto, resuelto.
+- `baseOptions(el)`: opciones base de ApexCharts (paleta, fuente, ejes, cuadrícula, leyenda).
+- `sequentialScale(min, max, el)` / `divergingScale(el, cuts?)`: rangos de `colorScale` para
+  mapas de calor. La divergente tiene un neutro y cuatro tonos por signo; sus tonos positivos
+  son los de la secuencial (`--tb-seq-2…5`), así el tono más fuerte de la matriz de correlación
+  es el mismo que el de la V de Cramér. La V de Cramér usa los tonos secuenciales con sus
+  propios cortes de fuerza (`window.cramerScale()`).
+- `refresh(el, charts)`: reaplica las opciones a gráficos existentes si cambian las variables.
+
+La miniatura de plantillas (`generateRealBoardThumbnail`) es un SVG que se muestra como
+`<img>` y no ve las variables CSS: toma los colores de `ChartTheme.read()` y se los pasa a cada
+widget en `ctx.theme`, `ctx.colors` y `ctx.primary`.
 
 ### Estilos de la app (`ui-*`)
 
 Las pantallas de la app usan los componentes de `templates/sheets_reports/_app_ui.html`, no
-cadenas de utilidades sueltas. Esas pantallas son el home, Fuentes (`source_manager.html`,
-`source_picker.html`), el panel de Configuración, `email_campaign.html` y la pestaña
-«Seguimiento de correos». El tablero y los widgets no los usan.
+cadenas de utilidades sueltas. El tablero y los widgets no los usan.
 
-El archivo es un `<style type="text/tailwindcss">` con `@layer components` incluido en el
-`<head>` de `base.html`, que el CDN de Tailwind procesa sin build. No es un `.css` aparte
-porque el preflight de Tailwind (`[type=button] { background: transparent }`) le ganaría a
-los fondos de los botones. Al quedar en la capa `components`, una utilidad suelta
-(`w-64`, `hover:text-red-600`) ajusta un caso puntual.
+El archivo es un `<style type="text/tailwindcss">` con `@layer base` y `@layer components`
+incluido en el `<head>` de `base.html`, que el CDN de Tailwind procesa sin build. No es un
+`.css` aparte porque el preflight de Tailwind (`[type=button] { background: transparent }`) le
+ganaría a los fondos de los botones. Al quedar en la capa `components`, una utilidad suelta
+(`w-64`, `hover:text-danger`) ajusta un caso puntual. Los colores salen de las variables de
+componente de `tokens.css`.
 
 | Pieza | Clases |
 |---|---|
-| Botón | `ui-btn` + `ui-btn-primary` / `-secondary` / `-ghost` / `-danger` / `-danger-outline` / `-icon`; tamaños `ui-btn-sm`, `ui-btn-xs` |
-| Campo | `ui-label`, `ui-input` (también para `<select>`), `ui-input-sm`, `ui-textarea`, `ui-check` |
-| Contenedor | `ui-card`, `ui-card-title`, `ui-eyebrow` (rótulo en mayúsculas) |
+| Botón | `ui-btn` + `ui-btn-primary` / `-secondary` / `-dark` / `-ghost` / `-danger` / `-danger-outline` / `-icon`; tamaños `ui-btn-sm`, `ui-btn-xs` |
+| Header y navegación | `ui-app-header`, `ui-sidebar`, `ui-nav-item` (enlace con el aspecto de `ui-btn-secondary`; activo con `.is-active` o `aria-current`), `ui-sidebar-label`, `ui-module-card` + `ui-module-icon` |
+| Campo | `ui-label`, `ui-help`, `ui-input` (también para `<select>`), `ui-input-sm`, `ui-textarea`, `ui-check` |
+| Contenedor | `ui-card`, `ui-card-title`, `ui-eyebrow` (rótulo en mayúsculas), `ui-code-chip` |
 | Aviso | `ui-alert` + `ui-alert-error` / `-warn` / `-info` |
-| Badge | `ui-badge` + `ui-badge-neutral` / `-success` / `-danger` / `-warn` / `-info` |
+| Badge | `ui-badge` + `ui-badge-neutral` / `-success` / `-danger` / `-warn` / `-accent` (`-info` es un alias) |
 | Modal | `ui-modal-backdrop` > `ui-modal` > `ui-modal-header` (`ui-modal-title`), `ui-modal-body`, `ui-modal-footer` |
+| Panel inferior | `ui-panel`, `ui-panel-header`, `ui-panel-title`, `ui-danger-zone` |
 | Pestañas | `ui-tabs` > `ui-tab`, activa con `aria-selected="true"` (o `.is-active`) |
 | Tabla HTML | `ui-table`: encabezado fijo, rótulos y celdas ya espaciados |
+| Otros | `ui-page-loader` (barra de carga), `ui-dot-grid` (fondo del lienzo del editor y del login), `.vselect` |
 
-Reglas:
-- El principal (`ui-btn-primary`) es fondo verde muy claro, texto `moss-700` e ícono `moss-600` con borde suave: el mismo tratamiento que «Generar con IA» en violeta. El verde sólido queda para estados seleccionados, no para botones.
-- Un solo radio, `rounded-md`.
-- El foco es el borde `moss-500`, sin anillo.
-- Solo existen los tonos `moss` del tema (50, 100, 300, 500, 600, 700): `moss-200` o `moss-800` no generan nada.
-- Las tablas Tabulator de la app llevan `tb-app` (encabezado neutro, no el color del tablero). El listado del home lleva además `tb-list` (filas más altas).
+Jerarquía de botones:
+- `ui-btn-primary`: una acción principal por zona («Generar con IA», «Crear tablero»,
+  «Guardar», «Editar» en la vista de una plantilla).
+- `ui-btn-secondary`: «Gestionar fuentes», «Vista previa», «Compartir» y acciones de apoyo.
+- `ui-btn-dark`: una acción fuerte que no es la principal («Guardar igual» ante el impacto de
+  un cambio de columnas).
+- `ui-btn-ghost` / `ui-btn-icon`: cerrar, editar, duplicar y eliminar en filas.
+- `ui-btn-danger`: solo «Eliminar tablero definitivamente» y confirmaciones destructivas.
+
+Tabulator solo se usa en la app (`app-tabulator.css`); el listado del home lleva además
+`app-tabulator-list` (filas más altas). Las tablas de los widgets son `DataTable`, no Tabulator.
 
 ## Selects con buscador (`x-vselect`)
 
@@ -668,7 +772,7 @@ Un select nuevo solo necesita el atributo:
 Con `x-bind:value` (sin `x-model`) la directiva lleva la misma expresión, que es lo que le
 avisa de que el valor cambió. La opción de valor vacío («Sin orden», «Todas las filas») viaja
 con un valor centinela, porque VirtualSelect trata el vacío como «nada elegido». Los estilos
-(`.vselect`) están en `base.html`.
+(`.vselect`) están en `_app_ui.html`.
 
 La excepción es la tabla de columnas de la fuente (`source_picker.html`): sus selects de
 «Tipo» y «Formato», uno por columna de la hoja, son nativos.

@@ -65,6 +65,7 @@
       const labelMode = this.style.labelMode === 'value' ? 'value' : 'percent';
       const holeSize = Math.min(80, Math.max(30, Number(this.style.donutSize) || 50));
 
+      const theme = this.themeColors();
       const options = {
         chart: { type: 'donut', height: '100%', width: '100%', fontFamily: 'inherit', toolbar: this.chartExportToolbar() },
         plotOptions: {
@@ -76,9 +77,8 @@
                 value: {
                   show: true,
                   fontSize: '18px',
-                  fontFamily: 'Inter, sans-serif',
                   fontWeight: 'bold',
-                  color: '#111111',
+                  color: theme.label,
                   offsetY: 8
                 },
                 total: {
@@ -86,8 +86,7 @@
                   showAlways: true,
                   label: 'Total',
                   fontSize: '16px',
-                  fontFamily: 'Inter, sans-serif',
-                  color: '#888888',
+                  color: theme.axis,
                   formatter: function (w) {
                     return w.globals.seriesTotals.reduce((a, b) => a + b, 0);
                   }
@@ -96,7 +95,8 @@
             }
           }
         },
-        colors: this.getSeriesColors(series.length),
+        colors: this.seriesColors(series.length),
+        stroke: { colors: [theme.stroke] },
         series,
         labels,
         legend: { show: this.style.showLegend !== false, position: 'bottom', fontSize: '10px' },
@@ -104,9 +104,8 @@
           enabled: true,
           style: {
             fontSize: '10px',
-            fontFamily: 'Roboto, sans-serif',
-            fontWeight: '400',
-            colors: ['#000000'],
+            fontWeight: '600',
+            colors: this.seriesTextColors(series.length),
           },
           dropShadow: { enabled: false },
           formatter: (val, opts) => (labelMode === 'value'

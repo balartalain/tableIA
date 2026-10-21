@@ -15,72 +15,59 @@
 <link rel="icon" type="image/png" sizes="32x32" href="{% static 'sheets_reports/img/favicon-32.png' %}">
 <link rel="icon" type="image/png" sizes="16x16" href="{% static 'sheets_reports/img/favicon-16.png' %}">
 <link rel="apple-touch-icon" sizes="180x180" href="{% static 'sheets_reports/img/apple-touch-icon-180.png' %}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="{% static 'sheets_reports/css/tokens.css' %}">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-  // Los colores del tema son variables CSS; con color-mix aceptan la transparencia de Tailwind
-  // (`text-ink/50`, `bg-ink/40`): un var() suelto la ignoraría.
-  const themeColor = (name) => `color-mix(in srgb, var(--color-${name}) calc(<alpha-value> * 100%), transparent)`;
+  // Tailwind solo nombra los tokens de tokens.css: ningún valor vive aquí.
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          ink: themeColor('ink'),
-          paper: themeColor('paper'),
-          header: themeColor('header'),
-          line: themeColor('line'),
-          moss: {
-            50: themeColor('moss-50'), 100: themeColor('moss-100'), 300: themeColor('moss-300'),
-            500: themeColor('moss-500'), 600: themeColor('moss-600'), 700: themeColor('moss-700'),
-            tint: themeColor('moss-tint'),
-          },
-          clay: {
-            50: themeColor('clay-50'), 300: themeColor('clay-300'),
-            500: themeColor('clay-500'), 600: themeColor('clay-600'),
-          },
-        }
+          primary: { DEFAULT: 'var(--color-primary)', hover: 'var(--color-primary-hover)', on: 'var(--color-on-primary)' },
+          accent:  { DEFAULT: 'var(--color-accent)', hover: 'var(--color-accent-hover)', on: 'var(--color-on-accent)',
+                     text: 'var(--color-accent-text)', soft: 'var(--color-accent-soft)', 'soft-border': 'var(--color-accent-soft-border)' },
+          app: 'var(--color-bg-app)',
+          surface: { DEFAULT: 'var(--color-surface)', muted: 'var(--color-surface-muted)' },
+          line:    { DEFAULT: 'var(--color-border)', strong: 'var(--color-border-strong)' },
+          fg:      { DEFAULT: 'var(--color-text)', muted: 'var(--color-text-muted)', subtle: 'var(--color-text-subtle)' },
+          heading: 'var(--color-heading)',
+          overlay: 'var(--color-overlay)',
+          scrim: 'var(--color-scrim)',
+          success: { DEFAULT: 'var(--status-success)', bg: 'var(--status-success-bg)' },
+          danger:  { DEFAULT: 'var(--status-danger)',  bg: 'var(--status-danger-bg)' },
+          warning: { DEFAULT: 'var(--status-warning)', bg: 'var(--status-warning-bg)' },
+        },
+        fontFamily: { sans: 'var(--font-sans)', mono: 'var(--font-mono)' },
+        fontSize: {
+          xs:   ['var(--fs-xs)',   { lineHeight: 'var(--lh-base)' }],
+          sm:   ['var(--fs-sm)',   { lineHeight: 'var(--lh-base)' }],
+          base: ['var(--fs-base)', { lineHeight: 'var(--lh-base)' }],
+          md:   ['var(--fs-md)',   { lineHeight: 'var(--lh-tight)' }],
+          lg:   ['var(--fs-lg)',   { lineHeight: 'var(--lh-tight)' }],
+          xl:   ['var(--fs-xl)',   { lineHeight: 'var(--lh-tight)' }],
+        },
+        borderRadius: { sm: 'var(--radius-sm)', DEFAULT: 'var(--radius-md)', md: 'var(--radius-md)',
+                        lg: 'var(--radius-lg)', full: 'var(--radius-pill)' },
+        boxShadow: { sm: 'var(--shadow-sm)', md: 'var(--shadow-md)' },
+        letterSpacing: { label: 'var(--tracking-label)' },
       }
     }
   }
 </script>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
-
-<style>
-  :root {
-    --color-ink: #14171F;
-    --color-paper: #f5f8fb;
-    --color-header: #9A4F00;
-    --color-line: #E3E5DE;
-    --color-moss-50: #FFF4E6;
-    --color-moss-100: #FFE3C2;
-    --color-moss-300: #FFAD5C;
-    --color-moss-500: #FE8200;
-    --color-moss-600: #CC6800;
-    --color-moss-700: #FE8200;
-    --color-moss-tint: color-mix(in srgb, var(--color-moss-500) 10%, white);
-    --color-clay-50: #FBF3EA;
-    --color-clay-300: #E0AF77;
-    --color-clay-500: #B5793D;
-    --color-clay-600: #8F5E2E;
-  }
-  [x-cloak] { display: none !important; }
-  /* Selects de la caja de filtros (Virtual Select): el botón como un control, la lista como un contenedor. */
-  .vscomp-toggle-button { border-radius: 0.375rem; }
-  .vscomp-dropbox { border-radius: 0.25rem; overflow: hidden; }
-  /* x-vselect (vselect.js): el select nativo queda oculto y el VirtualSelect ocupa su lugar. */
-  .vselect-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-  .vselect { min-width: 0; }
-  .vselect .vscomp-toggle-button { border-color: var(--color-line); font-size: inherit; }
-  .vselect.focused .vscomp-toggle-button, .vselect:focus .vscomp-toggle-button { border-color: var(--color-moss-500); box-shadow: none; }
-</style>
+{% block extra_head %}{% endblock %}
 {% include "sheets_reports/_app_ui.html" %}
 </head>
-<body class="bg-paper text-ink antialiased min-h-screen">
+<body class="min-h-screen">
 
 {% block header %}
 <!-- Header compartido: cada página llena sus bloques (el editor agrega salir, el nombre del
      tablero y sus acciones; el home usa los valores por defecto). -->
-<header id="app-header" class="border-b border-line bg-white">
+<header id="app-header" class="ui-app-header">
   <div class="h-14 px-4 flex items-center gap-3">
     {% block header_leading %}{% endblock %}
     <img src="{% static 'sheets_reports/img/reportia_icon.svg' %}" alt="" class="shrink-0 w-7 h-7" aria-hidden="true">
@@ -92,22 +79,22 @@
       {% if request.user.is_authenticated %}
       <div x-data="{ open: false }" class="relative">
         <button type="button" @click="open = !open" @click.outside="open = false"
-                class="flex items-center gap-2 text-xs font-medium text-ink/80 hover:text-ink px-2 py-1 rounded-full hover:bg-paper transition cursor-pointer">
-          <div class="w-7 h-7 rounded-full bg-moss-50 border border-moss-100 flex items-center justify-center text-xs font-bold text-moss-700 uppercase"
+                class="flex items-center gap-2 text-xs font-medium text-fg hover:text-fg px-2 py-1 rounded-full hover:bg-surface-muted transition cursor-pointer">
+          <div class="w-7 h-7 rounded-full bg-accent-soft border border-accent-soft-border flex items-center justify-center text-xs font-bold text-accent-text uppercase"
                title="{{ request.user.email }}">
             {{ request.user.email|slice:":2"|default:request.user.username|slice:":2" }}
           </div>
-          <span class="hidden sm:inline-block max-w-[140px] truncate text-ink/70">{{ request.user.email|default:request.user.username }}</span>
-          <i class="ti ti-chevron-down text-xs text-ink/40"></i>
+          <span class="hidden sm:inline-block max-w-[140px] truncate text-fg">{{ request.user.email|default:request.user.username }}</span>
+          <i class="ti ti-chevron-down text-xs text-fg-muted"></i>
         </button>
         <div x-show="open" x-cloak
-             class="absolute right-0 mt-1 w-48 bg-white border border-line rounded-md shadow-lg py-1 z-50 text-xs">
-          <div class="px-3 py-2 border-b border-line/60">
-            <p class="font-semibold text-ink truncate">{{ request.user.email|default:request.user.username }}</p>
-            <p class="text-[10px] text-ink/40">Sesión activa</p>
+             class="absolute right-0 mt-1 w-48 bg-surface border border-line rounded-md shadow-lg py-1 z-50 text-xs">
+          <div class="px-3 py-2 border-b border-line">
+            <p class="font-semibold text-fg truncate">{{ request.user.email|default:request.user.username }}</p>
+            <p class="text-xs text-fg-muted">Sesión activa</p>
           </div>
           <a href="{% url 'logout' %}"
-             class="flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 transition">
+             class="flex items-center gap-2 px-3 py-2 text-danger hover:bg-danger-bg transition">
             <i class="ti ti-logout text-sm"></i>
             <span>Cerrar sesión</span>
           </a>
@@ -126,7 +113,6 @@
 
 {% block content %}{% endblock %}
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.4.2/chroma.min.js"></script>
 <script src="{% static 'sheets_reports/js/board_editor/utils/formatearEtiquetaApex.js' %}"></script>
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 </body>

@@ -111,8 +111,8 @@ const FormulaBlocks = (() => {
     const key = pathKey(path);
     const isSelected = selected != null && pathKey(selected) === key;
     if (n == null) {
-      const slot = el('span', 'fb-slot inline-flex items-center justify-center min-w-[5.5rem] h-7 px-2 rounded-lg border border-dashed text-[11px] cursor-pointer select-none '
-        + (isSelected ? 'border-moss-500 bg-moss-50 text-moss-700' : 'border-ink/25 text-ink/35 hover:border-moss-500'),
+      const slot = el('span', 'fb-slot inline-flex items-center justify-center min-w-[5.5rem] h-7 px-2 rounded-lg border border-dashed text-xs cursor-pointer select-none '
+        + (isSelected ? 'border-accent bg-accent-soft text-accent-text' : 'border-line-strong text-fg-muted hover:border-accent'),
         'suelta aquí');
       slot.dataset.fbDrop = key;
       slot.addEventListener('click', e => { e.stopPropagation(); actions.select(path); });
@@ -120,42 +120,42 @@ const FormulaBlocks = (() => {
     }
 
     const leaf = !n.args.length || (n.kind === 'neg' && n.args[0] && n.args[0].kind === 'num');
-    const ring = isSelected ? ' fb-selected ring-2 ring-moss-500 ring-offset-1' : '';
+    const ring = isSelected ? ' fb-selected ring-2 ring-accent ring-offset-1' : '';
     let block;
     if (leaf) {
       const styles = {
-        col: 'bg-moss-50 border-moss-300 text-moss-700 font-medium',
-        str: 'bg-amber-50 border-amber-200 text-amber-900 font-mono',
-        empty: 'bg-white border-dashed border-ink/30 text-ink/60 italic',
+        col: 'bg-accent-soft border-accent text-accent-text font-medium',
+        str: 'bg-warning-bg border-warning text-warning font-mono',
+        empty: 'bg-surface border-dashed border-line-strong text-fg-muted italic',
       };
-      block = el('span', `fb-block inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg border text-xs ${styles[n.kind] || 'bg-sky-50 border-sky-200 text-sky-900 font-mono'}${ring}`);
+      block = el('span', `fb-block inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg border text-xs ${styles[n.kind] || 'bg-surface-muted border-line-strong text-primary font-mono'}${ring}`);
       block.append(el('span', 'truncate max-w-[14rem]', leafLabel(n)));
     } else if (n.kind === 'func' && n.args.length > 1) {
       // Una función de varios huecos (SI): vertical, cada hueco con su rótulo del catálogo.
       const info = functionByName[n.value] || { label: n.value, slots: n.args.map(() => '') };
-      block = el('div', `fb-block inline-flex flex-col gap-1.5 rounded-lg border border-violet-200 bg-violet-50/60 p-2 text-xs${ring}`);
+      block = el('div', `fb-block inline-flex flex-col gap-1.5 rounded-lg border border-accent-soft-border bg-accent-soft p-2 text-xs${ring}`);
       const head = el('div', 'fb-head flex items-center gap-1');
-      const name = el('span', 'font-semibold text-violet-700', info.label);
+      const name = el('span', 'font-semibold text-accent-text', info.label);
       name.title = info.title || '';
       head.append(name, removeButton(path, actions));
       block.append(head);
       info.slots.forEach((label, i) => {
         const row = el('div', 'flex items-start gap-2 pl-2');
-        row.append(el('span', 'w-20 shrink-0 pt-1.5 text-[11px] text-ink/50', label),
+        row.append(el('span', 'w-20 shrink-0 pt-1.5 text-xs text-fg-muted', label),
                    draw(n.args[i], [...path, i], selected, actions));
         block.append(row);
       });
     } else {
-      block = el('span', `fb-block inline-flex flex-wrap items-center gap-1 rounded-lg border px-1.5 py-1 text-xs ${n.kind === 'func' ? 'border-sky-200 bg-sky-50/60' : 'border-line bg-white'}${ring}`);
+      block = el('span', `fb-block inline-flex flex-wrap items-center gap-1 rounded-lg border px-1.5 py-1 text-xs ${n.kind === 'func' ? 'border-line-strong bg-surface-muted' : 'border-line bg-surface'}${ring}`);
       if (n.kind === 'func') {
         const info = functionByName[n.value] || { label: n.value };
-        const name = el('span', 'font-semibold text-sky-700 font-mono', info.label);
+        const name = el('span', 'font-semibold text-primary font-mono', info.label);
         name.title = info.title || '';
-        block.append(name, el('span', 'text-ink/40', '('), draw(n.args[0], [...path, 0], selected, actions),
-                     el('span', 'text-ink/40', ')'));
+        block.append(name, el('span', 'text-fg-muted', '('), draw(n.args[0], [...path, 0], selected, actions),
+                     el('span', 'text-fg-muted', ')'));
       } else if (n.kind === 'not' || n.kind === 'neg') {
         const not = catalog.logic.find(o => o.op === 'NOT') || { symbol: 'NOT' };
-        block.append(el('span', 'font-semibold text-ink/70', n.kind === 'not' ? not.symbol : '−'),
+        block.append(el('span', 'font-semibold text-fg', n.kind === 'not' ? not.symbol : '−'),
                      draw(n.args[0], [...path, 0], selected, actions));
       } else {
         block.append(draw(n.args[0], [...path, 0], selected, actions), opSelect(n, path, actions),
@@ -187,7 +187,7 @@ const FormulaBlocks = (() => {
   // El operador de un bloque se cambia sin rearmarlo (solo dentro de su familia).
   function opSelect(n, path, actions) {
     const family = families.find(ops => ops.some(o => o.op === n.value)) || [{ op: n.value, symbol: n.value }];
-    const select = el('select', 'text-xs font-semibold rounded-md border border-line bg-paper px-1 py-0.5 cursor-pointer focus:outline-none focus:border-moss-500');
+    const select = el('select', 'text-xs font-semibold rounded-md border border-line bg-app px-1 py-0.5 cursor-pointer focus:outline-none focus:border-accent');
     select.setAttribute('aria-label', 'Operador');
     family.forEach(({ op, symbol }) => {
       const option = el('option', '', symbol);
@@ -201,7 +201,7 @@ const FormulaBlocks = (() => {
 
   function removeButton(path, actions) {
     // Se ve al pasar sobre su bloque (o al elegirlo): junto al «×» de multiplicar confundiría.
-    const button = el('button', 'fb-remove p-0.5 rounded text-ink/40 hover:text-red-600 hover:bg-red-50 cursor-pointer leading-none');
+    const button = el('button', 'fb-remove p-0.5 rounded text-fg-muted hover:text-danger hover:bg-danger-bg cursor-pointer leading-none');
     button.type = 'button';
     button.title = 'Quitar';
     button.setAttribute('aria-label', 'Quitar');
@@ -246,7 +246,7 @@ const FormulaBlocks = (() => {
       listeners: {
         start(event) {
           const label = (event.target.querySelector('.truncate') || event.target).textContent.trim();
-          ghost = el('div', 'fixed z-[100] pointer-events-none rounded-lg border border-moss-300 bg-white/95 px-2 py-1 text-xs font-medium text-ink shadow-lg max-w-[16rem] truncate',
+          ghost = el('div', 'fixed z-[100] pointer-events-none rounded-lg border border-accent bg-surface px-2 py-1 text-xs font-medium text-fg shadow-lg max-w-[16rem] truncate',
                      label.slice(0, 60));
           document.body.append(ghost);
           event.target.classList.add('opacity-40');

@@ -2,43 +2,43 @@
 tipos con ejemplos, cuál elegir, cómo calcula cada función (engine/formulas.py) y cómo se arma
 la fórmula con bloques (formula-builder.js). Los ejemplos van en texto: es la forma corta de
 escribirlos.{% endcomment %}
-<div class="space-y-4 text-sm text-ink/80 leading-relaxed">
+<div class="space-y-4 text-sm text-fg leading-relaxed">
   <div>
     <p>Columnas nuevas que se calculan con una fórmula sobre las columnas de esta fuente. Se
       definen una vez y se usan en todos los widgets del tablero.</p>
   </div>
 
   <div class="space-y-1.5">
-    <p class="font-semibold text-ink">Hay dos tipos y lo decide la fórmula</p>
-    <div class="rounded border border-moss-100 bg-moss-50/60 p-2.5 space-y-1">
-      <p><span class="font-semibold text-moss-700">Por fila</span> — la fórmula <b>no</b> usa SUM,
+    <p class="font-semibold text-fg">Hay dos tipos y lo decide la fórmula</p>
+    <div class="rounded border border-accent-soft-border bg-accent-soft p-2.5 space-y-1">
+      <p><span class="font-semibold text-accent-text">Por fila</span> — la fórmula <b>no</b> usa SUM,
         AVG, COUNT… Se calcula en cada fila de la hoja, antes de agrupar, y queda como una columna
         más: sirve de dimensión, de filtro o de métrica (eligiendo Suma, Promedio…).</p>
-      <ul class="font-mono text-[11px] text-ink/70 space-y-0.5 pl-2">
+      <ul class="font-mono text-xs text-fg space-y-0.5 pl-2">
         <li>[Gasto_Real] - [Presupuesto_Asignado]</li>
         <li>IF([Respuesta] = "Sí", 1, 0)</li>
         <li>IF([Gasto_Real] &gt; [Presupuesto_Asignado], "Excedido", "En presupuesto")</li>
       </ul>
     </div>
-    <div class="rounded border border-sky-100 bg-sky-50/60 p-2.5 space-y-1">
-      <p><span class="font-semibold text-sky-700">Agregado</span> — la fórmula usa SUM, AVG, COUNT,
+    <div class="rounded border border-line-strong bg-surface-muted p-2.5 space-y-1">
+      <p><span class="font-semibold text-primary">Agregado</span> — la fórmula usa SUM, AVG, COUNT,
         COUNT_DISTINCT, MIN o MAX. Se calcula sobre las filas de <b>cada grupo</b> del widget (cada
         departamento, cada mes…). Solo se usa como métrica y su agregación es «Automática»: ya va
         en la fórmula.</p>
-      <ul class="font-mono text-[11px] text-ink/70 space-y-0.5 pl-2">
-        <li>SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100 <span class="font-sans text-ink/50">— % de ejecución</span></li>
-        <li>AVG(IF([Respuesta] = "Sí", 1, 0)) * 100 <span class="font-sans text-ink/50">— % que respondió Sí</span></li>
-        <li>SUM([Gasto_Real]) / COUNT([ID_Registro]) <span class="font-sans text-ink/50">— gasto por registro</span></li>
+      <ul class="font-mono text-xs text-fg space-y-0.5 pl-2">
+        <li>SUM([Gasto_Real]) / SUM([Presupuesto_Asignado]) * 100 <span class="font-sans text-fg-muted">— % de ejecución</span></li>
+        <li>AVG(IF([Respuesta] = "Sí", 1, 0)) * 100 <span class="font-sans text-fg-muted">— % que respondió Sí</span></li>
+        <li>SUM([Gasto_Real]) / COUNT([ID_Registro]) <span class="font-sans text-fg-muted">— gasto por registro</span></li>
       </ul>
     </div>
   </div>
 
   <div class="space-y-1.5">
-    <p class="font-semibold text-ink">¿Cuál uso?</p>
+    <p class="font-semibold text-fg">¿Cuál uso?</p>
     <p>Un cociente entre totales (un porcentaje de ejecución, un margen) va <b>agregado</b>.
       Calcularlo por fila y luego promediarlo da otro número:</p>
-    <table class="w-full text-[11px]">
-      <thead class="text-ink/50">
+    <table class="w-full text-xs">
+      <thead class="text-fg-muted">
         <tr><th class="text-left font-medium py-0.5">Tecnología</th><th class="text-right font-medium">Presupuesto</th><th class="text-right font-medium">Gasto</th><th class="text-right font-medium">% por fila</th></tr>
       </thead>
       <tbody class="font-mono">
@@ -54,25 +54,25 @@ escribirlos.{% endcomment %}
   </div>
 
   <div class="space-y-1.5">
-    <p class="font-semibold text-ink">Cómo calcula cada función</p>
+    <p class="font-semibold text-fg">Cómo calcula cada función</p>
     <p>Una agregación hace dos pasos: primero calcula lo de adentro <b>en cada fila</b>
       (<span class="font-mono">[Gasto_Real]</span> es el valor de esa fila, no un total) y después
       resume esos valores con las filas del grupo.</p>
-    <table class="w-full text-[11px]">
-      <tbody class="divide-y divide-line/60">
-        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">SUM</td><td>Suma los valores.</td></tr>
-        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">AVG</td><td>Los promedia.</td></tr>
-        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">MIN / MAX</td><td>El menor / el mayor.</td></tr>
-        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">COUNT</td><td>Cuántos valores <b>no vacíos</b> hay (un 0 también cuenta). <span class="font-mono">COUNT(1)</span> cuenta todas las filas, incluidas las vacías.</td></tr>
-        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">COUNT_DISTINCT</td><td>Cuántos valores distintos, sin contar los vacíos.</td></tr>
-        <tr><td class="py-0.5 pr-3 font-mono text-ink whitespace-nowrap">IF</td><td>Dentro de una agregación decide fila a fila; fuera, sobre los resultados ya agregados.</td></tr>
+    <table class="w-full text-xs">
+      <tbody class="divide-y divide-line">
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">SUM</td><td>Suma los valores.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">AVG</td><td>Los promedia.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">MIN / MAX</td><td>El menor / el mayor.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">COUNT</td><td>Cuántos valores <b>no vacíos</b> hay (un 0 también cuenta). <span class="font-mono">COUNT(1)</span> cuenta todas las filas, incluidas las vacías.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">COUNT_DISTINCT</td><td>Cuántos valores distintos, sin contar los vacíos.</td></tr>
+        <tr><td class="py-0.5 pr-3 font-mono text-fg whitespace-nowrap">IF</td><td>Dentro de una agregación decide fila a fila; fuera, sobre los resultados ya agregados.</td></tr>
       </tbody>
     </table>
     <p>SUM, AVG, MIN y MAX trabajan con números: el texto y los vacíos no cuentan. Con las tres
       filas de arriba:</p>
-    <ul class="font-mono text-[11px] text-ink/70 space-y-0.5 pl-2">
-      <li>AVG([Gasto_Real] - [Presupuesto_Asignado]) <span class="font-sans text-ink/50">— promedio de −800, 500 y −200 = <b>−166,7</b></span></li>
-      <li>SUM([Gasto_Real]) - SUM([Presupuesto_Asignado]) <span class="font-sans text-ink/50">— 15 500 − 16 000 = <b>−500</b></span></li>
+    <ul class="font-mono text-xs text-fg space-y-0.5 pl-2">
+      <li>AVG([Gasto_Real] - [Presupuesto_Asignado]) <span class="font-sans text-fg-muted">— promedio de −800, 500 y −200 = <b>−166,7</b></span></li>
+      <li>SUM([Gasto_Real]) - SUM([Presupuesto_Asignado]) <span class="font-sans text-fg-muted">— 15 500 − 16 000 = <b>−500</b></span></li>
     </ul>
     <ul class="list-disc pl-4 space-y-0.5">
       <li>Para contar las filas que cumplen algo usa <span class="font-mono">SUM(IF(condición, 1, 0))</span>;
@@ -87,14 +87,14 @@ escribirlos.{% endcomment %}
   </div>
 
   <div class="space-y-1">
-    <p class="font-semibold text-ink">No se mezclan</p>
+    <p class="font-semibold text-fg">No se mezclan</p>
     <p><span class="font-mono">SUM([Gasto_Real]) / [Presupuesto_Asignado]</span> no vale: compara un
       total con el valor de una fila suelta. Envuelve la columna en una agregación:
       <span class="font-mono">SUM([Presupuesto_Asignado])</span>.</p>
   </div>
 
   <div class="space-y-1">
-    <p class="font-semibold text-ink">Cómo se arma</p>
+    <p class="font-semibold text-fg">Cómo se arma</p>
     <ul class="list-disc pl-4 space-y-0.5">
       <li>Arrastra piezas del panel izquierdo a los huecos punteados del canvas. Cada bloque trae sus
         huecos: <b>SI</b> tres (condición, si se cumple, si no), <b>SUM</b>, <b>AVG</b>… uno, una

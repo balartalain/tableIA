@@ -7,12 +7,12 @@
     {% include B|add:"_title.html" %}
     {% include B|add:"_assistant.html" %}
     {% include B|add:"_columns.html" %}
-    <!-- Cómo se lee: la escala de fuerza de cramer-widget.js (window.CRAMER_SCALE), la
-         misma que colorea las celdas y nombra la fuerza en el tooltip. -->
-    <div class="space-y-2 rounded border border-line/60 bg-paper/60 p-3"
+    <!-- Cómo se lee: la escala de fuerza de cramer-widget.js (cramerScale), con los colores
+         del tablero: la misma que colorea las celdas y nombra la fuerza en el tooltip. -->
+    <div class="space-y-2 rounded border border-line bg-app p-3"
          x-data="{
            get levels() {
-             const scale = window.CRAMER_SCALE || [];
+             const scale = window.cramerScale ? window.cramerScale() : [];
              const fmt = v => String(v).replace('.', ',');
              return scale.map((level, i) => ({
                ...level,
@@ -20,19 +20,19 @@
              }));
            },
          }">
-      <label class="block text-xs font-semibold text-ink/70">Cómo se lee</label>
+      <label class="block text-xs font-semibold text-fg">Cómo se lee</label>
       <ul class="space-y-1">
         <template x-for="level in levels" :key="level.label">
-          <li class="flex items-center gap-2 text-[11px] text-ink/70">
+          <li class="flex items-center gap-2 text-xs text-fg">
             <span class="flex shrink-0" aria-hidden="true">
-              <span class="h-3.5 w-10 rounded-sm border border-line/60" x-bind:style="`background:${level.color}`"></span>
+              <span class="h-3.5 w-10 rounded-sm border border-line" x-bind:style="`background:${level.color}`"></span>
             </span>
             <span class="font-medium w-20" x-text="level.label"></span>
-            <span class="tabular-nums text-ink/50" x-text="level.range"></span>
+            <span class="tabular-nums text-fg-muted" x-text="level.range"></span>
           </li>
         </template>
       </ul>
-      <p class="text-[11px] text-ink/50">Coeficiente de V de Cramér (de 0 a 1). Mide la intensidad de la asociación entre variables categóricas (0: independientes, 1: asociación perfecta). Gris: sin datos suficientes.</p>
+      <p class="text-xs text-fg-muted">Coeficiente de V de Cramér (de 0 a 1). Mide la intensidad de la asociación entre variables categóricas (0: independientes, 1: asociación perfecta). Gris: sin datos suficientes.</p>
     </div>
     {% include B|add:"_filters.html" with label="Condición" %}
     {% include B|add:"_json.html" %}

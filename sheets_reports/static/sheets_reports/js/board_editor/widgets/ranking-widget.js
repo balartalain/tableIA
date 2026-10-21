@@ -45,10 +45,10 @@
         const barW = Math.max(3, (w - 34) * pcts[i % pcts.length]);
         const labelW = Math.max(8, (w - 44) * 0.5);
         rows += `
-        <rect x="${x + 5}" y="${ry + 1}" width="7" height="7" rx="1.5" fill="${ctx.primary}" fill-opacity="0.12"/>
-        <rect x="${x + 16}" y="${ry + 1.5}" width="${labelW}" height="2.6" rx="1.3" fill="#C7CBC2"/>
-        <rect x="${x + 16}" y="${ry + 6}" width="${barW}" height="2.2" rx="1.1" fill="${ctx.primary}"/>
-        <rect x="${x + w - 12}" y="${ry + 1.5}" width="7" height="2.6" rx="1.3" fill="#8A8F86"/>`;
+        <rect x="${x + 5}" y="${ry + 1}" width="7" height="7" rx="1.5" fill="${ctx.theme.track}"/>
+        <rect x="${x + 16}" y="${ry + 1.5}" width="${labelW}" height="2.6" rx="1.3" fill="${ctx.theme.border}"/>
+        <rect x="${x + 16}" y="${ry + 6}" width="${barW}" height="2.2" rx="1.1" fill="${i === 0 ? ctx.colors[1] : ctx.primary}"/>
+        <rect x="${x + w - 12}" y="${ry + 1.5}" width="7" height="2.6" rx="1.3" fill="${ctx.theme.textMuted}"/>`;
       }
       return rows;
     }
@@ -72,7 +72,7 @@
     }
 
     _rankHTML(item) {
-      return `<span class="shrink-0 min-w-[1.5rem] text-center text-sm font-bold tabular-nums text-ink/50">${item.rank}</span>`;
+      return `<span class="tb-rank-pos shrink-0 min-w-[1.5rem] text-center text-sm tabular-nums">${item.rank}</span>`;
     }
 
     // Ancho de la barra: el % de la métrica respecto al total (la barra y el % cuentan lo
@@ -88,23 +88,21 @@
       const best = payload.order !== 'worst';
       const showShare = this.style.showShare !== false && item.share != null;
       const width = this._barWidth(item, max);
-      const barStyle = best
-        ? `width:${width}%; background-color:${this.getPrimaryColor()}`
-        : `width:${width}%`;
-      const barClass = best ? '' : 'bg-red-400';
-      // La barra, fina y debajo de la fila, alineada con el nombre (después de la posición).
+      // «Mejores»: el líder destacado y el resto en el primer color; «peores»: en el de alerta.
+      const barClass = !best ? 'tb-fill-bad' : item.rank === 1 ? 'tb-bar-lead' : '';
+      // La barra, debajo de la fila, alineada con el nombre (después de la posición).
       const bar = width
-        ? `<span class="block h-1 ml-[2.125rem] mt-1 rounded-full bg-line overflow-hidden" aria-hidden="true">
-             <span class="block h-full rounded-full ${barClass}" style="${barStyle}"></span>
+        ? `<span class="tb-bar block ml-[2.125rem] mt-1" aria-hidden="true">
+             <span class="${barClass}" style="width:${width}%"></span>
            </span>`
         : '';
       return `<li class="px-2 py-1.5">
           <span class="flex items-center gap-2.5 min-w-0">
             ${this._rankHTML(item)}
-            <span class="min-w-0 flex-1 truncate text-sm font-medium text-ink" title="${esc(item.label)}">${esc(item.label)}</span>
+            <span class="min-w-0 flex-1 truncate text-sm font-medium tb-text" title="${esc(item.label)}">${esc(item.label)}</span>
             <span class="shrink-0 text-right">
-              <span class="block text-sm font-semibold tabular-nums text-ink">${esc(String(this.format(item.value, payload.metric.format)))}</span>
-              ${showShare ? `<span class="block text-[11px] tabular-nums text-ink/45">${formatNumber(item.share, { percent: true, decimals: 1 })}</span>` : ''}
+              <span class="block text-sm font-semibold tabular-nums tb-text">${esc(String(this.format(item.value, payload.metric.format)))}</span>
+              ${showShare ? `<span class="block text-xs tabular-nums tb-text-muted">${formatNumber(item.share, { percent: true, decimals: 1 })}</span>` : ''}
             </span>
           </span>
           ${bar}
@@ -115,7 +113,7 @@
       if (!rest || !rest.count || this.style.showRest === false) return '';
       const share = this.style.showShare !== false && rest.share != null
         ? ` · ${formatNumber(rest.share, { percent: true, decimals: 1 })} del total` : '';
-      return `<p class="shrink-0 pt-2 mt-1 border-t border-line text-[11px] text-ink/50">+ ${rest.count} más${share}</p>`;
+      return `<p class="shrink-0 pt-2 mt-1 border-t tb-border text-xs tb-text-muted">+ ${rest.count} más${share}</p>`;
     }
 
     draw(data, style, title) {
@@ -129,7 +127,7 @@
       container.className = 'flex flex-col h-full min-h-0';
 
       if (!items.length) {
-        container.innerHTML = '<p class="m-auto text-xs text-ink/40">Sin datos que cumplan la condición.</p>';
+        container.innerHTML = '<p class="m-auto text-xs tb-text-muted">Sin datos que cumplan la condición.</p>';
         return;
       }
       const max = Math.max(...items.map(i => Math.abs(i.value || 0)));

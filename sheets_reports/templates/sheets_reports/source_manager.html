@@ -10,18 +10,18 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
       </button>
     </div>
 
-    <p x-show="error" x-text="error" role="alert" class="text-sm text-red-600"></p>
+    <p x-show="error" x-text="error" role="alert" class="text-sm text-danger"></p>
 
     <!-- Confirmación al eliminar: los widgets que se quedan sin datos. -->
     <div x-show="pendingDelete" x-cloak role="alertdialog" aria-label="Confirmar eliminación"
          class="ui-alert ui-alert-error p-3 space-y-2">
-      <p class="text-sm font-semibold text-red-900">
+      <p class="text-sm font-semibold text-danger">
         ¿Eliminar la fuente «<span x-text="pendingDelete && pendingDelete.source.label"></span>»?
         <span x-show="pendingDelete && pendingDelete.impact.length" class="font-normal"
               x-text="pendingDelete && (pendingDelete.impact.length === 1 ? 'Un widget se quedará sin datos:' : `${pendingDelete.impact.length} widgets se quedarán sin datos:`)"></span>
         <span x-show="pendingDelete && !pendingDelete.impact.length" class="font-normal">Ningún widget la usa.</span>
       </p>
-      <ul x-show="pendingDelete && pendingDelete.impact.length" class="text-xs text-red-900/80 space-y-0.5 max-h-28 overflow-y-auto">
+      <ul x-show="pendingDelete && pendingDelete.impact.length" class="text-xs text-danger space-y-0.5 max-h-28 overflow-y-auto">
         <template x-for="w in (pendingDelete && pendingDelete.impact) || []" :key="w.id">
           <li class="font-medium" x-text="w.title"></li>
         </template>
@@ -33,14 +33,14 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                 class="ui-btn ui-btn-danger ui-btn-sm">Eliminar</button>
       </div>
     </div>
-    <p x-show="loading" class="text-xs text-ink/50">
+    <p x-show="loading" class="text-xs text-fg-muted">
       <i class="ti ti-loader-2 animate-spin" aria-hidden="true"></i> Cargando fuentes…
     </p>
 
     <div x-show="!loading && !error && !sources.length"
          class="flex-1 flex flex-col items-center justify-center text-center gap-2 border border-dashed border-line rounded-md py-10">
-      <i class="ti ti-database-off text-2xl text-ink/30" aria-hidden="true"></i>
-      <p class="text-sm text-ink/60">Este tablero no tiene fuentes de datos.</p>
+      <i class="ti ti-database-off text-xl text-fg-subtle" aria-hidden="true"></i>
+      <p class="text-sm text-fg-muted">Este tablero no tiene fuentes de datos.</p>
     </div>
 
     <div x-show="sources.length" class="ui-card flex-1 min-h-0 overflow-auto">
@@ -76,16 +76,16 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                       </span>
                     </span>
                     <!-- Con nombre propio, el original («Documento · Pestaña») debajo. -->
-                    <span x-show="s.name" class="block text-xs text-ink/50 truncate" x-text="s.original_label"></span>
-                    <span x-show="refreshErrors[s.id]" x-text="refreshErrors[s.id]" role="alert" class="block text-[11px] text-red-600"></span>
+                    <span x-show="s.name" class="block text-xs text-fg-muted truncate" x-text="s.original_label"></span>
+                    <span x-show="refreshErrors[s.id]" x-text="refreshErrors[s.id]" role="alert" class="block text-xs text-danger"></span>
                   </span>
                 </span>
               </td>
-              <td class="text-ink/70" x-text="columnsLabel(s)"></td>
+              <td class="text-fg" x-text="columnsLabel(s)"></td>
               <td class="whitespace-nowrap" x-bind:title="s.refreshed_at && new Date(s.refreshed_at).toLocaleString()"
-                  x-bind:class="s.refreshed_at || refreshing[s.id] ? 'text-ink/70' : 'text-ink/40'"
+                  x-bind:class="s.refreshed_at || refreshing[s.id] ? 'text-fg' : 'text-fg-muted'"
                   x-text="refreshing[s.id] ? 'Actualizando…' : refreshedLabel(s)"></td>
-              <td class="text-right" x-bind:class="s.widgets ? 'text-ink/70' : 'text-ink/40'"
+              <td class="text-right" x-bind:class="s.widgets ? 'text-fg' : 'text-fg-muted'"
                   x-text="s.widgets ? s.widgets : 'Sin usar'"></td>
               <td class="py-1.5">
                 <div class="flex justify-end gap-0.5">
@@ -107,7 +107,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
                     Editar
                   </button>
                   <button type="button" x-on:click="remove(s)" title="Eliminar la fuente" x-bind:aria-label="`Eliminar ${s.label}`"
-                          class="ui-btn ui-btn-ghost ui-btn-xs text-xs hover:text-red-600 hover:bg-red-50">
+                          class="ui-btn ui-btn-ghost ui-btn-xs text-xs hover:text-danger hover:bg-danger-bg">
                     <i class="ti ti-trash text-base" aria-hidden="true"></i>
                     Eliminar
                   </button>
@@ -133,8 +133,8 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
           <i class="ti ti-arrow-left text-lg leading-none" aria-hidden="true"></i>
         </button>
         <div class="min-w-0">
-          <h3 class="text-sm font-bold text-ink truncate" x-text="previewSource ? previewSource.label : ''"></h3>
-          <p x-show="previewSource && previewSource.name" class="text-xs text-ink/50 truncate" x-text="previewSource ? previewSource.original_label : ''"></p>
+          <h3 class="text-sm font-bold text-fg truncate" x-text="previewSource ? previewSource.label : ''"></h3>
+          <p x-show="previewSource && previewSource.name" class="text-xs text-fg-muted truncate" x-text="previewSource ? previewSource.original_label : ''"></p>
         </div>
       </div>
       <!-- Buscador para saltar a una columna en la tabla -->
@@ -149,13 +149,13 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
         </select>
       </div>
       <!-- Las filas se van cargando al llegar con el scroll al final de la tabla. -->
-      <p x-show="!loadingData && !dataError" role="status" class="shrink-0 text-xs text-ink/50"
+      <p x-show="!loadingData && !dataError" role="status" class="shrink-0 text-xs text-fg-muted"
          x-text="totalRows ? `Mostrando ${loadedRows.toLocaleString('es')} de ${totalRows.toLocaleString('es')} filas` : 'Sin filas'"></p>
     </div>
 
     <div x-show="loadingData" class="flex-1 flex flex-col items-center justify-center text-center gap-2 py-10">
-      <i class="ti ti-loader-2 text-2xl text-moss-600 animate-spin" aria-hidden="true"></i>
-      <p class="text-xs text-ink/60">Cargando datos transformados…</p>
+      <i class="ti ti-loader-2 text-xl text-accent-text animate-spin" aria-hidden="true"></i>
+      <p class="text-xs text-fg-muted">Cargando datos transformados…</p>
     </div>
 
     <div x-show="dataError" role="alert" class="ui-alert ui-alert-error text-xs space-y-2">
@@ -168,7 +168,7 @@ fuente) + selector para agregar o editar una fuente. {% endcomment %}
     </div>
 
     <div x-show="!loadingData && !dataError" class="ui-card flex-1 min-h-0 overflow-hidden">
-      <div x-ref="previewTabulatorHost" class="w-full h-full tb-app"></div>
+      <div x-ref="previewTabulatorHost" class="w-full h-full"></div>
     </div>
   </div>
 </div>

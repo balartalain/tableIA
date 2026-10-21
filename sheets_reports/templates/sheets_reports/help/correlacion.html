@@ -3,11 +3,11 @@ Ayuda de «Matriz de correlación» (tópico del centro de ayuda; lo abre tambi�
 Explica qué mide, cómo interpretar los coeficientes y colores, las escalas de medida,
 las respuestas no evaluables y los métodos de cálculo (Pearson y Spearman).
 {% endcomment %}
-<div class="space-y-5 text-sm text-ink/80 leading-relaxed">
+<div class="space-y-5 text-sm text-fg leading-relaxed">
 
   <!-- 1. Introducción -->
   <div class="space-y-1.5">
-    <p class="text-sm font-medium text-ink">
+    <p class="text-sm font-medium text-fg">
       La <b>Matriz de Correlación</b> analiza el grado de relación o asociación estadística entre pares de variables
       de tu fuente de datos.
     </p>
@@ -19,57 +19,57 @@ las respuestas no evaluables y los métodos de cálculo (Pearson y Spearman).
 
   <!-- 2. Cómo interpretar los valores y colores -->
   <div class="space-y-2">
-    <h4 class="font-semibold text-ink text-xs uppercase tracking-wider">¿Cómo interpretar el coeficiente?</h4>
+    <h4 class="font-semibold text-fg text-xs uppercase tracking-wider">¿Cómo interpretar el coeficiente?</h4>
     <p>
       El valor resultante de cada par va siempre en un rango de <b>-1,00</b> a <b>+1,00</b>:
     </p>
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-      <div class="rounded border border-line bg-paper/50 p-2.5 space-y-1">
-        <div class="flex items-center gap-1.5 font-semibold text-moss-700">
+      <div class="rounded border border-line bg-app p-2.5 space-y-1">
+        <div class="flex items-center gap-1.5 font-semibold text-primary">
           <i class="ti ti-trending-up text-base"></i>
           <span>Positiva (+0.1 a +1.0)</span>
         </div>
-        <p class="text-[11px] text-ink/70">
+        <p class="text-xs text-fg">
           Ambas variables se mueven en la <b>misma dirección</b>: cuando una sube, la otra también tiende a subir.
         </p>
       </div>
 
-      <div class="rounded border border-line bg-paper/50 p-2.5 space-y-1">
-        <div class="flex items-center gap-1.5 font-semibold text-ink/60">
+      <div class="rounded border border-line bg-app p-2.5 space-y-1">
+        <div class="flex items-center gap-1.5 font-semibold text-fg-muted">
           <i class="ti ti-arrows-minimize text-base"></i>
           <span>Nula o casi nula (0.0)</span>
         </div>
-        <p class="text-[11px] text-ink/70">
+        <p class="text-xs text-fg">
           <b>No hay relación</b> lineal o monótona: el comportamiento de una no permite predecir el de la otra.
         </p>
       </div>
 
-      <div class="rounded border border-line bg-paper/50 p-2.5 space-y-1">
-        <div class="flex items-center gap-1.5 font-semibold text-amber-700">
+      <div class="rounded border border-line bg-app p-2.5 space-y-1">
+        <div class="flex items-center gap-1.5 font-semibold text-danger">
           <i class="ti ti-trending-down text-base"></i>
           <span>Negativa (-0.1 a -1.0)</span>
         </div>
-        <p class="text-[11px] text-ink/70">
+        <p class="text-xs text-fg">
           Se mueven en <b>direcciones opuestas</b>: cuando una variable aumenta, la otra tiende a disminuir.
         </p>
       </div>
     </div>
 
     <!-- Escala de fuerza -->
-    <div class="mt-2 rounded border border-line/70 bg-white p-2.5 space-y-1.5">
-      <p class="text-[11px] font-semibold text-ink/70">Fuerza de la relación:</p>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-        <div><span class="font-semibold text-moss-700">0.70 a 1.00:</span> Fuerte</div>
-        <div><span class="font-semibold text-moss-600">0.40 a 0.69:</span> Moderada</div>
-        <div><span class="font-semibold text-ink/60">0.10 a 0.39:</span> Débil</div>
-        <div><span class="font-semibold text-ink/40">0.00 a 0.09:</span> Sin correlación</div>
+    <div class="mt-2 rounded border border-line bg-surface p-2.5 space-y-1.5">
+      <p class="text-xs font-semibold text-fg">Fuerza de la relación:</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div><span class="font-semibold text-accent-text">0.70 a 1.00:</span> Fuerte</div>
+        <div><span class="font-semibold text-accent-text">0.40 a 0.69:</span> Moderada</div>
+        <div><span class="font-semibold text-fg-muted">0.10 a 0.39:</span> Débil</div>
+        <div><span class="font-semibold text-fg-muted">0.00 a 0.09:</span> Sin correlación</div>
       </div>
     </div>
   </div>
 
   <!-- 3. Escalas de medida -->
   <div class="space-y-2">
-    <h4 class="font-semibold text-ink text-xs uppercase tracking-wider">Escalas de medida de las variables</h4>
+    <h4 class="font-semibold text-fg text-xs uppercase tracking-wider">Escalas de medida de las variables</h4>
     <p>
       Para que el cálculo matemático sea correcto, cada variable debe tener asignada su escala adecuada.
       Puedes hacer clic en el botón de escala al lado de cada variable para cambiarla o usar <b>«Clasificar con IA»</b>.
@@ -77,11 +77,11 @@ las respuestas no evaluables y los métodos de cálculo (Pearson y Spearman).
 
     <ul class="space-y-1.5 pl-1">
       <li class="flex items-start gap-2">
-        <span class="font-semibold text-moss-700 shrink-0 min-w-[5rem]">Continua / Discreta:</span>
+        <span class="font-semibold text-accent-text shrink-0 min-w-[5rem]">Continua / Discreta:</span>
         <span>Números (edades, cantidades, montos, notas). Miden magnitudes matemáticas reales.</span>
       </li>
       <li class="flex items-start gap-2">
-        <span class="font-semibold text-sky-700 shrink-0 min-w-[5rem]">Ordinal:</span>
+        <span class="font-semibold text-primary shrink-0 min-w-[5rem]">Ordinal:</span>
         <span>
           Categorías de texto con un <b>orden natural evidente</b> (escalas Likert de satisfacción o acuerdo:
           <i>Completamente insatisfecho &lt; Insatisfecho &lt; Satisfecho &lt; Completamente satisfecho</i>).
@@ -89,23 +89,23 @@ las respuestas no evaluables y los métodos de cálculo (Pearson y Spearman).
         </span>
       </li>
       <li class="flex items-start gap-2">
-        <span class="font-semibold text-amber-700 shrink-0 min-w-[5rem]">Nominal:</span>
+        <span class="font-semibold text-warning shrink-0 min-w-[5rem]">Nominal:</span>
         <span>
           Categorías <b>sin orden jerárquico</b> (sede, carrera, departamento, género).
           En la matriz se evalúan automáticamente creando variables dicotómicas (0 o 1) por cada opción.
         </span>
       </li>
       <li class="flex items-start gap-2">
-        <span class="font-semibold text-ink/40 shrink-0 min-w-[5rem]">No se analiza:</span>
+        <span class="font-semibold text-fg-muted shrink-0 min-w-[5rem]">No se analiza:</span>
         <span>Identificadores, códigos, nombres, correos o campos de texto libre que no procede correlacionar.</span>
       </li>
     </ul>
   </div>
 
   <!-- 4. Respuestas no evaluables ("No aplica") -->
-  <div class="space-y-1.5 rounded border border-line bg-paper/40 p-3">
-    <h4 class="font-semibold text-ink text-xs uppercase tracking-wider flex items-center gap-1.5">
-      <i class="ti ti-filter-off text-moss-600"></i>
+  <div class="space-y-1.5 rounded border border-line bg-app p-3">
+    <h4 class="font-semibold text-fg text-xs uppercase tracking-wider flex items-center gap-1.5">
+      <i class="ti ti-filter-off text-accent-text"></i>
       <span>Ignorar respuestas no evaluables</span>
     </h4>
     <p>
@@ -120,7 +120,7 @@ las respuestas no evaluables y los métodos de cálculo (Pearson y Spearman).
 
   <!-- 5. Métodos de cálculo -->
   <div class="space-y-1.5">
-    <h4 class="font-semibold text-ink text-xs uppercase tracking-wider">Métodos: Pearson vs. Spearman</h4>
+    <h4 class="font-semibold text-fg text-xs uppercase tracking-wider">Métodos: Pearson vs. Spearman</h4>
     <ul class="list-disc pl-4 space-y-1">
       <li>
         <b>Pearson:</b> Evalúa relaciones en línea recta continua entre variables numéricas. Es sensible a valores extremos (outliers).
@@ -134,8 +134,8 @@ las respuestas no evaluables y los métodos de cálculo (Pearson y Spearman).
 
   <!-- 6. Pasos para configurar -->
   <div class="space-y-1.5 border-t border-line pt-3">
-    <h4 class="font-semibold text-ink text-xs uppercase tracking-wider">Guía rápida de configuración</h4>
-    <ol class="list-decimal pl-4 space-y-1 text-ink/70">
+    <h4 class="font-semibold text-fg text-xs uppercase tracking-wider">Guía rápida de configuración</h4>
+    <ol class="list-decimal pl-4 space-y-1 text-fg">
       <li>Agrega las columnas que deseas cruzar en <b>«Variables a correlacionar»</b>.</li>
       <li>Verifica la escala de cada variable (usa <b>«Clasificar con IA»</b> si provienen de encuestas).</li>
       <li>Asegúrate de tener activa la opción de <b>«Ignorar respuestas no evaluables»</b> si tu formulario contiene <i>«No aplica»</i> o similares.</li>

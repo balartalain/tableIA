@@ -1,0 +1,1 @@
+{% comment %}Atributos del contenedor del tablero (class="tablero"): el preset de tema y los colores propios del tablero como variables --tb-* (Dashboard.style_variables ya viene validado).{% endcomment %}data-board-theme="{{ dashboard.theme|default:'institucional' }}"{% if dashboard.style_variables %} style="{{ dashboard.style_variables }}"{% endif %}

@@ -10,54 +10,8 @@ function setPageLoading(isLoading) {
 document.addEventListener('alpine:init', () => {
   Alpine.store('dashboard', {
     dashboardId: window.DASHBOARD_ID,
-    primaryColor: window.DASHBOARD_PRIMARY_COLOR || '#1F8A5F',
     widgets: [],
     sources: [],
-
-    init() {
-      this.applyThemeVariables(this.primaryColor);
-    },
-
-    applyThemeVariables(color) {
-      const base = color || '#1F8A5F';
-      const root = document.documentElement;
-
-      if (typeof window.chroma === 'function') {
-        const c = window.chroma(base);
-        const p500 = base;
-        const p600 = c.darken(0.35).hex();
-        const p700 = c.darken(0.7).hex();
-        const p300 = c.brighten(0.6).hex();
-        const p100 = c.brighten(1.4).desaturate(0.4).hex();
-        const p50 = c.brighten(1.8).desaturate(0.6).hex();
-
-        root.style.setProperty('--board-primary', p500);
-        root.style.setProperty('--board-primary-600', p600);
-        root.style.setProperty('--board-primary-700', p700);
-        root.style.setProperty('--board-primary-300', p300);
-        root.style.setProperty('--board-primary-100', p100);
-        root.style.setProperty('--board-primary-50', p50);
-        root.style.setProperty('--board-primary-tint', `color-mix(in srgb, ${p500} 10%, white)`);
-      } else {
-        root.style.setProperty('--board-primary', base);
-        root.style.setProperty('--board-primary-600', base);
-        root.style.setProperty('--board-primary-700', base);
-        root.style.setProperty('--board-primary-300', base);
-        root.style.setProperty('--board-primary-100', base);
-        root.style.setProperty('--board-primary-50', base);
-        root.style.setProperty('--board-primary-tint', `color-mix(in srgb, ${base} 10%, white)`);
-      }
-    },
-
-    setPrimaryColor(color) {
-      this.primaryColor = color || '#1F8A5F';
-      this.applyThemeVariables(this.primaryColor);
-      this.widgets.forEach(w => {
-        if (w && typeof w.draw === 'function') {
-          w.draw(w._lastData);
-        }
-      });
-    },
 
     _renderUrl() {
       const url = apiUrl(`/api/dashboard/${this.dashboardId}/render/`);
@@ -79,9 +33,6 @@ document.addEventListener('alpine:init', () => {
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
         if (data.dashboard) {
           if (data.dashboard.sources) this.sources = data.dashboard.sources;
-          if (data.dashboard.primary_color) {
-            this.setPrimaryColor(data.dashboard.primary_color);
-          }
         }
         this.widgets.forEach(w => w.applyRender(byId[w.id]));
         requestAnimationFrame(() => {
@@ -113,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setPageLoading(false);
   }
   if (!r || !r.ok || !data) {
-    canvasEl.innerHTML = `<p class="col-span-12 text-sm text-red-600">${BaseWidget.escapeHTML((data && data.error) || 'No se pudo cargar el tablero')}</p>`;
+    canvasEl.innerHTML = `<p class="col-span-12 text-sm text-danger">${BaseWidget.escapeHTML((data && data.error) || 'No se pudo cargar el tablero')}</p>`;
     return;
   }
 

@@ -70,7 +70,7 @@
 
       const allPercent = BaseWidget.allSeriesPercent(payload, series);
       const reference = BaseWidget.referenceAnnotations(payload.referenceLines || [], series, {
-        format: BaseWidget.referenceFormat(allPercent),
+        format: BaseWidget.referenceFormat(allPercent), theme: this.themeColors(),
       });
 
       const options = {
@@ -78,7 +78,7 @@
           type: 'line', height: '100%', width: '100%', fontFamily: 'inherit',
           toolbar: this.chartExportToolbar(),
         },
-        colors: this.getSeriesColors(series.length),
+        colors: this.seriesColors(series.length),
         stroke: { curve: 'monotoneCubic', width: 3 },
         markers: { size: 3, hover: { size: 5 } },
         series,

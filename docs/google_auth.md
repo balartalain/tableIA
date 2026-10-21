@@ -1,4 +1,4 @@
-# Google en TableIA: implementación y credenciales
+# Google en UAPA DataViz AI: implementación y credenciales
 
 Documenta la app **`google_auth`**: qué se implementó, cómo encaja con el resto del proyecto y,
 paso a paso, cómo darle las credenciales de OAuth y la API key para el Google Picker.

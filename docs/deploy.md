@@ -106,7 +106,7 @@ y en el servidor, después del `migrate`: `venv/bin/python manage.py loaddata du
 
 ```ini
 [Unit]
-Description=TableIA (Gunicorn)
+Description=UAPA DataViz AI (Gunicorn)
 After=network.target postgresql.service
 
 [Service]

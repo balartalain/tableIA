@@ -7,7 +7,7 @@
 
 ## 1. Visión general
 
-TableIA es una aplicación Django que construye tableros de reportes sobre hojas de Google
+UAPA DataViz AI es una aplicación Django que construye tableros de reportes sobre hojas de Google
 Sheets. El usuario describe lo que quiere en lenguaje natural (o lo configura a mano en un
 editor visual), y el backend calcula los números con pandas y devuelve JSON listo para dibujar.
 

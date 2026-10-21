@@ -490,7 +490,7 @@ class ViewsTests(TestCase):
         self.assertContains(r, "Valor objetivo")
         self.assertContains(r, "['showTotals', 'rowSubtotal1', 'rowSubtotal2'][idx]")
         self.assertContains(r, "drawerDraft.style.stacked")
-        self.assertContains(self.client.get("/"), "Tableros IA")
+        self.assertContains(self.client.get("/"), "UAPA DataViz AI")
 
     def test_tablero_lleva_su_tema(self, _df):
         # El lienzo (editor y vista) es un `.tablero` con su preset y los colores propios

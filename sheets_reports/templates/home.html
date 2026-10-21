@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Tabler IA — Tus tableros{% endblock %}
+{% block title %}UAPA DataViz AI — Tus tableros{% endblock %}
 
 {% block extra_head %}
 <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
@@ -109,7 +109,7 @@
         <template x-for="t in templates" :key="t.id">
           <a :href="templateViewUrl(t)"
              class="ui-card group relative hover:border-accent overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col cursor-pointer">
-            
+
             <!-- Botón de eliminar en hover -->
             <button type="button" x-show="t.can_delete" @click.stop.prevent="deleteTemplate(t.id)" title="Eliminar plantilla" aria-label="Eliminar plantilla"
                     class="ui-btn ui-btn-icon absolute top-2 right-2 z-10 w-7 h-7 bg-surface hover:bg-danger-bg hover:text-danger shadow-sm opacity-0 group-hover:opacity-100">

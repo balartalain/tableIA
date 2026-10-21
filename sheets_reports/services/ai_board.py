@@ -49,6 +49,18 @@ Reglas:
   área), usa el más parecido y dilo en "note".
 - Cada widget usa columnas reales de la hoja. Si algo del pedido no se puede con estas columnas,
   no lo inventes: dilo en "note".
+- El pedido de cada widget cabe en lo que admite su tipo («Admite»: cuántas dimensiones,
+  pivotes, métricas o columnas). No le pidas a un widget más de lo que acepta.
+- Varias preguntas de una misma batería o matriz de un formulario (el mismo enunciado y un
+  «[…]» distinto) son columnas separadas: no se pueden juntar como si fueran una sola variable,
+  ni poner todas como dimensiones o pivotes de un mismo widget. Para mostrar la distribución de
+  respuestas de cada una, propón un widget por pregunta (las más relevantes si son muchas, dentro
+  del máximo de widgets), aunque el usuario lo haya pedido como un solo widget, y dilo en
+  "note". Para compararlas en un solo widget, cada pregunta es una métrica (ej. cuántos
+  respondieron cierta opción en cada una, o el promedio si la columna es numérica), dentro del
+  máximo de métricas del widget.
+  Ej.: «conteo por nivel de interés de 6 tópicos, por área» → 6 tablas dinámicas, cada una
+  con área en filas y un tópico en columnas; NO una tabla con los 6 tópicos como pivotes.
 - Si una columna está marcada como «fecha y hora en que se envió la respuesta», no es una fecha
   de los datos: no propongas evolución en el tiempo ni comparación de periodos con ella.
 - title: corto, en español, como lo leería quien ve el tablero (ej. «Ventas por categoría»).

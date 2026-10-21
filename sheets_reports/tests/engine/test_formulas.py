@@ -201,6 +201,11 @@ class FormulaLanguageTests(SimpleTestCase):
             with self.assertRaisesRegex(FormulaError, "solo va como resultado de un SI", msg=text):
                 compile_formula(text, df.columns)
 
+    def test_null_no_existe_y_sugiere_empty(self):
+        df = budget_df()
+        with self.assertRaisesRegex(FormulaError, "No existe NULL.*EMPTY"):
+            compile_formula('AVG(IF(Campus = "Santiago", Gasto_Real, NULL))', df.columns)
+
     def test_vacio_en_el_arbol_y_una_columna_con_ese_nombre(self):
         tree = formula_tree('IF(Campus = "Santiago", 1, EMPTY)')
         self.assertEqual(tree["args"][2], {"kind": "empty", "value": None, "args": []})

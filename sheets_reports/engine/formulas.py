@@ -376,6 +376,9 @@ def compile_formula(text: str, columns, aggregated_names=()) -> Formula:
         if name in aggregated_names:
             raise FormulaError(f"«{name}» es un campo agregado: no se puede usar dentro de otra fórmula.")
         real = name if name in known else lowered.get(name.casefold())
+        if real is None and name.casefold() == "null":
+            raise FormulaError("No existe NULL: para dejar la celda vacía usa EMPTY como resultado "
+                               "de un SI: IF(condición, valor, EMPTY).")
         if real is None:
             raise FormulaError(f"La columna «{name}» no existe. Si el nombre tiene espacios, "
                                f"escríbelo entre corchetes: [{name}].")

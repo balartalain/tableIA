@@ -75,11 +75,14 @@ BI_DATA_RULES = """\
 - Usa el tipo real de la columna: suma, promedio, mediana, mínimo, máximo y desviación estándar
   solo sobre columnas numéricas. Una escala ordinal de texto NO convierte sus respuestas en
   números. No propongas promedios de texto ni inventes puntuaciones a partir de su orden;
-  una conversión solo se usa si el usuario definió la equivalencia o ya existe un campo
-  calculado que la implementa.
+  una conversión solo se usa si el usuario definió la equivalencia en su pedido o ya existe un
+  campo calculado que la implementa. Que el enunciado de la pregunta describa una escala
+  («del 1 al 5», «de 0 a 10») o que las respuestas empiecen con un número («1 Me es muy POCO
+  interesante», «2», …) NO la vuelve numérica: sigue siendo texto y no se promedia.
 - Sobre texto, incluidas las escalas ordinales, puedes contar, contar distintos, mostrar la
   distribución por respuesta y calcular porcentajes por condición. Para un tablero de
-  satisfacción, propone estos análisis en lugar de un promedio de las etiquetas.
+  satisfacción o de interés, propone estos análisis en lugar de un promedio de las etiquetas
+  (ej. «% que respondió 4 o 5 por área» en vez de «interés promedio por área»).
 - «No aplica», «N/A», «No utilizo este medio», «Sin respuesta» y «Empty» son respuestas de texto
   válidas, no valores nulos. No las excluyas, recodifiques ni filtres por iniciativa propia:
   solo el usuario decide excluirlas mediante filtros explícitos. Solo los nulos reales son
@@ -191,7 +194,8 @@ a su `name`. Se crea en la fuente al aplicar la propuesta y queda para todo el t
   reglas de datos: COUNT([Pregunta]) o COUNT([ID]) según el pedido.
 - `formula` SIEMPRE agregada: cada columna dentro de SUM, AVG, COUNT, COUNT_DISTINCT, MIN o MAX.
   Columnas entre corchetes ([Ventas]), textos entre comillas, + - * / ( ), comparaciones
-  (= != > >= < <=), AND OR NOT e IF(condición, sí, no) dentro de las agregaciones.
+  (= != > >= < <=), AND OR NOT e IF(condición, sí, no) dentro de las agregaciones. Para que
+  una fila no cuente, el resultado del IF es EMPTY (no existe NULL): AVG(IF(cond, [x], EMPTY)).
   Ej.: SUM([Ventas]) - SUM([Costo]); SUM([Gasto]) / SUM([Presupuesto]) * 100;
   SUM(IF([Respuesta] = "Sí", 1, 0)) / COUNT([Respuesta]) * 100;
   SUM(IF([categoria] = "Hogar", [ventas], 0)) / SUM([ventas]) * 100.
@@ -1149,7 +1153,9 @@ def _metric_errors(metric, index: int, ctx, seen_aliases) -> list[str]:
             errors.append(f"{path}: la columna '{metric['field']}' no existe en la hoja.")
         elif agg in NUMERIC_AGGS and not ctx.is_numeric(metric["field"]):
             errors.append(f"{path}: '{agg}' solo se aplica a columnas numéricas; "
-                          f"'{metric['field']}' es de texto.")
+                          f"'{metric['field']}' es de texto. No conviertas sus respuestas en números: "
+                          f"cuéntalas (agg 'count', con la columna como dimensión o pivote) o "
+                          f"calcula el % de una o varias respuestas con un campo calculado.")
         if metric.get("window"):
             w = metric["window"].get("type") if isinstance(metric["window"], dict) else None
             if w not in WINDOW_TYPES:
@@ -1324,8 +1330,13 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
     # del form los puede usar como métricas «auto».
     new_fields, calc_errors = _calculated_fields_errors(data.get("calculated_fields"), ctx)
     errors += calc_errors
-    if new_fields:
-        ctx = dataclasses.replace(ctx, aggregated_fields=ctx.aggregated_fields | set(new_fields))
+    # Un campo propuesto con la fórmula mal ya tiene su error: las métricas que lo usan no
+    # suman otro («agg 'auto' solo con un campo agregado»), que esconde el motivo real.
+    items = data.get("calculated_fields") if isinstance(data.get("calculated_fields"), list) else []
+    proposed_names = {str(item.get("name") or "").strip() for item in items if isinstance(item, dict)}
+    proposed_names -= set(ctx.fields) | {""}
+    if new_fields or proposed_names:
+        ctx = dataclasses.replace(ctx, aggregated_fields=ctx.aggregated_fields | set(new_fields) | proposed_names)
 
     # Las escalas que propone la IA para las variables: válidas contra la hoja, y desde aquí
     # la validación de las columnas las usa en vez de las detectadas.

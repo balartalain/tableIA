@@ -177,6 +177,12 @@ class FormErrorsTests(SimpleTestCase):
             with self.subTest(case=case):
                 errors = errors_for("dynamic_table", uses, calculated_fields=[item])
                 self.assertTrue(any(message in e for e in errors), errors)
+        # Con la fórmula mal, el único error es el de la fórmula: la métrica que usa el campo
+        # propuesto no suma «agg 'auto' solo con un campo agregado».
+        broken = {**share, "formula": "AVG(IF(ventas > 1, 1, NULL))"}
+        errors = errors_for("dynamic_table", uses, calculated_fields=[broken])
+        self.assertEqual(len(errors), 1, errors)
+        self.assertIn("usa EMPTY", errors[0])
         # Las métricas de cálculo entre métricas ya no existen.
         old = fields(metrics=[agg("total"), {"type": "formula", "alias": "d", "expression": "total * 2"}])
         self.assertIn("metrics[1]", errors_for("dynamic_table", old)[0])

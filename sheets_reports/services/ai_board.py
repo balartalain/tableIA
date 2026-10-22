@@ -51,8 +51,12 @@ Reglas:
   no lo inventes: dilo en "note".
 - El pedido de cada widget cabe en lo que admite su tipo («Admite»: cuántas dimensiones,
   pivotes, métricas o columnas). No le pidas a un widget más de lo que acepta.
-- Varias preguntas de una misma batería o matriz de un formulario (el mismo enunciado y un
-  «[…]» distinto) son columnas separadas: no se pueden juntar como si fueran una sola variable,
+- Si la hoja trae columnas virtuales de una cuadrícula o pregunta de casillas («<pregunta> ·
+  Aspecto/Opción» y «<pregunta> · Respuesta»), úsalas para esa batería en un solo widget, según
+  la nota de cuadrículas. No propongas pedidos que esa nota marca como «No se puede» (ej. un %
+  que junte varias respuestas): propón su alternativa y dilo en "note".
+- Sin columnas virtuales, varias preguntas de una misma batería o matriz de un formulario (el
+  mismo enunciado y un «[…]» distinto) son columnas separadas: no se pueden juntar como si fueran una sola variable,
   ni poner todas como dimensiones o pivotes de un mismo widget. Para mostrar la distribución de
   respuestas de cada una, propón un widget por pregunta (las más relevantes si son muchas, dentro
   del máximo de widgets), aunque el usuario lo haya pedido como un solo widget, y dilo en
@@ -139,7 +143,7 @@ def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
     taken = {t for t in existing_types if (allowed.get(t) and allowed[t].max_per_dashboard == 1)}
     if not isinstance(raw, dict):
         raw = {}
-    items = []
+    items, dropped = [], []
     for item in raw.get("items") or []:
         if not isinstance(item, dict):
             continue
@@ -159,6 +163,10 @@ def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
             "request": request,
         }
         cols = _plan_columns(item.get("columns"), ctx) if ctx is not None else []
+        problem = _grid_problem(widget, cols, ctx)
+        if problem:
+            dropped.append(f"«{entry['title']}»: {problem}")
+            continue
         if cols:
             entry["columns"] = cols
         if widget.key == "filter" and ctx is not None:
@@ -179,8 +187,24 @@ def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
             break
     if not items:
         raise SpecGenerationError("La IA no propuso widgets para ese pedido. Prueba a describir qué "
-                                  "quieres ver con los nombres de las columnas.")
-    return {"items": items, "note": _text(raw.get("note"), MAX_TEXT_CHARS)}
+                                  "quieres ver con los nombres de las columnas."
+                                  + (f" ({'; '.join(dropped)})" if dropped else ""))
+    note = " ".join(n for n in [_text(raw.get("note"), MAX_TEXT_CHARS),
+                                *(f"Se quitó {d}." for d in dropped)] if n)
+    return {"items": items, "note": note}
+
+
+def _grid_problem(widget, columns: list[str], ctx: SheetContext | None) -> str:
+    """Por qué un widget planificado no puede usar sus columnas virtuales de cuadrícula (ver
+    engine/steps/grid.py), o "" si puede: el tipo no las acepta o son de dos cuadrículas."""
+    if ctx is None:
+        return ""
+    questions = list(dict.fromkeys(ctx.grid_fields[c]["question"] for c in columns if c in ctx.grid_fields))
+    if questions and not widget.grid_fields:
+        return f"«{widget.label}» no usa columnas de cuadrícula"
+    if len(questions) > 1:
+        return f"usa dos cuadrículas a la vez ({' y '.join(questions)})"
+    return ""
 
 
 def propose_board(prompt: str, ctx: SheetContext, existing_types=(), existing_widgets=()) -> dict:

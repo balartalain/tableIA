@@ -1006,12 +1006,15 @@ def samples_note(field, samples: dict, refs: dict) -> str:
     return ""
 
 
-GRID_NOTE = """Cuadrículas y preguntas de casillas del formulario: las columnas virtuales «<pregunta> · Aspecto» y «<pregunta> · Respuesta» son la pregunta en formato largo (una fila por respuesta y aspecto).
-- Para comparar los aspectos, la distribución por aspecto o una tabla Aspecto × Respuesta: Aspecto como dimensión y Respuesta como pivote (o como métrica, ej. AVG si es numérica), con Conteo.
-- Para un solo aspecto: filtra Aspecto (eq) o usa su columna en ancho si está en la hoja.
-- Un widget usa las virtuales de una sola cuadrícula, y no en dispersión, correlación, V de Cramér ni filtros.
-- En una fórmula de campo calculado no se usan las virtuales.
-- Preguntas de casillas: «<pregunta> · Opción» y «<pregunta> · Respuesta» (Sí/No), una fila por respuesta y opción. Opción como dimensión y Respuesta como pivote con Conteo y % de la fila: el % que marcó cada opción; o Opción con el filtro Respuesta = Sí: cuántos la marcaron."""
+GRID_NOTE = """Cuadrículas y preguntas de casillas del formulario: las columnas virtuales «<pregunta> · Aspecto» (en una de casillas, «· Opción») y «<pregunta> · Respuesta» son la pregunta en formato largo (una fila por respuesta y aspecto u opción). En una de casillas, Respuesta es Sí/No.
+Se puede:
+- Aspecto (u Opción) como dimensión y Respuesta como pivote, con Conteo y «% de la fila»: la distribución de respuestas de cada aspecto (en casillas, el % que marcó cada opción).
+- Agrupar por una columna real y ver un solo aspecto: la columna real como dimensión, Respuesta como pivote y el filtro Aspecto = «…» (ej. Recinto × Respuesta de «Servicios generales», con «% de la fila»).
+- Filtrar Aspecto o Respuesta (eq, in); contar con el filtro Respuesta in [...] (ej. cuántos respondieron «Satisfecho» o «Muy satisfecho»); AVG de Respuesta si es numérica.
+No se puede (no lo propongas ni lo configures; propón la alternativa y dilo en "note"):
+- Un campo calculado (fórmula) con una virtual: ningún ratio ni % que junte varias respuestas, como «% de satisfechos o completamente satisfechos». Alternativa: la distribución con «% de la fila» (Respuesta como pivote, se ve el % de cada respuesta) o el conteo con el filtro Respuesta in [...].
+- Las virtuales de dos cuadrículas en un mismo widget. Alternativa: un widget por cuadrícula.
+- Las virtuales en dispersión, matriz de correlación, V de Cramér o filtros. Alternativa: tabla dinámica o barras."""
 
 
 def columns_context(ctx: SheetContext, only=None) -> str:

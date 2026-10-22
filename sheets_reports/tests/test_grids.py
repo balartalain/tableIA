@@ -238,6 +238,29 @@ class GridConfigTests(SimpleTestCase):
         text = columns_context(ctx)
         self.assertIn("columna virtual de la cuadrícula «Evaluación»", text)
         self.assertIn("Cuadrículas y preguntas de casillas del formulario", text)
+        # Los límites, con su alternativa: la IA no planifica lo que no se puede.
+        self.assertIn("No se puede", text)
+        self.assertIn("% de satisfechos o completamente satisfechos", text)
+        # Sin virtuales, la nota no aparece.
+        no_grids = survey_source_df()
+        no_grids.attrs.pop("grid_store")
+        self.assertNotIn("No se puede", columns_context(SheetContext.from_dataframe(no_grids, "0")))
+
+    def test_el_plan_descarta_lo_que_las_virtuales_no_permiten(self):
+        from sheets_reports.services.ai_board import clean_plan
+        ctx = SheetContext.from_dataframe(survey_source_df(), "0")
+
+        def item(widget_type, columns):
+            return {"widget_type": widget_type, "title": widget_type, "description": "",
+                    "request": "algo", "columns": columns}
+        plan = clean_plan({"items": [
+            item("dynamic_table", [ASPECT, VALUE, "Carrera"]),
+            item("correlation", ["Nota · Respuesta", "Nota [Clase]"]),
+            item("bar", [ASPECT, "Nota · Respuesta"]),
+        ], "note": ""}, ctx=ctx)
+        self.assertEqual([i["widget_type"] for i in plan["items"]], ["dynamic_table"])
+        self.assertIn("no usa columnas de cuadrícula", plan["note"])
+        self.assertIn("dos cuadrículas", plan["note"])
 
     def test_validacion_de_las_virtuales(self):
         ctx = SheetContext.from_dataframe(survey_source_df(), "0")

@@ -96,9 +96,10 @@ class WidgetService:
 
     def _clean_style(self, widget_type: str, style: dict) -> dict:
         """El estilo lo define el `style_schema` del tipo: una clave fuera de él se descarta.
-        Los tipos y las opciones los valida `form_errors` (en `_validate`)."""
+        Un `null` quita la clave (un número que se vació en el panel): el widget vuelve a su
+        defecto. Los tipos y las opciones los valida `form_errors` (en `_validate`)."""
         known = {c["key"] for c in (WIDGETS.get(widget_type).style_schema or [])}
-        return {k: v for k, v in (style or {}).items() if k in known}
+        return {k: v for k, v in (style or {}).items() if k in known and v is not None}
 
     def _validate(self, widget_type: str, form: WidgetForm, title) -> None:
         """Mismas reglas que la IA: un form que no pasa no llega a guardarse."""

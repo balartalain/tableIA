@@ -592,7 +592,12 @@
         this._chart.destroy();
         this._chart = null;
       }
-      container.innerHTML = '<div style="height:100%;width:100%;"></div>';
+      // Un ancho fijo (ej. «Forzar ancho de gráfico») mayor que la tarjeta se recorre con
+      // scroll horizontal dentro del contenedor, sin desbordar la tarjeta.
+      const fixedWidth = Number(options?.chart?.width) || 0;
+      container.style.overflowX = fixedWidth ? 'auto' : '';
+      container.style.overflowY = fixedWidth ? 'hidden' : '';
+      container.innerHTML = `<div style="height:100%;width:${fixedWidth ? `${fixedWidth}px` : '100%'};"></div>`;
       const mountEl = container.firstElementChild;
       this._chart = new ApexCharts(mountEl, BaseWidget.mergeOptions(this.themeOptions(), options));
       return this._chart.render();

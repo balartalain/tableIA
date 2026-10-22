@@ -88,7 +88,7 @@ class PanelTests(StaticLiveServerTestCase):
     # ------------------------------------------------------------------ helpers
     def widget(self, widget_fields, **extra):
         return Widget.objects.create(
-            dashboard=self.dashboard, source=self.source, type="dynamic_table", title="Tabla",
+            dashboard=self.dashboard, source=self.source, type=extra.pop("type", "dynamic_table"), title="Tabla",
             fields=widget_fields, style=extra.pop("style", {}),
             position=extra.pop("position", {"order": 0, "w": 12, "h": 420, "row_id": "row_1"}), **extra)
 
@@ -223,6 +223,41 @@ class PanelTests(StaticLiveServerTestCase):
         widget.refresh_from_db()
         self.assertEqual((widget.source_id, widget.fields["dimensions"], widget.fields["pivots"]),
                          (self.source.id, ["categoria"], ["mes"]))
+
+    def test_un_grafico_mas_ancho_que_su_tarjeta_se_recorre_con_scroll(self):
+        """«Forzar ancho de gráfico» mayor que la tarjeta: el contenedor del gráfico muestra
+        scroll horizontal y la tarjeta no se ensancha."""
+        widget = self.widget(fields(), type="bar", style={"chartWidth": 3000},
+                             position={"order": 0, "w": 6, "h": 360, "row_id": "row_1"})
+        self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
+        card = self.page.locator(f'[data-widget-id="{widget.id}"]')
+        card.locator(".apexcharts-svg").wait_for()
+        sizes = card.evaluate(f"""card => {{
+            const box = card.querySelector('#chart-{widget.id}');
+            return {{scroll: box.scrollWidth, client: box.clientWidth, card: card.clientWidth,
+                     overflow: getComputedStyle(box).overflowX}};
+        }}""")
+        self.assertEqual(sizes["overflow"], "auto", sizes)
+        self.assertGreaterEqual(sizes["scroll"], 3000, sizes)
+        self.assertLess(sizes["client"], 3000, sizes)
+        self.assertLess(sizes["card"], 3000, sizes)
+
+    def test_vaciar_un_numero_de_estilo_lo_quita(self):
+        """Vaciar un número de «Personalizar» quita la clave del estilo: se guarda sin el error
+        «debe ser un número» y el widget vuelve a su valor por defecto."""
+        widget = self.widget(fields(), style={"pageSize": 20})
+        drawer = self.open_panel(self.open_editor(widget))
+        self.page.get_by_role("tab", name="Personalizar").click()
+        page_size = drawer.locator("div", has=self.page.get_by_text("Filas por página", exact=True)) \
+            .locator('input[type="number"]').last
+        self.assertEqual(page_size.input_value(), "20")
+        page_size.fill("")
+        with self.page.expect_response(lambda r: f"/api/widget/{widget.id}/" in r.url
+                                       and r.request.method == "PUT") as response:
+            self.page.get_by_role("button", name="Guardar", exact=True).click()
+        self.assertEqual(response.value.status, 200, response.value.text())
+        widget.refresh_from_db()
+        self.assertNotIn("pageSize", widget.style)
 
     def test_la_tabla_de_fuentes(self):
         """«Sin usar», columnas incluidas, estado de la fuente, sus acciones y la confirmación al

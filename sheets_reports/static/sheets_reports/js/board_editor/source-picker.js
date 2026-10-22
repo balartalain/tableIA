@@ -305,7 +305,8 @@ function sourcePicker({ mode = 'create' } = {}) {
       return fresh.map((c, i) => {
         const edited = current[c.name];
         const alias = (edited && edited.alias) || c.alias || `col_${i + 1}`;
-        return edited ? { ...c, alias, type: edited.type, include: edited.include, label: edited.label || '', format: edited.format || '' }
+        return edited ? { ...c, alias, type: edited.type, include: edited.include, label: edited.label || '', format: edited.format || '',
+                          aspects_excluded: edited.aspects_excluded || [] }
           : { ...c, alias, include: c.include ?? true, label: c.label || '', format: c.format || '' };
       });
     },
@@ -489,7 +490,8 @@ function sourcePicker({ mode = 'create' } = {}) {
         // en la edición (las columnas de igual encabezado).
         if (refresh) this.columns = this._keepEdits(data.columns || []);
         else if (this.mode === 'replace') this.columns = this._keepEdits(data.columns || [], this._editSnapshot.columns);
-        else this.columns = (data.columns || []).map((c, i) => ({ ...c, alias: c.alias || `col_${i + 1}`, include: true, label: '', format: '' }));
+        // Las columnas anchas de una cuadrícula llegan excluidas: se usan sus virtuales.
+        else this.columns = (data.columns || []).map((c, i) => ({ ...c, alias: c.alias || `col_${i + 1}`, include: c.include ?? true, label: '', format: '' }));
         this.rows = data.rows || 0;
         const doc = this.spreadsheet.name.trim();
         if (this.mode === 'create' && !refresh) {
@@ -518,9 +520,10 @@ function sourcePicker({ mode = 'create' } = {}) {
     },
 
     // ---- campos calculados
-    // Nombres que una fórmula puede usar: las columnas incluidas (con su nombre a mostrar).
+    // Nombres que una fórmula puede usar: las columnas incluidas (con su nombre a mostrar). Las
+    // virtuales de una cuadrícula no: solo existen al desdoblarla, en un widget.
     get formulaColumns() {
-      return this.columns.filter(c => c.include).map(c => (c.label || '').trim() || c.name);
+      return this.columns.filter(c => c.include && !c.virtual).map(c => (c.label || '').trim() || c.name);
     },
 
     get selectedField() {
@@ -713,7 +716,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         .map(f => ({ id: f.id, name: f.name.trim(), format: f.format, ...this._formulaBody(f) }));
       return {
         first_row_headers: this.headers, calculated_fields: previous,
-        columns: this.columns.map(({ name, type, include, label, alias }) => ({ name, type, include, alias: alias || '', label: (label || '').trim() })),
+        columns: this.columns.map(({ name, type, include, label, alias, ...c }) => ({ name, type, include, alias: alias || '', label: (label || '').trim(), ...this._gridKeys(c) })),
       };
     },
 
@@ -787,12 +790,28 @@ function sourcePicker({ mode = 'create' } = {}) {
       return data;
     },
 
+    // Una virtual de cuadrícula guarda su pregunta, su rol y, la de Aspecto, los aspectos quitados.
+    _gridKeys(c) {
+      if (!c.virtual) return {};
+      return { grid: c.grid, role: c.role,
+               ...(c.role === 'aspect' && (c.aspects_excluded || []).length ? { aspects_excluded: c.aspects_excluded } : {}) };
+    },
+
+    // Quitar o volver a poner un aspecto en la cuadrícula (la fila de Aspecto).
+    toggleAspect(c, aspect) {
+      const excluded = new Set(c.aspects_excluded || []);
+      if (excluded.has(aspect)) excluded.delete(aspect);
+      else if (c.aspects.length - excluded.size > 1) excluded.add(aspect);
+      c.aspects_excluded = c.aspects.filter(a => excluded.has(a));
+    },
+
     _payload() {
       // La escala de medida (y el orden de una ordinal) se edita desde la matriz de
       // correlación: aquí solo se conserva.
-      const columns = this.columns.map(({ name, type, include, label, format, alias, scale, order }) =>
+      const columns = this.columns.map(({ name, type, include, label, format, alias, scale, order, ...c }) =>
         ({ name, type, include, alias: alias || '', label: (label || '').trim(), format: type === 'number' ? (format || '') : '',
-           ...(scale ? { scale, ...(scale === 'ordinal' && order && order.length ? { order } : {}) } : {}) }));
+           ...(scale ? { scale, ...(scale === 'ordinal' && order && order.length ? { order } : {}) } : {}),
+           ...this._gridKeys(c) }));
       const body = { columns, first_row_headers: this.headers };
       // ¿Respuestas de Google Forms? (null en edición directa no debería
       // pasar: arranca con el valor guardado de la fuente).

@@ -9,6 +9,7 @@ from typing import Optional
 import pandas as pd
 
 from sheets_reports.engine.steps.filter import Condition, apply_filters, condition_errors, parse_conditions
+from sheets_reports.engine.steps.grid import query_names
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.utils.validation import MAX_BOARD_IN_VALUES, SpecValidationError
 from sheets_reports.engine import ResultTooLargeError
@@ -144,6 +145,22 @@ class WidgetService:
         return valid, ignored
 
     # -------------------------------------------------------------- cálculo
+    def _board_filtered(self, definition, board_filters: list[Condition], fields: dict):
+        """(frame, fields) con los filtros del tablero: los de columnas reales recortan la hoja;
+        los de las virtuales de una cuadrícula solo existen al desdoblarla, así que se suman a
+        los filtros del widget si usa esa cuadrícula (y no aplican a los demás)."""
+        virtual = self.ctx.grid_fields
+        real = [c for c in board_filters if c.field not in virtual]
+        df = apply_filters(self.df, real) if real else self.df
+        if len(real) == len(board_filters) or not definition.grid_fields:
+            return df, fields
+        used = {virtual[name]["question"] for name in query_names(fields) if name in virtual}
+        extra = [c.to_dict() for c in board_filters
+                 if c.field in virtual and virtual[c.field]["question"] in used]
+        if extra:
+            fields = {**fields, "filters": [*(fields.get("filters") or []), *extra]}
+        return df, fields
+
     def render(self, widget: Widget, board_filters: Optional[list[Condition]] = None) -> dict:
         """{"data": ...} listo para dibujar, o {"error": ...}. Un error no tumba el tablero."""
         definition = widget.definition
@@ -152,8 +169,10 @@ class WidgetService:
         try:
             # Los filtros del tablero se aplican antes: definen el universo del widget (el
             # denominador de sus porcentajes), mientras que los del propio widget lo recortan.
-            df = apply_filters(self.df, board_filters) if board_filters and definition.board_filtered else self.df
-            rendered = definition.render(df, {"fields": widget.fields, "style": widget.style})
+            df, fields = self.df, widget.fields
+            if board_filters and definition.board_filtered:
+                df, fields = self._board_filtered(definition, board_filters, fields)
+            rendered = definition.render(df, {"fields": fields, "style": widget.style})
         except ResultTooLargeError as e:
             return {"error": str(e)}
         except KeyError as e:

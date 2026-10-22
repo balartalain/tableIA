@@ -40,6 +40,7 @@ class CorrelationWidget(BaseWidget):
     key = "correlation"
     type_key = "correlation"
     label = "Matriz de correlación"
+    grid_fields = False
     ai_doc = ('qué tan relacionadas están entre sí varias columnas, como mapa de calor. Las '
               'variables van en columns y son numéricas, ordinales o nominales (ver la escala de '
               'cada columna); una nominal se muestra como una fila 0/1 por categoría (hasta 10 '

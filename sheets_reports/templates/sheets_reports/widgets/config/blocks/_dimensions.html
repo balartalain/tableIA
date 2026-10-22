@@ -25,6 +25,7 @@
           <i class="ti ti-grip-vertical column-drag-handle shrink-0 cursor-grab active:cursor-grabbing text-base leading-none text-fg-subtle hover:text-fg-muted select-none"
              aria-hidden="true" title="Arrastra para reordenar"></i>
           <select x-vselect x-model="$store.dashboard.drawerDraft.fields.dimensions[idx]"
+                  x-on:change="$store.dashboard.onDimensionChange(idx)"
                   aria-label="Dimensión"
                   class="flex-1 min-w-0 text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">
             <option value="" x-show="!col" x-text="'— elegir —'"></option>
@@ -44,6 +45,14 @@
             <template x-if="$store.dashboard.dimensionCalculatedOptions(idx).length">
               <optgroup label="Campos calculados">
                 <template x-for="c in $store.dashboard.dimensionCalculatedOptions(idx)" :key="c">
+                  <option x-bind:value="c" x-text="c"></option>
+                </template>
+              </optgroup>
+            </template>
+            <!-- Virtuales de las cuadrículas del formulario (Aspecto, Respuesta) -->
+            <template x-if="$store.dashboard.gridOptions($store.dashboard.drawerDraft.fields.dimensions, idx).length">
+              <optgroup label="Cuadrículas">
+                <template x-for="c in $store.dashboard.gridOptions($store.dashboard.drawerDraft.fields.dimensions, idx)" :key="'grid-' + c">
                   <option x-bind:value="c" x-text="c"></option>
                 </template>
               </optgroup>

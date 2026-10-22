@@ -2,6 +2,7 @@
 El motor: cuatro pasos atómicos que un widget encadena en `BaseWidget.process_query`.
 
     1. filter_rows               (filter.py)       condiciones sobre las filas
+       expand_grid               (grid.py)         solo si usa una cuadrícula: la desdobla
     2. apply_aggregation         (aggregation.py)  groupby, pivote, escalar o tabla dinámica
                                                    (incluidos los campos calculados agregados)
     3. apply_window_functions    (window.py)       percent_of_total, running_total, ...
@@ -19,14 +20,27 @@ import pandas as pd
 
 from sheets_reports.engine.steps.aggregation import apply_aggregation
 from sheets_reports.engine.steps.filter import filter_rows
+from sheets_reports.engine.steps.grid import expand_grid, grid_in_use, split_filters
 from sheets_reports.engine.steps.sort import apply_sort_limit
 from sheets_reports.engine.steps.window import apply_window_functions
 
 
 def run_steps(df: pd.DataFrame, fields, widget_type: Optional[str] = None) -> Dict[str, Any]:
-    """La secuencia por defecto de los cuatro pasos sobre `df`."""
+    """La secuencia por defecto de los cuatro pasos sobre `df`. Si la consulta usa las columnas
+    virtuales de una cuadrícula (grid.py), el filtro se parte: las condiciones sobre columnas
+    reales en ancho, la cuadrícula se desdobla y después las condiciones sobre las virtuales."""
     metadata: Dict[str, Any] = {}
-    df = filter_rows(df, fields.filters, metadata)
+    grid = grid_in_use(df, fields)
+    if grid is None:
+        df = filter_rows(df, fields.filters, metadata)
+    else:
+        real, virtual = split_filters(fields.filters, grid.names)
+        df = filter_rows(df, real, metadata)
+        applied = metadata.get("filters_applied", 0)
+        df = filter_rows(expand_grid(df, grid, fields), virtual, metadata)
+        if real and virtual:
+            metadata["filters_applied"] += applied
+        metadata["grid"] = grid.question
     df = apply_aggregation(df, fields, metadata, widget_type=widget_type)
     df = apply_window_functions(df, fields.metrics, metadata)
     df = apply_sort_limit(df, fields.sort_by, fields.limit, metadata)

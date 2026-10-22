@@ -34,7 +34,7 @@ Un archivo por widget en `tests/widgets/test_<tipo>.py`: `test_bar`, `test_line`
 ### Panel en el navegador (`tests/e2e/test_panel.py`, solo con `E2E=1`)
 El servidor de pruebas atiende las peticiones de a una (`SerialLiveServerThread`): con SQLite en memoria todos los hilos comparten una conexión, y las peticiones simultáneas de la página daban errores 500 al azar.
 
-El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de la fuente llega a todas las columnas de la tabla dinámica; «Mostrar como» desaparece al pasar a Promedio; la dimensión obligatoria no se puede quitar; sobre una columna de texto solo se cuenta; la tabla dinámica llena el ancho y el total queda pegado a las filas; un porcentaje de un campo calculado sale con 2 decimales; la tabla de fuentes («Sin usar», columnas incluidas, estado, confirmación al eliminar); el formateador común de números (`formatNumber`).
+El JS del panel y el dibujo de las tablas, con la hoja simulada: el formato de la fuente llega a todas las columnas de la tabla dinámica; «Mostrar como» desaparece al pasar a Promedio; la dimensión obligatoria no se puede quitar; sobre una columna de texto solo se cuenta; la tabla dinámica llena el ancho y el total queda pegado a las filas; un porcentaje de un campo calculado sale con 2 decimales; la tabla de fuentes («Sin usar», columnas incluidas, estado, confirmación al eliminar); el formateador común de números (`formatNumber`); el grupo «Cuadrículas» de una fuente de formulario y el pivote que se completa al elegir «· Aspecto».
 
 `FormulaBuilderTests`, el constructor de fórmulas por bloques: armar un SI solo con clics y guardarlo; arrastrar de verdad (mouse) un operador que envuelve un bloque, un valor a un hueco y un bloque al panel para quitarlo; una función sin huecos (HOY) se dibuja con su nombre; «Generar con IA» (IA simulada) reemplaza el lienzo o muestra el motivo si no pudo.
 
@@ -81,6 +81,7 @@ Cómo se graba:
 | `tests/test_sources.py` | Conectar una hoja: Drive, pestañas, tipos de columna, caché de la hoja. |
 | `tests/test_data_sources.py` | Fuentes del tablero: CRUD, renombrar/reemplazar/actualizar con aviso de impacto, campos calculados, formato de columnas (moneda, %), varios widgets por fuente. |
 | `tests/test_source_columns.py` | Las columnas que usa cada widget (para renombrar y avisar qué se rompe). |
+| `tests/test_grids.py` | Cuadrículas de formulario como columnas virtuales: formato largo (simple y de casillas), Aspecto × Respuesta con conteo y % de la fila, filtros en ancho antes de desdoblar y sobre las virtuales después, promedio de una escala numérica, dos cuadrículas rechazadas, columna ancha excluida que sigue en la cuadrícula, aspectos excluidos, contexto de la IA, validación, filtros del tablero, editor de la fuente (posición, valores por defecto, alias iguales a los del motor) y guardado. |
 | `tests/test_column_scales.py` | Escala de medida de las columnas: reglas de detección (escalas conocidas, «No aplica» como categoría válida, identificadores, discreta y continua), la guardada en la fuente manda, el PUT de escalas con su validación y «Clasificar con IA» (modelo simulado). |
 | `tests/test_views.py` | Las vistas como adaptadores HTTP: render, guardar widgets, asistente de IA, tableros. |
 

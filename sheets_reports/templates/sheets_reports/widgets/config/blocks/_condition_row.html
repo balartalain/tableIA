@@ -8,6 +8,13 @@ Alpine de la lista que la contiene (filtros del widget o de una métrica).
     <template x-for="f in $store.dashboard.schema.all_fields || []" :key="f">
       <option x-bind:value="f" x-text="f"></option>
     </template>
+    <template x-if="$store.dashboard.gridColumns.length">
+      <optgroup label="Cuadrículas">
+        <template x-for="f in $store.dashboard.gridColumns" :key="'grid-' + f">
+          <option x-bind:value="f" x-text="f"></option>
+        </template>
+      </optgroup>
+    </template>
   </select>
   <select x-vselect x-model="c.op" x-on:change="$store.dashboard.onFilterOpChange(c)" aria-label="Operador"
           class="w-36 text-xs border border-line rounded-md px-1.5 py-1 bg-surface focus:outline-none focus:border-accent">

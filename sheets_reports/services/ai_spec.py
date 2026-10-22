@@ -23,6 +23,7 @@ from google import genai
 from google.genai import types
 
 from sheets_reports.engine.steps.filter import condition_errors
+from sheets_reports.engine.steps.grid import query_names
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.engine.formulas import FORMATS, FormulaError, compile_formula, formula_tree, rename_columns
 from sheets_reports.services.source_columns import map_columns
@@ -1005,12 +1006,20 @@ def samples_note(field, samples: dict, refs: dict) -> str:
     return ""
 
 
+GRID_NOTE = """Cuadrículas del formulario: las columnas virtuales «<pregunta> · Aspecto» y «<pregunta> · Respuesta» son la pregunta en formato largo (una fila por respuesta y aspecto).
+- Para comparar los aspectos, la distribución por aspecto o una tabla Aspecto × Respuesta: Aspecto como dimensión y Respuesta como pivote (o como métrica, ej. AVG si es numérica), con Conteo.
+- Para un solo aspecto: filtra Aspecto (eq) o usa su columna en ancho si está en la hoja.
+- Un widget usa las virtuales de una sola cuadrícula, y no en dispersión, correlación, V de Cramér ni filtros.
+- En una fórmula de campo calculado no se usan las virtuales."""
+
+
 def columns_context(ctx: SheetContext, only=None) -> str:
     """Las columnas con su alias, tipo y ejemplos, y los campos calculados con su fórmula: así la IA
     sabe qué calcula cada uno aunque su nombre no lo diga. Con `only` (las columnas que usa un
     widget ya planificado) lista solo esas y la ID: en una hoja ancha es casi todo el mensaje."""
     only = set(only or ())
     fields = [f for f in ctx.fields if not only or f in only or is_id_column(f)]
+    members = {column: grid["question"] for grid in ctx.grid_fields.values() for column in grid["columns"]}
     refs, shared = shared_samples(ctx.samples, fields)
     lines = []
     for field in fields:
@@ -1031,11 +1040,20 @@ def columns_context(ctx: SheetContext, only=None) -> str:
         calculated = ctx.calculated.get(field)
         if calculated and calculated["kind"] == "row":
             line += f" — campo calculado por fila: {calculated['formula']}"
+        grid = ctx.grid_fields.get(field)
+        if grid:
+            role = "el aspecto" if grid["role"] == "aspect" else "la respuesta"
+            line += (f" — columna virtual de la cuadrícula «{grid['question']}»: {role} de cada "
+                     f"respuesta, una fila por aspecto")
+        elif field in members:
+            line += f" — un aspecto de la cuadrícula «{members[field]}», en ancho"
         line += samples_note(field, ctx.samples, refs)
         lines.append(line)
     title = ("Columnas de la hoja para este widget (la hoja tiene más: usa solo estas)" if only
              else "Columnas de la hoja")
     text = shared + f"{title}:\n" + "\n".join(lines)
+    if any(f in ctx.grid_fields for f in fields):
+        text += "\n\n" + GRID_NOTE
     if ctx.aggregated_fields:
         def describe(name):
             info = ctx.calculated.get(name) or {}
@@ -1296,7 +1314,7 @@ def _calculated_fields_errors(items, ctx: SheetContext) -> tuple[list[str], list
         if item.get("format", "number") not in FORMATS:
             errors.append(f"{path}: format debe ser uno de {', '.join(FORMATS)}.")
         try:
-            formula = compile_formula(str(item.get("formula") or ""), ctx.fields, ctx.aggregated_fields)
+            formula = compile_formula(str(item.get("formula") or ""), ctx.sheet_fields, ctx.aggregated_fields)
         except FormulaError as e:
             errors.append(f"{path}: {e}")
             continue
@@ -1531,7 +1549,27 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
     if require_title and not str(data.get("title") or "").strip():
         errors.append("title: el widget necesita un título.")
 
+    errors += _grid_errors(fields, ctx, definition)
     return errors
+
+
+def _grid_errors(fields: dict, ctx: SheetContext, definition) -> list[str]:
+    """Las columnas virtuales de una cuadrícula (ver engine/steps/grid.py): de una sola por
+    widget y solo en los que desdoblan la cuadrícula al consultar."""
+    used = {}
+    for name in query_names(fields):
+        if name in ctx.grid_fields:
+            used.setdefault(ctx.grid_fields[name]["question"], name)
+    if not used:
+        return []
+    if not definition.grid_fields:
+        return [f"fields: «{definition.label}» no usa columnas de cuadrícula ('{next(iter(used.values()))}'); "
+                f"usa las columnas de cada aspecto."]
+    if len(used) > 1:
+        return ["fields: un widget usa las columnas de una sola cuadrícula; "
+                f"{' y '.join(repr(q) for q in used)} no se pueden combinar."]
+    return []
+
 
 
 def _has_target(style: dict, aliases: list[str]) -> bool:

@@ -22,6 +22,10 @@ class SheetContext:
     (no agrupan ni filtran), solo métricas con agregación «auto».
     `calculated` son todos los campos calculados de la fuente con lo que calculan
     ({nombre: {formula, kind: "row"|"aggregated", format}}), para el contexto de la IA.
+    `grid_fields` son las columnas virtuales de las cuadrículas de un formulario
+    ({nombre: {question, role, columns}}, ver engine/steps/grid.py): están en `fields` (se
+    agrupan, pivotan, filtran y resumen) pero no en la hoja, así que una fórmula no las lee
+    (`sheet_fields`). `columns` son las columnas anchas de la cuadrícula que siguen en la fuente.
     `scales` es la escala de medida de cada columna (continua, discreta, ordinal, nominal o
     `none`), la guardada en la fuente o la detectada, con su perfil
     (`utils/scales.effective_scales`): la usan la matriz de correlación y el contexto de la IA.
@@ -37,6 +41,7 @@ class SheetContext:
     calculated: dict = field(default_factory=dict, compare=False)
     aliases: dict = field(default_factory=dict, compare=False)
     scales: dict = field(default_factory=dict, compare=False)
+    grid_fields: dict = field(default_factory=dict, compare=False)
 
     def __post_init__(self):
         if not self.aliases and self.fields:
@@ -45,17 +50,23 @@ class SheetContext:
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame, source: str, samples: dict | None = None) -> "SheetContext":
+        # Aquí y no arriba: los pasos del motor importan este módulo.
+        from sheets_reports.engine.steps.grid import grid_fields, virtual_frame
+
+        virtual = virtual_frame(df)
         attr_aliases = df.attrs.get("column_aliases") or {}
         aliases = {}
-        for i, col in enumerate(df.columns):
+        for i, col in enumerate([*df.columns, *virtual.columns]):
             alias = attr_aliases.get(col) or f"col_{i + 1}"
             aliases[alias.lower()] = col
         dates = frozenset(date_fields(df))
         submission = df.attrs.get("submission_field")
+        saved_scales = df.attrs.get("column_scales")
         return cls(
             source=str(source),
-            fields=tuple(df.columns),
-            numeric_fields=frozenset(df.select_dtypes(include="number").columns),
+            fields=(*df.columns, *virtual.columns),
+            numeric_fields=frozenset([*df.select_dtypes(include="number").columns,
+                                      *virtual.select_dtypes(include="number").columns]),
             samples=samples or {},
             time_fields=frozenset(time_fields(df)),
             date_fields=dates,
@@ -68,9 +79,17 @@ class SheetContext:
                    for name, f in aggregated_fields(df).items()},
             },
             aliases=aliases,
-            scales=effective_scales(df, df.attrs.get("column_scales"), date_columns=dates,
-                                    submission=submission),
+            scales={**effective_scales(df, saved_scales, date_columns=dates, submission=submission),
+                    **effective_scales(virtual, saved_scales)},
+            grid_fields={name: {"question": grid.question, "role": role,
+                                "columns": [c for c in grid.columns if c in df.columns]}
+                         for name, (grid, role) in grid_fields(df).items()},
         )
+
+    @property
+    def sheet_fields(self) -> tuple[str, ...]:
+        """Las columnas que existen en la hoja (sin las virtuales de las cuadrículas)."""
+        return tuple(f for f in self.fields if f not in self.grid_fields)
 
     def alias_for(self, field: str) -> str:
         for alias, name in self.aliases.items():

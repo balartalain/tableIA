@@ -17,6 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from sheets_reports.engine.context import SheetContext
+from sheets_reports.engine.steps.grid import ASPECT, VALUE
 from sheets_reports.help import help_sections
 from sheets_reports.models import Dashboard, DataSource, Widget
 from sheets_reports.services import google_drive, sheets
@@ -77,6 +78,8 @@ def _widget_manifest() -> dict:
             "style_defaults": widget_cls.style_defaults(),
             "capabilities": widget_cls.capabilities,
             "max_per_dashboard": widget_cls.max_per_dashboard,
+            # ¿Ofrece las columnas virtuales de las cuadrículas (`schema.grid_fields`)?
+            "grid_fields": widget_cls.grid_fields,
             # Qué ofrece el panel en las métricas: las mismas reglas que valida el servidor.
             "panel_options": panel_options(widget_cls),
         }
@@ -197,6 +200,11 @@ def _clean_columns(columns: list) -> list[dict]:
         # Formato (moneda, %): solo en las numéricas; sin él se muestran como número.
         if c["type"] == "number" and c.get("format") in COLUMN_FORMATS:
             column["format"] = c["format"]
+        # Virtual de una cuadrícula: su pregunta, Aspecto o Respuesta y los aspectos que se quitan.
+        if c.get("grid") and c.get("role") in (ASPECT, VALUE):
+            column.update({"grid": str(c["grid"]), "role": c["role"]})
+            if c["role"] == ASPECT and c.get("aspects_excluded"):
+                column["aspects_excluded"] = [str(a) for a in c["aspects_excluded"]]
         # Escala de medida confirmada (y el orden de una ordinal); sin ella se detecta al cargar.
         if c.get("scale") in SCALES:
             column["scale"] = c["scale"]
@@ -223,6 +231,9 @@ def _columns_errors(columns) -> list[str]:
             return [f"Columna repetida: '{c['name']}'"]
         if c.get("label") is not None and not isinstance(c["label"], str):
             return [f"El nombre a mostrar de '{c['name']}' debe ser texto"]
+        if c.get("aspects_excluded") is not None and not (
+                isinstance(c["aspects_excluded"], list) and all(isinstance(a, str) for a in c["aspects_excluded"])):
+            return [f"Los aspectos excluidos de '{c['name']}' deben ser una lista de textos"]
         if c.get("format") not in (None, "", "number", *COLUMN_FORMATS):
             return [f"Formato no válido para '{c['name']}': usa number, {', '.join(COLUMN_FORMATS)}"]
         if c.get("scale") is not None:
@@ -505,10 +516,22 @@ SOURCE_SAMPLES = 3
 
 def _sheet_columns(df) -> list[dict]:
     """Columnas de la hoja tal cual: tipo inferido, alias único y algunos valores de
-    ejemplo. La columna de sistema ID se marca de solo lectura."""
+    ejemplo. La columna de sistema ID se marca de solo lectura. En una hoja de respuestas de
+    formulario, cada cuadrícula suma sus dos columnas virtuales (Aspecto y Respuesta, ver
+    engine/steps/grid.py) justo antes de sus columnas anchas, que entran excluidas: en los
+    reportes se usan las virtuales (excluidas, las anchas siguen alimentando la cuadrícula)."""
     types = infer_column_types(df)
+    grids = sheets.grid_column_entries(df)
+    members = sheets.grid_member_columns(df)
     columns = []
     for i, col in enumerate(df.columns):
+        question = members.get(col)
+        if question in grids:
+            for entry in grids.pop(question):
+                # Después de los de la hoja: los alias de las columnas reales no se corren.
+                alias = f"col_{len(df.columns) + sum(c.get('virtual', False) for c in columns) + 1}"
+                columns.append({**entry, "alias": alias, "samples": entry["samples"][:SOURCE_SAMPLES],
+                                "readonly": False, "virtual": True})
         # to_key: 5000.0 → «5000», como se ve en la hoja.
         values = [v for v in dict.fromkeys(str(to_key(x)).strip() for x in df[col].dropna()) if v]
         column = {
@@ -518,6 +541,8 @@ def _sheet_columns(df) -> list[dict]:
             "samples": values[:SOURCE_SAMPLES],
             "readonly": is_id_column(col),
         }
+        if question:
+            column.update({"grid_member": question, "include": False})
         columns.append(column)
     return columns
 
@@ -791,18 +816,21 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
     incluida)."""
     by_name = {c["name"]: c for c in saved}
     used = {c["alias"] for c in saved if c.get("alias")}
+    real = [c for c in sheet_columns if not c.get("virtual")]
     out = []
-    for i, column in enumerate(sheet_columns):
+    for column in sheet_columns:
         stored = None if is_id_column(column["name"]) else by_name.get(column["name"])
-        # Sin alias guardado (el ID, una columna nueva): la misma regla que el motor.
-        alias = (stored or {}).get("alias") or sheets.free_alias(i, used)
+        # Sin alias guardado (el ID, una columna nueva): la misma regla que el motor, por la
+        # posición en la hoja; las virtuales, después de todas las de la hoja.
+        position = int(column["alias"][len("col_"):]) - 1 if column.get("virtual") else real.index(column)
+        alias = (stored or {}).get("alias") or sheets.free_alias(position, used)
         out.append({**column,
                     "alias": alias,
                     "type": stored["type"] if stored else column["type"],
-                    "include": stored.get("include", True) if stored else True,
+                    "include": stored.get("include", True) if stored else column.get("include", True),
                     "label": (stored or {}).get("label", ""),
                     "format": (stored or {}).get("format", ""),
-                    **{k: stored[k] for k in ("scale", "order") if stored and stored.get(k)},
+                    **{k: stored[k] for k in ("scale", "order", "aspects_excluded") if stored and stored.get(k)},
                     "readonly": is_id_column(column["name"])})
     return out
 

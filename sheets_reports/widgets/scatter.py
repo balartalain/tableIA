@@ -60,6 +60,7 @@ class ScatterWidget(BaseWidget):
     key = "scatter"
     type_key = "scatter"
     label = "Gráfico de dispersión"
+    grid_fields = False
     ai_doc = ('cómo se relacionan dos columnas numéricas fila a fila (¿a más experiencia, más '
               'salario?): un punto por fila. columns lleva exactamente dos: primero la del eje X, '
               'luego la del eje Y. dimensions (opcional, una columna de categorías) colorea los '

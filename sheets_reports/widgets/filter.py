@@ -19,6 +19,7 @@ class FilterWidget(BaseWidget):
     key = "filter"
     type_key = "filter"
     label = "Filtros"
+    grid_fields = False
     ai_doc = 'una caja de filtros fija arriba del tablero (elegir categoría, año, vendedor).'
     ai_examples = [
        (   'que se pueda filtrar por categoría y año',

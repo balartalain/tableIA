@@ -259,7 +259,21 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 <input type="checkbox" x-model="c.include" class="ui-check"
                        x-bind:disabled="c.readonly" x-bind:aria-label="`Incluir ${c.name}`">
               </td>
-              <td class="py-2 font-medium max-w-[var(--name-column-width)] truncate" x-text="c.name" x-bind:title="c.name"></td>
+              <td class="py-2 font-medium max-w-[var(--name-column-width)]">
+                <div class="truncate" x-text="c.name" x-bind:title="c.name"></div>
+                <!-- Virtual de una cuadrícula: une sus columnas anchas en filas (Aspecto × Respuesta). -->
+                <span x-show="c.virtual" x-cloak class="ui-badge ui-badge-accent mt-0.5 font-normal"
+                      x-bind:title="`Une las columnas de la cuadrícula «${c.grid}» en filas: una por respuesta y aspecto`">
+                  <i class="ti ti-grid-dots text-xs" aria-hidden="true"></i>
+                  <span x-text="c.role === 'aspect' ? 'Cuadrícula · Aspecto' : 'Cuadrícula · Respuesta'"></span>
+                </span>
+                <!-- Columna ancha de una cuadrícula: excluida, sigue alimentando sus virtuales. -->
+                <span x-show="c.grid_member" x-cloak class="ui-badge ui-badge-neutral mt-0.5 font-normal"
+                      x-bind:title="`Aspecto de la cuadrícula «${c.grid_member}». Excluida, no se ofrece en los widgets pero sigue en la cuadrícula`">
+                  <i class="ti ti-grid-dots text-xs" aria-hidden="true"></i>
+                  <span>En cuadrícula</span>
+                </span>
+              </td>
               <td class="py-2 font-mono text-xs text-fg-muted">
                 <code class="bg-app border border-line px-1.5 py-0.5 rounded text-xs" x-text="c.alias || `col_${index + 1}`" x-bind:title="`Alias interno: ${c.alias || 'col_' + (index + 1)}`"></code>
               </td>
@@ -270,7 +284,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                        class="ui-input ui-input-sm min-w-[10rem] disabled:opacity-50">
               </td>
               <td class="py-2">
-                <select x-model="c.type" x-bind:disabled="!c.include || c.readonly" x-bind:aria-label="`Tipo de ${c.name}`"
+                <select x-model="c.type" x-bind:disabled="!c.include || c.readonly || c.role === 'aspect'" x-bind:aria-label="`Tipo de ${c.name}`"
                         class="ui-input ui-input-sm disabled:opacity-50">
                   <template x-for="t in TYPES" :key="t.value">
                     <option x-bind:value="t.value" x-text="t.label" x-bind:selected="c.type === t.value"></option>
@@ -288,7 +302,21 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 </select>
                 <span x-show="c.type !== 'number'" class="text-xs text-fg-subtle">—</span>
               </td>
-              <td class="py-2 text-xs text-fg-muted truncate max-w-[20rem]" x-text="c.samples.join(' · ')"></td>
+              <td class="py-2 text-xs text-fg-muted max-w-[20rem]">
+                <!-- Aspectos de la cuadrícula: clic para quitarlo o volver a ponerlo (queda al menos uno). -->
+                <template x-if="c.role === 'aspect'">
+                  <div class="flex flex-wrap gap-1">
+                    <template x-for="a in c.aspects" :key="a">
+                      <button type="button" x-on:click="toggleAspect(c, a)" x-bind:disabled="!c.include"
+                              x-bind:aria-pressed="!(c.aspects_excluded || []).includes(a)"
+                              x-bind:title="(c.aspects_excluded || []).includes(a) ? `Volver a poner «${a}»` : `Quitar «${a}» de la cuadrícula`"
+                              x-bind:class="(c.aspects_excluded || []).includes(a) ? 'line-through text-fg-subtle border-line' : 'text-accent-text border-accent-soft-border bg-accent-soft'"
+                              class="px-1.5 py-0.5 rounded border text-xs cursor-pointer disabled:cursor-default" x-text="a"></button>
+                    </template>
+                  </div>
+                </template>
+                <div x-show="c.role !== 'aspect'" class="truncate" x-text="c.samples.join(' · ')"></div>
+              </td>
             </tr>
           </template>
           <tr x-show="columns.length && !shownColumns.length" x-cloak>

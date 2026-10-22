@@ -29,6 +29,14 @@
             <template x-for="c in $store.dashboard.pivotOptions(idx)" :key="c">
               <option x-bind:value="c" x-text="c"></option>
             </template>
+            <!-- Virtuales de las cuadrículas del formulario (Aspecto, Respuesta) -->
+            <template x-if="$store.dashboard.gridOptions($store.dashboard.drawerDraft.fields.pivots, idx).length">
+              <optgroup label="Cuadrículas">
+                <template x-for="c in $store.dashboard.gridOptions($store.dashboard.drawerDraft.fields.pivots, idx)" :key="'grid-' + c">
+                  <option x-bind:value="c" x-text="c"></option>
+                </template>
+              </optgroup>
+            </template>
           </select>
           <button type="button" x-on:click="$store.dashboard.removePivot(idx)"
                   class="text-fg-muted hover:text-danger transition cursor-pointer px-1 text-base leading-none"

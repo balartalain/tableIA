@@ -222,27 +222,71 @@ def transform(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd
     else:
         df = df.rename(columns={id_name: "_ID"})
 
-    inferred = {a["name"]: a["inferred_type"] for a in analyze(df, custom_separator)}
+    report = analyze(df, custom_separator)
+    inferred = {a["name"]: a["inferred_type"] for a in report}
+    grid_of = {a["name"]: (a["details"]["parent"], a["details"]["aspect"])
+               for a in report if a["inferred_type"] in ("GRID", "CHECKBOX_GRID")}
 
     # Las columnas se juntan primero y el frame se arma de una vez: insertarlas una a una lo
     # fragmenta y, con muchas casillas expandidas, hace lenta la carga de la fuente.
     cols = {}
     if "_ID" in df.columns:
         cols["_ID"] = df["_ID"]
+    grids: dict[str, dict] = {}
 
     for col in df.columns:
         if col == "_ID":
             continue
         kind = inferred.get(col, "SCALAR")
         if kind in ("CHECKBOX", "CHECKBOX_GRID"):
-            cols.update(_expand_checkbox_column(df[col], col).items())
+            expanded = _expand_checkbox_column(df[col], col)
+            cols.update(expanded.items())
+            produced = {name[len(_clean_header(col)) + 1:]: name for name in expanded.columns}
         else:
             clean_col = _clean_header(col)
             if clean_col in cols:
                 clean_col = col
             cols[clean_col] = df[col]
+            produced = clean_col
+        if col in grid_of:
+            parent, aspect = grid_of[col]
+            grid = grids.setdefault(parent, {"kind": kind, "aspects": []})
+            grid["aspects"].append([aspect, produced])
 
-    return pd.DataFrame(cols, index=df.index)
+    out = pd.DataFrame(cols, index=df.index)
+    # Las cuadrículas, para verlas en formato largo (ver `grid_long`):
+    # {pregunta: {kind, aspects: [[aspecto, columna]]}}; en una de casillas la columna es
+    # {opción: columna «pregunta [aspecto]_opción»}.
+    out.attrs["grids"] = grids
+    return out
+
+
+def grid_long(df: pd.DataFrame, grid: dict) -> pd.DataFrame:
+    """Una cuadrícula (`df.attrs["grids"][pregunta]`) en formato largo: una fila por respuesta
+    y aspecto (`row` = índice de la fila de `df`, `aspect`, `value`), en el orden de los aspectos.
+    En una cuadrícula de casillas, una fila por opción marcada; las celdas vacías no generan
+    filas. Las columnas que ya no están en `df` se omiten."""
+    parts = []
+    for aspect, column in grid["aspects"]:
+        options = column.items() if isinstance(column, dict) else [(None, column)]
+        for option, name in options:
+            if name not in df.columns:
+                continue
+            series = df[name]
+            if option is None:
+                keep = series.notna() & (series.astype(str).str.strip() != "")
+                values = series[keep]
+            else:
+                values = pd.Series(option, index=series.index[series == CHECKED])
+            parts.append(pd.DataFrame({"row": values.index, "aspect": aspect,
+                                       "value": values.to_numpy()}))
+    if not parts:
+        return pd.DataFrame({"row": [], "aspect": [], "value": []})
+    long = pd.concat(parts, ignore_index=True)
+    # En el orden de las respuestas y, dentro de cada una, de los aspectos.
+    order = {aspect: i for i, (aspect, _) in enumerate(grid["aspects"])}
+    long["_order"] = long["aspect"].map(order)
+    return long.sort_values(["row", "_order"], kind="stable").drop(columns="_order").reset_index(drop=True)
 
 
 # Alias de compatibilidad

@@ -19,6 +19,7 @@ class CramerWidget(BaseWidget):
     key = "cramer"
     type_key = "cramer"
     label = "V de Cramér"
+    grid_fields = False
     ai_doc = ('mide el grado de asociación entre varias columnas categóricas (variables nominales '
               'u ordinales, de 0 a 1), como mapa de calor. Las variables van en columns.')
     ai_examples = [

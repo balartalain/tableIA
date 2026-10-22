@@ -14,6 +14,7 @@ from django.core.cache import caches
 from django.utils.timezone import now
 
 from sheets_reports.engine.formulas import apply_calculated_fields
+from sheets_reports.engine.steps.grid import ASPECT, VALUE, Grid, GridStore, grid_fields, virtual_frame
 from sheets_reports.services import form_transform
 from sheets_reports.utils.data import as_dates, find_id_column, is_id_column, time_order, to_key
 
@@ -131,7 +132,7 @@ def _cache_key(sheet_id: str, gid: str, headers: bool) -> str:
 # mostrar «actualizado» sin cargar el frame. La hoja original no se guarda: se lee de Google al
 # conectar la pestaña, con «Actualizar datos» o cuando cambia `_FRAME_VERSION`.
 COERCED, TRANSFORMED = "coerced", "transformed"
-_FRAME_VERSION = 7
+_FRAME_VERSION = 8  # 8: `attrs["grids"]` de las cuadrículas de formulario
 
 
 def _frame_key(kind: str, sheet_id: str, gid: str, headers: bool) -> str:
@@ -244,6 +245,9 @@ def load_source(source) -> pd.DataFrame:
                                   source.calculated_fields)
     if source.is_form_response:
         out.attrs["submission_field"] = submission_field(df, source.columns)
+        attach_grids(out, df, source.columns)
+    # El mapa crudo de las cuadrículas ya está en `grid_store`, con los nombres a mostrar.
+    out.attrs.pop("grids", None)
     return out
 
 
@@ -385,10 +389,109 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
     return df
 
 
+# ------------------------------------------------- cuadrículas (columnas virtuales)
+GRID_ROLE_LABELS = {ASPECT: "Aspecto", VALUE: "Respuesta"}
+
+
+def grid_column_name(question: str, role: str) -> str:
+    """El nombre (fijo, el que se guarda en `source.columns`) de una virtual de la cuadrícula."""
+    return f"{question} · {GRID_ROLE_LABELS[role]}"
+
+
+def grid_column_entries(df: pd.DataFrame) -> dict[str, list[dict]]:
+    """{pregunta: [entrada de Aspecto, entrada de Respuesta]} de las cuadrículas del frame
+    transformado (`attrs["grids"]`), como columnas del editor de la fuente: nombre, tipo y
+    valores de ejemplo (los aspectos; los valores de la escala). Respuesta es numérica si lo son
+    todas las columnas de la cuadrícula."""
+    out = {}
+    for question, grid in (df.attrs.get("grids") or {}).items():
+        long = form_transform.grid_long(df, grid)
+        numeric = grid["kind"] == "GRID" and all(
+            pd.api.types.is_numeric_dtype(df[column]) for _, column in grid["aspects"] if column in df.columns)
+        values = [str(to_key(v)) for v in dict.fromkeys(long["value"].dropna())]
+        out[question] = [
+            {"name": grid_column_name(question, ASPECT), "grid": question, "role": ASPECT,
+             "type": "text", "samples": [aspect for aspect, _ in grid["aspects"]],
+             "aspects": [aspect for aspect, _ in grid["aspects"]]},
+            {"name": grid_column_name(question, VALUE), "grid": question, "role": VALUE,
+             "type": "number" if numeric else "text", "samples": values},
+        ]
+    return out
+
+
+def grid_member_columns(df: pd.DataFrame) -> dict[str, str]:
+    """{columna ancha del frame transformado: pregunta de su cuadrícula}."""
+    out = {}
+    for question, grid in (df.attrs.get("grids") or {}).items():
+        for _, column in grid["aspects"]:
+            for name in (column.values() if isinstance(column, dict) else [column]):
+                out[name] = question
+    return out
+
+
+def attach_grids(out: pd.DataFrame, df: pd.DataFrame, columns: list[dict] | None) -> None:
+    """Las cuadrículas del frame transformado `df` como columnas virtuales de `out` (la fuente
+    ya configurada): `out.attrs["grid_store"]` (ver engine/steps/grid.py), con el nombre a
+    mostrar, el tipo, el formato, la escala y el alias de cada virtual según `columns`. Las
+    virtuales sin configuración guardada están incluidas. El formato largo sale de `df`: una
+    columna ancha excluida no se ofrece en los widgets, pero sigue alimentando su cuadrícula;
+    un aspecto se quita de ella con `aspects_excluded` en la entrada de Aspecto."""
+    grids = df.attrs.get("grids") or {}
+    if not grids:
+        return
+    config = {(c.get("grid"), c.get("role")): c for c in columns or [] if c.get("grid")}
+    display_of = {c["name"]: column_display_name(c) for c in columns or [] if not c.get("grid")}
+    members = grid_member_columns(df)
+    taken = set(out.columns)
+    aliases = out.attrs.setdefault("column_aliases", {})
+    used_aliases = {c["alias"] for c in columns or [] if c.get("alias")} | set(aliases.values())
+    built = []
+    for g, (question, grid) in enumerate(grids.items()):
+        excluded = set(config.get((question, ASPECT), {}).get("aspects_excluded") or [])
+        grid = {**grid, "aspects": [a for a in grid["aspects"] if a[0] not in excluded]}
+        if not grid["aspects"]:
+            continue
+        long = form_transform.grid_long(df, grid)
+        names = {}
+        for r, role in enumerate((ASPECT, VALUE)):
+            entry = config.get((question, role)) or {"name": grid_column_name(question, role)}
+            if not entry.get("include", True):
+                names[role] = None
+                continue
+            display = column_display_name(entry)
+            if display in taken:
+                display = f"{display} (cuadrícula)"
+            taken.add(display)
+            names[role] = display
+            # Sin alias guardado: después de todas las columnas de la hoja, en el orden de las
+            # cuadrículas (como el editor, `views._sheet_columns`).
+            aliases[display] = entry.get("alias") or free_alias(len(df.columns) + 2 * g + r, used_aliases)
+            if entry.get("scale"):
+                out.attrs.setdefault("column_scales", {})[display] = {
+                    "scale": entry["scale"], **({"order": entry["order"]} if entry.get("order") else {})}
+            if role == VALUE:
+                cast = _CASTS.get(entry.get("type"))
+                converted = cast(long["value"]) if cast else None
+                if converted is not None and (converted.notna().any() or not long["value"].notna().any()):
+                    long["value"] = converted
+                if entry.get("type") == "number" and entry.get("format") in COLUMN_FORMATS:
+                    out.attrs.setdefault("column_formats", {})[display] = entry["format"]
+        wide = [display_of.get(name, name) for name, owner in members.items() if owner == question]
+        built.append(Grid(question, names[ASPECT], names[VALUE], long, tuple(wide)))
+    store = GridStore(built)
+    if store.grids:
+        out.attrs["grid_store"] = store
+
+
 def get_sheet_schema(df: pd.DataFrame) -> dict:
+    virtual = virtual_frame(df)
     return {
-        "all_fields": list(df.columns),
-        "numeric_fields": list(df.select_dtypes(include="number").columns),
+        "all_fields": [*df.columns, *virtual.columns],
+        "numeric_fields": [*df.select_dtypes(include="number").columns,
+                           *virtual.select_dtypes(include="number").columns],
+        # Las cuadrículas de un formulario: sus dos virtuales (None la que se excluyó).
+        "grid_fields": [{"question": g.question, "aspect": g.aspect, "value": g.value}
+                        for g in (df.attrs["grid_store"].grids if df.attrs.get("grid_store") else [])],
     }
 
 
@@ -409,7 +512,8 @@ def get_dimension_fields(df: pd.DataFrame, max_numeric_unique: int = 31) -> list
             and series.nunique() <= len(series) / 2
         ):
             fields.append(col)
-    return fields
+    # Las virtuales de una cuadrícula: Aspecto y Respuesta se cruzan como dimensión y pivote.
+    return fields + list(grid_fields(df))
 
 
 def get_field_samples(df: pd.DataFrame, max_unique: int = 15) -> dict:
@@ -417,11 +521,12 @@ def get_field_samples(df: pd.DataFrame, max_unique: int = 15) -> dict:
     para que la IA escriba filtros con el valor exacto. Las columnas de alta cardinalidad
     (nombres, correos, ...) se omiten."""
     samples = {}
-    for col in df.columns:
-        if pd.api.types.is_numeric_dtype(df[col]):
-            continue
-        values = df[col].dropna().astype(str).str.strip()
-        unique = [v for v in values.unique() if v]
-        if 0 < len(unique) <= max_unique:
-            samples[col] = unique
+    for frame in (df, virtual_frame(df)):
+        for col in frame.columns:
+            if pd.api.types.is_numeric_dtype(frame[col]):
+                continue
+            values = frame[col].dropna().astype(str).str.strip()
+            unique = [v for v in values.unique() if v]
+            if 0 < len(unique) <= max_unique:
+                samples[col] = unique
     return samples

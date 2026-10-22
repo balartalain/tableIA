@@ -45,6 +45,14 @@
                   <option x-bind:value="col" x-text="col" x-bind:selected="metric.field === col"></option>
                 </template>
               </template>
+              <!-- Virtuales de las cuadrículas del formulario (Aspecto, Respuesta) -->
+              <template x-if="$store.dashboard.gridColumns.length">
+                <optgroup label="Cuadrículas">
+                  <template x-for="col in $store.dashboard.gridColumns" :key="'grid-' + col">
+                    <option x-bind:value="col" x-text="col" x-bind:selected="metric.field === col"></option>
+                  </template>
+                </optgroup>
+              </template>
               <!-- Campos calculados (por fila y agregados) de la fuente -->
               <template x-if="$store.dashboard.calculatedFieldNames.length">
                 <optgroup label="Campos calculados">

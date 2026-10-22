@@ -183,6 +183,28 @@ class PanelTests(StaticLiveServerTestCase):
             with self.subTest(args=args):
                 self.assertEqual(self.page.evaluate("args => formatNumber(...args)", args), expected)
 
+    def test_las_cuadriculas_tienen_su_grupo_y_completan_el_pivote(self):
+        """Una fuente de formulario: las virtuales de la cuadrícula van en «Cuadrículas» y elegir
+        «· Aspecto» como dimensión pone «· Respuesta» como pivote."""
+        from sheets_reports.models import DataSource
+        from sheets_reports.services import sheets
+        from sheets_reports.services.form_transform import transform
+        from sheets_reports.tests.test_grids import ASPECT, VALUE, survey_df
+
+        form = DataSource.objects.create(dashboard=self.dashboard, sheet_id="form1", is_form_response=True)
+        with mock.patch("sheets_reports.services.sheets.get_transformed_dataframe",
+                        side_effect=lambda *a, **k: sheets._coerce_numeric_columns(transform(survey_df()))):
+            widget = self.widget(fields(dimensions=["Carrera"], metrics=[{"agg": "count", "alias": "n"}]))
+            Widget.objects.filter(id=widget.id).update(source=form)
+            drawer = self.open_panel(self.open_editor(widget))
+            dimension = drawer.locator('select[aria-label="Dimensión"]').first
+            self.assertEqual(dimension.locator('optgroup[label="Cuadrículas"] option').all_inner_texts()[:2],
+                             [ASPECT, VALUE])
+            dimension.select_option(ASPECT)
+            self.page.wait_for_function(
+                "value => document.querySelector('#edit-drawer select[aria-label=\"Pivote\"]')?.value === value",
+                arg=VALUE)
+
     def test_la_tabla_de_fuentes(self):
         """«Sin usar», columnas incluidas, estado de la fuente, sus acciones y la confirmación al
         eliminar."""

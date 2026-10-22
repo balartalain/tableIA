@@ -83,6 +83,9 @@ class BaseWidget(ABC):
     capabilities: ClassVar[dict] = {}
     max_per_dashboard: ClassVar[Optional[int]] = None
     board_filtered: ClassVar[bool] = True
+    # ¿Acepta las columnas virtuales de una cuadrícula? Solo los que consultan con `run_steps`,
+    # que la desdobla (engine/steps/grid.py).
+    grid_fields: ClassVar[bool] = True
     ai_enabled: ClassVar[bool] = True
     ai_doc: ClassVar[str] = ""
     ai_examples: ClassVar[List[tuple]] = []

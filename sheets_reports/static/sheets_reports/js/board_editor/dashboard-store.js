@@ -185,6 +185,18 @@ document.addEventListener('alpine:init', () => {
     _nextId: -1,
     listSortables: {},
 
+    // Las virtuales de las cuadrículas de un formulario («P · Aspecto», «P · Respuesta») salen de
+    // las listas de columnas y quedan en `grid_columns`: el panel las ofrece en su propio grupo
+    // y solo en los widgets que las aceptan (`grid_fields` del manifiesto). `numeric_fields` las
+    // conserva: una Respuesta numérica se promedia.
+    _withGridColumns(schema) {
+      const names = (schema.grid_fields || []).flatMap(g => [g.aspect, g.value]).filter(Boolean);
+      const virtual = new Set(names);
+      const real = list => (list || []).filter(f => !virtual.has(f));
+      return { ...schema, grid_columns: names, all_fields: real(schema.all_fields),
+               dimension_fields: real(schema.dimension_fields) };
+    },
+
     // Schema de una fuente (cacheado por id). Lo deja en `schema` para el panel.
     async loadSchema(sourceId) {
       const empty = { all_fields: [], numeric_fields: [], dimension_fields: [], time_fields: [], calculated_fields: [], aggregated_fields: [], sample_values: {} };
@@ -203,7 +215,8 @@ document.addEventListener('alpine:init', () => {
         const r = await fetch(apiUrl(`/api/sources/${sourceId}/schema/`));
         const data = await r.json().catch(() => null);
         if (r.ok && data) {
-          const { widget_manifest: manifest, ...schema } = data;
+          const { widget_manifest: manifest, ...raw } = data;
+          const schema = this._withGridColumns(raw);
           this.schemas[sourceId] = schema;
           this.schema = schema;
           if (manifest) {
@@ -917,7 +930,9 @@ document.addEventListener('alpine:init', () => {
       if (this.drawerCapabilities.columns_scaled) {
         return (this.schema.all_fields || []).filter(f => this.isCorrelatable(f));
       }
-      return (this.drawerCapabilities.columns_numeric ? this.schema.numeric_fields : this.schema.all_fields) || [];
+      const virtual = new Set(this.schema.grid_columns || []);
+      return ((this.drawerCapabilities.columns_numeric ? this.schema.numeric_fields : this.schema.all_fields) || [])
+        .filter(f => !virtual.has(f));
     },
 
     // Un widget nuevo de columnas arranca con las primeras de la hoja (la Tabla, 8; la
@@ -974,6 +989,26 @@ document.addEventListener('alpine:init', () => {
 
     removeDimension(index) {
       this.drawerDraft.fields.dimensions.splice(index, 1);
+    },
+
+    // ---- cuadrículas (columnas virtuales, ver engine/steps/grid.py)
+    // Las virtuales que ofrece el widget que se edita (ninguna si no las acepta).
+    get gridColumns() {
+      return this.drawerManifest.grid_fields ? (this.schema.grid_columns || []) : [];
+    },
+
+    // Las virtuales elegibles en la fila `idx` de `list` (dimensiones o pivotes): sin repetir.
+    gridOptions(list, idx) {
+      return this.gridColumns.filter(c => list[idx] === c || !list.includes(c));
+    },
+
+    // Al elegir «P · Aspecto» como dimensión, con el pivote vacío: «P · Respuesta» como pivote
+    // (la tabla Aspecto × Respuesta de un clic).
+    onDimensionChange(idx) {
+      const fields = this.drawerDraft.fields;
+      const grid = (this.schema.grid_fields || []).find(g => g.aspect && g.aspect === fields.dimensions[idx]);
+      if (!grid || !grid.value || !this.maxPivots || fields.pivots.some(Boolean)) return;
+      fields.pivots = [grid.value];
     },
 
     addPivot() {
@@ -1237,7 +1272,8 @@ document.addEventListener('alpine:init', () => {
       // Medidas de verdad primero: numéricas que no son dimensiones (año, mes...
       // no se suman como métrica por defecto).
       const dims = this.schema.dimension_fields || [];
-      const numeric = this.schema.numeric_fields || [];
+      const virtual = this.schema.grid_columns || [];
+      const numeric = (this.schema.numeric_fields || []).filter(f => !virtual.includes(f));
       const used = f => metrics.some(m => m && m.field === f);
       const field = numeric.find(f => !dims.includes(f) && !used(f))
         || numeric.find(f => !used(f))

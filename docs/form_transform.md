@@ -31,6 +31,54 @@ El DataFrame mantiene el formato ancho (1 fila por respuesta `_ID`):
 Incluir, excluir, renombrar (`label`) y tipar esas columnas se hace
 con la configuración de columnas de la fuente, igual que en una hoja normal.
 
+## Cuadrículas como columnas virtuales
+
+Una cuadrícula llega ancha: una columna por aspecto («Evaluación [Contenido]», «Evaluación
+[Profesor]»…). Para cruzarla como Aspecto × Respuesta (tabla dinámica, barras), la fuente
+suma dos **columnas virtuales** por pregunta: `«<pregunta> · Aspecto»` y `«<pregunta> ·
+Respuesta»`. No están en el frame: existen solo dentro de la consulta de un widget que las usa
+(`engine/steps/grid.py`).
+
+- `transform` anota cada cuadrícula en `df.attrs["grids"]` (`{pregunta: {kind, aspects}}`, con
+  la columna de cada aspecto; en una de casillas, la de cada opción). `grid_long` la pasa a
+  formato largo: una fila por respuesta y aspecto (en una de casillas, por opción marcada), sin
+  las celdas vacías.
+- `sheets.load_source` (`attach_grids`) deja en `attrs["grid_store"]` las cuadrículas con el
+  nombre a mostrar, tipo, formato, escala y alias de cada virtual. El almacén no se copia en
+  cada operación de pandas (se comparte).
+- La consulta (`engine/steps/__init__.run_steps`) sigue este orden:
+  1. filtros sobre columnas reales, en ancho (una fila por respuesta, sin duplicados);
+  2. `expand_grid` desdobla la cuadrícula, solo con las columnas que usa la consulta;
+  3. filtros sobre las virtuales;
+  4. agregación, ventanas y orden, sin cambios.
+- **Conteo:** al desdoblar, el ID pasa a ser `id·aspecto`. Así cada celda Aspecto × Respuesta
+  cuenta respuestas y el «% de la fila» es sobre las respuestas a ese aspecto. En una cuadrícula
+  de casillas una persona tiene varias filas en el mismo aspecto con el mismo ID: el % de la
+  fila es sobre las personas y puede sumar más de 100 %.
+- **Límites:**
+  - Un widget usa las virtuales de **una** cuadrícula; dos serían un producto cartesiano y se
+    rechaza.
+  - Dispersión, correlación, V de Cramér y filtros no las aceptan (`BaseWidget.grid_fields`).
+  - Una fórmula no las lee.
+  - Lo que compara aspectos de la misma persona («quienes dieron Malo al Profesor, ¿cómo
+    evaluaron el Contenido?», correlación entre aspectos) necesita las columnas anchas.
+- **Filtros del tablero:** los de una virtual se suman a los filtros de los widgets que usan esa
+  cuadrícula; a los demás no les aplican.
+
+**En el editor de la fuente** las virtuales son filas de la tabla de columnas, justo antes de
+sus columnas anchas, con el distintivo «Cuadrícula · Aspecto/Respuesta».
+- Se guardan en `source.columns` con `grid` (la pregunta) y `role` (`aspect` | `value`), y se
+  renombran, excluyen y tipan como cualquier columna.
+- La fila de Aspecto muestra los aspectos: un clic quita uno de la cuadrícula
+  (`aspects_excluded`).
+- **Por defecto:** las virtuales entran incluidas y las columnas anchas, excluidas. Una columna
+  ancha excluida no se ofrece en los widgets ni a la IA, pero sigue alimentando su cuadrícula.
+  Las fuentes que ya existían conservan su configuración.
+
+**En el panel del widget** van en su propio grupo, «Cuadrículas», solo en los widgets que las
+aceptan. Al elegir «· Aspecto» como dimensión con el pivote vacío, el pivote pasa a ser
+«· Respuesta».
+
 ## Tipos de pregunta (clasificación automática)
 
 La detección (`services/form_tidy.analyze`) corre sobre el frame **crudo**

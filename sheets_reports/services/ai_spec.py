@@ -658,6 +658,9 @@ def gemini_delete_file(file_id: str) -> bool:
         return False
 
 
+NO_ANSWER = "No se pudo generar una respuesta. Intenta reformular o acotar la pregunta."
+
+
 def generate_with_code_execution(
     file_path: str | None = None,
     prompt: str = "",
@@ -694,7 +697,12 @@ def generate_with_code_execution(
 
     texts, raw_images, codes = [], [], []
     if response.candidates and response.candidates[0].content:
-        parts = response.candidates[0].content.parts
+        # Sin partes cuando Gemini corta antes de responder (MAX_TOKENS, SAFETY, límite de
+        # ejecución de código...): se responde el texto de reserva en vez de fallar.
+        parts = response.candidates[0].content.parts or []
+        if not parts:
+            logger.warning("La IA respondió sin contenido (finish_reason=%s)",
+                           getattr(response.candidates[0], "finish_reason", None))
         last_code_idx = -1
         for i, part in enumerate(parts):
             if getattr(part, "executable_code", None) or getattr(part, "code_execution_result", None):
@@ -724,7 +732,7 @@ def generate_with_code_execution(
     if not images and raw_images:
         images = raw_images
 
-    full_text = "\n\n".join(t.strip() for t in texts if t.strip()) or "No se pudo generar una respuesta."
+    full_text = "\n\n".join(t.strip() for t in texts if t.strip()) or NO_ANSWER
     # Limpiar sintaxis de imágenes markdown o HTML para evitar renderizarlas duplicadas (ya se devuelven en images)
     full_text = re.sub(r"!\[.*?\]\([^)]*\)", "", full_text)
     full_text = re.sub(r"<img[^>]*>", "", full_text, flags=re.IGNORECASE)
@@ -735,7 +743,7 @@ def generate_with_code_execution(
         full_text,
     ).strip()
     return {
-        "text": full_text or "No se pudo generar una respuesta.",
+        "text": full_text or NO_ANSWER,
         "images": images,
         "code": codes,
     }
@@ -1017,12 +1025,15 @@ No se puede (no lo propongas ni lo configures; propón la alternativa y dilo en 
 - Las virtuales en dispersión, matriz de correlación, V de Cramér o filtros. Alternativa: tabla dinámica o barras."""
 
 
-def columns_context(ctx: SheetContext, only=None) -> str:
+def columns_context(ctx: SheetContext, only=None, virtual: bool = True) -> str:
     """Las columnas con su alias, tipo y ejemplos, y los campos calculados con su fórmula: así la IA
     sabe qué calcula cada uno aunque su nombre no lo diga. Con `only` (las columnas que usa un
-    widget ya planificado) lista solo esas y la ID: en una hoja ancha es casi todo el mensaje."""
+    widget ya planificado) lista solo esas y la ID: en una hoja ancha es casi todo el mensaje.
+    Con `virtual=False` omite las columnas virtuales de las cuadrículas: el chatbot recibe el
+    CSV de la fuente, que solo tiene las reales."""
     only = set(only or ())
-    fields = [f for f in ctx.fields if not only or f in only or is_id_column(f)]
+    candidates = ctx.fields if virtual else ctx.sheet_fields
+    fields = [f for f in candidates if not only or f in only or is_id_column(f)]
     members = {column: grid["question"] for grid in ctx.grid_fields.values() for column in grid["columns"]}
     refs, shared = shared_samples(ctx.samples, fields)
     lines = []

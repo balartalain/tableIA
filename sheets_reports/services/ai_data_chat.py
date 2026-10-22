@@ -139,7 +139,8 @@ def ask_data_chat(source, prompt: str) -> dict[str, Any]:
 
     gid = getattr(source, "gid", "") or ""
     ctx = SheetContext.from_dataframe(df, gid)
-    cols_info = columns_context(ctx)
+    # El CSV tiene solo las columnas reales: las virtuales de las cuadrículas no se describen.
+    cols_info = columns_context(ctx, virtual=False)
 
     full_prompt = (
         f"Conjunto de datos: '{getattr(source, 'label', 'Datos')}'. Total filas: {len(df)}.\n"

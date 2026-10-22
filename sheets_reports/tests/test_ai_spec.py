@@ -680,6 +680,19 @@ class ColumnResolutionTests(SimpleTestCase):
         self.assertTrue(res["images"][0].startswith("data:image/png;base64,"))
 
     @mock.patch("sheets_reports.services.ai_spec.gemini_client")
+    def test_generate_with_code_execution_sin_partes(self, mock_client_fn):
+        """Gemini corta sin contenido (parts=None, ej. MAX_TOKENS): texto de reserva, sin fallar."""
+        mock_client = mock.Mock()
+        mock_client_fn.return_value = mock_client
+        mock_candidate = mock.Mock(content=mock.Mock(parts=None), finish_reason="MAX_TOKENS")
+        mock_client.models.generate_content.return_value = mock.Mock(candidates=[mock_candidate], usage_metadata=None)
+
+        with self.assertLogs("sheets_reports.services.ai_spec", "WARNING") as logs:
+            res = ai_spec.generate_with_code_execution("fake.csv", "calcular")
+        self.assertEqual(res, {"text": ai_spec.NO_ANSWER, "images": [], "code": []})
+        self.assertIn("MAX_TOKENS", logs.output[0])
+
+    @mock.patch("sheets_reports.services.ai_spec.gemini_client")
     def test_generate_with_code_execution_deduplicate_images_and_clean_markdown_images(self, mock_client_fn):
         mock_client = mock.Mock()
         mock_client_fn.return_value = mock_client

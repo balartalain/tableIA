@@ -150,6 +150,27 @@ class AskDataChatServiceTests(SimpleTestCase):
         self.assertIn("texto libre", called_prompt)
         self.assertIn("ventas", called_prompt)
 
+    @mock.patch("sheets_reports.services.ai_data_chat.gemini_upload_file")
+    @mock.patch("sheets_reports.services.ai_data_chat.load_source")
+    @mock.patch("sheets_reports.services.ai_data_chat.generate_with_code_execution")
+    def test_el_contexto_describe_solo_las_columnas_del_csv(self, mock_gen, mock_load_source, mock_upload):
+        """El CSV que se sube no tiene las columnas virtuales de las cuadrículas: el contexto
+        tampoco las describe, pero sí las columnas reales de la cuadrícula."""
+        from sheets_reports.tests.test_grids import ASPECT, VALUE, survey_source_df
+        df = survey_source_df()
+        mock_load_source.return_value = df
+        mock_upload.return_value = mock.Mock()
+        mock_gen.return_value = {"text": "ok", "images": [], "code": []}
+
+        ai_data_chat.ask_data_chat(mock.Mock(label="Encuesta", gemini_file_id="", pk=1, gid="0"), "¿Cómo evalúan?")
+
+        prompt = mock_gen.call_args[1]["prompt"]
+        self.assertNotIn(ASPECT, prompt)
+        self.assertNotIn(VALUE, prompt)
+        self.assertNotIn("Cuadrículas y preguntas de casillas", prompt)
+        self.assertIn("Evaluación [Contenido]", prompt)
+        self.assertNotIn(ASPECT, df.to_csv(index=False))
+
 
 class DashboardDataChatViewTests(TestCase):
     def setUp(self):

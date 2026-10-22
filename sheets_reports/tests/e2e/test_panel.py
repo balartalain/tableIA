@@ -205,6 +205,25 @@ class PanelTests(StaticLiveServerTestCase):
                 "value => document.querySelector('#edit-drawer select[aria-label=\"Pivote\"]')?.value === value",
                 arg=VALUE)
 
+    def test_elegir_la_fuente_de_un_widget_sin_fuente_conserva_su_configuracion(self):
+        """Su fuente se eliminó: al elegir otra con las mismas columnas, el panel conserva las
+        dimensiones y métricas que existen en ella y se guarda sin errores."""
+        widget = self.widget(fields(pivots=["mes"]))
+        Widget.objects.filter(id=widget.id).update(source=None)
+        self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/edit/")
+        card = self.page.locator(f'[data-widget-id="{widget.id}"]')
+        card.get_by_text("ya no existe").wait_for()
+        drawer = self.open_panel(card)
+        drawer.locator("#drawer-source").select_option(str(self.source.id))
+        self.page.wait_for_function(
+            "() => document.querySelector('#edit-drawer select[aria-label=\"Pivote\"]')?.value === 'mes'")
+        self.assertEqual(drawer.locator('select[aria-label="Dimensión"]').first.input_value(), "categoria")
+        self.page.get_by_role("button", name="Guardar", exact=True).click()
+        card.locator(".tb-table tbody tr").first.wait_for()
+        widget.refresh_from_db()
+        self.assertEqual((widget.source_id, widget.fields["dimensions"], widget.fields["pivots"]),
+                         (self.source.id, ["categoria"], ["mes"]))
+
     def test_la_tabla_de_fuentes(self):
         """«Sin usar», columnas incluidas, estado de la fuente, sus acciones y la confirmación al
         eliminar."""

@@ -53,6 +53,48 @@ class SourcesCrudTests(TestCase):
         # La guardada más la columna de sistema ID, como las cuenta el editor.
         self.assertEqual((listed[1]["columns_included"], listed[1]["columns_total"]), (2, 2))
 
+    def _orphans(self):
+        """Dos widgets de la fuente, que después se elimina: quedan sin fuente."""
+        by_category = Widget.objects.create(dashboard=self.dashboard, source=self.source, type="bar",
+                                            title="Por categoría", fields=fields(), style={})
+        by_month = Widget.objects.create(dashboard=self.dashboard, source=self.source, type="bar",
+                                         title="Por mes", fields=fields(dimensions=["mes"]), style={})
+        self.assertEqual(self.client.delete(f"/api/sources/{self.source.id}/").status_code, 200)
+        return by_category, by_month
+
+    def _add(self, sheet_id, columns=()):
+        return json_body(self.client, "post", f"/api/dashboard/{self.dashboard.id}/sources/",
+                         {"sheet_id": sheet_id, "sheet_gid": "0", "columns": list(columns)})
+
+    def test_volver_a_agregar_la_hoja_reconecta_sus_widgets(self, _df):
+        by_category, by_month = self._orphans()
+        r = self._add("abc")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["reattached"], 2)
+        new = DataSource.objects.get(id=r.json()["id"])
+        for widget in (by_category, by_month):
+            widget.refresh_from_db()
+            self.assertEqual(widget.source, new)
+        rendered = self.client.get(f"/api/dashboard/{self.dashboard.id}/render/").json()["widgets"]
+        self.assertEqual([w["error"] for w in rendered], [None, None])
+
+    def test_solo_se_reconectan_los_que_valen_en_la_fuente_nueva(self, _df):
+        by_category, by_month = self._orphans()
+        columns = [{"name": c, "type": t, "include": c != "mes"}
+                   for c, t in [("categoria", "text"), ("mes", "text"), ("anio", "number"), ("ventas", "number")]]
+        self.assertEqual(self._add("abc", columns).json()["reattached"], 1)
+        by_category.refresh_from_db()
+        by_month.refresh_from_db()
+        self.assertIsNotNone(by_category.source)
+        self.assertIsNone(by_month.source)     # usa «mes», que la fuente nueva no incluye
+
+    def test_si_la_hoja_no_se_lee_la_fuente_se_agrega_sin_reconectar(self, _df):
+        by_category, _ = self._orphans()
+        r = self._add("zzz")
+        self.assertEqual((r.status_code, r.json()["reattached"]), (201, 0))
+        by_category.refresh_from_db()
+        self.assertIsNone(by_category.source)
+
     def test_agregar_valida(self, _df):
         url = f"/api/dashboard/{self.dashboard.id}/sources/"
         self.assertEqual(json_body(self.client, "post", url, {"sheet_id": ""}).status_code, 400)
@@ -211,6 +253,63 @@ class SourceChangesTests(TestCase):
                          ("inv", "7", "Inventario · Stock"))
         self.widget.refresh_from_db()
         self.assertEqual(self.widget.source, self.source)   # el widget sigue en la misma fuente
+
+    def test_plantilla_editada_y_otra_hoja_con_las_columnas_en_otro_orden(self, _df):
+        """Plantilla → usarla → editar un widget → cambiar la hoja por otra con la misma estructura
+        y las columnas en otro orden: los widgets guardan nombres (no alias) y el cambio de hoja
+        empareja las columnas por encabezado, así que todo sigue igual."""
+        import pandas as pd
+
+        configured = [{**c, "alias": f"col_{i + 2}", **({"label": "Categoría"} if c["name"] == "categoria" else {}),
+                       **({"label": "Monto"} if c["name"] == "ventas" else {})}
+                      for i, c in enumerate(SALES_COLUMNS)]
+        # Por la API, como el editor: los widgets siguen a las columnas renombradas.
+        self.assertEqual(self.put({"columns": configured}).status_code, 200)
+        self.dashboard.is_template = True
+        self.dashboard.save()
+        Widget.objects.create(dashboard=self.dashboard, source=self.source, type="dynamic_table", title="Tabla",
+                              fields=fields(dimensions=["Categoría"], pivots=["mes"],
+                                            metrics=[{"field": "Monto", "agg": "sum", "alias": "monto"}]),
+                              style={})
+        copy_id = self.client.post(f"/api/dashboards/{self.dashboard.id}/use-template/").json()["id"]
+        source = DataSource.objects.get(dashboard_id=copy_id)
+        table = Widget.objects.get(dashboard_id=copy_id, type="dynamic_table")
+        r = json_body(self.client, "put", f"/api/widget/{table.id}/", {"title": "Ventas por categoría"})
+        self.assertEqual(r.status_code, 200, r.content)
+
+        def render():
+            widgets = self.client.get(f"/api/dashboard/{copy_id}/render/").json()["widgets"]
+            self.assertEqual([w["error"] for w in widgets], [None] * len(widgets))
+            return [w["data"] for w in widgets]
+        before = render()
+
+        # La hoja nueva: las mismas columnas, en otro orden.
+        def sheets(sheet_id, gid, **kwargs):
+            df = sales_df()
+            return df[["ventas", "anio", "mes", "ID", "categoria"]] if sheet_id == "otra" else by_sheet(sheet_id, gid)
+        _df.side_effect = sheets
+
+        # Lo que arma el editor al «Cambiar fuente»: las columnas de la hoja nueva con lo
+        # configurado de las que se llaman igual (`_keepEdits` en source-picker.js).
+        saved = {c["name"]: c for c in self.client.get(f"/api/sources/{source.id}/columns/").json()["columns"]}
+        fresh = self.client.get("/api/sources/google/spreadsheets/otra/tabs/0/columns/").json()["columns"]
+        self.assertEqual([c["name"] for c in fresh], ["ventas", "anio", "mes", "ID", "categoria"])
+        columns = [{**c, **{k: saved[c["name"]][k] for k in ("alias", "type", "include", "label", "format")
+                            if c["name"] in saved}} for c in fresh]
+        payload = {"sheet_id": "otra", "sheet_gid": "0", "sheet_name": "Otra", "tab_name": "Hoja 1",
+                   "columns": columns}
+        self.assertEqual(json_body(self.client, "put", f"/api/sources/{source.id}/",
+                                   {**payload, "dry_run": True}).json()["impact"], [])
+        r = json_body(self.client, "put", f"/api/sources/{source.id}/", payload)
+        self.assertEqual(r.status_code, 200, r.content)
+
+        source.refresh_from_db()
+        table.refresh_from_db()
+        self.assertEqual((source.sheet_id, table.source_id), ("otra", source.id))
+        self.assertEqual(render(), before)
+        # Cada columna conserva su alias aunque cambió de posición.
+        self.assertEqual({c["name"]: c["alias"] for c in source.columns},
+                         {c["name"]: c["alias"] for c in configured})
 
     def test_actualizar_datos_relee_la_hoja_sin_guardar(self, _df):
         saved = [*with_column("ventas", label="Monto"), {"name": "borrada", "type": "text", "include": True}]

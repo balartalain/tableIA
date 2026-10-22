@@ -112,6 +112,24 @@ class WidgetService:
         if errors:
             raise SpecValidationError(errors)
 
+    def adopt(self, widgets) -> list[Widget]:
+        """Conecta a esta fuente los widgets sin fuente (la suya se eliminó) cuya configuración
+        vale en ella, con la misma validación que al guardar: volver a agregar la hoja, u otra
+        con las mismas columnas, recupera el tablero. Los demás siguen sin fuente.
+        → los widgets conectados."""
+        adopted = []
+        for widget in widgets:
+            definition = widget.definition
+            if definition is None:
+                continue
+            form = WidgetForm.from_dict({"fields": widget.fields or {}, "style": widget.style or {}})
+            data = {"widget_type": widget.type, "fields": form.fields.to_dict(), "style": form.style.to_dict()}
+            if not form_errors(data, self.ctx, widget.type, require_title=False):
+                widget.source = self.source
+                adopted.append(widget)
+        Widget.objects.bulk_update(adopted, ["source"])
+        return adopted
+
     def _check_singleton(self, definition) -> None:
         limit = getattr(definition, "max_per_dashboard", None)
         if limit is None:

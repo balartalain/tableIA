@@ -613,7 +613,17 @@ def dashboard_sources(request, dashboard_id):
     if error:
         return _error(error)
     source = DataSource.objects.create(dashboard=dashboard, **source_data)
-    return JsonResponse(_serialize_source(source), status=201)
+    # Widgets cuya fuente se eliminó: los que valen en la nueva vuelven a conectarse.
+    reattached = 0
+    orphans = list(dashboard.widgets.filter(source__isnull=True))
+    if orphans:
+        try:
+            service = WidgetService(dashboard, sheets.load_source(source), source)
+        except SheetError:
+            logger.info("No se pudo leer la fuente %s para reconectar widgets", source.id)
+        else:
+            reattached = len(service.adopt(orphans))
+    return JsonResponse({**_serialize_source(source), "reattached": reattached}, status=201)
 
 
 def _as_columns(calculated: list[dict]) -> list[dict]:

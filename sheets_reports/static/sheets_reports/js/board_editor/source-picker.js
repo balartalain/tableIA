@@ -857,7 +857,12 @@ function sourcePicker({ mode = 'create' } = {}) {
           window.location.replace(window.BOARD_EDITOR_URL.replace('/0/', `/${data.id}/`));
           return;
         } else {
-          await this._send('POST', `/api/dashboard/${window.DASHBOARD_ID}/sources/`, body);
+          const created = await this._send('POST', `/api/dashboard/${window.DASHBOARD_ID}/sources/`, body);
+          // Widgets de una fuente eliminada que valen en esta: el servidor los reconectó.
+          const n = (created && created.reattached) || 0;
+          if (n && typeof window.showToast === 'function') {
+            window.showToast(n === 1 ? 'Se reconectó 1 widget a esta fuente.' : `Se reconectaron ${n} widgets a esta fuente.`);
+          }
         }
         this.saving = false;
         this.impact = null;

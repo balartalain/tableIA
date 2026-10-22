@@ -816,19 +816,37 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Cambiar la fuente del widget en el panel: otro schema y otras sugerencias. Otra hoja tiene
-    // otras columnas: los campos (y los roles del KPI, que apuntan a sus métricas) se reinician
-    // y se vuelven a elegir de la nueva fuente.
+    // Cambiar la fuente del widget en el panel: otro schema y otras sugerencias. Se conserva lo
+    // que existe en la fuente nueva (ej. la misma hoja, vuelta a agregar tras eliminarla) y lo
+    // demás se vuelve a elegir de ella; los roles del KPI siguen si su métrica sigue.
     async changeDrawerSource(sourceId) {
       const id = sourceId ? Number(sourceId) : null;
       if (id === this.drawerDraft.source) return;
       this.drawerDraft.source = id;
-      this.drawerDraft.fields = EMPTY_FIELDS();
-      const style = this.drawerDraft.style;
-      ['primary', 'compare', 'targetMetric', 'target'].forEach(key => delete style[key]);
       await this.loadSchema(id);
-      if (this.drawerDraft.source === id) this._prefillDraft();
+      if (this.drawerDraft.source !== id) return;
+      this._keepAvailableFields();
+      this._prefillDraft();
       this.loadSuggestions(this.editingType);
+    },
+
+    // Los campos del panel que existen en el schema actual; lo demás se quita.
+    _keepAvailableFields() {
+      const s = this.schema;
+      const known = new Set([...(s.all_fields || []), ...(s.grid_columns || []), ...(s.calculated_fields || []),
+                             ...(s.aggregated_fields || []).map(f => f.name)]);
+      const has = name => !!name && known.has(name);
+      const conditions = list => (list || []).filter(c => has(c.field));
+      const f = this.drawerDraft.fields;
+      f.dimensions = f.dimensions.filter(has);
+      f.pivots = f.pivots.filter(has);
+      f.columns = f.columns.filter(c => has(c.field));
+      f.filters = conditions(f.filters);
+      f.metrics = f.metrics.filter(m => !m.field || has(m.field)).map(m => ({ ...m, filters: conditions(m.filters) }));
+      if (!has(f.trend_by)) f.trend_by = '';
+      const aliases = new Set(f.metrics.map(m => m.alias));
+      const style = this.drawerDraft.style;
+      ['primary', 'compare', 'targetMetric'].forEach(key => { if (style[key] && !aliases.has(style[key])) delete style[key]; });
     },
 
     // (Re)atan los arrastres de las listas del panel: se destruyen al cerrar.

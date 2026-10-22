@@ -1006,11 +1006,12 @@ def samples_note(field, samples: dict, refs: dict) -> str:
     return ""
 
 
-GRID_NOTE = """Cuadrículas del formulario: las columnas virtuales «<pregunta> · Aspecto» y «<pregunta> · Respuesta» son la pregunta en formato largo (una fila por respuesta y aspecto).
+GRID_NOTE = """Cuadrículas y preguntas de casillas del formulario: las columnas virtuales «<pregunta> · Aspecto» y «<pregunta> · Respuesta» son la pregunta en formato largo (una fila por respuesta y aspecto).
 - Para comparar los aspectos, la distribución por aspecto o una tabla Aspecto × Respuesta: Aspecto como dimensión y Respuesta como pivote (o como métrica, ej. AVG si es numérica), con Conteo.
 - Para un solo aspecto: filtra Aspecto (eq) o usa su columna en ancho si está en la hoja.
 - Un widget usa las virtuales de una sola cuadrícula, y no en dispersión, correlación, V de Cramér ni filtros.
-- En una fórmula de campo calculado no se usan las virtuales."""
+- En una fórmula de campo calculado no se usan las virtuales.
+- Preguntas de casillas: «<pregunta> · Opción» y «<pregunta> · Respuesta» (Sí/No), una fila por respuesta y opción. Opción como dimensión y Respuesta como pivote con Conteo y % de la fila: el % que marcó cada opción; o Opción con el filtro Respuesta = Sí: cuántos la marcaron."""
 
 
 def columns_context(ctx: SheetContext, only=None) -> str:
@@ -1041,12 +1042,16 @@ def columns_context(ctx: SheetContext, only=None) -> str:
         if calculated and calculated["kind"] == "row":
             line += f" — campo calculado por fila: {calculated['formula']}"
         grid = ctx.grid_fields.get(field)
-        if grid:
+        if grid and grid.get("kind") == "CHECKBOX":
+            role = "la opción" if grid["role"] == "aspect" else "si la marcó (Sí/No)"
+            line += (f" — columna virtual de la pregunta de casillas «{grid['question']}»: {role}, "
+                     f"una fila por respuesta y opción")
+        elif grid:
             role = "el aspecto" if grid["role"] == "aspect" else "la respuesta"
             line += (f" — columna virtual de la cuadrícula «{grid['question']}»: {role} de cada "
                      f"respuesta, una fila por aspecto")
         elif field in members:
-            line += f" — un aspecto de la cuadrícula «{members[field]}», en ancho"
+            line += f" — una columna de «{members[field]}», en ancho"
         line += samples_note(field, ctx.samples, refs)
         lines.append(line)
     title = ("Columnas de la hoja para este widget (la hoja tiene más: usa solo estas)" if only

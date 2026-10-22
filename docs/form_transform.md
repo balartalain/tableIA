@@ -36,11 +36,15 @@ con la configuración de columnas de la fuente, igual que en una hoja normal.
 Una cuadrícula llega ancha: una columna por aspecto («Evaluación [Contenido]», «Evaluación
 [Profesor]»…). Para cruzarla como Aspecto × Respuesta (tabla dinámica, barras), la fuente
 suma dos **columnas virtuales** por pregunta: `«<pregunta> · Aspecto»` y `«<pregunta> ·
-Respuesta»`. No están en el frame: existen solo dentro de la consulta de un widget que las usa
+Respuesta»`. Una pregunta de casillas (`CHECKBOX`) recibe el mismo trato: ya expandida es una
+cuadrícula en ancho (una columna Sí/No por opción), con `«<pregunta> · Opción»` y
+`«<pregunta> · Respuesta»` (Sí/No). Opción × Respuesta con «% de la fila» da el % que marcó
+cada opción; Opción con el filtro Respuesta = Sí, cuántos la marcaron. No están en el frame: existen solo dentro de la consulta de un widget que las usa
 (`engine/steps/grid.py`).
 
-- `transform` anota cada cuadrícula en `df.attrs["grids"]` (`{pregunta: {kind, aspects}}`, con
-  la columna de cada aspecto; en una de casillas, la de cada opción). `grid_long` la pasa a
+- `transform` anota cada cuadrícula y cada pregunta de casillas en `df.attrs["grids"]`
+  (`{pregunta: {kind, aspects}}`, con la columna de cada aspecto; en una cuadrícula de casillas,
+  la de cada opción; en una pregunta de casillas, cada opción es un aspecto con su columna Sí/No). `grid_long` la pasa a
   formato largo: una fila por respuesta y aspecto (en una de casillas, por opción marcada), sin
   las celdas vacías.
 - `sheets.load_source` (`attach_grids`) deja en `attrs["grid_store"]` las cuadrículas con el
@@ -66,7 +70,8 @@ Respuesta»`. No están en el frame: existen solo dentro de la consulta de un wi
   cuadrícula; a los demás no les aplican.
 
 **En el editor de la fuente** las virtuales son filas de la tabla de columnas, justo antes de
-sus columnas anchas, con el distintivo «Cuadrícula · Aspecto/Respuesta».
+sus columnas anchas, con el distintivo «Cuadrícula · Aspecto/Respuesta» o «Casillas ·
+Opción/Respuesta»; las anchas llevan «En cuadrícula» o «En casillas».
 - Se guardan en `source.columns` con `grid` (la pregunta) y `role` (`aspect` | `value`), y se
   renombran, excluyen y tipan como cualquier columna.
 - La fila de Aspecto muestra los aspectos: un clic quita uno de la cuadrícula
@@ -75,7 +80,7 @@ sus columnas anchas, con el distintivo «Cuadrícula · Aspecto/Respuesta».
   ancha excluida no se ofrece en los widgets ni a la IA, pero sigue alimentando su cuadrícula.
   Las fuentes que ya existían conservan su configuración.
 
-**En el panel del widget** van en su propio grupo, «Cuadrículas», solo en los widgets que las
+**En el panel del widget** van en su propio grupo, «Cuadrículas y casillas», solo en los widgets que las
 aceptan. Al elegir «· Aspecto» como dimensión con el pivote vacío, el pivote pasa a ser
 «· Respuesta».
 
@@ -86,7 +91,7 @@ La detección (`services/form_tidy.analyze`) corre sobre el frame **crudo**
 
 | Tipo | Transformación |
 |---|---|
-| `CHECKBOX` | Se expande en columnas binarias `{pregunta}_{valor}`. |
+| `CHECKBOX` | Se expande en columnas binarias `{pregunta}_{valor}`, excluidas por defecto: se usan sus virtuales Opción y Respuesta. |
 | `CHECKBOX_GRID` | Se expande en columnas binarias `{pregunta}_{valor}` por cada aspecto. |
 | `GRID` | Cuadrícula simple de opción única: se conserva como columna ancha. |
 | `FREE_TEXT_WITH_COMMAS` | Texto libre con comas: se conserva como columna ancha. |

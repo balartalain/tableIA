@@ -9,7 +9,7 @@ Alpine de la lista que la contiene (filtros del widget o de una métrica).
       <option x-bind:value="f" x-text="f"></option>
     </template>
     <template x-if="$store.dashboard.gridColumns.length">
-      <optgroup label="Cuadrículas">
+      <optgroup label="Cuadrículas y casillas">
         <template x-for="f in $store.dashboard.gridColumns" :key="'grid-' + f">
           <option x-bind:value="f" x-text="f"></option>
         </template>

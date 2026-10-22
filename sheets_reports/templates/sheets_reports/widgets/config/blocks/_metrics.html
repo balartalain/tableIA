@@ -47,7 +47,7 @@
               </template>
               <!-- Virtuales de las cuadrículas del formulario (Aspecto, Respuesta) -->
               <template x-if="$store.dashboard.gridColumns.length">
-                <optgroup label="Cuadrículas">
+                <optgroup label="Cuadrículas y casillas">
                   <template x-for="col in $store.dashboard.gridColumns" :key="'grid-' + col">
                     <option x-bind:value="col" x-text="col" x-bind:selected="metric.field === col"></option>
                   </template>

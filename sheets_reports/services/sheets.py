@@ -132,7 +132,7 @@ def _cache_key(sheet_id: str, gid: str, headers: bool) -> str:
 # mostrar «actualizado» sin cargar el frame. La hoja original no se guarda: se lee de Google al
 # conectar la pestaña, con «Actualizar datos» o cuando cambia `_FRAME_VERSION`.
 COERCED, TRANSFORMED = "coerced", "transformed"
-_FRAME_VERSION = 8  # 8: `attrs["grids"]` de las cuadrículas de formulario
+_FRAME_VERSION = 9  # 8: `attrs["grids"]` de las cuadrículas; 9: también las preguntas de casillas
 
 
 def _frame_key(kind: str, sheet_id: str, gid: str, headers: bool) -> str:
@@ -390,12 +390,15 @@ def apply_column_config(df: pd.DataFrame, columns: list[dict] | None) -> pd.Data
 
 
 # ------------------------------------------------- cuadrículas (columnas virtuales)
+# En una pregunta de casillas (CHECKBOX) el aspecto es la opción y la respuesta, Sí o No.
 GRID_ROLE_LABELS = {ASPECT: "Aspecto", VALUE: "Respuesta"}
+CHECKBOX_ROLE_LABELS = {ASPECT: "Opción", VALUE: "Respuesta"}
 
 
-def grid_column_name(question: str, role: str) -> str:
+def grid_column_name(question: str, role: str, kind: str = "GRID") -> str:
     """El nombre (fijo, el que se guarda en `source.columns`) de una virtual de la cuadrícula."""
-    return f"{question} · {GRID_ROLE_LABELS[role]}"
+    labels = CHECKBOX_ROLE_LABELS if kind == "CHECKBOX" else GRID_ROLE_LABELS
+    return f"{question} · {labels[role]}"
 
 
 def grid_column_entries(df: pd.DataFrame) -> dict[str, list[dict]]:
@@ -410,13 +413,20 @@ def grid_column_entries(df: pd.DataFrame) -> dict[str, list[dict]]:
             pd.api.types.is_numeric_dtype(df[column]) for _, column in grid["aspects"] if column in df.columns)
         values = [str(to_key(v)) for v in dict.fromkeys(long["value"].dropna())]
         out[question] = [
-            {"name": grid_column_name(question, ASPECT), "grid": question, "role": ASPECT,
+            {"name": grid_column_name(question, ASPECT, grid["kind"]), "grid": question, "role": ASPECT,
+             "kind": grid["kind"],
              "type": "text", "samples": [aspect for aspect, _ in grid["aspects"]],
              "aspects": [aspect for aspect, _ in grid["aspects"]]},
-            {"name": grid_column_name(question, VALUE), "grid": question, "role": VALUE,
+            {"name": grid_column_name(question, VALUE, grid["kind"]), "grid": question, "role": VALUE,
+             "kind": grid["kind"],
              "type": "number" if numeric else "text", "samples": values},
         ]
     return out
+
+
+def grid_kinds(df: pd.DataFrame) -> dict[str, str]:
+    """{pregunta: tipo} de las cuadrículas y preguntas de casillas del frame transformado."""
+    return {question: grid["kind"] for question, grid in (df.attrs.get("grids") or {}).items()}
 
 
 def grid_member_columns(df: pd.DataFrame) -> dict[str, str]:
@@ -454,7 +464,7 @@ def attach_grids(out: pd.DataFrame, df: pd.DataFrame, columns: list[dict] | None
         long = form_transform.grid_long(df, grid)
         names = {}
         for r, role in enumerate((ASPECT, VALUE)):
-            entry = config.get((question, role)) or {"name": grid_column_name(question, role)}
+            entry = config.get((question, role)) or {"name": grid_column_name(question, role, grid["kind"])}
             if not entry.get("include", True):
                 names[role] = None
                 continue
@@ -477,7 +487,7 @@ def attach_grids(out: pd.DataFrame, df: pd.DataFrame, columns: list[dict] | None
                 if entry.get("type") == "number" and entry.get("format") in COLUMN_FORMATS:
                     out.attrs.setdefault("column_formats", {})[display] = entry["format"]
         wide = [display_of.get(name, name) for name, owner in members.items() if owner == question]
-        built.append(Grid(question, names[ASPECT], names[VALUE], long, tuple(wide)))
+        built.append(Grid(question, names[ASPECT], names[VALUE], long, tuple(wide), grid["kind"]))
     store = GridStore(built)
     if store.grids:
         out.attrs["grid_store"] = store
@@ -490,7 +500,7 @@ def get_sheet_schema(df: pd.DataFrame) -> dict:
         "numeric_fields": [*df.select_dtypes(include="number").columns,
                            *virtual.select_dtypes(include="number").columns],
         # Las cuadrículas de un formulario: sus dos virtuales (None la que se excluyó).
-        "grid_fields": [{"question": g.question, "aspect": g.aspect, "value": g.value}
+        "grid_fields": [{"question": g.question, "kind": g.kind, "aspect": g.aspect, "value": g.value}
                         for g in (df.attrs["grid_store"].grids if df.attrs.get("grid_store") else [])],
     }
 

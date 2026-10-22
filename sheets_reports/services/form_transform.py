@@ -233,6 +233,7 @@ def transform(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd
     if "_ID" in df.columns:
         cols["_ID"] = df["_ID"]
     grids: dict[str, dict] = {}
+    checkboxes = []
 
     for col in df.columns:
         if col == "_ID":
@@ -252,11 +253,22 @@ def transform(df: pd.DataFrame, custom_separator: str = SEPARATOR_DEFAULT) -> pd
             parent, aspect = grid_of[col]
             grid = grids.setdefault(parent, {"kind": kind, "aspects": []})
             grid["aspects"].append([aspect, produced])
+        elif kind == "CHECKBOX" and produced:
+            checkboxes.append((_clean_header(col), produced))
+
+    # Una pregunta de casillas es una cuadrícula en ancho: cada opción es un aspecto con su
+    # columna Sí/No.
+    for question, produced in checkboxes:
+        name = question
+        while name in grids:
+            name += " (casillas)"
+        grids[name] = {"kind": "CHECKBOX", "aspects": [[option, column] for option, column in produced.items()]}
 
     out = pd.DataFrame(cols, index=df.index)
-    # Las cuadrículas, para verlas en formato largo (ver `grid_long`):
-    # {pregunta: {kind, aspects: [[aspecto, columna]]}}; en una de casillas la columna es
-    # {opción: columna «pregunta [aspecto]_opción»}.
+    # Las cuadrículas y las preguntas de casillas, para verlas en formato largo (ver
+    # `grid_long`): {pregunta: {kind, aspects: [[aspecto, columna]]}}. En una cuadrícula de
+    # casillas la columna es {opción: columna «pregunta [aspecto]_opción»}; en una pregunta de
+    # casillas (CHECKBOX) cada opción es un aspecto con su columna Sí/No.
     out.attrs["grids"] = grids
     return out
 

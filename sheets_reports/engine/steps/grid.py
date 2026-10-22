@@ -32,12 +32,14 @@ ASPECT, VALUE = "aspect", "value"
 class Grid:
     """Una cuadrícula de la fuente: su pregunta, el nombre a mostrar de cada virtual (None si
     el usuario la excluyó), su formato largo (`row` = índice de la fila de la fuente, `aspect`,
-    `value`) y sus columnas anchas (con su nombre a mostrar)."""
+    `value`), sus columnas anchas (con su nombre a mostrar) y su tipo: `GRID`, `CHECKBOX_GRID` o
+    `CHECKBOX` (una pregunta de casillas: cada opción es un aspecto y la respuesta, Sí o No)."""
     question: str
     aspect: str | None
     value: str | None
     long: pd.DataFrame
     columns: tuple[str, ...] = ()
+    kind: str = "GRID"
 
     @property
     def names(self) -> list[str]:

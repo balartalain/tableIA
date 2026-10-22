@@ -263,15 +263,16 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 <div class="truncate" x-text="c.name" x-bind:title="c.name"></div>
                 <!-- Virtual de una cuadrícula: une sus columnas anchas en filas (Aspecto × Respuesta). -->
                 <span x-show="c.virtual" x-cloak class="ui-badge ui-badge-accent mt-0.5 font-normal"
-                      x-bind:title="`Une las columnas de la cuadrícula «${c.grid}» en filas: una por respuesta y aspecto`">
+                      x-bind:title="`Une las columnas de «${c.grid}» en filas: una por respuesta y ${c.kind === 'CHECKBOX' ? 'opción' : 'aspecto'}`">
                   <i class="ti ti-grid-dots text-xs" aria-hidden="true"></i>
-                  <span x-text="c.role === 'aspect' ? 'Cuadrícula · Aspecto' : 'Cuadrícula · Respuesta'"></span>
+                  <span x-text="(c.kind === 'CHECKBOX' ? 'Casillas · ' : 'Cuadrícula · ')
+                                + (c.role === 'value' ? 'Respuesta' : c.kind === 'CHECKBOX' ? 'Opción' : 'Aspecto')"></span>
                 </span>
                 <!-- Columna ancha de una cuadrícula: excluida, sigue alimentando sus virtuales. -->
                 <span x-show="c.grid_member" x-cloak class="ui-badge ui-badge-neutral mt-0.5 font-normal"
-                      x-bind:title="`Aspecto de la cuadrícula «${c.grid_member}». Excluida, no se ofrece en los widgets pero sigue en la cuadrícula`">
+                      x-bind:title="`${c.grid_kind === 'CHECKBOX' ? 'Opción de la pregunta de casillas' : 'Aspecto de la cuadrícula'} «${c.grid_member}». Excluida, no se ofrece en los widgets pero sigue en sus columnas virtuales`">
                   <i class="ti ti-grid-dots text-xs" aria-hidden="true"></i>
-                  <span>En cuadrícula</span>
+                  <span x-text="c.grid_kind === 'CHECKBOX' ? 'En casillas' : 'En cuadrícula'"></span>
                 </span>
               </td>
               <td class="py-2 font-mono text-xs text-fg-muted">
@@ -309,7 +310,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                     <template x-for="a in c.aspects" :key="a">
                       <button type="button" x-on:click="toggleAspect(c, a)" x-bind:disabled="!c.include"
                               x-bind:aria-pressed="!(c.aspects_excluded || []).includes(a)"
-                              x-bind:title="(c.aspects_excluded || []).includes(a) ? `Volver a poner «${a}»` : `Quitar «${a}» de la cuadrícula`"
+                              x-bind:title="(c.aspects_excluded || []).includes(a) ? `Volver a poner «${a}»` : `Quitar «${a}» de las columnas virtuales`"
                               x-bind:class="(c.aspects_excluded || []).includes(a) ? 'line-through text-fg-subtle border-line' : 'text-accent-text border-accent-soft-border bg-accent-soft'"
                               class="px-1.5 py-0.5 rounded border text-xs cursor-pointer disabled:cursor-default" x-text="a"></button>
                     </template>

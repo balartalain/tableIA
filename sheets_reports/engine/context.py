@@ -23,7 +23,7 @@ class SheetContext:
     `calculated` son todos los campos calculados de la fuente con lo que calculan
     ({nombre: {formula, kind: "row"|"aggregated", format}}), para el contexto de la IA.
     `grid_fields` son las columnas virtuales de las cuadrículas de un formulario
-    ({nombre: {question, role, columns}}, ver engine/steps/grid.py): están en `fields` (se
+    ({nombre: {question, role, kind, columns}}, ver engine/steps/grid.py): están en `fields` (se
     agrupan, pivotan, filtran y resumen) pero no en la hoja, así que una fórmula no las lee
     (`sheet_fields`). `columns` son las columnas anchas de la cuadrícula que siguen en la fuente.
     `scales` es la escala de medida de cada columna (continua, discreta, ordinal, nominal o
@@ -81,7 +81,7 @@ class SheetContext:
             aliases=aliases,
             scales={**effective_scales(df, saved_scales, date_columns=dates, submission=submission),
                     **effective_scales(virtual, saved_scales)},
-            grid_fields={name: {"question": grid.question, "role": role,
+            grid_fields={name: {"question": grid.question, "role": role, "kind": grid.kind,
                                 "columns": [c for c in grid.columns if c in df.columns]}
                          for name, (grid, role) in grid_fields(df).items()},
         )

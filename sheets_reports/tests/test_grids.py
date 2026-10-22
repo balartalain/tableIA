@@ -95,6 +95,51 @@ class GridLongTests(SimpleTestCase):
                          [("Lunes", "Álgebra"), ("Lunes", "Física"), ("Martes", "Física")])
 
 
+class CheckboxTests(SimpleTestCase):
+    """Una pregunta de casillas es una cuadrícula en ancho: cada opción, un aspecto con Sí/No."""
+
+    def source(self):
+        from sheets_reports.tests.test_form_transform import form_df
+        raw = sheets._coerce_numeric_columns(transform(form_df()))
+        out = sheets.apply_column_config(raw.copy(), [])
+        sheets.attach_grids(out, raw, [])
+        return raw, out
+
+    def test_la_casilla_es_una_cuadricula_de_opciones(self):
+        raw, _ = self.source()
+        grid = raw.attrs["grids"]["Sabores favoritos"]
+        self.assertEqual(grid["kind"], "CHECKBOX")
+        self.assertEqual(grid["aspects"][0], ["Chocolate", "Sabores favoritos_Chocolate"])
+        # Las de cuadrícula de casillas siguen siendo una sola cuadrícula.
+        self.assertNotIn("Actividades [Deporte]", raw.attrs["grids"])
+
+    def test_el_editor_excluye_las_columnas_si_no(self):
+        from sheets_reports.views import _sheet_columns
+        raw, _ = self.source()
+        columns = _sheet_columns(raw)
+        names = [c["name"] for c in columns]
+        start = names.index("Sabores favoritos · Opción")
+        self.assertEqual(names[start:start + 3], ["Sabores favoritos · Opción", "Sabores favoritos · Respuesta",
+                                                  "Sabores favoritos_Chocolate"])
+        by_name = {c["name"]: c for c in columns}
+        self.assertEqual(by_name["Sabores favoritos · Opción"]["kind"], "CHECKBOX")
+        self.assertEqual(by_name["Sabores favoritos · Opción"]["aspects"], ["Chocolate", "Vainilla", "Fresa"])
+        self.assertFalse(by_name["Sabores favoritos_Chocolate"]["include"])
+        self.assertEqual(by_name["Sabores favoritos_Chocolate"]["grid_kind"], "CHECKBOX")
+
+    def test_porcentaje_que_marco_cada_opcion(self):
+        _, df = self.source()
+        option, answer = "Sabores favoritos · Opción", "Sabores favoritos · Respuesta"
+        metric = {**count("pct"), "window": {"type": "percent_of_row"}}
+        rows = dynamic_table(df, fields(dimensions=[option], pivots=[answer], metrics=[count(), metric]))
+        self.assertEqual(cells(rows, option)[("Chocolate", "Sí")], 4)
+        self.assertAlmostEqual(cells(rows, option, "pct")[("Chocolate", "Sí")], 66.67)
+        # Cuántos marcaron cada opción: el filtro Respuesta = Sí.
+        out = execute(df, fields(dimensions=[option], metrics=[count()],
+                                 filters=[{"field": answer, "op": "eq", "value": "Sí"}]))
+        self.assertEqual({r[option]: r["n"] for r in out["data"]}, {"Chocolate": 4, "Vainilla": 4, "Fresa": 2})
+
+
 class GridQueryTests(SimpleTestCase):
     def test_tabla_aspecto_por_respuesta(self):
         rows = dynamic_table(survey_source_df(), fields(dimensions=[ASPECT], pivots=[VALUE], metrics=[count()]))
@@ -192,7 +237,7 @@ class GridConfigTests(SimpleTestCase):
         self.assertIn(ASPECT, ctx.aliases.values())
         text = columns_context(ctx)
         self.assertIn("columna virtual de la cuadrícula «Evaluación»", text)
-        self.assertIn("Cuadrículas del formulario", text)
+        self.assertIn("Cuadrículas y preguntas de casillas del formulario", text)
 
     def test_validacion_de_las_virtuales(self):
         ctx = SheetContext.from_dataframe(survey_source_df(), "0")
@@ -256,7 +301,7 @@ class GridSourceTests(TestCase):
         schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
         self.assertIn("Aspecto evaluado", schema["all_fields"])
         self.assertNotIn("Evaluación [Contenido]", schema["all_fields"])
-        self.assertIn({"question": "Evaluación", "aspect": "Aspecto evaluado", "value": VALUE},
+        self.assertIn({"question": "Evaluación", "kind": "GRID", "aspect": "Aspecto evaluado", "value": VALUE},
                       schema["grid_fields"])
         self.assertTrue(schema["widget_manifest"]["dynamic_table"]["grid_fields"])
         self.assertFalse(schema["widget_manifest"]["correlation"]["grid_fields"])

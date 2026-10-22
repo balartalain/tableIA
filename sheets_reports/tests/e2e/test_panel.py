@@ -198,7 +198,7 @@ class PanelTests(StaticLiveServerTestCase):
             Widget.objects.filter(id=widget.id).update(source=form)
             drawer = self.open_panel(self.open_editor(widget))
             dimension = drawer.locator('select[aria-label="Dimensión"]').first
-            self.assertEqual(dimension.locator('optgroup[label="Cuadrículas"] option').all_inner_texts()[:2],
+            self.assertEqual(dimension.locator('optgroup[label="Cuadrículas y casillas"] option').all_inner_texts()[:2],
                              [ASPECT, VALUE])
             dimension.select_option(ASPECT)
             self.page.wait_for_function(

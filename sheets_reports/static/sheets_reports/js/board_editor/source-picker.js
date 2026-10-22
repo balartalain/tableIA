@@ -305,8 +305,7 @@ function sourcePicker({ mode = 'create' } = {}) {
       return fresh.map((c, i) => {
         const edited = current[c.name];
         const alias = (edited && edited.alias) || c.alias || `col_${i + 1}`;
-        return edited ? { ...c, alias, type: edited.type, include: edited.include, label: edited.label || '', format: edited.format || '',
-                          aspects_excluded: edited.aspects_excluded || [] }
+        return edited ? { ...c, alias, type: edited.type, include: edited.include, label: edited.label || '', format: edited.format || '' }
           : { ...c, alias, include: c.include ?? true, label: c.label || '', format: c.format || '' };
       });
     },
@@ -790,19 +789,9 @@ function sourcePicker({ mode = 'create' } = {}) {
       return data;
     },
 
-    // Una virtual de cuadrícula guarda su pregunta, su rol y, la de Aspecto, los aspectos quitados.
+    // Una virtual de cuadrícula guarda su pregunta y su rol (Aspecto o Respuesta).
     _gridKeys(c) {
-      if (!c.virtual) return {};
-      return { grid: c.grid, role: c.role,
-               ...(c.role === 'aspect' && (c.aspects_excluded || []).length ? { aspects_excluded: c.aspects_excluded } : {}) };
-    },
-
-    // Quitar o volver a poner un aspecto en la cuadrícula (la fila de Aspecto).
-    toggleAspect(c, aspect) {
-      const excluded = new Set(c.aspects_excluded || []);
-      if (excluded.has(aspect)) excluded.delete(aspect);
-      else if (c.aspects.length - excluded.size > 1) excluded.add(aspect);
-      c.aspects_excluded = c.aspects.filter(a => excluded.has(a));
+      return c.virtual ? { grid: c.grid, role: c.role } : {};
     },
 
     _payload() {

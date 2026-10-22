@@ -415,8 +415,7 @@ def grid_column_entries(df: pd.DataFrame) -> dict[str, list[dict]]:
         out[question] = [
             {"name": grid_column_name(question, ASPECT, grid["kind"]), "grid": question, "role": ASPECT,
              "kind": grid["kind"],
-             "type": "text", "samples": [aspect for aspect, _ in grid["aspects"]],
-             "aspects": [aspect for aspect, _ in grid["aspects"]]},
+             "type": "text", "samples": [aspect for aspect, _ in grid["aspects"]]},
             {"name": grid_column_name(question, VALUE, grid["kind"]), "grid": question, "role": VALUE,
              "kind": grid["kind"],
              "type": "number" if numeric else "text", "samples": values},
@@ -444,8 +443,8 @@ def attach_grids(out: pd.DataFrame, df: pd.DataFrame, columns: list[dict] | None
     ya configurada): `out.attrs["grid_store"]` (ver engine/steps/grid.py), con el nombre a
     mostrar, el tipo, el formato, la escala y el alias de cada virtual según `columns`. Las
     virtuales sin configuración guardada están incluidas. El formato largo sale de `df`: una
-    columna ancha excluida no se ofrece en los widgets, pero sigue alimentando su cuadrícula;
-    un aspecto se quita de ella con `aspects_excluded` en la entrada de Aspecto."""
+    columna ancha excluida no se ofrece en los widgets, pero sigue alimentando su cuadrícula.
+    Para dejar fuera un aspecto de los resultados, se filtra en el widget."""
     grids = df.attrs.get("grids") or {}
     if not grids:
         return
@@ -457,10 +456,6 @@ def attach_grids(out: pd.DataFrame, df: pd.DataFrame, columns: list[dict] | None
     used_aliases = {c["alias"] for c in columns or [] if c.get("alias")} | set(aliases.values())
     built = []
     for g, (question, grid) in enumerate(grids.items()):
-        excluded = set(config.get((question, ASPECT), {}).get("aspects_excluded") or [])
-        grid = {**grid, "aspects": [a for a in grid["aspects"] if a[0] not in excluded]}
-        if not grid["aspects"]:
-            continue
         long = form_transform.grid_long(df, grid)
         names = {}
         for r, role in enumerate((ASPECT, VALUE)):

@@ -74,8 +74,8 @@ sus columnas anchas, con el distintivo «Cuadrícula · Aspecto/Respuesta» o «
 Opción/Respuesta»; las anchas llevan «En cuadrícula» o «En casillas».
 - Se guardan en `source.columns` con `grid` (la pregunta) y `role` (`aspect` | `value`), y se
   renombran, excluyen y tipan como cualquier columna.
-- La fila de Aspecto muestra los aspectos: un clic quita uno de la cuadrícula
-  (`aspects_excluded`).
+- Para dejar fuera un aspecto de los resultados, se filtra en el widget (ej. Aspecto «no está
+  en» […]).
 - **Por defecto:** las virtuales entran incluidas y las columnas anchas, excluidas. Una columna
   ancha excluida no se ofrece en los widgets ni a la IA, pero sigue alimentando su cuadrícula.
   Las fuentes que ya existían conservan su configuración.

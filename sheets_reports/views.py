@@ -200,11 +200,9 @@ def _clean_columns(columns: list) -> list[dict]:
         # Formato (moneda, %): solo en las numéricas; sin él se muestran como número.
         if c["type"] == "number" and c.get("format") in COLUMN_FORMATS:
             column["format"] = c["format"]
-        # Virtual de una cuadrícula: su pregunta, Aspecto o Respuesta y los aspectos que se quitan.
+        # Virtual de una cuadrícula: su pregunta y si es el Aspecto o la Respuesta.
         if c.get("grid") and c.get("role") in (ASPECT, VALUE):
             column.update({"grid": str(c["grid"]), "role": c["role"]})
-            if c["role"] == ASPECT and c.get("aspects_excluded"):
-                column["aspects_excluded"] = [str(a) for a in c["aspects_excluded"]]
         # Escala de medida confirmada (y el orden de una ordinal); sin ella se detecta al cargar.
         if c.get("scale") in SCALES:
             column["scale"] = c["scale"]
@@ -231,9 +229,6 @@ def _columns_errors(columns) -> list[str]:
             return [f"Columna repetida: '{c['name']}'"]
         if c.get("label") is not None and not isinstance(c["label"], str):
             return [f"El nombre a mostrar de '{c['name']}' debe ser texto"]
-        if c.get("aspects_excluded") is not None and not (
-                isinstance(c["aspects_excluded"], list) and all(isinstance(a, str) for a in c["aspects_excluded"])):
-            return [f"Los aspectos excluidos de '{c['name']}' deben ser una lista de textos"]
         if c.get("format") not in (None, "", "number", *COLUMN_FORMATS):
             return [f"Formato no válido para '{c['name']}': usa number, {', '.join(COLUMN_FORMATS)}"]
         if c.get("scale") is not None:
@@ -832,7 +827,7 @@ def _merge_saved_columns(sheet_columns: list[dict], saved: list[dict]) -> list[d
                     "include": stored.get("include", True) if stored else column.get("include", True),
                     "label": (stored or {}).get("label", ""),
                     "format": (stored or {}).get("format", ""),
-                    **{k: stored[k] for k in ("scale", "order", "aspects_excluded") if stored and stored.get(k)},
+                    **{k: stored[k] for k in ("scale", "order") if stored and stored.get(k)},
                     "readonly": is_id_column(column["name"])})
     return out
 

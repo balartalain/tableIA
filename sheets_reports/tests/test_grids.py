@@ -123,7 +123,7 @@ class CheckboxTests(SimpleTestCase):
                                                   "Sabores favoritos_Chocolate"])
         by_name = {c["name"]: c for c in columns}
         self.assertEqual(by_name["Sabores favoritos · Opción"]["kind"], "CHECKBOX")
-        self.assertEqual(by_name["Sabores favoritos · Opción"]["aspects"], ["Chocolate", "Vainilla", "Fresa"])
+        self.assertEqual(by_name["Sabores favoritos · Opción"]["samples"], ["Chocolate", "Vainilla", "Fresa"])
         self.assertFalse(by_name["Sabores favoritos_Chocolate"]["include"])
         self.assertEqual(by_name["Sabores favoritos_Chocolate"]["grid_kind"], "CHECKBOX")
 
@@ -216,16 +216,17 @@ class GridConfigTests(SimpleTestCase):
         out = execute(df, fields(dimensions=[ASPECT], metrics=[count()]))
         self.assertIn("Profesor", {r[ASPECT] for r in out["data"]})
 
-    def test_aspectos_excluidos_nombre_y_virtual_excluida(self):
+    def test_nombre_a_mostrar_y_virtual_excluida(self):
         df = survey_source_df([
-            {"name": ASPECT, "type": "text", "grid": "Evaluación", "role": "aspect", "label": "Aspecto",
-             "aspects_excluded": ["Materiales"]},
+            {"name": ASPECT, "type": "text", "grid": "Evaluación", "role": "aspect", "label": "Aspecto"},
             {"name": VALUE, "type": "text", "grid": "Evaluación", "role": "value", "include": False},
         ])
         schema = sheets.get_sheet_schema(df)
         self.assertIn("Aspecto", schema["all_fields"])
         self.assertNotIn(VALUE, schema["all_fields"])
-        out = execute(df, fields(dimensions=["Aspecto"], metrics=[count()]))
+        # Un aspecto se deja fuera de los resultados con un filtro en el widget.
+        out = execute(df, fields(dimensions=["Aspecto"], metrics=[count()],
+                                 filters=[{"field": "Aspecto", "op": "not_in", "value": ["Materiales"]}]))
         self.assertEqual({r["Aspecto"] for r in out["data"]}, {"Contenido", "Profesor"})
 
     def test_el_contexto_conoce_las_virtuales(self):
@@ -294,7 +295,7 @@ class GridSourceTests(TestCase):
                          [ASPECT, VALUE, "Evaluación [Contenido]"])
         by_name = {c["name"]: c for c in columns}
         self.assertTrue(by_name[ASPECT]["virtual"])
-        self.assertEqual(by_name[ASPECT]["aspects"], ["Contenido", "Profesor", "Materiales"])
+        self.assertEqual(by_name[ASPECT]["samples"], ["Contenido", "Profesor", "Materiales"])
         self.assertEqual(by_name["Nota · Respuesta"]["type"], "number")
         self.assertFalse(by_name["Evaluación [Contenido]"]["include"])
         self.assertTrue(by_name["Carrera"].get("include", True))
@@ -313,14 +314,13 @@ class GridSourceTests(TestCase):
         columns = self.client.get(f"/api/sources/{self.source.id}/columns/").json()["columns"]
         for c in columns:
             if c["name"] == ASPECT:
-                c.update(label="Aspecto evaluado", aspects_excluded=["Materiales"])
+                c.update(label="Aspecto evaluado")
         r = self.client.put(f"/api/sources/{self.source.id}/", data={"columns": columns},
                             content_type="application/json")
         self.assertEqual(r.status_code, 200, r.content)
         self.source.refresh_from_db()
         saved = next(c for c in self.source.columns if c["name"] == ASPECT)
-        self.assertEqual((saved["grid"], saved["role"], saved["aspects_excluded"]),
-                         ("Evaluación", "aspect", ["Materiales"]))
+        self.assertEqual((saved["grid"], saved["role"]), ("Evaluación", "aspect"))
         schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
         self.assertIn("Aspecto evaluado", schema["all_fields"])
         self.assertNotIn("Evaluación [Contenido]", schema["all_fields"])

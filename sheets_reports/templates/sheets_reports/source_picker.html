@@ -303,21 +303,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                 </select>
                 <span x-show="c.type !== 'number'" class="text-xs text-fg-subtle">—</span>
               </td>
-              <td class="py-2 text-xs text-fg-muted max-w-[20rem]">
-                <!-- Aspectos de la cuadrícula: clic para quitarlo o volver a ponerlo (queda al menos uno). -->
-                <template x-if="c.role === 'aspect'">
-                  <div class="flex flex-wrap gap-1">
-                    <template x-for="a in c.aspects" :key="a">
-                      <button type="button" x-on:click="toggleAspect(c, a)" x-bind:disabled="!c.include"
-                              x-bind:aria-pressed="!(c.aspects_excluded || []).includes(a)"
-                              x-bind:title="(c.aspects_excluded || []).includes(a) ? `Volver a poner «${a}»` : `Quitar «${a}» de las columnas virtuales`"
-                              x-bind:class="(c.aspects_excluded || []).includes(a) ? 'line-through text-fg-subtle border-line' : 'text-accent-text border-accent-soft-border bg-accent-soft'"
-                              class="px-1.5 py-0.5 rounded border text-xs cursor-pointer disabled:cursor-default" x-text="a"></button>
-                    </template>
-                  </div>
-                </template>
-                <div x-show="c.role !== 'aspect'" class="truncate" x-text="c.samples.join(' · ')"></div>
-              </td>
+              <td class="py-2 text-xs text-fg-muted truncate max-w-[20rem]" x-text="c.samples.join(' · ')"></td>
             </tr>
           </template>
           <tr x-show="columns.length && !shownColumns.length" x-cloak>

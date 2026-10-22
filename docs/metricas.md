@@ -148,8 +148,8 @@ comparan año y mes; `latest` / `previous` son el último y el penúltimo period
 
 | `type` | En el editor | Qué muestra |
 |---|---|---|
-| `percent_of_total` | % del total de la columna | Qué % del total representa cada valor. |
-| `percent_of_row` | % del total de la fila | Con pivotes: qué % de su fila es cada celda (cada fila suma 100 %). **Necesita pivotes.** |
+| `percent_of_total` | % del total (con pivotes: «% del total de la columna» en la tabla dinámica, «% del total de cada {pivote}» en gráficos) | Qué % del total representa cada valor. Con pivotes, del total de su valor del pivote (no del total general). |
+| `percent_of_row` | % del total de la fila (en gráficos, «% del total de cada {dimensión}») | Con pivotes: qué % de su fila es cada celda (cada fila suma 100 %). **Necesita pivotes.** |
 | `running_total` | Acumulado | Suma acumulada en el orden de las filas (cronológico si la dimensión es de tiempo). |
 | `pct_change` | Variación vs anterior | % de cambio respecto a la fila anterior. |
 

@@ -76,9 +76,12 @@ const AGG_OPTIONS = [
 ];
 
 // «Mostrar como» de una métrica (`metric.window`): cómo se muestra cada valor respecto a los demás.
+// `pivotLabel`: el texto con pivotes, donde el % del total (por columna) se distingue del de la fila.
+// `chartBy`: en un gráfico con pivote no se ven columnas ni filas; el % se nombra con la columna
+// que reparte («% del total de cada Sexo»: el pivote, cada serie; la dimensión, cada categoría).
 const WINDOW_OPTIONS = [
-  { value: 'percent_of_total', label: '% del total de la columna' },
-  { value: 'percent_of_row', label: '% del total de la fila' },
+  { value: 'percent_of_total', label: '% del total', pivotLabel: '% del total de la columna', chartBy: 'pivots' },
+  { value: 'percent_of_row', label: '% del total de la fila', chartBy: 'dimensions' },
   { value: 'running_total', label: 'Acumulado' },
   { value: 'pct_change', label: 'Variación vs anterior' },
 ];
@@ -721,8 +724,17 @@ document.addEventListener('alpine:init', () => {
       const hasPivots = (this.drawerDraft.fields.pivots || []).some(Boolean);
       const byAgg = ((this.panelOptions.windows || {})[hasPivots ? 'pivot' : 'flat']) || {};
       const allowed = byAgg[metric && metric.agg] || [];
-      const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value));
+      const options = WINDOW_OPTIONS.filter(o => allowed.includes(o.value))
+        .map(o => ({ value: o.value, label: this._windowLabel(o, hasPivots) }));
       return options.length ? [{ value: '', label: 'Valor' }, ...options] : [];
+    },
+    _windowLabel(option, hasPivots) {
+      if (!hasPivots) return option.label;
+      const fields = this.drawerDraft.fields;
+      const by = this.editingType !== 'dynamic_table' && option.chartBy
+        && (fields[option.chartBy] || []).find(Boolean);
+      if (by) return `% del total de cada ${humanizeName(by)}`;
+      return option.pivotLabel || option.label;
     },
     // ¿La ventana guardada en la métrica ya no vale (ej. se agregó un pivote o se cambió a
     // promedio)? Se quita al guardar.

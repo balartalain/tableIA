@@ -19,7 +19,7 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
           <tr class="border-b border-line">
             <th class="text-left font-medium py-1 pr-3">Campus</th>
             <th class="text-right font-medium py-1 pr-3">Valor</th>
-            <th class="text-right font-medium py-1 pr-3">% del total de la columna</th>
+            <th class="text-right font-medium py-1 pr-3">% del total</th>
             <th class="text-right font-medium py-1 pr-3">Acumulado</th>
             <th class="text-right font-medium py-1">Variación vs anterior</th>
           </tr>
@@ -33,15 +33,18 @@ en sheets_reports/widgets/*.py; las reglas, de metricWindowOptions (dashboard-st
     </div>
     <dl class="space-y-1.5 pt-1">
       <div>
-        <dt class="font-semibold text-fg">% del total de la columna</dt>
-        <dd>Qué parte del total representa cada valor: 120 de 200 = 60 %. La columna suma 100 %.
-          Con pivote, cada celda se divide entre el total de su columna del pivote.</dd>
+        <dt class="font-semibold text-fg">% del total</dt>
+        <dd>Qué parte del total representa cada valor: 120 de 200 = 60 %. Todos suman 100 %.
+          Con pivote es el total de cada valor del pivote, no el total general: en la tabla
+          dinámica se llama «% del total de la columna»; en un gráfico, «% del total de cada …» con
+          el nombre del pivote (cada serie o color suma 100 %).</dd>
       </div>
       <div>
         <dt class="font-semibold text-fg">% del total de la fila</dt>
         <dd>Solo con pivote: qué parte de su fila es cada celda, y cada fila suma 100 %. Ej. con
           pivote <span class="font-mono">Categoria_Gasto</span>: de las solicitudes de Santiago,
-          qué % fue de cada categoría.</dd>
+          qué % fue de cada categoría. En un gráfico se llama «% del total de cada …» con el nombre
+          de la dimensión (cada barra o grupo suma 100 %).</dd>
       </div>
       <div>
         <dt class="font-semibold text-fg">Acumulado</dt>

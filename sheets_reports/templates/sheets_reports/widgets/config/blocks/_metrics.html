@@ -63,7 +63,7 @@
                   <option x-bind:value="o.value" x-text="o.label" x-bind:selected="metric.agg === o.value"></option>
                 </template>
               </select>
-              <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total de la columna, acumulado…). -->
+              <!-- Mostrar como: el valor tal cual o respecto a los demás (% del total, acumulado…). -->
               <template x-if="$store.dashboard.metricWindowOptions(metric).length">
                 <div class="flex items-center gap-1 w-full">
                   <select x-vselect="(metric.window && metric.window.type) || ''" x-bind:value="(metric.window && metric.window.type) || ''"

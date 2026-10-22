@@ -330,7 +330,7 @@ def capabilities_text(widget) -> str:
     return ", ".join(parts)
 
 
-WINDOW_LABELS = {"percent_of_total": "% del total de la columna (participación)",
+WINDOW_LABELS = {"percent_of_total": "% del total (participación)",
                  "percent_of_row": "% del total de la fila",
                  "running_total": "acumulado", "pct_change": "variación"}
 

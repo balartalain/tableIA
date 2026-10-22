@@ -570,7 +570,7 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
               <!-- Generar con IA: la fórmula que arma reemplaza lo que haya en el lienzo; si no
                    puede con el pedido, muestra su motivo y el lienzo no cambia. -->
               <form x-on:submit.prevent="generateWithAI(f)" class="space-y-1">
-                <div class="flex items-center gap-2 rounded-md border border-accent-soft-border bg-accent-soft pl-2.5 pr-1 py-1 focus-within:border-accent">
+                <div class="flex items-center gap-2 rounded-md border border-line bg-surface pl-2.5 pr-1 py-1 focus-within:border-accent">
                   <i class="ti ti-sparkles text-base text-accent-text shrink-0" aria-hidden="true"></i>
                   <input type="text" x-model="f._aiPrompt" x-bind:disabled="f._aiLoading" maxlength="500"
                          placeholder="Describe el cálculo y la IA arma la fórmula, ej. % de las ventas que son de Hogar"

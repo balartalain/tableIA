@@ -67,6 +67,31 @@ class DynamicTableCompileTests(SimpleTestCase):
         self.assertEqual([c["header"] for c in out["columns"][-1]["children"]],
                          ["Suma Ventas", "Suma Plan"])
 
+    def test_las_columnas_de_pivote_llevan_su_ruta(self):
+        """El editor mueve cada valor del pivote dentro de su grupo: los nodos de valor y su
+        «Total <valor>» llevan `pivot`; las métricas y «Total general» no."""
+        out = compiled("dynamic_table",
+                       fields(dimensions=["categoria"], pivots=["anio", "vendedor"],
+                              metrics=[agg("total_ventas")]),
+                       df=sellers_df())
+        self.assertEqual(out["pivots"], ["anio", "vendedor"])
+        metric = out["columns"][1]
+        self.assertNotIn("pivot", metric)
+        self.assertEqual([c["pivot"] for c in metric["children"]],
+                         [["2025"], ["2025"], ["2026"], ["2026"]])
+        inner = metric["children"][0]["children"]
+        self.assertTrue(inner and all(c["pivot"][0] == "2025" and len(c["pivot"]) == 2 for c in inner))
+        self.assertNotIn("pivot", out["columns"][-1])
+
+    def test_con_varias_metricas_la_ruta_va_en_el_valor_no_en_la_metrica(self):
+        out = compiled("dynamic_table",
+                       fields(dimensions=["categoria"], pivots=["anio"],
+                              metrics=[agg("total_ventas"), agg("total_plan", "sum", "plan")]),
+                       df=sellers_df())
+        group = out["columns"][1]
+        self.assertEqual(group["pivot"], ["2025"])
+        self.assertTrue(all("pivot" not in c for c in group["children"]))
+
     def test_nombre_a_mostrar_de_la_metrica(self):
         out = compiled("dynamic_table", fields(metrics=[
             {"field": "ventas", "agg": "sum", "alias": "t", "label": "Costos totales"},

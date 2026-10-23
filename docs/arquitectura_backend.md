@@ -446,7 +446,7 @@ son **obligatorias** y deben ser válidas: `test_capacidades_planas_y_validas`.
 |---|---|---|
 | `key` | str | Clave en `style` (única por widget) |
 | `label` | str | Nombre de la clave para la IA y los mensajes de error (obligatoria) |
-| `type` | str | `string`, `number`, `boolean`, `choice` o `list` (lista de textos); `form_errors` valida el valor contra él |
+| `type` | str | `string`, `number`, `boolean`, `choice`, `list` (lista de textos) u `object`; `form_errors` valida el valor contra él |
 | `options` | list | Solo en `choice`: `[{"value", "label"}, ...]` |
 | `options_from` | `"metrics"` | `choice` cuyo valor es además un **alias de métrica** del propio widget (roles del KPI) |
 | `default` | any | Default; debe coincidir con el `type`. `style_defaults()` completa el form con ellos |
@@ -535,7 +535,7 @@ Todos los tipos tienen `ai_enabled = True`.
 | `line` | `title`, `curve`, `showGrid`, `showMarkers` |
 | `donut` | `title`, `labelMode`, `donutSize`, `showLegend` |
 | `table` | `title`, `pageSize`, `showPagination` |
-| `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels` |
+| `dynamic_table` | `title`, `pageSize`, `showPagination`, `showTotals`, `rowSubtotal1`, `rowSubtotal2`, `showColumnTotals`, `columnSubtotal1`, `repeatRowLabels`, `pivotOrder` (lo escriben las flechas del editor; fuera de la IA) |
 | `scatter` | `title`, `showTrend`, `markerSize`, `showGrid` |
 | `filter` | `title`, `layout` (`horizontal`/`vertical`) |
 
@@ -650,8 +650,10 @@ style}`. `variables` son las filas: `{field, label, scale, unmatched?}` y, en un
 - **`_pivot_columns()`**: columnas de los pivotes anidadas como una hoja — cada valor del primer
   pivote agrupa los del segundo, seguido de su «Total {valor}» (subtotal) y al final
   «Total general». Con 1 métrica todo cuelga de un grupo con su nombre; con varias, cada
-  columna se abre en subcolumnas por métrica.
-- **`_compile_nested()`**: `columns` (dimensiones + métricas/pivotes), `rows` con
+  columna se abre en subcolumnas por métrica. Cada columna de un valor de pivote y su
+  «Total {valor}» llevan `pivot` (su ruta de valores, en texto): el editor las mueve dentro de
+  su grupo y guarda el orden en `style.pivotOrder`, que aplica el frontend.
+- **`_compile_nested()`**: `columns` (dimensiones + métricas/pivotes), `pivots` (los campos), `rows` con
   `__subtotal: True` y etiqueta «Total {valor}» en la última dimensión, `totals` = fila de
   total general, `percent` expandido a `cell_field(...)`/`total_field(...)` si hay pivotes.
 - Fallback sin `nested` (escalar/sin dims): `_build_columns` + `_totals` (suma de cada numérica).

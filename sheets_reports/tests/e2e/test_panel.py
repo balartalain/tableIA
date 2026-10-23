@@ -158,6 +158,53 @@ class PanelTests(StaticLiveServerTestCase):
         self.assertLessEqual(abs(sizes["holder"] - sizes["table"]), 2, sizes)
         self.assertLessEqual(abs(sizes["gap"]), 2, sizes)
 
+    # Encabezados de los valores de pivote, en el orden en que se ven (sin el texto de las flechas).
+    PIVOT_HEADERS = """el => [...el.querySelectorAll('thead th')]
+        .map(th => (th.querySelector('.tb-move-wrap > span') || th).textContent.trim())"""
+
+    def move_pivot(self, card, header, direction):
+        """Clic en la flecha de una columna de pivote y espera a que el widget se guarde."""
+        th = card.locator("thead th", has=self.page.locator(".tb-move-wrap > span", has_text=re.compile(rf"^{header}$")))
+        label = "Mover a la derecha" if direction > 0 else "Mover a la izquierda"
+        with self.page.expect_response(lambda r: "/api/widget/" in r.url and r.request.method == "PUT"):
+            th.get_by_role("button", name=label).click(force=True)
+
+    def test_mover_un_valor_del_pivote_lo_guarda_y_queda_en_la_vista(self):
+        widget = self.widget(fields(pivots=["mes"], metrics=[agg("total_ventas")]))
+        card = self.open_editor(widget)
+        self.assertEqual(card.locator('thead button[aria-label="Mover a la izquierda"]').count(), 2)
+        self.move_pivot(card, "Ene", 1)
+        headers = card.evaluate(self.PIVOT_HEADERS)
+        self.assertLess(headers.index("Feb"), headers.index("Ene"))
+        self.assertLess(headers.index("Ene"), headers.index("Mar"))
+        widget.refresh_from_db()
+        self.assertEqual(widget.style["pivotOrder"], {"pivots": ["mes"], "groups": {"[]": ["Feb", "Ene", "Mar"]}})
+
+        # La vista del tablero respeta el orden y no tiene flechas.
+        self.page.goto(f"{self.live_server_url}/tableros/{self.dashboard.id}/view/")
+        view = self.page.locator(f'[data-widget-id="{widget.id}"]')
+        view.locator(".tb-table tbody tr").first.wait_for()
+        headers = view.evaluate(self.PIVOT_HEADERS)
+        self.assertLess(headers.index("Feb"), headers.index("Ene"))
+        self.assertEqual(view.locator("button.tb-move").count(), 0)
+
+    def test_con_dos_pivotes_cada_valor_se_mueve_dentro_de_su_grupo(self):
+        widget = self.widget(fields(pivots=["anio", "mes"], metrics=[agg("total_ventas")]),
+                             style={"columnSubtotal1": True})
+        card = self.open_editor(widget)
+        # 2026 tiene Ene, Feb y Mar; mover Ene solo reordena ese grupo.
+        self.move_pivot(card, "Ene", 1)
+        widget.refresh_from_db()
+        self.assertEqual(widget.style["pivotOrder"]["groups"], {'["2026"]': ["Feb", "Ene", "Mar"]})
+        # Un año se mueve con sus meses y su «Total <año>» (2025 aparece después en la hoja).
+        self.move_pivot(card, "2025", -1)
+        headers = card.evaluate(self.PIVOT_HEADERS)
+        self.assertLess(headers.index("2025"), headers.index("Total 2025"))
+        self.assertLess(headers.index("Total 2025"), headers.index("2026"))
+        self.assertLess(headers.index("2026"), headers.index("Total 2026"))
+        widget.refresh_from_db()
+        self.assertEqual(widget.style["pivotOrder"]["groups"],
+                         {"[]": ["2025", "2026"], '["2026"]': ["Feb", "Ene", "Mar"]})
 
     def test_un_porcentaje_calculado_sale_con_dos_decimales(self):
         """Un campo calculado llega sin redondear (Feb: 50 / 330 = 15,1515…): la tabla muestra 2 decimales."""

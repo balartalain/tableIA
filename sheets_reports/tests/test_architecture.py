@@ -18,7 +18,7 @@ from sheets_reports.widgets import WIDGETS
 PACKAGE = Path(__file__).resolve().parents[1]
 
 CAPABILITY_KEYS = {"dimensions", "pivots", "metrics", "sort", "limit", "filters", "windows"}
-STYLE_TYPES = {"string", "number", "boolean", "choice", "list"}
+STYLE_TYPES = {"string", "number", "boolean", "choice", "list", "object"}
 # Lo único que declara un control: datos. El layout del panel vive en el partial del widget.
 STYLE_KEYS = {"key", "label", "type", "options", "options_from", "default"}
 TEMPLATES = PACKAGE / "templates"

@@ -299,6 +299,33 @@
   content: "▼";
 }
 
+/* ---------- Flechas para mover las columnas de los pivotes (editor) ---------- */
+.tablero .tb-table .tb-move-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.tablero .tb-table .tb-move {
+  padding: 0 3px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--tb-text-subtle);
+  font-size: var(--fs-sm);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.tablero .tb-table thead th:hover > .tb-move-wrap > .tb-move,
+.tablero .tb-table .tb-move:focus-visible {
+  opacity: 1;
+}
+.tablero .tb-table .tb-move:hover {
+  background: var(--tb-table-header-hover);
+  color: var(--tb-table-header-text);
+}
+
 /* ---------- Dimensiones fijas al hacer scroll horizontal ---------- */
 .tablero .tb-table [data-dim] {
   position: sticky;

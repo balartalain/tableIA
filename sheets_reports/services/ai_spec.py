@@ -266,8 +266,9 @@ CORRELATION_PROMPT = """\
   que conserves o sustituyas. No reintroduzcas errores corregidos en intentos anteriores.
 """
 
-# El título de la tarjeta lo pone el usuario: la IA no lo genera ni lo ve en `style`.
-NOT_AI_STYLE_KEYS = {"title"}
+# El título de la tarjeta lo pone el usuario y el orden de los pivotes, las flechas del editor:
+# la IA no los genera ni los ve en `style`.
+NOT_AI_STYLE_KEYS = {"title", "pivotOrder"}
 
 # Con el estado actual del widget, la IA no crea desde cero: ajusta lo que ya hay.
 MODIFY_PROMPT = """\
@@ -1561,6 +1562,8 @@ def form_errors(data: dict, ctx: SheetContext, widget_type: str | None,
         elif control.get("type") == "list" and not (
                 isinstance(value, list) and all(isinstance(v, str) for v in value)):
             errors.append(f"style.{key}: debe ser una lista de textos.")
+        elif control.get("type") == "object" and not isinstance(value, dict):
+            errors.append(f"style.{key}: debe ser un objeto.")
 
     if style.get("statusBasis") == "target_pct" and not _has_target(style, aliases):
         errors.append("style.statusBasis: «% de la meta» necesita una meta (target o targetMetric).")

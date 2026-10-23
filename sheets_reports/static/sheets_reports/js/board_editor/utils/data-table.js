@@ -9,6 +9,8 @@
 // - `formatOf(field)`: 'text' | 'number' | 'currency' | 'percent' | 'progress'.
 // - `sortable`: clic en el encabezado ordena (asc → desc → original); solo en tablas planas.
 // - `footerNote`: aviso a la izquierda del paginador.
+// - `onMove(id, dir)`: una columna con `move: {id, left, right}` lleva flechas ‹ › a los lados
+//   de su encabezado; el clic llama a `onMove` con -1 (izquierda) o 1 (derecha).
 class DataTable {
   // Relleno de la barra por tercio, de menos a más (clases de tablero-theme.css).
   static PROGRESS = { min: 0, max: 100, fills: ['tb-fill-bad', 'tb-fill-warn', 'tb-fill-good'] };
@@ -17,8 +19,10 @@ class DataTable {
   constructor(host, {
     columns = [], rows = [], rowFields = [], totals = null, formatOf = () => 'number',
     repeatRowLabels = false, paginate = true, pageSize = 10, sortable = false, footerNote = '',
+    onMove = null,
   } = {}) {
     this.host = host;
+    this.onMove = onMove;
     this.rows = rows;
     this.totals = totals;
     this.repeatRowLabels = repeatRowLabels;
@@ -66,7 +70,7 @@ class DataTable {
       if (col.total) classes.push('tb-total-col');
       const first = this.leaves.length === 0 ? ['tb-first'] : [];
       if (col.children) {
-        const cell = { header: col.header, classes: [...classes, ...first, 'tb-group', 'tb-group-start'], colspan: 0, rowspan: 1 };
+        const cell = { header: col.header, classes: [...classes, ...first, 'tb-group', 'tb-group-start'], colspan: 0, rowspan: 1, move: col.move };
         this.headerRows[level].push(cell);
         const start = this.leaves.length;
         walk(col.children, level + 1, classes, [...path, col.header]);
@@ -82,7 +86,7 @@ class DataTable {
         isDim: rowFieldSet.has(col.field), index: this.leaves.length,
       };
       this.leaves.push(leaf);
-      this.headerRows[level].push({ header: col.header, classes, colspan: 1, rowspan: depth - level, leaf });
+      this.headerRows[level].push({ header: col.header, classes, colspan: 1, rowspan: depth - level, leaf, move: col.move });
     });
     walk(columns, 0, [], []);
 
@@ -99,12 +103,22 @@ class DataTable {
       const all = classes.filter(Boolean);
       return (all.length ? ` class="${all.join(' ')}"` : '') + extra;
     };
+    // Los ids de las columnas que se mueven, por índice (el id puede llevar comillas).
+    this.moveIds = [];
     const thead = this.headerRows.map(cells => `<tr>${cells.map(c => {
       const leaf = c.leaf;
       const dim = leaf && leaf.isDim ? ` data-dim="${this.dims.indexOf(leaf.field)}"` : '';
       const span = (c.colspan > 1 ? ` colspan="${c.colspan}"` : '') + (c.rowspan > 1 ? ` rowspan="${c.rowspan}"` : '');
       const sort = leaf && this.sortable ? ` data-sort="${leaf.index}"` : '';
-      return `<th${attrs(c.classes, span + dim + sort)}>${esc(c.header || '')}</th>`;
+      const move = c.move && this.onMove ? c.move : null;
+      const moveIndex = move ? this.moveIds.push(move.id) - 1 : -1;
+      const arrow = (dir, shown, label, symbol) => shown
+        ? `<button type="button" class="tb-move" data-move="${dir}" data-col="${moveIndex}" aria-label="${label}" title="${label}">${symbol}</button>`
+        : '';
+      const header = move
+        ? `<span class="tb-move-wrap">${arrow(-1, move.left, 'Mover a la izquierda', '‹')}<span>${esc(c.header || '')}</span>${arrow(1, move.right, 'Mover a la derecha', '›')}</span>`
+        : esc(c.header || '');
+      return `<th${attrs(c.classes, span + dim + sort)}>${header}</th>`;
     }).join('')}</tr>`).join('');
 
     let tfoot = '';
@@ -135,6 +149,10 @@ class DataTable {
       this.page = Math.max(0, Math.min(this.pages - 1, this.page + Number(button.dataset.step)));
       this._render();
     };
+    if (this.onMove) this.table.querySelector('thead').addEventListener('click', (e) => {
+      const button = e.target.closest('button[data-move]');
+      if (button) this.onMove(this.moveIds[Number(button.dataset.col)], Number(button.dataset.move));
+    });
     if (this.sortable) this.table.querySelector('thead').onclick = (e) => {
       const th = e.target.closest('th[data-sort]');
       if (th) this._toggleSort(this.leaves[Number(th.dataset.sort)].field);

@@ -26,6 +26,9 @@ def _pivot_columns(nested: dict, labels: dict) -> List[Dict[str, Any]]:
     pivote agrupa los del segundo, seguido de su columna «Total <valor>» (subtotal). Al
     final, la columna «Total general». Con una métrica todo va bajo un grupo con su nombre;
     con varias, cada columna hoja se abre en una subcolumna por métrica.
+
+    Cada columna de un valor de pivote (y su «Total <valor>») lleva `pivot`, su ruta de
+    valores: el editor la mueve dentro de su grupo (`style.pivotOrder`).
     """
     col_keys, depth = nested["column_keys"], len(nested["pivots"])
     metrics = nested["metrics"]
@@ -48,11 +51,12 @@ def _pivot_columns(nested: dict, labels: dict) -> List[Dict[str, Any]]:
     def build(prefix: tuple) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
         for key in children.get(prefix, []):
+            path = [str(v) for v in key]
             if len(key) == depth:
-                out.append(node(str(key[-1]), key))
+                out.append(node(str(key[-1]), key, pivot=path))
             else:
-                out.append({"header": str(key[-1]), "children": build(key)})
-                out.append(node(f"Total {key[-1]}", key, subtotal=True))
+                out.append({"header": str(key[-1]), "pivot": path, "children": build(key)})
+                out.append(node(f"Total {key[-1]}", key, subtotal=True, pivot=path))
         return out
 
     top = build(())
@@ -126,6 +130,9 @@ class DynamicTableWidget(BaseWidget):
         {"key": "showColumnTotals", "label": "Columna «Total general» a la derecha", "type": "boolean", "default": False},
         {"key": "columnSubtotal1", "label": "Subtotales «Total …» de cada pivote", "type": "boolean", "default": False},
         {"key": "repeatRowLabels", "label": "Repetir etiquetas de fila", "type": "boolean", "default": False},
+        # Lo escriben las flechas de las columnas de los pivotes en el editor; la IA no lo ve.
+        # {"pivots": [campos], "groups": {ruta del padre en JSON: [valores en orden]}}.
+        {"key": "pivotOrder", "label": "Orden de las columnas de los pivotes", "type": "object"},
     ]
 
     def compile(
@@ -224,6 +231,7 @@ class DynamicTableWidget(BaseWidget):
             "columns": columns,
             "rows": rows,
             "rowFields": dimensions,
+            "pivots": pivots,
             "totals": grand,
             "percent": percent,
             "formats": formats,

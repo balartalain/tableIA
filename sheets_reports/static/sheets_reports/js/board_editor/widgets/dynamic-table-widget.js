@@ -65,7 +65,7 @@
 
         // «Mostrar totales» por nivel (estilo del widget): la columna «Total general» y las
         // «Total <valor>» de cada pivote se quitan (con sus hijos) si ese nivel está apagado.
-        let columns = this._visibleColumns(payload.columns);
+        let columns = this._orderPivots(this._visibleColumns(payload.columns), payload.pivots);
         const rowFields = payload.rowFields || (columns[0] && columns[0].field ? [columns[0].field] : []);
         const rowFieldSet = new Set(rowFields);
         const flat = !columns.some(c => c.children) && rowFields.length < 2;
@@ -83,7 +83,79 @@
             : (payloadFormats[field] || (percentFields.has(field) ? 'percent' : 'number')),
           repeatRowLabels: !!this.style.repeatRowLabels,
           sortable: flat,
+          onMove: (id, dir) => this._movePivot(id, dir),
         });
+      }
+
+      // El orden elegido de los valores de los pivotes (`style.pivotOrder`): por grupo (la ruta
+      // del padre en JSON), sus valores. Vale solo con los mismos pivotes con que se guardó.
+      _pivotGroups(pivots) {
+        const saved = this.style.pivotOrder;
+        const same = saved && Array.isArray(saved.pivots)
+          && JSON.stringify(saved.pivots) === JSON.stringify(pivots || []);
+        return same && saved.groups ? saved.groups : {};
+      }
+
+      // Reordena las columnas de los pivotes dentro de su grupo: cada valor se mueve junto con
+      // su «Total <valor>» (misma ruta `pivot`); los valores sin orden guardado quedan después,
+      // en el orden de la hoja, y las columnas sin `pivot` (métricas, «Total general») no se
+      // mueven. En el editor marca cada valor con `move` para que la tabla dibuje sus flechas.
+      _orderPivots(columns, pivots) {
+        const groups = this._pivotGroups(pivots);
+        const editable = !this._readOnly;
+        this._pivotSiblings = {};
+        const walk = (cols) => {
+          const units = new Map();
+          cols.forEach(c => {
+            if (!c.pivot) return;
+            const id = JSON.stringify(c.pivot);
+            if (!units.has(id)) units.set(id, { value: c.pivot[c.pivot.length - 1], path: c.pivot, nodes: [] });
+            units.get(id).nodes.push(c);
+          });
+          const out = cols.map(c => (c.children ? { ...c, children: walk(c.children) } : c));
+          if (!units.size) return out;
+          const first = [...units.values()][0];
+          const parent = JSON.stringify(first.path.slice(0, -1));
+          const order = groups[parent] || [];
+          const rank = (u) => { const i = order.indexOf(u.value); return i < 0 ? order.length : i; };
+          const sorted = [...units.values()]
+            .map((u, i) => ({ ...u, i }))
+            .sort((a, b) => rank(a) - rank(b) || a.i - b.i);
+          this._pivotSiblings[parent] = sorted.map(u => u.value);
+          const byNode = new Map(cols.map((c, i) => [c, out[i]]));
+          const moved = sorted.flatMap((u, i) => u.nodes.map((n, k) => {
+            const node = byNode.get(n);
+            if (k > 0 || !editable || sorted.length < 2) return node;
+            return { ...node, move: { id: JSON.stringify(u.path), left: i > 0, right: i < sorted.length - 1 } };
+          }));
+          // Los valores ocupan los lugares que tenían; lo demás queda donde estaba.
+          let next = 0;
+          return cols.map((c, i) => (c.pivot ? moved[next++] : out[i]));
+        };
+        return walk(columns || []);
+      }
+
+      // Una flecha: el valor cambia de lugar con su vecino en el grupo, y el orden se guarda
+      // en el widget (queda para la vista del tablero) y se redibuja sin pedir los datos.
+      _movePivot(id, dir) {
+        const path = JSON.parse(id);
+        const parent = JSON.stringify(path.slice(0, -1));
+        const values = [...(this._pivotSiblings[parent] || [])];
+        const from = values.indexOf(path[path.length - 1]);
+        const to = from + dir;
+        if (from < 0 || to < 0 || to >= values.length) return;
+        [values[from], values[to]] = [values[to], values[from]];
+        const pivots = (this._lastData && this._lastData.pivots) || [];
+        this.style.pivotOrder = { pivots, groups: { ...this._pivotGroups(pivots), [parent]: values } };
+        this._dirty = true;
+        const store = window.Alpine && Alpine.store('dashboard');
+        // Con el panel de este widget abierto, su borrador también lleva el orden: si no,
+        // «Guardar» lo pisaría con la copia que tomó al abrirse.
+        if (store && store.editingId === this.id && store.drawerDraft && store.drawerDraft.style) {
+          store.drawerDraft.style.pivotOrder = JSON.parse(JSON.stringify(this.style.pivotOrder));
+        }
+        if (store && typeof store._saveWidget === 'function') store._saveWidget(this);
+        this.draw(this._lastData, this.style, this.title);
       }
 
       // Monta la tabla (utils/data-table.js) en el contenido de la tarjeta; la comparte el

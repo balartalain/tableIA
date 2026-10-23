@@ -445,9 +445,19 @@ Renderiza: tabla dinámica con jerarquía de filas, subtotales por nivel, total 
   `payload.percent`; no hay formato por columna en la tabla.
 - `_mountTable(options)`: monta el `DataTable` en la tarjeta y conecta la descarga CSV (la comparte `TableWidget`).
 - Tabla plana (sin pivotes, una dimensión): orden por clic en el encabezado; un `style.columnOrder` guardado se respeta.
+- Orden de las columnas de los pivotes: `_orderPivots()` reordena cada lista de hermanos
+  según `style.pivotOrder` (`{pivots, groups: {ruta del padre en JSON: [valores]}}`; se ignora
+  si los pivotes del payload son otros). Cada valor se mueve con su «Total <valor>» (misma ruta
+  `pivot`); los valores sin orden guardado van después, en el orden de la hoja, y las columnas
+  sin `pivot` no se mueven. En el editor marca cada valor con `move` y la tabla dibuja sus
+  flechas; `_movePivot()` lo cambia de lugar con su vecino dentro del grupo, guarda el widget
+  (`_saveWidget`, así queda en la vista del tablero), copia el orden al borrador del panel si
+  está abierto y redibuja sin pedir datos. En la vista de solo lectura no hay flechas.
 
 **`DataTable`** recibe `columns` (árbol con `children`, `subtotal`, `total`), `rows`, `rowFields`,
-`totals`, `formatOf(field)`, `repeatRowLabels`, `paginate`/`pageSize`, `sortable` y `footerNote`.
+`totals`, `formatOf(field)`, `repeatRowLabels`, `paginate`/`pageSize`, `sortable`, `footerNote`
+y `onMove(id, dir)`: una columna con `move: {id, left, right}` lleva botones ‹ › en su
+encabezado que llaman a `onMove` con -1 o 1.
 Cabecera multinivel con `colspan`/`rowspan`; las dimensiones se agrupan con `rowspan` y quedan
 fijas al hacer scroll (`position: sticky`, `data-dim`); el «Total general» va en el `<tfoot>`.
 `csv()` devuelve `{headers, rows}` para `downloadRowsAsCSV`. Estilos: `.tb-table` en

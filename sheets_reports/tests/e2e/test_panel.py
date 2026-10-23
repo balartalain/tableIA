@@ -334,9 +334,8 @@ class FormulaBuilderTests(PanelTests):
         self.page.get_by_role("button", name="Agregar campo").click()
         self.page.get_by_label("Nombre del campo").fill("Nivel")
         # Cada clic coloca la pieza en el hueco elegido y elige el siguiente.
-        self.open_section(panel, "Agregaciones")
-        self.piece(panel, "SI").click()
         self.open_section(panel, "Condición")
+        self.piece(panel, "SI").click()
         self.piece(panel, "[ ] = [ ]").click()
         self.open_section(panel, "Columnas")
         self.piece(panel, "categoria").click()

@@ -276,7 +276,7 @@ class FormulaLanguageTests(SimpleTestCase):
                 compile_formula(text, df.columns)
         labels = {f["name"]: (f["label"], f.get("group")) for f in BUILDER_CATALOG["functions"]}
         self.assertEqual(labels["TRIM"], ("QUITAR ESPACIOS", "texto"))
-        self.assertEqual(labels["IF"], ("SI", None))
+        self.assertEqual(labels["IF"], ("SI", "condicion"))
 
     def test_division_entre_cero_queda_vacia(self):
         df = budget_df()

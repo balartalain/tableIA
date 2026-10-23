@@ -539,8 +539,8 @@ huecos y rótulos, operadores con su símbolo y título) vienen de `BUILDER_CATA
   con muchas columnas no empuje fuera de la vista a las secciones de abajo); su subpanel
   *Valores* (Número/Texto → `valuePiece`, y la ficha «Vacío» → `EMPTY_PIECE`, que deja la
   celda en blanco y solo vale como resultado de un SI: el servidor rechaza cualquier otro
-  lugar con su mensaje); *Operadores* (`+ − × ÷`); *Condición* (comparación, Y, O, NO);
-  *Funciones* (SI y las agregaciones), *Texto* (CONCATENAR, MINÚSCULAS, MAYÚSCULAS, QUITAR
+  lugar con su mensaje); *Operadores* (`+ − × ÷`); *Condición* (SI, comparación, Y, O, NO);
+  *Agregaciones* (SUM, AVG, COUNT, COUNT_DISTINCT, MIN, MAX), *Texto* (CONCATENAR, MINÚSCULAS, MAYÚSCULAS, QUITAR
   ESPACIOS, CONTIENE) y *Fecha* (AÑO, MES, NOMBRE DEL MES, TRIMESTRE, DÍA, DÍA DE LA SEMANA,
   AÑO-MES, DIFERENCIA DE FECHAS, HOY). Los grupos salen del catálogo (`FUNCTION_GROUPS`, por el
   campo `group` de cada función). El panel tiene scroll propio. Una función sin huecos (HOY) se

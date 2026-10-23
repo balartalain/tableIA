@@ -131,6 +131,8 @@ function sourcePicker({ mode = 'create' } = {}) {
     columnQuery: '',
     // Piezas del panel del constructor y la barra de operadores, del catálogo del servidor.
     CONDITION_PIECES: [
+      ...FormulaBlocks.catalog.functions.filter(f => f.group === 'condicion').map(({ name, label, title }) =>
+        ({ label, title, tall: true, piece: FormulaBlocks.pieces.func(name) })),
       ...FormulaBlocks.catalog.compare.slice(0, 1).map(({ op, symbol }) => ({
         label: `[ ] ${symbol} [ ]`, piece: FormulaBlocks.pieces.operator(op),
         title: `Comparación: ${FormulaBlocks.catalog.compare.map(o => o.symbol).join(' ')}`,
@@ -139,8 +141,9 @@ function sourcePicker({ mode = 'create' } = {}) {
         label: op === 'NOT' ? `${symbol} [ ]` : `[ ] ${symbol} [ ]`, title, piece: FormulaBlocks.pieces.operator(op),
       })),
     ],
-    // Las funciones del catálogo en sus grupos de la paleta: SI y las agregaciones, las de texto
-    // y las de fecha. `tall`: las de varios huecos, que se dibujan como bloque vertical (el color de SI).
+    // Las funciones del catálogo en sus grupos de la paleta: las agregaciones, las de texto y las
+    // de fecha (SI va con las piezas de condición). `tall`: las de varios huecos, que se dibujan
+    // como bloque vertical (el color de SI).
     FUNCTION_GROUPS: [['Agregaciones', undefined], ['Funciones de Texto', 'texto'], ['Funciones de Fecha', 'fecha']].map(([title, group]) => ({
       title,
       pieces: FormulaBlocks.catalog.functions.filter(f => f.group === group).map(({ name, label, title, slots }) =>

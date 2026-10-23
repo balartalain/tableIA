@@ -542,7 +542,7 @@ _FUNCTION_TITLES = {
 BUILDER_CATALOG = {
     "functions": [
         {"name": "IF", "label": "SI", "title": _FUNCTION_TITLES["IF"],
-         "slots": ["condición", "si se cumple", "si no"]},
+         "slots": ["condición", "si se cumple", "si no"], "group": "condicion"},
         *({"name": name, "label": name, "title": _FUNCTION_TITLES.get(name, name), "slots": [""]}
           for name in AGGREGATE_FUNCTIONS),
         # De texto: un grupo aparte en la paleta.

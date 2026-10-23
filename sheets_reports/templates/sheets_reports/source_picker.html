@@ -497,7 +497,8 @@ source-picker.js). `service_account_email` es la cuenta con la que se comparten 
                   <div class="flex flex-wrap gap-1">
                     <template x-for="p in CONDITION_PIECES" :key="p.label">
                       <button type="button" x-bind:data-fb-piece="JSON.stringify(p.piece)" x-on:click="clickPiece(p.piece)" x-bind:title="p.title"
-                              class="rounded-lg border border-line bg-surface px-2 py-1 font-semibold text-fg hover:border-accent cursor-grab"
+                              x-bind:class="p.tall ? 'border-accent-soft-border bg-accent-soft font-mono text-accent-text' : 'border-line bg-surface text-fg hover:border-accent'"
+                              class="rounded-lg border px-2 py-1 font-semibold cursor-grab"
                               x-text="p.label"></button>
                     </template>
                   </div>

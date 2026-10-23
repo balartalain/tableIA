@@ -306,6 +306,7 @@ def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=""):
             calculated_fields=copy.deepcopy(source.calculated_fields or []),
             is_form_response=source.is_form_response,
             gemini_file_id=source.gemini_file_id,
+            gemini_file_hash=source.gemini_file_hash,
         )
     for widget in dashboard.widgets.all():
         Widget.objects.create(
@@ -785,9 +786,6 @@ def source_detail(request, source_id):
         return _error(error)
     for key, value in updates.items():
         setattr(source, key, value)
-    if ("columns" in updates or "calculated_fields" in updates) and getattr(source, "gemini_file_id", ""):
-        from sheets_reports.services.ai_data_chat import delete_source_gemini_file
-        delete_source_gemini_file(source)
     source.save()
     rename_in_widgets(source.widgets.all(), renames)
     return JsonResponse({**_serialize_source(source), "impact": affected})
@@ -879,9 +877,6 @@ def source_add_calculated(request, source_id):
     if error:
         return _error(error)
     source.calculated_fields = calculated
-    if getattr(source, "gemini_file_id", ""):
-        from sheets_reports.services.ai_data_chat import delete_source_gemini_file
-        delete_source_gemini_file(source)
     source.save(update_fields=["calculated_fields"])
     return JsonResponse(_serialize_source(source))
 
@@ -987,9 +982,6 @@ def source_refresh(request, source_id):
     try:
         sheets.refresh_sheet(source.sheet_id, source.gid, headers=source.first_row_headers,
                              form=source.is_form_response)
-        if getattr(source, "gemini_file_id", ""):
-            from sheets_reports.services.ai_data_chat import delete_source_gemini_file
-            delete_source_gemini_file(source)
     except SheetError as e:
         return JsonResponse({"error": str(e), "status": status}, status=502)
     return JsonResponse({**_serialize_source(source), "status": status})
@@ -1483,6 +1475,8 @@ def dashboard_data_chat(request, dashboard_id):
         return error
 
     from sheets_reports.services.ai_data_chat import ask_data_chat
+    # La subida nocturna a Gemini solo mantiene las fuentes que se consultan.
+    DataSource.objects.filter(pk=source.pk).update(chat_used_at=now())
     try:
         result = ask_data_chat(source, prompt)
         return JsonResponse(result)

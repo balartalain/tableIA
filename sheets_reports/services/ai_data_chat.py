@@ -1,11 +1,12 @@
 """
 Chatbot analítico sobre la fuente de datos del tablero usando Gemini y ejecución de código Python.
-Sube la fuente de datos a Google una sola vez, reutiliza el identificador de archivo en consultas
-subsecuentes, permite hacer preguntas analíticas, ejecutar cálculos en pandas y generar gráficos
-con matplotlib/seaborn.
+Sube a Google la hoja original de la fuente (sin su configuración de columnas ni campos
+calculados) y reutiliza el archivo mientras siga activo y la hoja no cambie; permite hacer
+preguntas analíticas, ejecutar cálculos en pandas y generar gráficos con matplotlib/seaborn.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import tempfile
@@ -22,7 +23,7 @@ from sheets_reports.services.ai_spec import (
     gemini_upload_file,
     generate_with_code_execution,
 )
-from sheets_reports.services.sheets import load_source
+from sheets_reports.services.sheets import source_frame
 
 logger = logging.getLogger(__name__)
 
@@ -52,36 +53,47 @@ Instrucciones:
 """
 
 
+def _source_csv(df) -> tuple[str, str]:
+    """El CSV que se sube a Gemini y su huella (sha256), para saber si la hoja cambió."""
+    csv = df.to_csv(index=False)
+    return csv, hashlib.sha256(csv.encode("utf-8")).hexdigest()
+
+
+def _current_file(source, digest: str) -> Any:
+    """El archivo de la fuente en Gemini si tiene estos mismos datos y sigue activo (Gemini lo
+    borra a las 48 h); None si hay que subirlo."""
+    file_id = (getattr(source, "gemini_file_id", "") or "").strip()
+    if not file_id or getattr(source, "gemini_file_hash", "") != digest:
+        return None
+    return gemini_get_file(file_id)
+
+
 def get_or_upload_source_file(source, df) -> Any:
-    """
-    Obtiene la referencia del archivo en Gemini Files API para la fuente dada.
-    Reutiliza `source.gemini_file_id` si el archivo existe y sigue activo en Gemini.
-    Si no existe o expiró, exporta el DataFrame a CSV temporal, lo sube y guarda el nuevo ID en la fuente.
-    """
-    file_id = getattr(source, "gemini_file_id", "")
-    if isinstance(file_id, str) and file_id.strip():
-        existing = gemini_get_file(file_id.strip())
-        if existing:
-            return existing
-
-    return _upload_source_file(source, df)
+    """La referencia del archivo de la fuente en Gemini Files API: el que ya está si sigue
+    activo y la hoja no cambió; si no, sube la hoja."""
+    csv, digest = _source_csv(df)
+    return _current_file(source, digest) or _upload_source_file(source, csv, digest)
 
 
-def _upload_source_file(source, df) -> Any:
-    """Exporta el DataFrame a un CSV temporal, lo sube a Gemini Files API y guarda el nuevo ID
-    en la fuente."""
+def _upload_source_file(source, csv: str, digest: str) -> Any:
+    """Sube el CSV a Gemini Files API, guarda el nuevo ID y su huella en la fuente y borra el
+    archivo anterior. Sube antes de borrar: el chat nunca queda sin archivo."""
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
-            df.to_csv(f, index=False)
+            f.write(csv)
             tmp_path = f.name
 
         display_name = f"source_{getattr(source, 'id', 'data')}.csv"
         file_ref = gemini_upload_file(tmp_path, display_name=display_name)
         new_file_id = getattr(file_ref, "name", "")
+        old_id = (getattr(source, "gemini_file_id", "") or "").strip()
         if new_file_id and hasattr(source, "save") and getattr(source, "pk", None):
             source.gemini_file_id = new_file_id
-            source.save(update_fields=["gemini_file_id"])
+            source.gemini_file_hash = digest
+            source.save(update_fields=["gemini_file_id", "gemini_file_hash"])
+        if old_id and old_id != new_file_id:
+            gemini_delete_file(old_id)
         return file_ref
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -91,20 +103,19 @@ def _upload_source_file(source, df) -> Any:
                 pass
 
 
-def resync_source_file(source) -> bool:
-    """Resube la fuente a Gemini con los datos del caché (no relee la hoja) y borra el archivo
-    anterior; lo llama cada noche `sync_gemini_files` para que el chat no tenga que subirla
-    cuando expira. Sube antes de borrar: el chat nunca queda sin archivo. Una fuente vacía
-    solo pierde su archivo. Devuelve si subió."""
-    df = load_source(source)
+def resync_source_file(source) -> str:
+    """Lo que hace cada noche `sync_gemini_files` con una fuente: la sube si su archivo expiró o
+    la hoja cambió → "uploaded"; si sigue vigente no sube nada → "current"; una hoja vacía solo
+    pierde su archivo → "empty"."""
+    df = source_frame(source)
     if df.empty:
         delete_source_gemini_file(source)
-        return False
-    old_id = (source.gemini_file_id or "").strip()
-    _upload_source_file(source, df)
-    if old_id and old_id != source.gemini_file_id:
-        gemini_delete_file(old_id)
-    return True
+        return "empty"
+    csv, digest = _source_csv(df)
+    if _current_file(source, digest):
+        return "current"
+    _upload_source_file(source, csv, digest)
+    return "uploaded"
 
 
 def delete_source_gemini_file(source) -> None:
@@ -117,13 +128,14 @@ def delete_source_gemini_file(source) -> None:
 
     if hasattr(source, "save") and getattr(source, "pk", None):
         source.gemini_file_id = ""
-        source.save(update_fields=["gemini_file_id"])
+        source.gemini_file_hash = ""
+        source.save(update_fields=["gemini_file_id", "gemini_file_hash"])
 
 
 def ask_data_chat(source, prompt: str) -> dict[str, Any]:
     """
     Ejecuta una consulta al chatbot sobre la fuente de datos usando ejecución de código en Gemini.
-    Sube el archivo CSV a Gemini únicamente si no se ha subido previamente o si expiró.
+    Sube la hoja a Gemini únicamente si no se ha subido, si expiró o si cambió.
     Devuelve:
       {
         "text": "...",
@@ -131,7 +143,7 @@ def ask_data_chat(source, prompt: str) -> dict[str, Any]:
         "code": ["código python ejecutado..."]
       }
     """
-    df = load_source(source)
+    df = source_frame(source)
     if df.empty:
         return {"text": "La fuente de datos está vacía.", "images": [], "code": []}
 

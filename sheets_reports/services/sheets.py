@@ -228,6 +228,16 @@ def fetched_at(source):
     return caches["sheets"].get(f"{key}:fetched_at")
 
 
+def source_frame(source) -> pd.DataFrame:
+    """La hoja de una fuente tal como viene de Google, sin la configuración de la fuente
+    (columnas, nombres, campos calculados): la de respuestas de Google Forms, ya transformada
+    (services/form_transform.py). Es lo que el chat de datos sube a Gemini."""
+    headers = source.first_row_headers
+    if source.is_form_response:
+        return get_transformed_dataframe(source.sheet_id, source.gid, headers=headers)
+    return get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
+
+
 def load_source(source) -> pd.DataFrame:
     """La hoja de una fuente del tablero, con las columnas, los tipos y los nombres
     elegidos, y sus campos calculados: los por fila como columnas; los agregados en
@@ -236,11 +246,7 @@ def load_source(source) -> pd.DataFrame:
     transformado de `services/form_transform.py` (con casillas expandidas)
     y sobre él se aplica la misma configuración de columnas que a
     cualquier hoja."""
-    headers = source.first_row_headers
-    if source.is_form_response:
-        df = get_transformed_dataframe(source.sheet_id, source.gid, headers=headers)
-    else:
-        df = get_sheet_dataframe(source.sheet_id, source.gid, headers=headers)
+    df = source_frame(source)
     out = apply_calculated_fields(apply_column_config(df, source.columns),
                                   source.calculated_fields)
     if source.is_form_response:

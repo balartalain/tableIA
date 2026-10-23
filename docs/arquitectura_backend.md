@@ -220,6 +220,8 @@ Una pestaña (`gid`) de una hoja de Google Sheets conectada a un tablero.
 | `columns` | `JSONField` | `[{name, label?, type: text\|number\|date, include, scale?, order?}]` |
 | `calculated_fields` | `JSONField` | `[{id, name, formula, format: number\|percent}]` (ver §10.4) |
 | `gemini_file_id` | `CharField(255, blank)` | Identificador del archivo en Gemini Files API (se reutiliza en el chat analítico) |
+| `gemini_file_hash` | `CharField(64, blank)` | Huella (sha256) del CSV subido: si la hoja ya no coincide, se vuelve a subir |
+| `chat_used_at` | `DateTimeField(null)` | Última consulta al chat analítico; la subida nocturna se salta las fuentes sin uso reciente |
 
 - `name` de cada columna es el encabezado de la hoja; `label`, el **nombre a mostrar**, que la
   reemplaza en todo el tablero (schema, motor, filtros, IA). Los widgets guardan ese nombre.
@@ -856,9 +858,9 @@ Permite realizar consultas analíticas libres en lenguaje natural sobre los dato
 - **Enfoque híbrido (cuantitativo y cualitativo)**:
   - **Consultas cuantitativas/estadísticas**: Activa la herramienta `code_execution` para cálculos numéricos exactos (`pandas`, `numpy`) y generación de gráficos (`matplotlib`, `seaborn`).
   - **Consultas cualitativas/texto libre**: Utiliza Python para extraer las respuestas abiertas de la columna y combina la comprensión de lenguaje natural de Gemini (LLM) para analizar semánticamente aspectos negativos/positivos, temas de quejas o sugerencias.
-- **Subida única y reutilización**: La referencia del archivo en Gemini se almacena en el campo `gemini_file_id` del modelo `DataSource`. Las siguientes consultas reutilizan el mismo archivo ya presente en Google (válido por 48 h) sin resubirlo por red.
-- **Resubida diaria**: el comando `sync_gemini_files` (crontab de las 12:00 AM) resube, con los datos del caché, las fuentes que tienen `gemini_file_id` (`resync_source_file`: sube el nuevo y después borra el viejo), así el archivo no llega a expirar. La subida en la consulta queda para la primera pregunta de una fuente, la que se editó o una noche en que el cron no corrió. Cada corrida queda en `TaskRun`.
-- **Invalidación**: Al actualizar la fuente (`source_refresh`) o alterar su estructura de columnas/fórmulas, el archivo remoto se elimina (`gemini_delete_file`) y el identificador se limpia automáticamente para regenerarse en la siguiente consulta.
+- **Qué se sube**: la hoja original de la fuente (`sheets.source_frame`: la de Google, o la transformada de una hoja de respuestas de Google Forms), sin la configuración de la fuente: ni nombres a mostrar, ni columnas excluidas, ni campos calculados. El contexto de columnas del prompt sale de la misma hoja, con sus nombres originales.
+- **Cuándo se sube**: el archivo y la huella (sha256) del CSV quedan en `gemini_file_id` y `gemini_file_hash`. Una consulta reutiliza el archivo si la huella coincide y Gemini lo da activo (lo borra a las 48 h); si no hay archivo, expiró o la hoja cambió, sube el nuevo y después borra el viejo. Cambiar columnas o campos calculados no toca el archivo. Cada consulta marca `chat_used_at` (en la vista).
+- **Subida nocturna**: el comando `sync_gemini_files` (crontab de las 12:00 AM) aplica la misma regla (`resync_source_file` → subida, vigente o vacía) solo a las fuentes con archivo consultadas en los últimos `GEMINI_SYNC_IDLE_DAYS` días (7 por defecto); las demás no se suben aunque su hoja cambie, y la próxima consulta lo hace. Así el chat de una fuente en uso casi nunca espera la subida. Cada corrida queda en `TaskRun`.
 
 ### 9.4 Sugerencias del chat (`services/ai_suggestions.py`)
 

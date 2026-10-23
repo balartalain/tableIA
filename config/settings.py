@@ -193,6 +193,9 @@ GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
 # Limitar los tokens de razonamiento de cada llamada (services/ai_spec.THINKING_BUDGETS): es lo
 # que más tarda. Ponerlo en False con un modelo que no admita ese límite.
 GEMINI_LIMIT_THINKING = config("GEMINI_LIMIT_THINKING", default=True, cast=bool)
+# Días sin consultas al chat de datos tras los que la subida nocturna (sync_gemini_files) deja
+# de mantener el archivo de la fuente en Gemini; la próxima consulta lo sube.
+GEMINI_SYNC_IDLE_DAYS = config("GEMINI_SYNC_IDLE_DAYS", default=7, cast=int)
 
 # Auditoría de cada spec generado por IA junto al prompt que lo originó (logger
 # "tableia.ai_audit"), para revisar y mejorar el system prompt con el tiempo.

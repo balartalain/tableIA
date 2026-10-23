@@ -190,8 +190,10 @@ Con `crontab -e` del usuario `tableia`:
 
 - `send_campaign_emails`: el envío de correos. El intervalo debe coincidir con
   `CAMPAIGN_CRON_MINUTES`. Detalle en [`configuracion_correos.md` §1](configuracion_correos.md).
-- `sync_gemini_files`: a las 12:00 AM resube a Gemini las fuentes que usan el chat de datos, para
-  que su archivo no expire y el chat no tenga que subirlo mientras el usuario espera.
+- `sync_gemini_files`: a las 12:00 AM sube a Gemini las fuentes consultadas en el chat de datos
+  en los últimos `GEMINI_SYNC_IDLE_DAYS` días (7 por defecto) cuyo archivo expiró o cuya hoja
+  cambió, para que el chat no tenga que subirlo mientras el usuario espera. El resumen de la
+  corrida cuenta subidas, vigentes (sin cambios, no se suben), sin uso, vacías y con error.
 
 El cron usa la hora del sistema, no la `TIME_ZONE` de Django. Con el servidor en
 `America/Santo_Domingo` (`timedatectl`), `0 0` es la medianoche local; si está en UTC, la
@@ -206,7 +208,8 @@ Cada corrida queda en el admin, en «Tareas en segundo plano».
 - Entrar con Google, crear un tablero y elegir una hoja con el Picker.
 - Generar un widget con IA; queda registrado en `ai_audit.log`.
 - Probar un envío: `venv/bin/python manage.py send_campaign_emails --dashboard <id> --force`.
-- Probar la subida a Gemini: `venv/bin/python manage.py sync_gemini_files --source <id>`.
+- Probar la subida a Gemini: `venv/bin/python manage.py sync_gemini_files --source <id>` (no
+  mira el uso de la fuente).
 - Logs de la app: `journalctl -u tableia -f`.
 
 ## Actualizar a una nueva versión

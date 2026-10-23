@@ -7,6 +7,9 @@
     <span class="flex items-center gap-1.5">
       <i class="ti ti-sparkles text-sm" aria-hidden="true"></i>
       Consultar a la IA
+      <!-- Sugerencias generándose y aún sin ninguna disponible. -->
+      <i x-show="$store.dashboard.drawerSuggestionsLoading && !$store.dashboard.drawerSuggestions.length" x-cloak
+         class="ti ti-refresh text-xs animate-spin" title="Generando sugerencias…" aria-label="Generando sugerencias"></i>
       <span x-show="$store.dashboard.drawerThread.length" x-cloak
             class="rounded-full bg-accent px-1.5 text-xs font-semibold leading-4 text-accent-on"
             x-text="$store.dashboard.drawerThread.filter(m => m.role === 'user').length"></span>

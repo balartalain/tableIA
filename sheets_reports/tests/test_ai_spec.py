@@ -678,6 +678,8 @@ class ColumnResolutionTests(SimpleTestCase):
         self.assertEqual(res["code"], ["print(123)"])
         self.assertEqual(len(res["images"]), 1)
         self.assertTrue(res["images"][0].startswith("data:image/png;base64,"))
+        config = mock_client.models.generate_content.call_args[1]["config"]
+        self.assertEqual(config.thinking_config.thinking_budget, 0)
 
     @mock.patch("sheets_reports.services.ai_spec.gemini_client")
     def test_generate_with_code_execution_sin_partes(self, mock_client_fn):

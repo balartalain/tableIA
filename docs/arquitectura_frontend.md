@@ -358,11 +358,9 @@ fromServer(w) → new WidgetClass(raw)
   │
   ├── mount() → buildElement() → DOM element
   │     ├── _attachCommonEvents()  (edit/delete buttons)
-  │     ├── initResize()           (interact.js)
-  │     └── setLoading(true)
+  │     └── initResize()           (interact.js)
   │
   ├── applyRender(entry)
-  │     ├── setLoading(false)
   │     └── draw(entry.data, entry.style, entry.title)
   │
   └── destroy()
@@ -638,7 +636,7 @@ Dos niveles:
 
 El evento `dashboard:filters-changed` dispara `store.refreshData()`, que re-fetch `/render/` con los filtros y llama `applyRender` en cada widget.
 
-La barra de carga de la página (`#page-loader`) es el único indicador de carga del tablero, en el editor y en la vista compartida. Está visible mientras queda alguna carga en curso: la carga inicial, cada refresco por filtros, la creación de un widget y el guardado desde el panel. La controla `setPageLoading()` (en `dashboard-store.js` y en `board-view-init.js`), que cuenta las cargas pendientes. Las peticiones de datos de la página (la carga de una página y cada refresco por filtros) ocupan un solo lugar en esa cuenta (`_setRenderLoading`): cada una toma un número de `_renderSeq`, y solo la última lo libera al responder; cambiar de página toma un número nuevo, así que las peticiones en vuelo de la página anterior ni se pintan ni sostienen la barra. Mientras la barra está activa el documento lleva `.is-page-loading` y no se puede cambiar de página: un velo tapa las pestañas marcadas con `data-lock-while-loading` (`#page-tabs`, `#view-tabs`) y `switchPage` / `showPage` no hacen nada (`isPageLoading()`). Así la foto de una página siempre coincide con sus filtros. `BaseWidget.setLoading()` la activa y además marca el widget con `.tb-widget-loading` (opaco) mientras carga; solo un cambio de estado suma o resta en la cuenta. Guardar el diseño (posición, tamaño) no es una carga y no los marca.
+La barra de carga de la página (`#page-loader`) es el único indicador de carga del tablero, en el editor y en la vista compartida. Está visible mientras queda alguna carga en curso: la carga inicial, cada refresco por filtros, la creación de un widget y el guardado desde el panel. La controla `setPageLoading()` (en `dashboard-store.js` y en `board-view-init.js`), que cuenta las cargas pendientes. Hay dos fuentes de carga: los datos de la página y guardar un widget que recalcula sus datos (`_saveWithLoader`, desde el panel o «Generar con IA»; guardar solo el diseño no es una carga). Los widgets no tienen estado de carga propio. Las peticiones de datos de la página (la carga de una página y cada refresco por filtros) ocupan un solo lugar en esa cuenta (`_setRenderLoading`): cada una toma un número de `_renderSeq`, y solo la última lo libera al responder; cambiar de página toma un número nuevo, así que las peticiones en vuelo de la página anterior ni se pintan ni sostienen la barra. Mientras la barra está activa el documento lleva `.is-page-loading` y no se puede cambiar de página: un velo tapa las pestañas marcadas con `data-lock-while-loading` (`#page-tabs`, `#view-tabs`) y `switchPage` / `showPage` no hacen nada (`isPageLoading()`). Así la foto de una página siempre coincide con sus filtros. Con `.is-page-loading` el lienzo (`#dashboard-canvas`) queda además opaco y sin interacción (`tablero-theme.css`); la caja de filtros sigue usable.
 
 ## Drag and drop
 
@@ -738,7 +736,7 @@ regla y las filas del editor son de la app y usan sus clases.
 
 | Grupo | Variables | Clases |
 |---|---|---|
-| Tarjeta y texto | `--tb-card-*`, `--tb-title-text`, `--tb-text*`, `--tb-surface-muted`, `--tb-link` | `.tb-widget`, `.tb-widget-title`, `.tb-text`, `.tb-text-muted`, `.tb-text-subtle`, `.tb-text-bad`, `.tb-link`, `.tb-surface-muted`, `.tb-border`, `.tb-track`, `.tb-swatch`, `.tb-retry`, `.tb-widget-loading` |
+| Tarjeta y texto | `--tb-card-*`, `--tb-title-text`, `--tb-text*`, `--tb-surface-muted`, `--tb-link` | `.tb-widget`, `.tb-widget-title`, `.tb-text`, `.tb-text-muted`, `.tb-text-subtle`, `.tb-text-bad`, `.tb-link`, `.tb-surface-muted`, `.tb-border`, `.tb-track`, `.tb-swatch`, `.tb-retry` |
 | Estados | `--tb-status-good/warn/bad(-bg)` | `.tb-status-*`, `.tb-fill-*` |
 | KPI | `--tb-kpi-*` | `.tb-kpi-value`, `.tb-kpi-label`, `.tb-kpi-sub`, `.tb-delta-*`, `.tb-progress` |
 | Tablas y ranking | `--tb-table-*`, `--tb-bar-*` | `.tb-table` (y sus partes), `.tb-pager`, `.tb-bar`, `.tb-bar-lead`, `.tb-rank-pos` |

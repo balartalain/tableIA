@@ -44,7 +44,6 @@ document.addEventListener('alpine:init', () => {
     // Todos los widgets de la página se calculan en un solo request al endpoint render (sin IA).
     async refreshData() {
       const seq = ++this._renderSeq;
-      this.widgets.forEach(w => w.setLoading(true));
       this._setRenderLoading(true);
       try {
         const r = await fetch(this._renderUrl());
@@ -53,7 +52,7 @@ document.addEventListener('alpine:init', () => {
         if (seq !== this._renderSeq) return null;
         if (!r.ok || !data) {
           const message = (data && data.error) || `Error ${r.status} al cargar los datos`;
-          this.widgets.forEach(w => { w.setLoading(false); w.renderError(message, { retryable: true }); });
+          this.widgets.forEach(w => w.renderError(message, { retryable: true }));
           return null;
         }
         const byId = Object.fromEntries(data.widgets.map(w => [w.id, w]));
@@ -67,7 +66,7 @@ document.addEventListener('alpine:init', () => {
         return data;
       } catch (e) {
         if (seq !== this._renderSeq) return null;
-        this.widgets.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
+        this.widgets.forEach(w => w.renderError('No se pudo conectar con el servidor', { retryable: true }));
         return null;
       } finally {
         if (seq === this._renderSeq) this._setRenderLoading(false);
@@ -83,7 +82,7 @@ document.addEventListener('alpine:init', () => {
 
     // La foto de la página dibujada; ninguna si todavía hay datos en camino.
     _snapshotPage() {
-      if (!this._loadedPage || this._renderLoading || this.widgets.some(w => w._loading)) return null;
+      if (!this._loadedPage || isPageLoading()) return null;
       return {
         page: this._loadedPage,
         dashboard: { sources: this.sources },
@@ -104,7 +103,7 @@ document.addEventListener('alpine:init', () => {
       if (snapshot) this._pageCache[snapshot.page] = snapshot;
       // Su propia secuencia: las respuestas en vuelo de la página anterior ya no valen.
       const seq = ++this._renderSeq;
-      this.widgets.forEach(w => { w.setLoading(false); w.destroy(); });
+      this.widgets.forEach(w => w.destroy());
       this.widgets = [];
       this._loadedPage = null;
       canvasEl.innerHTML = '';

@@ -394,7 +394,6 @@
       this.style = raw.style || {};
       this.data = raw.data || null;
       this._dirty = raw._dirty ?? false;
-      this._loading = false;
       this.el = null;
       this._chart = null;
       this._lastEntry = null;
@@ -475,7 +474,6 @@
     mount() {
       this.el = this.buildElement();
       this._attachCommonEvents();
-      this.setLoading(this.hasSpec);
       if (!this.hasSpec) this.renderPlaceholder();
       return this.el;
     }
@@ -511,21 +509,11 @@
       this._readOnly = true;
       this.el = this.buildReadOnlyElement();
       this._attachInsightEvent();
-      this.setLoading(true);
       return this.el;
     }
 
     getContentContainer() {
       return this.el ? this.el.querySelector(`#chart-${this.id}`) : null;
-    }
-
-    // Mientras carga, el widget se pone opaco y la barra superior (#page-loader) se muestra.
-    // La barra cuenta las cargas: solo un cambio de estado suma o resta.
-    setLoading(isLoading) {
-      isLoading = !!isLoading;  // 1 y true son el mismo estado: si no, la cuenta se descuadra
-      if (this._loading !== isLoading && typeof setPageLoading === 'function') setPageLoading(isLoading);
-      this._loading = isLoading;
-      if (this.el) this.el.classList.toggle('tb-widget-loading', isLoading);
     }
 
     updateChrome() {
@@ -631,7 +619,6 @@
     }
 
     applyRender(entry) {
-      this.setLoading(false);
       if (!entry) return;
       if (entry.position_only) {
         window.dispatchEvent(new Event('resize'));

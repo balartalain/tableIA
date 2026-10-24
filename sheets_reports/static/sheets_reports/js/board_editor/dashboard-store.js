@@ -282,7 +282,6 @@ document.addEventListener('alpine:init', () => {
         data: w.data || null,
         error: w.error || null,
         _dirty: false,
-        _loading: false,
         el: null,
         _chart: null,
       };
@@ -311,7 +310,7 @@ document.addEventListener('alpine:init', () => {
       this.sources = (data.dashboard && data.dashboard.sources) || [];
       if (data.dashboard && data.dashboard.pages) this.pages = data.dashboard.pages;
       this.currentPageId = data.page;
-      // Instancias reales (mount/applyRender/setLoading), no objetos planos.
+      // Instancias reales (mount/applyRender), no objetos planos.
       this.widgets = data.widgets
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))
         .filter(Boolean)
@@ -345,7 +344,7 @@ document.addEventListener('alpine:init', () => {
     // La foto de la página actual desde sus widgets vivos (con lo editado en ella). Sin foto si
     // todavía hay datos en camino: la selección de filtros ya no coincidiría con lo dibujado.
     _snapshotPage() {
-      if (!this.boardLoaded || this._renderLoading || this.widgets.some(w => w._loading)) return null;
+      if (!this.boardLoaded || isPageLoading()) return null;
       return {
         page: this.currentPageId,
         dashboard: { sources: this.sources },
@@ -371,7 +370,6 @@ document.addEventListener('alpine:init', () => {
       const snapshot = this._snapshotPage();
       if (snapshot) this._pageCache[this.currentPageId] = snapshot;
       this.widgets.forEach(w => {
-        w.setLoading(false);
         w.destroy();
         if (w.el) w.el.remove();
       });
@@ -464,7 +462,6 @@ document.addEventListener('alpine:init', () => {
     async refreshData() {
       const seq = ++this._renderSeq;
       const saved = this.widgets.filter(w => w.id > 0 && w.fields);
-      saved.forEach(w => w.setLoading(true));
       this._setRenderLoading(true);
       try {
         const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
@@ -472,7 +469,7 @@ document.addEventListener('alpine:init', () => {
         if (seq !== this._renderSeq) return;
         if (!r.ok || !data) {
           const message = (data && data.error) || `Error ${r.status} al cargar los datos`;
-          saved.forEach(w => { w.setLoading(false); w.renderError(message, { retryable: true }); });
+          saved.forEach(w => w.renderError(message, { retryable: true }));
           return;
         }
         this._reportFilterErrors(data);
@@ -491,7 +488,7 @@ document.addEventListener('alpine:init', () => {
         });
       } catch (e) {
         if (seq !== this._renderSeq) return;
-        saved.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
+        saved.forEach(w => w.renderError('No se pudo conectar con el servidor', { retryable: true }));
       } finally {
         if (seq === this._renderSeq) this._setRenderLoading(false);
       }
@@ -681,10 +678,8 @@ document.addEventListener('alpine:init', () => {
         return other && (other.position?.order ?? -1) > order;
       });
       container.insertBefore(widget.mount(), after || null);
-      widget.setLoading(true);
-      const result = await this._saveWidget(widget);
+      const result = await this._saveWithLoader(widget);
       if (!result.ok) {
-        widget.setLoading(false);
         if (widget.el) widget.el.remove();
         this.widgets = this.widgets.filter(w => w !== widget);
         return result;
@@ -720,6 +715,17 @@ document.addEventListener('alpine:init', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ position: w.position }),
         }).catch(() => null)));
+    },
+
+    // Guardar un widget que recalcula sus datos es una carga: la barra queda activa (y el
+    // lienzo opaco) hasta que responde. Guardar solo el diseño usa _saveWidget sin barra.
+    async _saveWithLoader(w) {
+      setPageLoading(true);
+      try {
+        return await this._saveWidget(w);
+      } finally {
+        setPageLoading(false);
+      }
     },
 
     // Crea o guarda según el id: un widget con id local todavía no existe en el servidor.
@@ -804,8 +810,6 @@ document.addEventListener('alpine:init', () => {
 
     async removeWidget(id) {
       const removed = this.widgets.find(w => w.id === id);
-      // Si estaba cargando, la barra superior no debe quedar contándolo.
-      if (removed) removed.setLoading(false);
       if (removed && removed.constructor.placement === 'header' && this.clearBoardFilters) {
         this.clearBoardFilters((removed.fields && removed.fields.dimensions) || []);
       }
@@ -1034,7 +1038,6 @@ document.addEventListener('alpine:init', () => {
     closeDrawer() {
       const w = this.editingWidget;
       if (w && w.id < 0 && (!w.fields || !w.fields.dimensions || !w.fields.dimensions.length)) {
-        w.setLoading(false);
         if (w.el) w.el.remove();
         this.widgets = this.widgets.filter(x => x !== w);
       }
@@ -1736,11 +1739,9 @@ document.addEventListener('alpine:init', () => {
         w._dirty = true;
         w.updateChrome?.();
 
-        // Recalcula sus datos: opaco y con la barra superior hasta que llega el resultado.
-        w.setLoading(true);
-        const result = await this._saveWidget(w);
+        // Recalcula sus datos: con la barra (y el lienzo opaco) hasta que llega el resultado.
+        const result = await this._saveWithLoader(w);
         if (!result.ok) {
-          w.setLoading(false);
           this.drawerSaveError = result.error || 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
           return false;
         }
@@ -1749,7 +1750,6 @@ document.addEventListener('alpine:init', () => {
         if (typeof window.showToast === 'function') window.showToast(toast);
         return true;
       } catch (e) {
-        w.setLoading(false);
         this.drawerSaveError = e.message;
         return false;
       } finally {

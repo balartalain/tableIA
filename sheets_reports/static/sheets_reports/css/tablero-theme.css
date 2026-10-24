@@ -142,8 +142,10 @@
   border-radius: var(--tb-card-radius);
   box-shadow: var(--tb-card-shadow);
 }
-/* Widget cargando (BaseWidget.setLoading): opaco; la barra superior es el indicador. */
-.tablero .tb-widget-loading { opacity: .3; transition: opacity .2s; }
+/* Mientras carga (barra superior activa, .is-page-loading) el lienzo queda opaco y sin
+   interacción; la caja de filtros sigue usable para marcar varias opciones seguidas. */
+.tablero #dashboard-canvas { transition: opacity .2s; }
+.is-page-loading .tablero #dashboard-canvas { opacity: .3; pointer-events: none; }
 .tablero .tb-widget-title {
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);

@@ -59,7 +59,6 @@
   /* ── Controles del lienzo (caja de filtros) ── */
   --tb-control-bg:           var(--color-surface);
   --tb-control-border:       var(--color-border);
-  --tb-control-border-focus: var(--color-accent);
 
   /* ── Gráficos: paleta categórica (series y categorías) ── */
   --tb-chart-1: var(--brand-navy-600);
@@ -198,9 +197,10 @@
 .tablero .tb-retry:hover { background: var(--tb-surface-muted); }
 
 /* Caja de filtros (VirtualSelect dentro del lienzo) */
-.tablero .vscomp-toggle-button { background: var(--tb-control-bg); border-color: var(--tb-control-border); }
-.tablero .vselect.focused .vscomp-toggle-button,
-.tablero .vselect:focus .vscomp-toggle-button { border-color: var(--tb-control-border-focus); }
+.tablero .vscomp-toggle-button { background: var(--tb-control-bg); border-color: var(--tb-control-border); border-radius: var(--tb-card-radius); }
+/* Abierto o con foco se ve igual que en reposo: sin la sombra que pone VirtualSelect. */
+.tablero .vscomp-wrapper.focused .vscomp-toggle-button,
+.tablero .vscomp-wrapper:focus .vscomp-toggle-button { border-color: var(--tb-control-border); box-shadow: none; }
 
 
 /* ═══ TABLA DE LOS WIDGETS «table» y «dynamic_table» (.tb-table, utils/data-table.js) ═══

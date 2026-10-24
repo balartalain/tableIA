@@ -282,7 +282,7 @@ Componente Alpine `dataChat()` (`data_chat.html`), solo en la vista compartida (
   - **Texto explicativo**: Formateado en Markdown y parseado mediante `marked.js` (o fallback nativo).
   - **Gráficos**: Imágenes PNG en Base64 generadas por `matplotlib`/`seaborn` durante la ejecución de código en Gemini Sandbox.
   - **Código ejecutado**: Acordeón desplegable con los bloques de código Python utilizados para derivar los resultados.
-- La fuente de datos se sube una sola vez a Gemini Files API (`gemini_file_id`), garantizando consultas rápidas sin resubida repetitiva de datos.
+- Cada pregunta sube a Gemini solo las columnas que necesita (ver `arquitectura_backend.md` §9.3). Si el navegador corta la espera (`DATA_CHAT_FETCH_TIMEOUT_MS`), muestra un aviso para acotar la pregunta.
 
 ### Modal de Insight IA por Widget (`widget_ai_insight_modal.html`)
 

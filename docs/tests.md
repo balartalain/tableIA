@@ -88,14 +88,14 @@ Cómo se graba:
 ### Tareas en segundo plano
 | Archivo | Qué prueba |
 |---|---|
-| `tests/test_tasks.py` | Las corridas del cron (`TaskRun`): registro con estado y duración, el mensaje de error que se relanza, la poda de las viejas y el registro que dejan `send_campaign_emails` y `sync_gemini_files` (solo las fuentes con uso reciente del chat, salvo `--source`; una fuente que falla no corta las demás y deja la corrida en error). |
+| `tests/test_tasks.py` | Las corridas del cron (`TaskRun`): registro con estado y duración, el mensaje de error que se relanza, la poda de las viejas y el registro que deja `send_campaign_emails`. |
 
 ### IA
 | Archivo | Qué prueba |
 |---|---|
 | `tests/test_ai_spec.py` | Generación del formulario por la IA (con el modelo simulado): reintento con errores, reparación adicional acotada de correlaciones con escalas mezcladas, conservación de escalas efectivas, schema de la tool y prompt. |
 | `tests/test_ai_suggestions.py` | Pedidos sugeridos del chat: limpieza y caché. |
-| `tests/test_ai_data_chat.py` | Chatbot de datos (Gemini simulado): la hoja original sin la configuración de la fuente, reuso del archivo y resubida si expiró o cambió la huella, resync nocturno (vigente, subida, vacía), la marca de uso del endpoint, el contexto con las escalas y solo las columnas del CSV (sin las virtuales de las cuadrículas), y el endpoint. La respuesta sin contenido de Gemini (texto de reserva) está en `test_ai_spec.py`. |
+| `tests/test_ai_data_chat.py` | Chatbot de datos (Gemini simulado): solo la ID y las columnas que elige la pregunta, con todas las filas y los nombres a mostrar (los que chocan conservan el encabezado), el archivo se borra al terminar, los valores de ejemplo en la selección, el aviso si son demasiadas columnas o ninguna, el aviso por tiempo máximo, el contexto sin las columnas virtuales de las cuadrículas, y el endpoint. La respuesta sin contenido de Gemini (texto de reserva) está en `test_ai_spec.py`. |
 | `tests/test_ai_formula.py` | «Generar con IA» de un campo calculado (modelo simulado): fórmula con su árbol, motivo cuando no puede, reintento con el error del motor, errores legibles. |
 | `tests/test_email_campaign.py` | Envío de correos (con el backend de correo en memoria): lectura del CSV, cifrado de la contraseña, el mensaje en HTML con su alternativa en texto y el saneo del cuerpo, cuándo le toca ejecutarse (diario, semanal, zona horaria, cupo del día, día cerrado), la ejecución (tope por remitente, correos espaciados uno por segundo, reparto en ronda entre remitentes, candado entre crons, remitente que falla, reintentos, remitente que no inicia sesión, bitácora), sus endpoints (la contraseña nunca sale, validación, solo el dueño), el reporte (estado del envío, fecha estimada de fin, enviados por día, por remitente, errores por motivo, tablas paginadas) y el comando del crontab. |
 

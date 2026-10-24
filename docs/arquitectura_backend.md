@@ -122,7 +122,7 @@ sheets_reports/
   models.py                 # Dashboard, Widget, default_position, widget_type_choices
   views.py                  # Vistas HTTP (adaptadores sobre services/)
   views_email.py            # Vistas del envío de correos (adaptadores sobre services/mailing.py)
-  management/commands/      # lo que ejecuta el crontab: send_campaign_emails (configuracion_correos.md), sync_gemini_files (deploy.md §9)
+  management/commands/      # lo que ejecuta el crontab: send_campaign_emails (configuracion_correos.md)
   admin.py                  # Django Admin (Dashboard con inline de widgets)
   apps.py                   # ready(): valida la longitud de las claves de widget
 
@@ -219,9 +219,6 @@ Una pestaña (`gid`) de una hoja de Google Sheets conectada a un tablero.
 | `first_row_headers` | `BooleanField(default=True)` | La fila 1 son los encabezados; si no, «Columna A»… |
 | `columns` | `JSONField` | `[{name, label?, type: text\|number\|date, include, scale?, order?}]` |
 | `calculated_fields` | `JSONField` | `[{id, name, formula, format: number\|percent}]` (ver §10.4) |
-| `gemini_file_id` | `CharField(255, blank)` | Identificador del archivo en Gemini Files API (se reutiliza en el chat analítico) |
-| `gemini_file_hash` | `CharField(64, blank)` | Huella (sha256) del CSV subido: si la hoja ya no coincide, se vuelve a subir |
-| `chat_used_at` | `DateTimeField(null)` | Última consulta al chat analítico; la subida nocturna se salta las fuentes sin uso reciente |
 
 - `name` de cada columna es el encabezado de la hoja; `label`, el **nombre a mostrar**, que la
   reemplaza en todo el tablero (schema, motor, filtros, IA). Los widgets guardan ese nombre.
@@ -850,13 +847,13 @@ Genera o ajusta el `WidgetForm` (`fields` + `style`) de un widget individual med
 
 Permite realizar consultas analíticas libres en lenguaje natural sobre los datos del tablero, disponible tanto en el editor como en la vista compartida (`board_view`):
 - `POST /api/dashboard/{id}/data-chat/` recibe `{prompt, source_id?}`.
-- **Perfilado e identificación de columnas (`SheetContext`)**: Incluye en el prompt de la IA el perfil de las columnas generado por `columns_context(ctx)` (tipos, muestras y escala de medida: `continuous`, `discrete`, `ordinal`, `nominal` o `texto libre` / respuestas abiertas).
+- **Contexto de columnas**: `columns_context(ctx, scales=False)`: alias, nombre a mostrar, tipo (numérica, fecha o texto), valores de ejemplo y las marcas de la ID y de la fecha de envío; sin la escala de medida, que Gemini deduce de los datos.
 - **Enfoque híbrido (cuantitativo y cualitativo)**:
   - **Consultas cuantitativas/estadísticas**: Activa la herramienta `code_execution` para cálculos numéricos exactos (`pandas`, `numpy`) y generación de gráficos (`matplotlib`, `seaborn`).
   - **Consultas cualitativas/texto libre**: Utiliza Python para extraer las respuestas abiertas de la columna y combina la comprensión de lenguaje natural de Gemini (LLM) para analizar semánticamente aspectos negativos/positivos, temas de quejas o sugerencias.
-- **Qué se sube**: la hoja original de la fuente (`sheets.source_frame`: la de Google, o la transformada de una hoja de respuestas de Google Forms), sin la configuración de la fuente: ni nombres a mostrar, ni columnas excluidas, ni campos calculados. El contexto de columnas del prompt sale de la misma hoja, con sus nombres originales.
-- **Cuándo se sube**: el archivo y la huella (sha256) del CSV quedan en `gemini_file_id` y `gemini_file_hash`. Una consulta reutiliza el archivo si la huella coincide y Gemini lo da activo (lo borra a las 48 h); si no hay archivo, expiró o la hoja cambió, sube el nuevo y después borra el viejo. Cambiar columnas o campos calculados no toca el archivo. Cada consulta marca `chat_used_at` (en la vista).
-- **Subida nocturna**: el comando `sync_gemini_files` (crontab de las 12:00 AM) aplica la misma regla (`resync_source_file` → subida, vigente o vacía) solo a las fuentes con archivo consultadas en los últimos `GEMINI_SYNC_IDLE_DAYS` días (7 por defecto); las demás no se suben aunque su hoja cambie, y la próxima consulta lo hace. Así el chat de una fuente en uso casi nunca espera la subida. Cada corrida queda en `TaskRun`.
+- **Qué columnas se usan**: por cada pregunta, una llamada corta (`generate_json`, `call="data_chat_columns"`) recibe el contexto de columnas con sus valores de ejemplo y la pregunta, y devuelve los alias de las columnas que hacen falta (`_chat_columns`). Si son más de `MAX_CHAT_COLUMNS` (15) o ninguna, el chat responde pidiendo acotar la pregunta, sin consultar el análisis.
+- **Qué se sube**: la hoja original de la fuente (`sheets.source_frame`: la de Google, o la transformada de una hoja de respuestas de Google Forms) con los nombres a mostrar de sus columnas (`column_display_name`; si dos chocan, esas conservan el encabezado), solo la ID y las columnas elegidas, con todas las filas. Se sube a Gemini Files API en cada pregunta y se borra al terminar. El contexto de columnas del prompt describe solo esas columnas.
+- **Tiempo máximo**: la consulta con ejecución de código tiene su propio límite (`DATA_CHAT_TIMEOUT_MS`, 100 s, sin reintento), por debajo de los 120 s del navegador y de gunicorn; si se pasa, el chat responde con un aviso para acotar la pregunta.
 
 ### 9.4 Sugerencias del chat (`services/ai_suggestions.py`)
 

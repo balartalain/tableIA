@@ -112,19 +112,6 @@ class DataSource(models.Model):
                   'Sin agregaciones son por fila (una columna más); con SUM, AVG… son agregados '
                   '(solo métricas). Ver engine/formulas.py.',
     )
-    gemini_file_id = models.CharField(
-        max_length=255, blank=True, default="",
-        help_text="Id del archivo subido a Gemini Files API para el chatbot de datos.",
-    )
-    gemini_file_hash = models.CharField(
-        max_length=64, blank=True, default="",
-        help_text="Huella (sha256) del CSV subido a Gemini: si la hoja ya no coincide, se vuelve a subir.",
-    )
-    chat_used_at = models.DateTimeField(
-        null=True, blank=True,
-        help_text="Última consulta al chatbot de datos: la subida nocturna a Gemini se salta las "
-                  "fuentes sin uso en los últimos GEMINI_SYNC_IDLE_DAYS días.",
-    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

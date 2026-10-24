@@ -99,7 +99,10 @@ function dataChat() {
           timestamp: new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }),
         });
       } catch (e) {
-        this.error = e.message || 'Error de conexión con el asistente.';
+        // El navegador corta a los DATA_CHAT_FETCH_TIMEOUT_MS; el servidor avisa antes (100 s).
+        this.error = e.name === 'AbortError'
+          ? 'El asistente tardó demasiado en responder. Intenta con una pregunta más acotada.'
+          : e.message || 'Error de conexión con el asistente.';
       } finally {
         this.loading = false;
       }

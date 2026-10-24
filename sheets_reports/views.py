@@ -305,8 +305,6 @@ def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=""):
             columns=copy.deepcopy(source.columns or []),
             calculated_fields=copy.deepcopy(source.calculated_fields or []),
             is_form_response=source.is_form_response,
-            gemini_file_id=source.gemini_file_id,
-            gemini_file_hash=source.gemini_file_hash,
         )
     for widget in dashboard.widgets.all():
         Widget.objects.create(
@@ -1437,8 +1435,6 @@ def dashboard_data_chat(request, dashboard_id):
         return error
 
     from sheets_reports.services.ai_data_chat import ask_data_chat
-    # La subida nocturna a Gemini solo mantiene las fuentes que se consultan.
-    DataSource.objects.filter(pk=source.pk).update(chat_used_at=now())
     try:
         result = ask_data_chat(source, prompt)
         return JsonResponse(result)

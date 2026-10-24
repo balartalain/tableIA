@@ -1,36 +1,37 @@
 """
 Chatbot analítico sobre la fuente de datos del tablero usando Gemini y ejecución de código Python.
-Sube a Google la hoja original de la fuente (sin su configuración de columnas ni campos
-calculados) y reutiliza el archivo mientras siga activo y la hoja no cambie; permite hacer
-preguntas analíticas, ejecutar cálculos en pandas y generar gráficos con matplotlib/seaborn.
+Por cada pregunta, una llamada corta elige las columnas que hacen falta; solo esas (con todas las
+filas) se suben a Gemini Files API para la consulta, que ejecuta cálculos en pandas y genera
+gráficos con matplotlib/seaborn, y el archivo se borra al terminar. La hoja es la original de la
+fuente, con los nombres a mostrar de sus columnas (más cortos que los encabezados de un
+formulario).
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import tempfile
 from typing import Any
 
-from django.conf import settings
 
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.services.ai_spec import (
-    SpecGenerationError,
+    AITimeoutError,
     columns_context,
     gemini_delete_file,
-    gemini_get_file,
     gemini_upload_file,
+    generate_json,
     generate_with_code_execution,
 )
-from sheets_reports.services.sheets import source_frame
+from sheets_reports.services.sheets import column_display_name, get_field_samples, source_frame
+from sheets_reports.utils.data import is_id_column
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_INSTRUCTION = """\
 Eres un asistente analítico experto de datos en español para un tablero de control.
 El usuario te hará preguntas sobre el conjunto de datos cargado en tu entorno de trabajo (archivo CSV).
-Se te proporciona el perfil de las columnas de la hoja, indicando su escala de medida (numéricas, fechas, categorías o columnas de "texto libre" para respuestas abiertas, comentarios, opiniones o sugerencias).
+Se te proporcionan las columnas de la hoja con su tipo (numérica, fecha o texto) y valores de ejemplo.
 
 Instrucciones:
 1. ANÁLISIS CUANTITATIVO Y ESTADÍSTICO:
@@ -38,9 +39,8 @@ Instrucciones:
 
 2. ANÁLISIS CUALITATIVO Y DE TEXTO LIBRE:
    - Para preguntas sobre comentarios, opiniones, aspectos positivos/negativos, temas de queja, sugerencias o análisis de texto abierto:
-     a) Usa Python con `pandas` para seleccionar la columna de texto libre no nula y listar sus textos o una muestra amplia (ejemplo: `print(df['comentario'].dropna().tolist())`).
-     b) Emplea tu capacidad nativa de comprensión de lenguaje natural sobre las respuestas impresas para sintetizar y clasificar cualitativamente los hallazgos: agrupa patrones de opinión, identifica aspectos negativos/positivos principales y resume las conclusiones clave.
-     c) NO intentes realizar solo conteos exactos de cadenas (`value_counts()`) sobre texto libre, ya que las respuestas abiertas varían en redacción y requieren interpretación semántica.
+     a) Emplea tu capacidad nativa de comprensión de lenguaje natural sobre las respuestas para sintetizar y clasificar cualitativamente los hallazgos: agrupa patrones de opinión, identifica aspectos negativos/positivos principales y resume las conclusiones clave.
+     b) NO intentes realizar solo conteos exactos de cadenas (`value_counts()`) sobre texto libre, ya que las respuestas abiertas varían en redacción y requieren interpretación semántica.
 
 3. GRÁFICOS:
    - Si la respuesta amerita un gráfico (o el usuario lo pide), crea el gráfico con `matplotlib.pyplot` o `seaborn`: prepara los datos primero y dibuja la figura en un único paso. Guárdalo obligatoriamente en disco con `plt.savefig('grafico.png', bbox_inches='tight')` y CIERRA SIEMPRE todas las figuras con `plt.close('all')` para evitar la emisión de lienzos en blanco o gráficos duplicados (con fondo limpio, etiquetas claras en español y título descriptivo).
@@ -53,48 +53,68 @@ Instrucciones:
 """
 
 
-def _source_csv(df) -> tuple[str, str]:
-    """El CSV que se sube a Gemini y su huella (sha256), para saber si la hoja cambió."""
-    csv = df.to_csv(index=False)
-    return csv, hashlib.sha256(csv.encode("utf-8")).hexdigest()
+# Columnas que puede usar una pregunta: con más, se le pide al usuario que la acote.
+MAX_CHAT_COLUMNS = 15
+
+TOO_MANY_COLUMNS = ("Tu pregunta abarca demasiadas columnas. Acótala: sé más específico sobre qué "
+                    "quieres comparar o analizar.")
+NO_COLUMNS = ("No encontré en los datos las columnas para esa pregunta. Sé más específico: nombra "
+              "las preguntas o los datos que quieres analizar.")
+TIMEOUT = ("La pregunta tomó demasiado tiempo. Prueba a acotarla (una comparación, unas pocas "
+           "preguntas del formulario).")
+
+COLUMNS_PROMPT = """\
+Un usuario hace una pregunta sobre una hoja de datos. Elige las columnas de la hoja que hacen falta
+para responderla: las que se comparan, agrupan, filtran o analizan, y nada más. Devuelve sus alias
+(col_1, col_2, …). La columna ID no hace falta.
+
+{columns}
+
+Pregunta del usuario:
+{prompt}
+"""
+
+COLUMNS_SCHEMA = {
+    "type": "object",
+    "properties": {"columns": {"type": "array", "items": {"type": "string"}}},
+    "required": ["columns"],
+}
 
 
-def _current_file(source, digest: str) -> Any:
-    """El archivo de la fuente en Gemini si tiene estos mismos datos y sigue activo (Gemini lo
-    borra a las 48 h); None si hay que subirlo."""
-    file_id = (getattr(source, "gemini_file_id", "") or "").strip()
-    if not file_id or getattr(source, "gemini_file_hash", "") != digest:
-        return None
-    return gemini_get_file(file_id)
+def _answer(text: str) -> dict[str, Any]:
+    return {"text": text, "images": [], "code": []}
 
 
-def get_or_upload_source_file(source, df) -> Any:
-    """La referencia del archivo de la fuente en Gemini Files API: el que ya está si sigue
-    activo y la hoja no cambió; si no, sube la hoja."""
-    csv, digest = _source_csv(df)
-    return _current_file(source, digest) or _upload_source_file(source, csv, digest)
+def _with_display_names(df, columns_config) -> Any:
+    """La hoja con los nombres a mostrar de la fuente (los que acortó la IA). Si dos columnas
+    acabarían con el mismo nombre, esas conservan el encabezado de la hoja."""
+    names = {c["name"]: column_display_name(c) for c in columns_config or [] if c.get("name") in df.columns}
+    taken = [names.get(c, c) for c in df.columns]
+    rename = {c: n for c, n in names.items() if n != c and taken.count(n) == 1}
+    return df.rename(columns=rename)
 
 
-def _upload_source_file(source, csv: str, digest: str) -> Any:
-    """Sube el CSV a Gemini Files API, guarda el nuevo ID y su huella en la fuente y borra el
-    archivo anterior. Sube antes de borrar: el chat nunca queda sin archivo."""
+def _chat_columns(prompt: str, ctx: SheetContext) -> list[str]:
+    """Las columnas que la IA dice que hacen falta para la pregunta, con su nombre real: sin la
+    ID, sin repetir y solo las que existen."""
+    raw = generate_json(COLUMNS_PROMPT.format(columns=columns_context(ctx, virtual=False, scales=False), prompt=prompt),
+                        COLUMNS_SCHEMA, call="data_chat_columns", thinking_budget=0)
+    columns = []
+    for alias in (raw.get("columns") if isinstance(raw, dict) else None) or []:
+        field = ctx.field_for(str(alias).strip())
+        if field in ctx.sheet_fields and not is_id_column(field) and field not in columns:
+            columns.append(field)
+    return columns
+
+
+def _upload_csv(df, display_name: str) -> Any:
+    """Sube `df` como CSV a Gemini Files API (el archivo temporal local se borra enseguida)."""
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
-            f.write(csv)
+            df.to_csv(f, index=False)
             tmp_path = f.name
-
-        display_name = f"source_{getattr(source, 'id', 'data')}.csv"
-        file_ref = gemini_upload_file(tmp_path, display_name=display_name)
-        new_file_id = getattr(file_ref, "name", "")
-        old_id = (getattr(source, "gemini_file_id", "") or "").strip()
-        if new_file_id and hasattr(source, "save") and getattr(source, "pk", None):
-            source.gemini_file_id = new_file_id
-            source.gemini_file_hash = digest
-            source.save(update_fields=["gemini_file_id", "gemini_file_hash"])
-        if old_id and old_id != new_file_id:
-            gemini_delete_file(old_id)
-        return file_ref
+        return gemini_upload_file(tmp_path, display_name=display_name)
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:
@@ -103,65 +123,47 @@ def _upload_source_file(source, csv: str, digest: str) -> Any:
                 pass
 
 
-def resync_source_file(source) -> str:
-    """Lo que hace cada noche `sync_gemini_files` con una fuente: la sube si su archivo expiró o
-    la hoja cambió → "uploaded"; si sigue vigente no sube nada → "current"; una hoja vacía solo
-    pierde su archivo → "empty"."""
-    df = source_frame(source)
-    if df.empty:
-        delete_source_gemini_file(source)
-        return "empty"
-    csv, digest = _source_csv(df)
-    if _current_file(source, digest):
-        return "current"
-    _upload_source_file(source, csv, digest)
-    return "uploaded"
-
-
-def delete_source_gemini_file(source) -> None:
-    """Elimina el archivo asociado a la fuente en Gemini Files API si existe y limpia su ID."""
-    file_id = getattr(source, "gemini_file_id", "")
-    if not (isinstance(file_id, str) and file_id.strip()):
-        return
-
-    gemini_delete_file(file_id.strip())
-
-    if hasattr(source, "save") and getattr(source, "pk", None):
-        source.gemini_file_id = ""
-        source.gemini_file_hash = ""
-        source.save(update_fields=["gemini_file_id", "gemini_file_hash"])
-
-
 def ask_data_chat(source, prompt: str) -> dict[str, Any]:
     """
-    Ejecuta una consulta al chatbot sobre la fuente de datos usando ejecución de código en Gemini.
-    Sube la hoja a Gemini únicamente si no se ha subido, si expiró o si cambió.
-    Devuelve:
+    Responde una pregunta sobre la fuente de datos con ejecución de código en Gemini, con solo
+    las columnas que necesita. Devuelve:
       {
         "text": "...",
         "images": ["data:image/png;base64,..."],
         "code": ["código python ejecutado..."]
       }
+    Si la pregunta abarca demasiadas columnas o ninguna, o la consulta pasa del tiempo máximo,
+    `text` lo explica.
     """
-    df = source_frame(source)
+    df = _with_display_names(source_frame(source), getattr(source, "columns", None))
     if df.empty:
-        return {"text": "La fuente de datos está vacía.", "images": [], "code": []}
-
-    file_ref = get_or_upload_source_file(source, df)
+        return _answer("La fuente de datos está vacía.")
 
     gid = getattr(source, "gid", "") or ""
-    ctx = SheetContext.from_dataframe(df, gid)
-    # El CSV tiene solo las columnas reales: las virtuales de las cuadrículas no se describen.
-    cols_info = columns_context(ctx, virtual=False)
+    ctx = SheetContext.from_dataframe(df, gid, samples=get_field_samples(df))
+    columns = _chat_columns(prompt, ctx)
+    if not columns:
+        return _answer(NO_COLUMNS)
+    if len(columns) > MAX_CHAT_COLUMNS:
+        return _answer(TOO_MANY_COLUMNS)
 
+    ids = [c for c in df.columns if is_id_column(c)]
+    subset = df[[*ids, *columns]]
+    # El CSV tiene solo las columnas reales: las virtuales de las cuadrículas no se describen.
     full_prompt = (
-        f"Conjunto de datos: '{getattr(source, 'label', 'Datos')}'. Total filas: {len(df)}.\n"
-        f"{cols_info}\n\n"
+        f"Conjunto de datos: '{getattr(source, 'label', 'Datos')}'. Total filas: {len(subset)}.\n"
+        f"{columns_context(ctx, only=columns, virtual=False, scales=False)}\n\n"
         f"Pregunta del usuario:\n{prompt}"
     )
-
-    return generate_with_code_execution(
-        prompt=full_prompt,
-        file_ref=file_ref,
-        system_instruction=SYSTEM_INSTRUCTION,
-    )
+    file_ref = _upload_csv(subset, f"chat_source_{getattr(source, 'id', 'data')}.csv")
+    try:
+        return generate_with_code_execution(
+            prompt=full_prompt,
+            file_ref=file_ref,
+            system_instruction=SYSTEM_INSTRUCTION,
+        )
+    except AITimeoutError:
+        logger.warning("El chat de datos pasó del tiempo máximo: %s", prompt[:200])
+        return _answer(TIMEOUT)
+    finally:
+        gemini_delete_file(getattr(file_ref, "name", ""))

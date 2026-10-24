@@ -687,6 +687,25 @@ class ColumnResolutionTests(SimpleTestCase):
         self.assertEqual(config.thinking_config.thinking_budget, 0)
 
     @mock.patch("sheets_reports.services.ai_spec.gemini_client")
+    def test_generate_with_code_execution_tiempo_maximo(self, mock_client_fn):
+        """El tiempo de la llamada y el 504 DEADLINE_EXCEEDED de Gemini son AITimeoutError; otro
+        error del servidor se propaga. Con su propio límite y sin reintento."""
+        import httpx
+        from google.genai import errors
+        generate = mock_client_fn.return_value.models.generate_content
+        deadline = errors.ServerError(504, {"error": {"code": 504, "message": "The request timed out.",
+                                                      "status": "DEADLINE_EXCEEDED"}})
+        for error in (httpx.ReadTimeout("timeout"), deadline):
+            generate.side_effect = error
+            with self.subTest(error=type(error).__name__), self.assertRaises(ai_spec.AITimeoutError):
+                ai_spec.generate_with_code_execution("fake.csv", "calcular")
+        generate.side_effect = errors.ServerError(500, {"error": {"code": 500, "message": "x", "status": "INTERNAL"}})
+        with self.assertRaises(errors.ServerError):
+            ai_spec.generate_with_code_execution("fake.csv", "calcular")
+        http = generate.call_args[1]["config"].http_options
+        self.assertEqual((http.timeout, http.retry_options.attempts), (ai_spec.DATA_CHAT_TIMEOUT_MS, 1))
+
+    @mock.patch("sheets_reports.services.ai_spec.gemini_client")
     def test_generate_with_code_execution_sin_partes(self, mock_client_fn):
         """Gemini corta sin contenido (parts=None, ej. MAX_TOKENS): texto de reserva, sin fallar."""
         mock_client = mock.Mock()

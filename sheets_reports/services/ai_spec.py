@@ -19,7 +19,9 @@ import zlib
 from typing import Any
 
 from django.conf import settings
+import httpx
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 from sheets_reports.engine.steps.filter import condition_errors
@@ -41,6 +43,9 @@ logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("tableia.ai_audit")
 
 GEMINI_TIMEOUT_MS = 120_000
+# Tiempo máximo de una consulta del chat de datos, sin reintento: por debajo de los 120 s con
+# los que cortan el navegador (data-chat.js) y gunicorn, para responder con un aviso.
+DATA_CHAT_TIMEOUT_MS = 100_000
 # Tokens de razonamiento del modelo por tipo de llamada: 0 = responde sin razonar; None = sin
 # límite (lo que decida el modelo). El reintento de una propuesta inválida razona sin límite.
 THINKING_BUDGETS = {"suggestions": 0, "widget": 0, "formula": 256, "board_plan": 512, "scales": 256, "column_labels": 256, "data_chat": 0}
@@ -69,6 +74,11 @@ MAX_NEW_CALCULATED = 10
 
 class SpecGenerationError(Exception):
     """Error legible para el usuario: la IA no produjo un WidgetForm válido."""
+
+
+class AITimeoutError(Exception):
+    """La consulta a Gemini pasó del tiempo máximo: el de la llamada o el del propio servidor
+    de Gemini (504 DEADLINE_EXCEEDED)."""
 
 
 BI_DATA_RULES = """\
@@ -635,23 +645,6 @@ def gemini_upload_file(file_path: str, display_name: str | None = None) -> Any:
     return client.files.upload(file=file_path, config=config)
 
 
-def gemini_get_file(file_id: str) -> Any:
-    """Obtiene un archivo de Gemini Files API o None si no existe o expiró."""
-    api_key = settings.GEMINI_API_KEY
-    if not api_key or not file_id:
-        return None
-    client = gemini_client(api_key)
-    try:
-        f = client.files.get(name=file_id)
-        state = getattr(f, "state", None)
-        state_str = str(getattr(state, "name", state) or "").upper()
-        if "ACTIVE" in state_str or state_str in ("", "STATE_UNSPECIFIED"):
-            return f
-        return None
-    except Exception:
-        return None
-
-
 def gemini_delete_file(file_id: str) -> bool:
     """Elimina un archivo de Gemini Files API si existe."""
     api_key = settings.GEMINI_API_KEY
@@ -693,16 +686,25 @@ def generate_with_code_execution(
         temperature=0.2,
         # Con razonamiento libre, alguna consulta tarda minutos en vez de segundos.
         thinking_config=_thinking_config(THINKING_BUDGETS["data_chat"]),
+        http_options=types.HttpOptions(timeout=DATA_CHAT_TIMEOUT_MS,
+                                       retry_options=types.HttpRetryOptions(attempts=1)),
     )
     if system_instruction:
         config.system_instruction = system_instruction
 
     started = time.monotonic()
-    response = client.models.generate_content(
-        model=settings.GEMINI_MODEL,
-        contents=contents,
-        config=config,
-    )
+    try:
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=contents,
+            config=config,
+        )
+    except httpx.TimeoutException as e:
+        raise AITimeoutError(str(e)) from e
+    except genai_errors.ServerError as e:
+        if e.code == 504:
+            raise AITimeoutError(str(e)) from e
+        raise
     _log_usage("code_execution", response, started)
 
     texts, raw_images, codes = [], [], []
@@ -1037,12 +1039,13 @@ No se puede (no lo propongas ni lo configures; propón la alternativa y dilo en 
 - Las virtuales en dispersión, matriz de correlación, V de Cramér o filtros. Alternativa: tabla dinámica o barras."""
 
 
-def columns_context(ctx: SheetContext, only=None, virtual: bool = True) -> str:
+def columns_context(ctx: SheetContext, only=None, virtual: bool = True, scales: bool = True) -> str:
     """Las columnas con su alias, tipo y ejemplos, y los campos calculados con su fórmula: así la IA
     sabe qué calcula cada uno aunque su nombre no lo diga. Con `only` (las columnas que usa un
     widget ya planificado) lista solo esas y la ID: en una hoja ancha es casi todo el mensaje.
     Con `virtual=False` omite las columnas virtuales de las cuadrículas: el chatbot recibe el
-    CSV de la fuente, que solo tiene las reales."""
+    CSV de la fuente, que solo tiene las reales. Con `scales=False` no describe la escala de
+    medida de cada columna (el chatbot la deduce de los datos)."""
     only = set(only or ())
     candidates = ctx.fields if virtual else ctx.sheet_fields
     fields = [f for f in candidates if not only or f in only or is_id_column(f)]
@@ -1052,7 +1055,7 @@ def columns_context(ctx: SheetContext, only=None, virtual: bool = True) -> str:
     for field in fields:
         alias = ctx.alias_for(field)
         kind = "numérica" if ctx.is_numeric(field) else "fecha" if ctx.is_date(field) else "texto"
-        profile = ctx.scales.get(field)
+        profile = ctx.scales.get(field) if scales else None
         if profile and not is_id_column(field) and field != ctx.submission_field and not ctx.is_date(field):
             # La escala de medida y un perfil corto (rango, orden, texto libre): lo que la IA ve
             # de los valores de una columna además de los ejemplos.

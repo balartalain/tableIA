@@ -36,8 +36,7 @@
       el.dataset.widgetId = this.id;
       el.dataset.type = this.chart_type;
       el.innerHTML = `
-        <div id="chart-${this.id}" class="contents"></div>
-        ${this.loaderOverlayHTML()}`;
+        <div id="chart-${this.id}" class="contents"></div>`;
       if (editable) {
         el.addEventListener('click', (e) => {
           if (e.target.closest('.vscomp-ele') || e.target.closest('.vscomp-wrapper')) return;

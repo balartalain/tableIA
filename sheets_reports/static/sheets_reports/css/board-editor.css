@@ -33,7 +33,7 @@
   border-color: transparent !important;
   outline: 2px dashed var(--color-border-strong);
   outline-offset: -2px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   opacity: 0.5;
   min-height: 10px !important;
   grid-column: span var(--ghost-span, 6) / span var(--ghost-span, 6) !important;

@@ -15,14 +15,13 @@
   --tb-bg:             var(--color-bg-app);
   --tb-card-bg:        var(--color-surface);
   --tb-card-border:    var(--color-border);
-  --tb-card-radius:    var(--radius-lg);
+  --tb-card-radius:    var(--radius-sm);
   --tb-card-shadow:    var(--shadow-sm);
   --tb-title-text:     var(--color-text-muted);   /* "GRÁFICO DE BARRAS", etiqueta superior */
   --tb-text:           var(--color-text);
   --tb-text-muted:     var(--color-text-muted);
   --tb-text-subtle:    var(--color-text-subtle);  /* íconos y marcas, no texto para leer */
   --tb-surface-muted:  var(--color-surface-muted);
-  --tb-scrim:          var(--color-scrim);        /* velo mientras el widget carga */
   --tb-link:           var(--color-accent-text);
   --tb-font:           var(--font-sans);
 
@@ -144,6 +143,8 @@
   border-radius: var(--tb-card-radius);
   box-shadow: var(--tb-card-shadow);
 }
+/* Widget cargando (BaseWidget.setLoading): opaco; la barra superior es el indicador. */
+.tablero .tb-widget-loading { opacity: .5; transition: opacity .2s; }
 .tablero .tb-widget-title {
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
@@ -161,7 +162,6 @@
 .tablero .tb-surface-muted { background: var(--tb-surface-muted); }
 .tablero .tb-track       { background: var(--tb-bar-track); }
 .tablero .tb-border      { border-color: var(--tb-card-border); }
-.tablero .tb-scrim       { background: var(--tb-scrim); }
 .tablero .tb-swatch      { display: inline-block; flex: none; width: 1em; height: 1em; border-radius: var(--radius-pill); }
 
 /* KPI */
@@ -191,7 +191,6 @@
 .tablero .tb-rank-pos  { font-weight: var(--fw-bold); color: var(--tb-text-muted); }
 
 /* Estados del widget: cargando, vacío, error, sin configurar */
-.tablero .tb-spinner { color: var(--tb-chart-1); }
 .tablero .tb-retry {
   border: 1px solid var(--tb-card-border); border-radius: var(--radius-pill);
   color: var(--tb-link); background: var(--tb-card-bg);

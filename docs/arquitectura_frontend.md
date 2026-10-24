@@ -341,7 +341,6 @@ fromServer(w) → new WidgetClass(raw)
 - `.drag-handle` (Sortable handle)
 - `.widget-title` (barra de título)
 - `#chart-{id}` (contenedor de contenido)
-- `.widget-loader` (spinner overlay)
 - `.edit-widget-btn` / `.delete-widget-btn`
 - `.resize-handle` (esquina inferior derecha)
 
@@ -602,7 +601,7 @@ Dos niveles:
 
 El evento `dashboard:filters-changed` dispara `store.refreshData()`, que re-fetch `/render/` con los filtros y llama `applyRender` en cada widget.
 
-En la vista compartida, un indicador de carga de la página (`#page-loader`) está visible mientras hay algún request a `/render/` en curso: la carga inicial y cada refresco por filtros. Lo controla `setPageLoading()` en `board-view-init.js`, que cuenta los requests pendientes.
+La barra de carga de la página (`#page-loader`) es el único indicador de carga del tablero, en el editor y en la vista compartida. Está visible mientras queda alguna carga en curso: la carga inicial, cada refresco por filtros, la creación de un widget y el guardado desde el panel. La controla `setPageLoading()` (en `dashboard-store.js` y en `board-view-init.js`), que cuenta las cargas pendientes. `BaseWidget.setLoading()` la activa y además marca el widget con `.tb-widget-loading` (opaco) mientras carga; solo un cambio de estado suma o resta en la cuenta. Guardar el diseño (posición, tamaño) no es una carga y no los marca.
 
 ## Drag and drop
 
@@ -658,7 +657,7 @@ app, pero sus variables son independientes: un tablero puede cambiar las suyas s
 
 - **Tailwind CSS** vía CDN (sin build). `tailwind.config` (en `base.html`) solo da nombres que
   apuntan a variables: colores `primary`, `accent`, `app`, `surface`, `line`, `fg`, `heading`,
-  `overlay`, `scrim`, `success`, `danger`, `warning`; la escala `fontSize` (`xs`…`xl`),
+  `overlay`, `success`, `danger`, `warning`; la escala `fontSize` (`xs`…`xl`),
   `borderRadius`, `boxShadow` y `tracking-label`. Ningún valor vive en la config.
 - **Tabler Icons** (`ti ti-*`) y la fuente de la marca (Google Fonts) en `base.html`.
 - Orden de carga: `tokens.css` → CDN de Tailwind → `_app_ui.html` → (editor y vista)
@@ -671,7 +670,7 @@ Reglas:
   `style` con las variables del tablero (`_board_theme_attrs.html`).
 - Si falta un color o un tamaño se agrega como token, de abajo hacia arriba.
 - Los modificadores de opacidad (`bg-primary/50`) no funcionan con estas variables: una
-  transparencia es un token (`--color-overlay`, `--color-scrim`).
+  transparencia es un token (`--color-overlay`).
 - Nombres: `--{componente o categoría}-{parte}-{variante}-{estado}`.
 
 ### Tokens de la app (`tokens.css`)
@@ -702,7 +701,7 @@ regla y las filas del editor son de la app y usan sus clases.
 
 | Grupo | Variables | Clases |
 |---|---|---|
-| Tarjeta y texto | `--tb-card-*`, `--tb-title-text`, `--tb-text*`, `--tb-surface-muted`, `--tb-scrim`, `--tb-link` | `.tb-widget`, `.tb-widget-title`, `.tb-text`, `.tb-text-muted`, `.tb-text-subtle`, `.tb-text-bad`, `.tb-link`, `.tb-surface-muted`, `.tb-border`, `.tb-track`, `.tb-scrim`, `.tb-swatch`, `.tb-spinner`, `.tb-retry` |
+| Tarjeta y texto | `--tb-card-*`, `--tb-title-text`, `--tb-text*`, `--tb-surface-muted`, `--tb-link` | `.tb-widget`, `.tb-widget-title`, `.tb-text`, `.tb-text-muted`, `.tb-text-subtle`, `.tb-text-bad`, `.tb-link`, `.tb-surface-muted`, `.tb-border`, `.tb-track`, `.tb-swatch`, `.tb-retry`, `.tb-widget-loading` |
 | Estados | `--tb-status-good/warn/bad(-bg)` | `.tb-status-*`, `.tb-fill-*` |
 | KPI | `--tb-kpi-*` | `.tb-kpi-value`, `.tb-kpi-label`, `.tb-kpi-sub`, `.tb-delta-*`, `.tb-progress` |
 | Tablas y ranking | `--tb-table-*`, `--tb-bar-*` | `.tb-table` (y sus partes), `.tb-pager`, `.tb-bar`, `.tb-bar-lead`, `.tb-rank-pos` |

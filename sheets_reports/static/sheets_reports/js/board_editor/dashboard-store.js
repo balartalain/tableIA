@@ -513,6 +513,7 @@ document.addEventListener('alpine:init', () => {
       widget.setLoading(true);
       const result = await this._saveWidget(widget);
       if (!result.ok) {
+        widget.setLoading(false);
         if (widget.el) widget.el.remove();
         this.widgets = this.widgets.filter(w => w !== widget);
         return result;
@@ -632,6 +633,8 @@ document.addEventListener('alpine:init', () => {
 
     async removeWidget(id) {
       const removed = this.widgets.find(w => w.id === id);
+      // Si estaba cargando, la barra superior no debe quedar contándolo.
+      if (removed) removed.setLoading(false);
       if (removed && removed.constructor.placement === 'header' && this.clearBoardFilters) {
         this.clearBoardFilters((removed.fields && removed.fields.dimensions) || []);
       }
@@ -860,6 +863,7 @@ document.addEventListener('alpine:init', () => {
     closeDrawer() {
       const w = this.editingWidget;
       if (w && w.id < 0 && (!w.fields || !w.fields.dimensions || !w.fields.dimensions.length)) {
+        w.setLoading(false);
         if (w.el) w.el.remove();
         this.widgets = this.widgets.filter(x => x !== w);
       }
@@ -1561,8 +1565,11 @@ document.addEventListener('alpine:init', () => {
         w._dirty = true;
         w.updateChrome?.();
 
+        // Recalcula sus datos: opaco y con la barra superior hasta que llega el resultado.
+        w.setLoading(true);
         const result = await this._saveWidget(w);
         if (!result.ok) {
+          w.setLoading(false);
           this.drawerSaveError = result.error || 'No se pudo guardar. Revisa tu conexión e inténtalo de nuevo.';
           return false;
         }
@@ -1571,6 +1578,7 @@ document.addEventListener('alpine:init', () => {
         if (typeof window.showToast === 'function') window.showToast(toast);
         return true;
       } catch (e) {
+        w.setLoading(false);
         this.drawerSaveError = e.message;
         return false;
       } finally {

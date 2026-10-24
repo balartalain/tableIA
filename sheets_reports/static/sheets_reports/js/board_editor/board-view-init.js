@@ -21,6 +21,7 @@ document.addEventListener('alpine:init', () => {
 
     // Todos los widgets se calculan en un solo request al endpoint render (sin IA).
     async refreshData() {
+      this.widgets.forEach(w => w.setLoading(true));
       setPageLoading(true);
       try {
         const r = await fetch(this._renderUrl());

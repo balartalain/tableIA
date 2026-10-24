@@ -295,12 +295,18 @@ document.addEventListener('alpine:init', () => {
       return Object.fromEntries(data.widgets.map(w => [w.id, w]));
     },
 
+    // Número de la última llamada a refreshData: solo su respuesta se aplica a los widgets.
+    _renderSeq: 0,
+
     async refreshData() {
+      const seq = ++this._renderSeq;
       const saved = this.widgets.filter(w => w.id > 0 && w.fields);
       saved.forEach(w => w.setLoading(true));
       setPageLoading(true);
       try {
         const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
+        // Llegó otra petición después (ej. otra opción del filtro): esta ya no vale.
+        if (seq !== this._renderSeq) return;
         if (!r.ok || !data) {
           const message = (data && data.error) || `Error ${r.status} al cargar los datos`;
           saved.forEach(w => { w.setLoading(false); w.renderError(message, { retryable: true }); });
@@ -321,6 +327,7 @@ document.addEventListener('alpine:init', () => {
           w.applyRender(entry);
         });
       } catch (e) {
+        if (seq !== this._renderSeq) return;
         saved.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
       } finally {
         setPageLoading(false);

@@ -144,7 +144,7 @@
   box-shadow: var(--tb-card-shadow);
 }
 /* Widget cargando (BaseWidget.setLoading): opaco; la barra superior es el indicador. */
-.tablero .tb-widget-loading { opacity: .5; transition: opacity .2s; }
+.tablero .tb-widget-loading { opacity: .3; transition: opacity .2s; }
 .tablero .tb-widget-title {
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);

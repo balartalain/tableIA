@@ -19,13 +19,19 @@ document.addEventListener('alpine:init', () => {
       return qs ? `${url}?${qs}` : url;
     },
 
+    // Número de la última llamada a refreshData: solo su respuesta se aplica a los widgets.
+    _renderSeq: 0,
+
     // Todos los widgets se calculan en un solo request al endpoint render (sin IA).
     async refreshData() {
+      const seq = ++this._renderSeq;
       this.widgets.forEach(w => w.setLoading(true));
       setPageLoading(true);
       try {
         const r = await fetch(this._renderUrl());
         const data = await r.json().catch(() => null);
+        // Llegó otra petición después (ej. otra opción del filtro): esta ya no vale.
+        if (seq !== this._renderSeq) return null;
         if (!r.ok || !data) {
           const message = (data && data.error) || `Error ${r.status} al cargar los datos`;
           this.widgets.forEach(w => { w.setLoading(false); w.renderError(message, { retryable: true }); });
@@ -41,6 +47,7 @@ document.addEventListener('alpine:init', () => {
         });
         return data;
       } catch (e) {
+        if (seq !== this._renderSeq) return null;
         this.widgets.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
         return null;
       } finally {

@@ -43,7 +43,7 @@ audit_logger = logging.getLogger("tableia.ai_audit")
 GEMINI_TIMEOUT_MS = 120_000
 # Tokens de razonamiento del modelo por tipo de llamada: 0 = responde sin razonar; None = sin
 # límite (lo que decida el modelo). El reintento de una propuesta inválida razona sin límite.
-THINKING_BUDGETS = {"suggestions": 0, "widget": 0, "formula": 256, "board_plan": 512, "scales": 256, "column_labels": 256, "board_batch_build": 0, "data_chat": 0}
+THINKING_BUDGETS = {"suggestions": 0, "widget": 0, "formula": 256, "board_plan": 512, "scales": 256, "column_labels": 256, "data_chat": 0}
 CREATE_TOOL = "create_widget"
 REJECT_TOOL = "reject_request"
 
@@ -84,6 +84,10 @@ BI_DATA_RULES = """\
   distribución por respuesta y calcular porcentajes por condición. Para un tablero de
   satisfacción o de interés, propone estos análisis en lugar de un promedio de las etiquetas
   (ej. «% que respondió 4 o 5 por área» en vez de «interés promedio por área»).
+- Si el pedido nombra una columna de texto como medida («X como métrica», «la satisfacción por
+  región») sin decir cómo agregarla, la lectura por defecto es contarla: agg "count" con esa
+  columna (las respuestas no vacías). Si pide su distribución o reparto, la columna va como
+  dimensión o pivote con agg "count". Nunca es motivo para rechazar el pedido.
 - «No aplica», «N/A», «No utilizo este medio», «Sin respuesta» y «Empty» son respuestas de texto
   válidas, no valores nulos. No las excluyas, recodifiques ni filtres por iniciativa propia:
   solo el usuario decide excluirlas mediante filtros explícitos. Solo los nulos reales son
@@ -108,8 +112,11 @@ CORE_PROMPT = """\
 Eres el asistente de un constructor de tableros de reportes sobre una hoja de cálculo. El
 usuario describe en español un widget y tú respondes SIEMPRE llamando a una función:
 - `create_widget` con el formulario del widget, o
-- `reject_request` con un motivo breve y amable si el pedido no se puede representar
-  (ej. pide una columna que no existe, o algo que no es un widget).
+- `reject_request` con un motivo breve y amable solo si el pedido no tiene ninguna lectura
+  posible con las columnas de la hoja (ej. pide una columna que no existe, o algo que no es un
+  widget). Si es ambiguo, elige la lectura más razonable según las reglas de datos en vez de
+  rechazarlo o pedir aclaración. Una columna de texto pedida como métrica NO es motivo de
+  rechazo: cuéntala (agg "count" con esa columna).
 
 Tú NO calculas nada ni ves los datos: solo describes QUÉ calcular. El backend ejecuta la
 consulta.
@@ -972,7 +979,9 @@ def _tools(ctx: SheetContext, widget_type: str | None) -> list[types.Tool]:
         ),
         types.FunctionDeclaration(
             name=REJECT_TOOL,
-            description="Rechaza el pedido cuando no se puede representar como widget con las columnas disponibles.",
+            description=("Rechaza el pedido solo cuando no tiene ninguna lectura posible como widget con las "
+                         "columnas disponibles. No lo uses porque una columna de texto se pida como métrica: "
+                         "cuéntala con create_widget."),
             parameters_json_schema={
                 "type": "object",
                 "required": ["reason"],

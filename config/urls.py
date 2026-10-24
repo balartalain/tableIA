@@ -27,7 +27,6 @@ urlpatterns = [
     path('api/dashboard/<int:dashboard_id>/table-assistant/', views.table_assistant, name='table_assistant'),
     path('api/dashboard/<int:dashboard_id>/data-chat/', views.dashboard_data_chat, name='dashboard_data_chat'),
     path('api/dashboard/<int:dashboard_id>/board-plan/', views.board_ai_plan, name='board_ai_plan'),
-    path('api/dashboard/<int:dashboard_id>/board-build/', views.board_ai_build, name='board_ai_build'),
     path('api/dashboard/<int:dashboard_id>/widget-suggestions/', views.widget_suggestions, name='widget_suggestions'),
     path('api/dashboard/<int:dashboard_id>/email-campaign/', views_email.email_campaign, name='email_campaign'),
     path('api/dashboard/<int:dashboard_id>/email-campaign/recipients/', views_email.email_recipients,

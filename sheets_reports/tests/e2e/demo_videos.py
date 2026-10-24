@@ -72,23 +72,19 @@ COLUMNS = [{"name": n, "label": COLUMN_LABELS[n], "include": True,
 L = COLUMN_LABELS
 SALES = agg("total_ventas", "sum", L["ventas"])
 
-# Lo que «la IA» arma para cada widget del tablero generado.
+# Lo que «la IA» propone para el tablero generado, cada widget con su formulario.
 AI_PLAN = [
-    {"widget_type": "kpi", "title": "Ventas totales", "description": "Suma de las ventas del semestre.",
-     "request": "suma de ventas"},
-    {"widget_type": "bar", "title": "Ventas por región", "description": "Comparar regiones.",
-     "request": "ventas por región"},
-    {"widget_type": "line", "title": "Evolución mensual", "description": "Tendencia de las ventas mes a mes.",
-     "request": "ventas por mes"},
-    {"widget_type": "dynamic_table", "title": "Categoría por canal", "description": "Ventas de cada categoría en cada canal.",
-     "request": "ventas por categoría y canal"},
+    {"widget_type": widget_type, "title": title, "description": description,
+     "fields": data, "style": {}, "calculated_fields": [], "column_scales": []}
+    for widget_type, title, description, data in [
+        ("kpi", "Ventas totales", "Suma de las ventas del semestre.", fields(dimensions=[], metrics=[SALES])),
+        ("bar", "Ventas por región", "Comparar regiones.", fields(dimensions=[L["region"]], metrics=[SALES])),
+        ("line", "Evolución mensual", "Tendencia de las ventas mes a mes.",
+         fields(dimensions=[L["mes"]], metrics=[SALES])),
+        ("dynamic_table", "Categoría por canal", "Ventas de cada categoría en cada canal.",
+         fields(dimensions=[L["categoria"]], pivots=[L["canal"]], metrics=[SALES])),
+    ]
 ]
-AI_FIELDS = {
-    "kpi": fields(dimensions=[], metrics=[SALES]),
-    "bar": fields(dimensions=[L["region"]], metrics=[SALES]),
-    "line": fields(dimensions=[L["mes"]], metrics=[SALES]),
-    "dynamic_table": fields(dimensions=[L["categoria"]], pivots=[L["canal"]], metrics=[SALES]),
-}
 
 ASSISTANT_ANSWER = {
     "widget_type": "bar", "title": "Unidades por canal",
@@ -118,12 +114,6 @@ CHAT_ANSWERS = {
 
 def _chat(source, prompt):
     return CHAT_ANSWERS["resumen" if "resumen" in prompt.lower() else "otro"]
-
-
-def _build(items, ctx):
-    by_title = {i["title"]: i for i in AI_PLAN}
-    return [{"widget_type": i["widget_type"], "title": i["title"], "style": {},
-             "fields": AI_FIELDS[by_title.get(i["title"], i)["widget_type"]]} for i in items]
 
 
 # ------------------------------------------------------------------ overlay: cursor y subtítulos
@@ -203,7 +193,6 @@ class DemoVideos(PanelTests):
             mock.patch(f"{base}.ai_suggestions.widget_suggestions",
                        return_value=["Unidades por canal, de mayor a menor", "Ventas por región y categoría"]),
             mock.patch(f"{base}.ai_board.propose_board", return_value={"items": AI_PLAN, "note": ""}),
-            mock.patch(f"{base}.ai_board.build_board_batch", side_effect=_build),
             mock.patch(f"{base}.ai_spec.generate_widget_form", return_value=ASSISTANT_ANSWER),
             mock.patch(f"{base}.ai_spec.generate_widget_insight", return_value=INSIGHT),
             mock.patch(f"{base}.ai_data_chat.ask_data_chat", side_effect=_chat),
@@ -308,7 +297,7 @@ class DemoVideos(PanelTests):
             for order, item in enumerate(AI_PLAN):
                 Widget.objects.create(
                     dashboard=dashboard, source=source, type=item["widget_type"], title=item["title"],
-                    fields=AI_FIELDS[item["widget_type"]], style={},
+                    fields=item["fields"], style={},
                     position={"order": order, "w": 4 if order < 3 else 12, "h": 340,
                               "row_id": "row_1" if order < 3 else "row_2"})
         return dashboard, source

@@ -1,19 +1,21 @@
 """
 «Generar con IA»: a partir del pedido del usuario («un tablero de ventas mensuales con…»), la
-lista de widgets que propone la IA: tipo, título, descripción, ancho y el pedido en lenguaje
-natural que configura cada uno. La IA NO arma aquí los `fields`: cada widget aceptado se
-configura después con `generate_widget_form` (el mismo chat del panel, ya validado), con su
-`request`.
+lista de widgets que propone la IA (tipo, título, descripción, el pedido en lenguaje natural de
+cada uno y las columnas que usa). Antes de mostrarla, cada widget se configura con el asistente
+del widget (`generate_widget_form`: el schema de su tipo y sus reintentos), varios a la vez; los
+que no se pueden configurar se quitan. Lo que ve el usuario es lo que se crea, tal cual.
 """
-import json
+import dataclasses
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.services.ai_spec import (
     BI_DATA_RULES,
     THINKING_BUDGETS,
     SpecGenerationError,
+    _audit,
     _normalize,
     _omit_unchanged_scales,
     _resolve_columns,
@@ -21,9 +23,11 @@ from sheets_reports.services.ai_spec import (
     columns_context,
     form_errors,
     generate_json,
+    generate_widget_form,
 )
 from sheets_reports.utils.data import is_id_column
 from sheets_reports.widgets import WIDGETS
+from sheets_reports.widgets.schemas import WidgetForm
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,12 @@ MAX_ITEMS = 15
 MAX_PROMPT_CHARS = 2000
 MAX_TITLE_CHARS = 80
 MAX_TEXT_CHARS = 400
+# Lo que se muestra de cada error de un widget que se quita del plan.
+MAX_DROPPED_ERRORS = 2
+# Widgets del plan que se configuran con el asistente a la vez.
+BUILD_CONCURRENCY = 5
+# Las claves del formulario de un widget.
+SPEC_KEYS = ("fields", "style", "calculated_fields", "column_scales")
 
 BOARD_PROMPT = """\
 Eres el asistente de un constructor de tableros sobre una hoja de cálculo. El usuario describe
@@ -45,6 +55,14 @@ Widgets disponibles (widget_type: para qué sirve. Admite: …):
 
 Reglas:
 - Entre 1 y {max_items} widgets, en el orden en que se verán (los números clave arriba). Si el usuario pide algo puntual (ej. un gráfico específico), propón únicamente lo solicitado; si pide un tablero completo, propón un conjunto balanceado (entre 3 y 8 widgets).
+- Un pedido genérico («un tablero», «los principales indicadores», «un resumen», «lo más
+  importante») es un tablero completo: unos pocos números clave (kpi) y, sobre todo, gráficos o
+  tablas que muestren distribuciones, comparaciones entre grupos y evolución. «Indicadores» no
+  significa solo kpi.
+- Un kpi muestra un número que dice algo por sí solo (total de registros, un promedio de una
+  columna numérica, un % que cumple una condición). Sobre una pregunta de texto, el kpi es el %
+  de una o varias respuestas (ej. «% que respondió Satisfecho o Muy satisfecho»), nunca el conteo
+  de sus respuestas: ese número es casi el total de registros y no dice nada de la pregunta.
 - Solo los widget_type de la lista. Si el usuario pide un tipo que no existe (ej. gráfico de
   área), usa el más parecido y dilo en "note".
 - Cada widget usa columnas reales de la hoja. Si algo del pedido no se puede con estas columnas,
@@ -70,13 +88,21 @@ Reglas:
 - title: corto, en español, como lo leería quien ve el tablero (ej. «Ventas por categoría»).
 - description: una frase que explica qué muestra.
 - request: el pedido en lenguaje natural para configurar ese widget, con los nombres exactos de
-  las columnas, la agregación, el agrupamiento, el orden, el límite y las condiciones (ej.
-  «suma de ventas por categoria, las 5 más altas»). Sin JSON.
+  las columnas, la agregación de cada métrica dicha de forma explícita, el agrupamiento, el
+  orden, el límite y las condiciones (ej. «suma de ventas por categoria, las 5 más altas»). Sobre
+  una columna de texto, solo conteo, conteo distinto, distribución o % por condición (ej.
+  «conteo de respuestas por Region en filas y Satisfecho_General en columnas»). Sin JSON.
 - columns: los alias de TODAS las columnas que ese widget necesita: por las que agrupa, las que
   calcula, las de sus condiciones y la de tiempo si compara periodos (ej. ["col_3", "col_7"]).
   El widget se configura viendo solo esas columnas: no omitas ninguna. En un "filter" son las
   columnas por las que filtrar.
-- note: vacío si se pudo todo; si no, qué cambiaste y por qué, en una frase.
+- requested: true solo si el texto del usuario nombra ese widget o ese análisis en concreto: su
+  columna, su métrica o su gráfico (ej. «un gráfico de ventas por región» → true para ese
+  gráfico). En un pedido genérico («un tablero», «los principales indicadores») TODOS son false:
+  los eliges tú. Ante la duda, false.
+- note: vacío si se pudo todo lo pedido. Solo si cambiaste o dejaste fuera algo del pedido, qué
+  y por qué, en una frase. NO resumas ni describas el tablero que propones: eso ya lo dicen el
+  título y la descripción de cada widget.
 {singletons}
 {existing_context}
 Pedido del usuario:
@@ -100,8 +126,9 @@ SCHEMA = {
                         "items": {"type": "string"},
                         "description": "Alias (ej. col_1, col_2) de todas las columnas que usa el widget.",
                     },
+                    "requested": {"type": "boolean"},
                 },
-                "required": ["widget_type", "title", "description", "request", "columns"],
+                "required": ["widget_type", "title", "description", "request", "columns", "requested"],
             },
         },
         "note": {"type": "string"},
@@ -133,72 +160,26 @@ def _plan_columns(raw, ctx: SheetContext) -> list[str]:
     return cols
 
 
-def clean_plan(raw, existing_types=(), ctx: SheetContext | None = None) -> dict:
-    """Lo que devolvió la IA, solo con lo que el tablero puede crear: tipos registrados con IA,
-    a lo más uno de un tipo único por tablero (ninguno si ya está), título y pedido no vacíos.
-    `columns` son las columnas de la hoja que usa cada widget (su asistente solo ve esas).
-    Para 'filter', si se especifican columnas, se resuelven en `fields.dimensions`.
-    Sin widgets → SpecGenerationError."""
-    allowed = {w.key: w for w in _widgets()}
-    taken = {t for t in existing_types if (allowed.get(t) and allowed[t].max_per_dashboard == 1)}
-    if not isinstance(raw, dict):
-        raw = {}
-    items, dropped = [], []
-    for item in raw.get("items") or []:
-        if not isinstance(item, dict):
-            continue
-        widget = allowed.get(str(item.get("widget_type") or "").strip())
-        title = _text(item.get("title"), MAX_TITLE_CHARS)
-        request = _text(item.get("request"), MAX_TEXT_CHARS)
-        if not widget or not request:
-            continue
-        if widget.max_per_dashboard == 1:
-            if widget.key in taken:
-                continue
-            taken.add(widget.key)
-        entry = {
-            "widget_type": widget.key,
-            "title": title or widget.label,
-            "description": _text(item.get("description"), MAX_TEXT_CHARS),
-            "request": request,
-        }
-        cols = _plan_columns(item.get("columns"), ctx) if ctx is not None else []
-        problem = _grid_problem(widget, cols, ctx)
-        if problem:
-            dropped.append(f"«{entry['title']}»: {problem}")
-            continue
-        if cols:
-            entry["columns"] = cols
-        if widget.key == "filter" and ctx is not None:
-            cols = list(cols)
-            if not cols:
-                for alias in re.findall(r"\bcol_\d+\b", request, re.IGNORECASE):
-                    field = ctx.field_for(alias)
-                    if field in ctx.fields and not is_id_column(field) and field not in cols:
-                        cols.append(field)
-            if not cols:
-                for f in ctx.fields:
-                    if not is_id_column(f) and re.search(r"\b" + re.escape(f) + r"\b", request, re.IGNORECASE) and f not in cols:
-                        cols.append(f)
-            if cols:
-                entry["fields"] = {"dimensions": cols}
-        items.append(entry)
-        if len(items) == MAX_ITEMS:
-            break
-    if not items:
-        raise SpecGenerationError("La IA no propuso widgets para ese pedido. Prueba a describir qué "
-                                  "quieres ver con los nombres de las columnas."
-                                  + (f" ({'; '.join(dropped)})" if dropped else ""))
-    note = " ".join(n for n in [_text(raw.get("note"), MAX_TEXT_CHARS),
-                                *(f"Se quitó {d}." for d in dropped)] if n)
-    return {"items": items, "note": note}
+def _filter_columns(item: dict, columns: list[str], ctx: SheetContext) -> list[str]:
+    """Las columnas de un 'filter': las que dijo la IA o, si no dijo, las que nombra su pedido
+    (por alias o por nombre)."""
+    if columns:
+        return columns
+    request = str(item.get("request") or "")
+    cols = []
+    for alias in re.findall(r"\bcol_\d+\b", request, re.IGNORECASE):
+        field = ctx.field_for(alias)
+        if field in ctx.fields and not is_id_column(field) and field not in cols:
+            cols.append(field)
+    if not cols:
+        cols = [f for f in ctx.fields if not is_id_column(f)
+                and re.search(r"\b" + re.escape(f) + r"\b", request, re.IGNORECASE)]
+    return cols
 
 
-def _grid_problem(widget, columns: list[str], ctx: SheetContext | None) -> str:
+def _grid_problem(widget, columns: list[str], ctx: SheetContext) -> str:
     """Por qué un widget planificado no puede usar sus columnas virtuales de cuadrícula (ver
     engine/steps/grid.py), o "" si puede: el tipo no las acepta o son de dos cuadrículas."""
-    if ctx is None:
-        return ""
     questions = list(dict.fromkeys(ctx.grid_fields[c]["question"] for c in columns if c in ctx.grid_fields))
     if questions and not widget.grid_fields:
         return f"«{widget.label}» no usa columnas de cuadrícula"
@@ -207,8 +188,98 @@ def _grid_problem(widget, columns: list[str], ctx: SheetContext | None) -> str:
     return ""
 
 
+def clean_plan(raw, ctx: SheetContext, existing_types=()) -> dict:
+    """Lo que devolvió la IA, solo con lo que el tablero puede crear: tipos registrados con IA,
+    a lo más uno de un tipo único por tablero (ninguno si ya está), pedido no vacío, hasta
+    MAX_ITEMS. → `{items: [{widget, item, columns, problem}], note}`; `columns` son las columnas
+    reales que usa cada widget (su asistente solo ve esas) y `problem` el motivo por el que no
+    se puede configurar sin preguntar a la IA ("" si no hay)."""
+    allowed = {w.key: w for w in _widgets()}
+    taken = {t for t in existing_types if (allowed.get(t) and allowed[t].max_per_dashboard == 1)}
+    planned = []
+    for item in (raw.get("items") if isinstance(raw, dict) else None) or []:
+        if not isinstance(item, dict):
+            continue
+        widget = allowed.get(str(item.get("widget_type") or "").strip())
+        if not widget or not _text(item.get("request"), MAX_TEXT_CHARS):
+            continue
+        if widget.max_per_dashboard == 1:
+            if widget.key in taken:
+                continue
+            taken.add(widget.key)
+        columns = _plan_columns(item.get("columns"), ctx)
+        if widget.key == "filter":
+            columns = _filter_columns(item, columns, ctx)
+        planned.append({"widget": widget, "item": item, "columns": columns,
+                        "problem": _grid_problem(widget, columns, ctx)})
+        if len(planned) == MAX_ITEMS:
+            break
+    note = _text(raw.get("note"), MAX_TEXT_CHARS) if isinstance(raw, dict) else ""
+    return {"items": planned, "note": note}
+
+
+def _configure(planned: dict, ctx: SheetContext) -> tuple[dict | None, list[str]]:
+    """El formulario de un widget del plan: (formulario, []) o (None, [motivo]). Un 'filter'
+    son sus columnas; el resto lo arma el asistente del widget con su pedido, su tipo fijo y
+    sus columnas."""
+    widget, item = planned["widget"], planned["item"]
+    if planned["problem"]:
+        return None, [planned["problem"]]
+    if widget.key == "filter" and planned["columns"]:
+        return {"fields": {"dimensions": planned["columns"]}, "style": {}}, []
+    try:
+        return generate_widget_form(_text(item.get("request"), MAX_TEXT_CHARS), widget.key, ctx,
+                                    columns=planned["columns"]), []
+    except SpecGenerationError as e:
+        return None, [str(e)]
+    except Exception:
+        logger.exception("Falló la configuración de un widget del plan de tablero")
+        return None, ["la IA no respondió correctamente"]
+
+
+@dataclasses.dataclass
+class _Checker:
+    """Valida el formulario de cada widget del plan, en orden. Los campos calculados que define
+    un widget válido quedan disponibles para los siguientes (como en la fuente al crearlos)."""
+    ctx: SheetContext
+    # Campos calculados que ya definió el plan: {name: formula}.
+    defined: dict = dataclasses.field(default_factory=dict)
+
+    def check(self, widget, item: dict) -> tuple[dict | None, list[str]]:
+        """(entrada del plan, []) si el formulario es válido; si no, (None, errores)."""
+        data = _resolve_columns(_normalize({**item, "widget_type": widget.key}), self.ctx)
+        # El mismo campo que ya definió otro widget del plan: lo usa, no lo vuelve a crear.
+        data["calculated_fields"] = [f for f in data["calculated_fields"]
+                                     if self.defined.get(f["name"]) != f["formula"]]
+        errors = form_errors(data, self.ctx, widget.key, require_title=False)
+        if errors:
+            return None, errors
+        # El form validado se re-parsea por el dataclass: lo que guarda es lo que se ejecuta.
+        WidgetForm.from_dict({"fields": data["fields"], "style": data["style"]})
+        _omit_unchanged_scales(data, self.ctx)
+        new = {f["name"]: f["formula"] for f in data["calculated_fields"]}
+        if new:
+            self.defined.update(new)
+            self.ctx = dataclasses.replace(self.ctx, aggregated_fields=self.ctx.aggregated_fields | set(new))
+        return {
+            "widget_type": widget.key,
+            "title": _text(item.get("title"), MAX_TITLE_CHARS) or widget.label,
+            "description": _text(item.get("description"), MAX_TEXT_CHARS),
+            "fields": data["fields"],
+            "style": data["style"],
+            "calculated_fields": data["calculated_fields"],
+            "column_scales": data["column_scales"],
+        }, []
+
+
+def _dropped(title: str, errors: list[str]) -> str:
+    detail = " ".join(errors[:MAX_DROPPED_ERRORS])
+    return f"Se quitó «{title}»: no se pudo configurar ({_text(detail, MAX_TEXT_CHARS)})."
+
+
 def propose_board(prompt: str, ctx: SheetContext, existing_types=(), existing_widgets=()) -> dict:
-    """`{items: [{widget_type, title, description, request, width}], note}` para el pedido."""
+    """`{items: [{widget_type, title, description, fields, style, calculated_fields,
+    column_scales}], note}` para el pedido: solo widgets ya configurados y válidos."""
     prompt = str(prompt or "").strip()[:MAX_PROMPT_CHARS]
     if not prompt:
         raise SpecGenerationError("Describe el tablero que quieres.")
@@ -236,209 +307,36 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=(), existing_wi
     )
     raw = generate_json(contents, SCHEMA, call="board_plan",
                         thinking_budget=THINKING_BUDGETS["board_plan"])
-    logger.info("Plan de tablero con IA: %s", json.dumps(raw, ensure_ascii=False)[:2000])
-    return clean_plan(raw, existing_types, ctx=ctx)
+    plan = clean_plan(raw, ctx, existing_types)
+    planned = plan["items"]
 
+    # Cada widget con el asistente, varios a la vez; después se validan en orden (los campos
+    # calculados de uno quedan para los siguientes).
+    forms = []
+    if planned:
+        with ThreadPoolExecutor(max_workers=min(BUILD_CONCURRENCY, len(planned))) as pool:
+            forms = list(pool.map(lambda p: _configure(p, ctx), planned))
+    checker = _Checker(ctx)
+    # Los que no salieron: todos van en el error si no queda ninguno; en la nota, solo los que
+    # el usuario pidió expresamente (los que la IA propuso por su cuenta no se echan de menos).
+    items, dropped, dropped_requested = [], [], []
+    for p, (form, errors) in zip(planned, forms):
+        if form is not None:
+            spec = {k: form[k] for k in SPEC_KEYS if k in form}
+            entry, errors = checker.check(p["widget"], {**p["item"], **spec})
+            if entry:
+                items.append(entry)
+        _audit(prompt, p["widget"].key, 1, "board_plan", p["item"], errors)
+        if errors:
+            message = _dropped(_text(p["item"].get("title"), MAX_TITLE_CHARS) or p["widget"].label, errors)
+            dropped.append(message)
+            if p["item"].get("requested") is True:
+                dropped_requested.append(message)
 
-BATCH_BUILD_PROMPT = """\
-Eres el compilador técnico de widgets para un tablero de control sobre una hoja de cálculo.
-Tu tarea es compilar las especificaciones técnicas completas (`fields` y `style`) de cada uno de los widgets solicitados a continuación.
-
-Widgets disponibles (widget_type: para qué sirve. Admite: …):
-{catalog}
-
-{columns}
-
-{data_rules}
-
-Instrucciones:
-1. Devuelve la lista `items` con exactamente los widgets pedidos, en el mismo orden.
-2. Cada elemento debe incluir:
-   - "widget_type": el tipo del widget solicitado.
-   - "fields": dimensiones, métricas (con agg y alias en snake_case; opcional label, filters y window), pivotes, orden (sort_by), límite (limit).
-   - "style": diccionario con opciones de apariencia según el widget.
-   - "calculated_fields": si el pedido requiere un cálculo entre totales (ej. % de cumplimiento, diferencia, margen), defínelo aquí y úsalo con agg="auto" en las métricas.
-   - "column_scales": correcciones de escalas (ej. ordinal) solo si aplica.
-3. Usa SIEMPRE los nombres y alias reales de las columnas indicadas en la lista de columnas.
-4. Para campos calculados, la fórmula debe ser agregada: SUM([Columna]), AVG([Columna]), COUNT([Columna]), IF(condición, sí, no).
-
-Widgets solicitados a compilar:
-{widgets_requested}
-"""
-
-BATCH_ITEM_SCHEMA = {
-    "type": "object",
-    "required": ["widget_type", "fields"],
-    "properties": {
-        "widget_type": {"type": "string"},
-        "fields": {
-            "type": "object",
-            "properties": {
-                "dimensions": {"type": "array", "items": {"type": "string"}},
-                "metrics": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": ["agg", "alias"],
-                        "properties": {
-                            "agg": {"type": "string"},
-                            "field": {"type": "string"},
-                            "alias": {"type": "string"},
-                            "label": {"type": "string"},
-                            "filters": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "required": ["field", "op"],
-                                    "properties": {
-                                        "field": {"type": "string"},
-                                        "op": {"type": "string"},
-                                        "value": {},
-                                        "relative": {"type": "string"},
-                                    },
-                                },
-                            },
-                            "window": {
-                                "type": "object",
-                                "properties": {"type": {"type": "string"}},
-                            },
-                        },
-                    },
-                },
-                "pivots": {"type": "array", "items": {"type": "string"}},
-                "filters": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "required": ["field", "op"],
-                        "properties": {
-                            "field": {"type": "string"},
-                            "op": {"type": "string"},
-                            "value": {},
-                            "relative": {"type": "string"},
-                        },
-                    },
-                },
-                "columns": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "field": {"type": "string"},
-                            "label": {"type": "string"},
-                        },
-                    },
-                },
-                "sort_by": {"type": "string"},
-                "limit": {"type": "integer"},
-                "trend_by": {"type": "string"},
-            },
-        },
-        "style": {"type": "object"},
-        "calculated_fields": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["name", "formula", "format"],
-                "properties": {
-                    "name": {"type": "string"},
-                    "formula": {"type": "string"},
-                    "format": {"type": "string"},
-                },
-            },
-        },
-        "column_scales": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["field", "scale"],
-                "properties": {
-                    "field": {"type": "string"},
-                    "scale": {"type": "string"},
-                    "order": {"type": "array", "items": {"type": "string"}},
-                },
-            },
-        },
-    },
-}
-
-BATCH_BUILD_SCHEMA = {
-    "type": "object",
-    "required": ["items"],
-    "properties": {
-        "items": {
-            "type": "array",
-            "items": BATCH_ITEM_SCHEMA,
-        },
-    },
-}
-
-
-def build_board_batch(items: list[dict], ctx: SheetContext) -> list[dict]:
-    """Compila en una sola llamada a la IA las especificaciones técnicas (fields, style) de todos los widgets."""
+    if plan["note"]:
+        _audit(prompt, None, 1, "board_plan_note", {"note": plan["note"]}, [])
     if not items:
-        return []
-    if not ctx.fields:
-        raise SpecGenerationError("La hoja no tiene columnas.")
-
-    widgets_lines = []
-    for idx, item in enumerate(items, 1):
-        w_type = item.get("widget_type") or "bar"
-        title = item.get("title") or f"Widget {idx}"
-        req = item.get("request") or title
-        cols = ", ".join(item.get("columns") or [])
-        line = f"{idx}. Tipo: '{w_type}'. Título: '{title}'. Pedido: '{req}'."
-        if cols:
-            line += f" Columnas sugeridas: {cols}."
-        widgets_lines.append(line)
-
-    prompt = BATCH_BUILD_PROMPT.format(
-        catalog=_catalog(),
-        columns=columns_context(ctx),
-        data_rules=BI_DATA_RULES,
-        widgets_requested="\n".join(widgets_lines),
-    )
-
-    raw = generate_json(
-        prompt, BATCH_BUILD_SCHEMA, call="board_batch_build",
-        thinking_budget=THINKING_BUDGETS.get("board_batch_build", 0),
-    )
-
-    raw_items = raw.get("items") or []
-    compiled_results = []
-    current_ctx = ctx
-    for idx, req_item in enumerate(items):
-        compiled = raw_items[idx] if idx < len(raw_items) and isinstance(raw_items[idx], dict) else {}
-        w_type = req_item.get("widget_type") or compiled.get("widget_type")
-        normalized = _resolve_columns(_normalize(compiled), current_ctx)
-        errors = form_errors(normalized, current_ctx, w_type, require_title=False)
-        if not errors:
-            _omit_unchanged_scales(normalized, current_ctx)
-            new_calcs = normalized.get("calculated_fields") or []
-            if new_calcs:
-                import dataclasses
-                current_ctx = dataclasses.replace(
-                    current_ctx,
-                    aggregated_fields=current_ctx.aggregated_fields | {f["name"] for f in new_calcs if f.get("name")}
-                )
-            compiled_results.append({
-                "widget_type": w_type,
-                "title": req_item.get("title", ""),
-                "width": req_item.get("width"),
-                "fields": normalized.get("fields"),
-                "style": normalized.get("style", {}),
-                "calculated_fields": normalized.get("calculated_fields", []),
-                "column_scales": normalized.get("column_scales", []),
-            })
-        else:
-            logger.info("Widget batch %s (%s) requiere compilación individual por errores: %s", idx + 1, w_type, errors)
-            compiled_results.append({
-                "widget_type": w_type,
-                "title": req_item.get("title", ""),
-                "width": req_item.get("width"),
-                "fields": None,
-                "style": {},
-                "calculated_fields": [],
-                "column_scales": [],
-            })
-    return compiled_results
+        raise SpecGenerationError("La IA no propuso widgets para ese pedido. Prueba a describir qué "
+                                  "quieres ver con los nombres de las columnas."
+                                  + (f" ({' '.join(dropped)})" if dropped else ""))
+    return {"items": items, "note": " ".join(n for n in [plan["note"], *dropped_requested] if n)}

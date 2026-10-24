@@ -56,7 +56,7 @@ editor visual), y el backend calcula los números con pandas y devuelve JSON lis
                     │   sheets.py          lectura de la hoja + caché     │
                     │   source_columns.py  columnas que usa cada widget   │
                     │   ai_spec.py         propuesta de WidgetForm (IA)   │
-                    │   ai_board.py        plan y compilación batch (IA)  │
+                    │   ai_board.py        plan de tablero con IA         │
                     │   ai_data_chat.py    chatbot analítico de datos     │
                     │   ai_suggestions.py  pedidos sugeridos del chat     │
                     └───────────────┬─────────────────────────────────────┘
@@ -165,7 +165,7 @@ sheets_reports/
     google_drive.py         # Hojas y pestañas visibles para la cuenta de servicio
     widget_service.py       # WidgetService: CRUD, validación, render
     ai_spec.py              # WidgetForm vía Gemini (Function Calling): compila o ajusta campos y estilo
-    ai_board.py             # Generación de tableros con IA en 2 llamadas: plan (propose_board) y lote (build_board_batch)
+    ai_board.py             # Generación de tableros con IA: plan y configuración de cada widget (propose_board)
     ai_data_chat.py         # Chatbot analítico sobre la fuente con ejecución de código Python en Gemini
     ai_suggestions.py       # 2 pedidos sugeridos para el chat del panel, por tipo de widget y hoja (cacheados)
     ai_scales.py            # «Clasificar con IA»: escala de medida y orden de las ordinales que propone la IA
@@ -827,21 +827,15 @@ Toda interacción con el SDK de Google Gemini vive aislada en `services/ai_spec.
 
 ### 9.1 Generación de tableros completos (`services/ai_board.py`)
 
-La creación de un tablero a partir de un pedido en lenguaje natural se ejecuta mediante una arquitectura eficiente de **dos llamadas**:
+La creación de un tablero a partir de un pedido en lenguaje natural la resuelve `propose_board` (`POST /api/dashboard/{id}/board-plan/`, `{prompt, source}`). Lo que el usuario ve en la lista es lo que se crea:
 
-1. **Llamada 1 — Planificación (`propose_board`)**:
-   - `POST /api/dashboard/{id}/board-plan/` recibe `{prompt, source}`.
-   - Envía el catálogo de widgets con sus capacidades, el contexto de columnas (`columns_context`) y las reglas de negocio (`BI_DATA_RULES`).
-   - Devuelve `{items: [{widget_type, title, description, request, width}], note}` con la lista conceptual de widgets (entre 2 y 15).
-   - El usuario visualiza la propuesta en el modal, donde puede revisar, ordenar o desmarcar widgets antes de construirlos.
+1. **Plan (`call="board_plan"`)**: una llamada a Gemini (`generate_json`) con el catálogo de widgets y sus capacidades (`capabilities_text`), las reglas de datos (`BI_DATA_RULES`), el contexto de columnas (`columns_context`) y lo que ya tiene el tablero. Por cada widget devuelve `widget_type`, `title`, `description`, `request` (el pedido en lenguaje natural), `columns` (los alias que usa) y `requested` (si el usuario lo pidió expresamente).
+2. **Limpieza (`clean_plan`)**: descarta tipos sin IA, repetidos de un tipo único por tablero y pedidos vacíos (hasta `MAX_ITEMS`), resuelve las columnas a su nombre real y marca los que usan columnas de cuadrícula que el tipo no admite (`_grid_problem`).
+3. **Configuración (`_configure`)**: cada widget se arma con el asistente del widget (`generate_widget_form` con su `request`, su tipo fijo y sus `columns`; ver 9.2), hasta `BUILD_CONCURRENCY` a la vez. Un `filter` son sus columnas, sin llamar a la IA.
+4. **Validación (`_Checker`)**: cada formulario se valida otra vez en orden; los campos calculados de un widget válido quedan disponibles para los siguientes y, si otro widget los vuelve a definir con la misma fórmula, no se repiten. Los que no se pudieron configurar se quitan. Cada widget del plan queda en el log de auditoría (`tableia.ai_audit`, `tool: board_plan`, con sus errores), y también la `note` de la IA.
+5. **`note`**: solo lo que la IA cambió o dejó fuera del pedido; no resume el tablero. De los widgets quitados solo menciona los que el usuario pidió expresamente (`requested`). Sin widgets válidos → `SpecGenerationError` (422), con el motivo de cada uno.
 
-2. **Llamada 2 — Compilación en lote (`build_board_batch`)**:
-   - `POST /api/dashboard/{id}/board-build/` recibe la lista de widgets seleccionados `{items: [...]}`.
-   - En una única llamada a Gemini bajo el esquema estructurado `BATCH_BUILD_SCHEMA`, compila las especificaciones técnicas completas (`fields`, `style`, `calculated_fields` y `column_scales`) de todos los widgets a la vez.
-   - El backend normaliza y valida cada widget con `form_errors()`:
-     - Los widgets válidos se devuelven con sus `fields` resueltos para montarse directamente en el canvas.
-     - Admite hasta `MAX_NEW_CALCULATED = 10` campos calculados nuevos propuestos en el lote.
-     - Si un widget individual no supera la validación en lote, se marca con `fields: null`, activando de forma transparente la compilación individual de respaldo (fallback) mediante `table_assistant`.
+Respuesta: `{items: [{widget_type, title, description, fields, style, calculated_fields, column_scales}], note}`. El editor crea los widgets con ese formulario, sin volver a llamar a la IA.
 
 ### 9.2 Asistente y compilación de widgets (`services/ai_spec.py`)
 
@@ -956,8 +950,7 @@ Permite a los usuarios obtener una interpretación ejecutiva en Markdown sobre l
 | `GET /api/sources/{id}/status/` | Si la cuenta de servicio todavía llega a la pestaña (`google_drive.tab_status`, sin caché): `ok`, `no_access` (403/404), `tab_missing` (la hoja abre pero el gid ya no está) o `null` si no se pudo saber |
 | `POST /api/sources/{id}/formula/` | Vista previa de una fórmula (`formula` o `tree`, el árbol del constructor) con lo que hay en el editor sin guardar (`columns`, `first_row_headers`, campos anteriores) → `{formula, kind, values}` o `{error}` |
 | `POST /api/sources/{id}/formula/ai/` | «Generar con IA» del constructor: `{prompt}` + lo mismo que la vista previa → `{formula, tree, name, kind}` o `{error}` con el motivo si la IA no pudo (`services/ai_formula.py`) |
-| `POST /api/dashboard/{id}/board-plan/` | «Generar con IA» (Llamada 1): `{prompt, source}` → lista conceptual de widgets `{items: [{widget_type, title, description, request, width}], note}` (`services/ai_board.py`) |
-| `POST /api/dashboard/{id}/board-build/` | Compilación en lote (Llamada 2): `{items: [...]}` → especificaciones técnicas completas `{items: [{widget_type, fields, style, calculated_fields, column_scales}, ...]}` (`services/ai_board.py`) |
+| `POST /api/dashboard/{id}/board-plan/` | «Generar con IA»: `{prompt, source}` → widgets ya configurados y validados `{items: [{widget_type, title, description, fields, style, calculated_fields, column_scales}], note}` (`services/ai_board.py`) |
 | `POST /api/dashboard/{id}/table-assistant/` | Asistente IA de configuración de un widget: `{prompt, widget_type, current, history}` → `{widget_type, fields, style, calculated_fields}` (`services/ai_spec.py`) |
 | `POST /api/dashboard/{id}/data-chat/` | Chatbot analítico sobre la fuente con ejecución de código Python: `{prompt, source_id?}` → `{text, images, code}` (`services/ai_data_chat.py`) |
 | `GET/POST /api/widget/{id}/ai-insight/` | Insight IA de un widget: `{filters?}` → `{text, cached, title}` (`services/ai_spec.generate_widget_insight`) |

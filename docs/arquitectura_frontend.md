@@ -48,7 +48,7 @@ static/sheets_reports/js/board_editor/
   source-manager.js           # sourceManager(): fuentes del tablero, actualizar datos, eliminar
   source-picker.js            # sourcePicker(): elegir/editar/reemplazar la hoja de una fuente
   formula-builder.js          # FormulaBlocks: árbol ↔ texto, bloques y arrastre de los campos calculados
-  ai-board.js                 # aiBoard(): modal «Generar con IA» (planificación y compilación batch)
+  ai-board.js                 # aiBoard(): modal «Generar con IA» (lista propuesta y creación)
   data-chat.js                # dataChat(): chatbot analítico de datos (Gemini + Code Execution)
   board-editor-init.js        # Bootstrap: palette, drag-drop, Sortable, resize
   email-campaign.js           # emailCampaign(): configurar el envío de correos del tablero
@@ -269,9 +269,9 @@ Mientras la IA responde, el icono de «Enviar» es un spinner (`drawerAsking`).
 
 ### Modal «Generar con IA» (`ai-board.js`)
 
-El componente Alpine `aiBoard()` gestiona la creación completa de un tablero en dos llamadas eficientes:
-1. **Plan (`propose()`)**: `POST /api/dashboard/{id}/board-plan/` envía el pedido y la fuente seleccionada. La IA devuelve la lista de widgets propuesta con títulos, descripciones y anchos (`width`). El usuario pasa al paso `'plan'`, donde puede revisar los widgets sugeridos, desmarcar los que no desee y confirmar la creación.
-2. **Construcción en lote (`build()`)**: Al confirmar, el frontend envía los widgets seleccionados a `POST /api/dashboard/{id}/board-build/`. Esta llamada resuelve de una sola vez los `fields`, `style`, `calculated_fields` y `column_scales` de todos los widgets. Los widgets listos se agregan al canvas inmediatamente con `createWidgetFromProposal()`, creando los campos calculados y escalas necesarias. Si algún widget puntual requiere resolución individual, `_buildOne(item)` recurre al asistente individual como mecanismo de resguardo (fallback).
+El componente Alpine `aiBoard()` gestiona la creación de un tablero a partir de un pedido:
+1. **Plan (`propose()`)**: `POST /api/dashboard/{id}/board-plan/` envía el pedido y la fuente seleccionada. El backend devuelve la lista de widgets ya configurados por la IA y validados, cada uno con título, descripción y su formulario (`fields`, `style`, `calculated_fields`, `column_scales`); los que no se pudieron configurar no llegan. En el paso `'plan'` el usuario revisa la lista, desmarca los que no quiere y cambia los títulos; `note` explica lo que la IA ajustó o quitó.
+2. **Creación (`build()`)**: reparte los widgets en filas (`_layoutQueue`), crea en la fuente de una vez los campos calculados que usan las métricas de los widgets marcados (`_calculatedFor`, aunque los defina un widget desmarcado) y luego crea cada widget con `createWidgetFromProposal()` (`_buildOne`, varios a la vez), guardando antes sus `column_scales`. No hay más llamadas a la IA en este paso.
 
 ### Chatbot analítico sobre los datos (`data-chat.js`)
 

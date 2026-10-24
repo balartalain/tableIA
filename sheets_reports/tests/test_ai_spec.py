@@ -601,6 +601,11 @@ class PromptTests(SimpleTestCase):
         self.assertIn("- bar:", prompt)
         self.assertIn("select de \"percent\", \"value\"", prompt)
 
+    def test_una_columna_de_texto_como_medida_se_cuenta_y_no_se_rechaza(self):
+        prompt = build_system_prompt()
+        self.assertIn("la lectura por defecto es contarla", prompt)
+        self.assertIn("solo si el pedido no tiene ninguna lectura", prompt)
+
     def test_explica_que_los_alias_llevan_un_nombre_a_mostrar(self):
         prompt = build_system_prompt()
         self.assertIn("`label` (nombre a mostrar", prompt)

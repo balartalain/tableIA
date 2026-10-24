@@ -1,11 +1,10 @@
-// «Generar con IA»: el usuario describe el tablero, la IA propone la lista de widgets (tipo,
-// título, descripción y el pedido que configura cada uno: POST board-plan/) y, al aceptar, cada
-// widget marcado se configura con el asistente del panel (table-assistant, con su pedido y su
-// tipo fijo), se crean los campos calculados que proponga y se crea en el tablero. Varios a la
-// vez (BUILD_CONCURRENCY): cada widget aparece en su lugar del lienzo apenas está listo. Lo
-// abre el evento `ai-board:open`.
+// «Generar con IA»: el usuario describe el tablero y la IA propone la lista de widgets (tipo,
+// título, descripción y el formulario de cada uno, ya validado: POST board-plan/). Al aceptar,
+// se crean los campos calculados y las escalas que traiga cada widget y se crea en el tablero.
+// Varios a la vez (BUILD_CONCURRENCY): cada widget aparece en su lugar del lienzo apenas está
+// listo. Lo abre el evento `ai-board:open`.
 
-// Widgets que se piden a la IA al mismo tiempo al crear el tablero.
+// Widgets que se crean al mismo tiempo.
 const BUILD_CONCURRENCY = 3;
 
 function aiBoard() {
@@ -15,7 +14,8 @@ function aiBoard() {
     step: 'prompt',
     prompt: '',
     source: null,
-    // [{widget_type, title, description, request, width, include, status, error}]
+    // [{widget_type, title, description, fields, style, calculated_fields, column_scales,
+    //   width, include, status, error}]
     // status: '' | 'pending' | 'working' | 'done' | 'failed'.
     items: [],
     note: '',
@@ -24,8 +24,7 @@ function aiBoard() {
     building: false,
     // Fila del lienzo de cada fila de la tanda que se está creando: {índice: row_id}.
     _rowIds: {},
-    // Campos calculados de la tanda: la cola que los crea de a uno y los nombres ya creados.
-    _calculated: null,
+    // Campos calculados del plan ya creados en la fuente (un reintento no los repite).
     _calculatedNames: new Set(),
 
     get store() { return Alpine.store('dashboard'); },
@@ -155,14 +154,15 @@ function aiBoard() {
     async build({ onlyFailed = false } = {}) {
       const queue = onlyFailed ? this.failed : this.selected;
       if (!queue.length || this.building) return;
+      // Antes de quitar los desmarcados: un widget puede usar el campo que define otro.
+      const calculated = this._calculatedFor(queue);
       this.items = this.items.filter(i => i.include);
       queue.forEach(i => { i.status = 'pending'; i.error = ''; });
       this.step = 'build';
       this.building = true;
       this._layoutQueue(queue);
       this._rowIds = {};
-      this._calculated = Promise.resolve();
-      this._calculatedNames = new Set();
+      if (!onlyFailed) this._calculatedNames = new Set();
       // Las filas y el orden quedan fijados antes de empezar: los widgets terminan en cualquier
       // orden y cada uno cae en su sitio.
       const firstOrder = Math.max(-1, ...this.store.widgets.map(w => w.position?.order ?? -1)) + 1;
@@ -171,38 +171,12 @@ function aiBoard() {
         item._rowId = await this._rowFor(item);
       }
 
-      // Compilación en bloque (Llamada 2): resuelve fields y estilos de todos los widgets en 1 sola llamada a la IA
-      const needCompile = queue.filter(i => !i.fields);
-      if (needCompile.length > 0) {
-        try {
-          const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.store.dashboardId}/board-build/`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              items: needCompile.map(i => ({
-                widget_type: i.widget_type,
-                title: i.title,
-                request: i.request,
-                columns: i.columns || [],
-                width: i.width,
-              })),
-              source: this.source,
-            }),
-          });
-          if (r && r.ok && data && Array.isArray(data.items)) {
-            for (let idx = 0; idx < needCompile.length; idx++) {
-              const compiled = data.items[idx];
-              if (compiled && compiled.fields) {
-                needCompile[idx].fields = compiled.fields;
-                needCompile[idx].style = compiled.style || needCompile[idx].style || {};
-                needCompile[idx].calculated_fields = compiled.calculated_fields || [];
-                needCompile[idx].column_scales = compiled.column_scales || [];
-              }
-            }
-          }
-        } catch (e) {
-          // Fallback a compilación individual en los workers
-        }
+      // Los campos calculados van a la fuente antes que los widgets que los usan.
+      let calculatedError = '';
+      try {
+        await this._addCalculated(calculated);
+      } catch (e) {
+        calculatedError = `No se pudieron crear los campos calculados: ${e.message}`;
       }
 
       let next = 0;
@@ -211,6 +185,7 @@ function aiBoard() {
           const item = queue[next++];
           item.status = 'working';
           try {
+            if (calculatedError) throw new Error(calculatedError);
             await this._buildOne(item);
             item.status = 'done';
           } catch (e) {
@@ -233,43 +208,24 @@ function aiBoard() {
       }
     },
 
-    // Los campos calculados se crean de a uno: si dos widgets que se configuran a la vez
-    // proponen el mismo campo, el segundo usa el que ya creó el primero.
-    _addCalculated(fields) {
-      const run = async () => {
-        const fresh = fields.filter(f => !this._calculatedNames.has(f.name));
-        if (!fresh.length) return;
-        await this.store.addCalculatedFields(this.source, fresh);
-        fresh.forEach(f => this._calculatedNames.add(f.name));
-      };
-      const result = this._calculated.then(run);
-      this._calculated = result.catch(() => {});
-      return result;
+    // Los campos calculados del plan que usan las métricas de `queue` (agg "auto"), los defina
+    // el mismo widget u otro del plan.
+    _calculatedFor(queue) {
+      const defined = new Map();
+      this.items.forEach(i => (i.calculated_fields || []).forEach(f => defined.has(f.name) || defined.set(f.name, f)));
+      const used = new Set(queue.flatMap(i => ((i.fields && i.fields.metrics) || []).map(m => m.field)));
+      return [...defined.values()].filter(f => used.has(f.name));
+    },
+
+    async _addCalculated(fields) {
+      const fresh = fields.filter(f => !this._calculatedNames.has(f.name));
+      if (!fresh.length) return;
+      await this.store.addCalculatedFields(this.source, fresh);
+      fresh.forEach(f => this._calculatedNames.add(f.name));
     },
 
     async _buildOne(item) {
-      let fields = item.fields;
-      let style = item.style || {};
-      let calculatedFields = item.calculated_fields || [];
-      let columnScales = item.column_scales || [];
-
-      // Si el widget no trae fields ya resueltos (ej. filter), consulta al asistente con IA
-      if (!fields) {
-        const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.store.dashboardId}/table-assistant/`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: item.request, widget_type: item.widget_type, source: this.source, columns: item.columns || [],
-          }),
-        });
-        if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
-        fields = data.fields;
-        style = data.style || style;
-        calculatedFields = data.calculated_fields || [];
-        columnScales = data.column_scales || [];
-      }
-
-      if (calculatedFields.length) await this._addCalculated(calculatedFields);
+      const columnScales = item.column_scales || [];
       // Las escalas que corrige la IA (matriz de correlación) van a la fuente antes del widget.
       if (columnScales.length) await this.store.saveScales(this.source, this.store._scalesMap(columnScales));
       const result = await this.store.createWidgetFromProposal({
@@ -279,8 +235,8 @@ function aiBoard() {
         width: item.width,
         rowId: item._rowId,
         order: item._order,
-        fields,
-        style,
+        fields: item.fields,
+        style: item.style || {},
       });
       if (!result.ok) throw new Error(result.error);
     },

@@ -258,10 +258,11 @@ class GridConfigTests(SimpleTestCase):
             item("dynamic_table", [ASPECT, VALUE, "Carrera"]),
             item("correlation", ["Nota · Respuesta", "Nota [Clase]"]),
             item("bar", [ASPECT, "Nota · Respuesta"]),
-        ], "note": ""}, ctx=ctx)
-        self.assertEqual([i["widget_type"] for i in plan["items"]], ["dynamic_table"])
-        self.assertIn("no usa columnas de cuadrícula", plan["note"])
-        self.assertIn("dos cuadrículas", plan["note"])
+        ], "note": ""}, ctx)
+        problems = [p["problem"] for p in plan["items"]]
+        self.assertEqual(problems[0], "")
+        self.assertIn("no usa columnas de cuadrícula", problems[1])
+        self.assertIn("dos cuadrículas", problems[2])
 
     def test_validacion_de_las_virtuales(self):
         ctx = SheetContext.from_dataframe(survey_source_df(), "0")

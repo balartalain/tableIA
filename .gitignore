@@ -38,3 +38,7 @@ google_credentials.json
 .coverage
 htmlcov/
 
+
+# Script de benchmark local (no va al repo)
+docs/benchmark_gemini_openai.py
+docs/data.csv

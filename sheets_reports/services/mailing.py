@@ -7,12 +7,14 @@ aplicación), hasta llegar al máximo de cada remitente (`per_sender_limit`), y 
 en `EmailLog`. No hace HTTP: las vistas (views_email.py) son adaptadores sobre este servicio.
 """
 import base64
+import binascii
 import csv
 import hashlib
 import io
 import re
 import smtplib
 from datetime import datetime, time, timedelta
+from email.mime.image import MIMEImage
 from html import unescape
 from time import sleep
 from zoneinfo import ZoneInfo
@@ -198,11 +200,48 @@ def html_to_text(html: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
+# Una imagen del editor, incrustada en el cuerpo: <img src="data:image/png;base64,...">.
+_DATA_IMAGE_RE = re.compile(r'src="data:image/([a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)"', re.IGNORECASE)
+
+
+def _inline_images(html: str) -> tuple[str, list[MIMEImage]]:
+    """Las imágenes `data:` del cuerpo → (HTML con `src="cid:..."`, sus partes MIME en línea).
+    Gmail y la mayoría de los clientes no muestran una imagen `data:` en un correo recibido;
+    adjunta en línea (Content-ID) sí. Una imagen repetida va una sola vez; un `data:` que no
+    es base64 válido queda como está."""
+    images, cids = [], {}
+
+    def to_cid(match):
+        source = match.group(0)
+        if source not in cids:
+            subtype = match.group(1).lower()
+            try:
+                data = base64.b64decode(re.sub(r"\s", "", match.group(2)), validate=True)
+            except (binascii.Error, ValueError):
+                return source
+            cid = f"img{len(cids) + 1}@tableia"
+            part = MIMEImage(data, _subtype=subtype)
+            part.add_header("Content-ID", f"<{cid}>")
+            part.add_header("Content-Disposition", "inline",
+                            filename=f"imagen{len(cids) + 1}.{subtype.split('+')[0]}")
+            images.append(part)
+            cids[source] = cid
+        return f'src="cid:{cids[source]}"'
+
+    return _DATA_IMAGE_RE.sub(to_cid, html), images
+
+
 def _message(campaign: EmailCampaign, sender_email: str, to: list[str], connection) -> EmailMultiAlternatives:
-    """El mensaje de la campaña: HTML, con su alternativa en texto plano."""
+    """El mensaje de la campaña: HTML, con su alternativa en texto plano y sus imágenes en
+    línea (multipart/related, para que el cliente las muestre en el cuerpo y no como adjuntos)."""
     message = EmailMultiAlternatives(campaign.subject, html_to_text(campaign.body),
                                      from_email=sender_email, to=to, connection=connection)
-    message.attach_alternative(campaign.body, "text/html")
+    html, images = _inline_images(campaign.body)
+    message.attach_alternative(html, "text/html")
+    if images:
+        message.mixed_subtype = "related"
+        for image in images:
+            message.attach(image)
     return message
 
 

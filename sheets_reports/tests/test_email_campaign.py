@@ -72,6 +72,32 @@ class MessageTests(SimpleTestCase):
         self.assertEqual(mailing.html_to_text(""), "")
         self.assertEqual(mailing.html_to_text("Texto plano"), "Texto plano")
 
+    def _sent(self, body):
+        campaign = EmailCampaign(subject="Hola", body=body)
+        msg = mailing._message(campaign, "a@gmail.com", ["x@uapa.edu.do"], None).message()
+        parts = list(msg.walk())
+        html = next(p for p in parts if p.get_content_type() == "text/html").get_payload(decode=True).decode()
+        images = [p for p in parts if p.get_content_maintype() == "image"]
+        return msg, html, images
+
+    def test_las_imagenes_van_en_linea_y_no_en_base64(self):
+        # Gmail no muestra una imagen `data:` en un correo recibido; adjunta en línea (cid), sí.
+        png = "iVBORw0KGgo="
+        msg, html, images = self._sent(f'<p>Hola</p><img src="data:image/png;base64,{png}">'
+                                       f'<img src="data:image/png;base64,{png}">')
+        self.assertEqual(msg.get_content_type(), "multipart/related")
+        self.assertNotIn("data:image", html)
+        self.assertEqual(html.count('src="cid:img1@tableia"'), 2)
+        self.assertEqual(len(images), 1)  # la misma imagen, una sola vez
+        self.assertEqual(images[0].get_content_type(), "image/png")
+        self.assertEqual(images[0]["Content-ID"], "<img1@tableia>")
+        self.assertTrue(images[0]["Content-Disposition"].startswith("inline"))
+
+    def test_sin_imagenes_no_hay_adjuntos(self):
+        msg, html, images = self._sent("<p>Hola</p>")
+        self.assertEqual(msg.get_content_type(), "multipart/alternative")
+        self.assertEqual((html, images), ("<p>Hola</p>", []))
+
 
 class PacerTests(SimpleTestCase):
     def test_no_espera_antes_del_primero_y_espacia_los_demas(self):

@@ -127,11 +127,14 @@ remitentes se puede subir el máximo diario.
 | **Activar el envío** | Exige asunto, cuerpo, al menos un remitente y destinatarios. Suma la pestaña «Seguimiento de correos» a la vista compartida. |
 
 El correo se envía en **HTML** y, además, con una versión en texto plano para los clientes
-que no muestran HTML (se genera quitando las etiquetas). Las **imágenes van incrustadas en
-base64** dentro del propio mensaje: no hace falta alojarlas, pero engordan el correo (el tope
-por imagen es 300 KB y `DATA_UPLOAD_MAX_MEMORY_SIZE` > 2.5 MB, ver §1; si el mensaje entero
-supera ese tope, al guardar avisa de que es demasiado grande). Gmail las muestra;
-algunos clientes de escritorio (Outlook) pueden no hacerlo. Al guardar, el servidor **sanea**
+que no muestran HTML (se genera quitando las etiquetas). En el editor, las **imágenes se
+guardan en base64** dentro del cuerpo: no hace falta alojarlas, pero engordan el mensaje (el
+tope por imagen es 300 KB y `DATA_UPLOAD_MAX_MEMORY_SIZE` > 2.5 MB, ver §1; si el mensaje
+entero supera ese tope, al guardar avisa de que es demasiado grande). Al enviar,
+`mailing._message` las saca del HTML y las adjunta **en línea** (`Content-ID`, con
+`src="cid:…"` en el HTML y el mensaje en `multipart/related`): Gmail y la mayoría de los
+clientes no muestran una imagen `data:` en un correo recibido, y en línea sí, dentro del
+cuerpo y sin listarla como adjunto. Una imagen repetida va una sola vez. Al guardar, el servidor **sanea**
 el HTML: solo se conservan las etiquetas del editor (script, estilos y atributos peligrosos
 se eliminan) y los enlaces se abren en otra pestaña.
 

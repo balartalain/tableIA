@@ -1706,8 +1706,31 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
         for calc in data["calculated_fields"]:
             if isinstance(calc, dict) and "formula" in calc and isinstance(calc["formula"], str):
                 calc["formula"] = rename_columns(calc["formula"], alias_map)
+        _reuse_calculated_fields(data, ctx)
 
     return data
+
+
+def _reuse_calculated_fields(data: dict, ctx: SheetContext) -> None:
+    """Un campo propuesto con la misma fórmula que uno de la fuente es ese campo: sale de
+    `calculated_fields` y las métricas que lo usan pasan al de la fuente."""
+    kept, same_as = [], {}
+    for item in data["calculated_fields"]:
+        try:
+            formula = compile_formula(str(item.get("formula") or ""), ctx.sheet_fields, ctx.aggregated_fields)
+            same = _same_formula(formula.text, ctx)
+        except (FormulaError, AttributeError):
+            same = None
+        if same:
+            same_as[str(item.get("name") or "").strip()] = same
+        else:
+            kept.append(item)
+    if not same_as:
+        return
+    data["calculated_fields"] = kept
+    for metric in (data.get("fields") or {}).get("metrics") or []:
+        if isinstance(metric, dict) and metric.get("field") in same_as:
+            metric["field"] = same_as[metric["field"]]
 
 
 def _omit_unchanged_scales(data: dict, ctx: SheetContext) -> None:

@@ -211,21 +211,21 @@ class GenerateWidgetFormTests(SimpleTestCase):
         self.assertIn('"Doble" (numérica, continua: 50 a 600, 6 valores distintos) — campo calculado por fila: [ventas] * 2', message)
         self.assertIn('"KPI 1" (porcentaje): ' + HOGAR, message)
 
-    def test_no_acepta_un_campo_igual_a_uno_que_ya_existe(self, _audit):
-        """La misma fórmula escrita distinto que «KPI 1»: error, y el reintento usa el existente."""
-        duplicate = {"widget_type": "bar", "calculated_fields": [
-            {"name": "Participación", "format": "percent",
-             "formula": 'SUM(IF(categoria = "Hogar", ventas, 0)) / SUM(ventas) * 100'}],
-            "fields": {"dimensions": ["mes"], "metrics": [{"field": "Participación", "agg": "auto", "alias": "p"}]},
-            "style": {}}
-        reuse = {**duplicate, "calculated_fields": [],
-                 "fields": {"dimensions": ["mes"], "metrics": [{"field": "KPI 1", "agg": "auto", "alias": "p"}]}}
-        with mock.patch.object(ai_spec, "_call_model", side_effect=[("create_widget", duplicate),
-                                                                   ("create_widget", reuse)]) as call:
-            result = generate_widget_form("participación de Hogar por mes", None, calculated_ctx())
-        self.assertEqual(call.call_count, 2)
-        self.assertIn("ya existe el campo 'KPI 1' con esa fórmula", call.call_args_list[1].args[0])
-        self.assertEqual(result["fields"]["metrics"][0]["field"], "KPI 1")
+    def test_un_campo_igual_a_uno_que_ya_existe_es_ese_campo(self, _audit):
+        """La misma fórmula escrita distinto que «KPI 1», con otro nombre o con el suyo: se usa
+        el existente sin reintento."""
+        formula = 'SUM(IF(categoria = "Hogar", ventas, 0)) / SUM(ventas) * 100'
+        for name in ("Participación", "KPI 1"):
+            with self.subTest(name=name):
+                duplicate = {"widget_type": "bar", "style": {},
+                             "calculated_fields": [{"name": name, "format": "percent", "formula": formula}],
+                             "fields": {"dimensions": ["mes"],
+                                        "metrics": [{"field": name, "agg": "auto", "alias": "p"}]}}
+                with mock.patch.object(ai_spec, "_call_model", return_value=("create_widget", duplicate)) as call:
+                    result = generate_widget_form("participación de Hogar por mes", None, calculated_ctx())
+                self.assertEqual(call.call_count, 1)
+                self.assertEqual(result["calculated_fields"], [])
+                self.assertEqual(result["fields"]["metrics"][0]["field"], "KPI 1")
 
     def test_admite_hasta_diez_campos_calculados(self, _audit):
         fields = [

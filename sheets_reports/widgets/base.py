@@ -81,7 +81,7 @@ class BaseWidget(ABC):
 
     # Reglas del tipo, planas y declarativas (antes vivían en subclases de SpecPart).
     capabilities: ClassVar[dict] = {}
-    max_per_dashboard: ClassVar[Optional[int]] = None
+    max_per_page: ClassVar[Optional[int]] = None
     board_filtered: ClassVar[bool] = True
     # ¿Acepta las columnas virtuales de una cuadrícula? Solo los que consultan con `run_steps`,
     # que la desdobla (engine/steps/grid.py).

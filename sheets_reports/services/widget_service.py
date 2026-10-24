@@ -13,7 +13,7 @@ from sheets_reports.engine.steps.grid import query_names
 from sheets_reports.engine.context import SheetContext
 from sheets_reports.utils.validation import MAX_BOARD_IN_VALUES, SpecValidationError
 from sheets_reports.engine import ResultTooLargeError
-from sheets_reports.models import Widget, default_position
+from sheets_reports.models import FIRST_PAGE_ID, Widget, default_position
 from sheets_reports.services.ai_spec import form_errors
 from sheets_reports.widgets import WIDGETS
 from sheets_reports.widgets.schemas import WidgetForm
@@ -29,12 +29,14 @@ def clean_position(value, fallback=None) -> dict:
         for key in ("order", "w", "h"):
             if isinstance(value.get(key), (int, float)) and not isinstance(value.get(key), bool):
                 position[key] = int(value[key])
-        if "row_id" in value and isinstance(value["row_id"], str) and value["row_id"].strip():
-            position["row_id"] = str(value["row_id"]).strip()
+        for key in ("row_id", "page_id"):
+            if isinstance(value.get(key), str) and value[key].strip():
+                position[key] = value[key].strip()
     position["w"] = min(max(position.get("w", 6), 2), 12)
     position["h"] = min(max(position.get("h", 300), 100), 3000)
     position.setdefault("order", 0)
     position.setdefault("row_id", "row_1")
+    position.setdefault("page_id", FIRST_PAGE_ID)
     return position
 
 
@@ -52,7 +54,8 @@ class WidgetService:
     def create(self, widget_type: str, payload: dict) -> Widget:
         """Widget desde el builder o desde la IA. Lanza UnknownKeyError o SpecValidationError."""
         definition = WIDGETS.get(widget_type)
-        self._check_singleton(definition)
+        position = clean_position(payload.get("position"))
+        self._check_singleton(definition, position["page_id"])
         title = str(payload.get("title") or "").strip() or definition.label
         form = WidgetForm.from_dict({
             **payload,
@@ -65,7 +68,7 @@ class WidgetService:
             source=self.source,
             type=widget_type,
             title=title,
-            position=clean_position(payload.get("position")),
+            position=position,
             fields=form.fields.to_dict(),
             style=form.style.to_dict(),
             source_prompt=payload.get("source_prompt"),
@@ -74,7 +77,7 @@ class WidgetService:
     def update(self, widget: Widget, payload: dict) -> Widget:
         """Edición manual: lo que no viene se conserva del widget. NUNCA llama a la IA."""
         if "type" in payload and payload["type"] != widget.type:
-            self._check_singleton(WIDGETS.get(payload["type"]))
+            self._check_singleton(WIDGETS.get(payload["type"]), self.dashboard.page_of(widget))
             widget.type = payload["type"]
 
         merged = {
@@ -131,12 +134,16 @@ class WidgetService:
         Widget.objects.bulk_update(adopted, ["source"])
         return adopted
 
-    def _check_singleton(self, definition) -> None:
-        limit = getattr(definition, "max_per_dashboard", None)
+    def _check_singleton(self, definition, page_id: str) -> None:
+        """`max_per_page` se cuenta por página: cada página tiene, p. ej., su caja de filtros."""
+        limit = getattr(definition, "max_per_page", None)
         if limit is None:
             return
-        if self.dashboard.widgets.filter(type=definition.type_key).count() >= limit:
-            raise SpecValidationError([f"Solo se puede agregar un widget «{definition.label}» por tablero."])
+        page = self.dashboard.resolve_page(page_id)
+        same_page = [w for w in self.dashboard.widgets.filter(type=definition.type_key)
+                     if self.dashboard.page_of(w) == page]
+        if len(same_page) >= limit:
+            raise SpecValidationError([f"Solo se puede agregar un widget «{definition.label}» por página."])
 
     # ------------------------------------------------------------- filtros
     def parse_board_filters(self, raw: Optional[str]) -> tuple[list[Condition], list[str]]:

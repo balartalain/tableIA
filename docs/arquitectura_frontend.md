@@ -93,6 +93,8 @@ Es el archivo más grande (~1000 líneas). Contiene todo el estado y la lógica 
   editingId: null,          // id del widget en edición
   editingType: null,        // tipo del widget en edición
   dashboardId: window.DASHBOARD_ID,
+  pages: [],                // [{id, name}] del tablero, en el orden de las pestañas
+  currentPageId: null,      // la página montada (arranca con ?page=)
   drawerTab: 'data',        // 'data' | 'style'
   schema: { all_fields, numeric_fields, dimension_fields, time_fields, sample_values },
   widgetManifest: window.WIDGET_MANIFEST,
@@ -119,14 +121,46 @@ Es el archivo más grande (~1000 líneas). Contiene todo el estado y la lógica 
 DOMContentLoaded
   ├── renderPalette() + initRail()
   ├── store.loadSchema()           → GET /api/dashboard/{id}/schema/
-  ├── store.loadBoard()            → GET /api/dashboard/{id}/render/
+  ├── store.loadBoard()            → GET /api/dashboard/{id}/render/?page=
   │     └── BaseWidget.fromServer(w) → instancias
-  ├── widget.mount() → DOM
-  └── applyRender(entries[w.id])   → widget.draw(data, style, title)
+  └── store.mountWidgets(entries)
+        ├── widget.mount() → DOM
+        └── applyRender(entries[w.id]) → widget.draw(data, style, title)
 ```
 
 El tablero no se refresca solo: los datos de cada hoja quedan en caché en el servidor hasta
 que el usuario pulsa «Actualizar datos» al editar la fuente.
+
+### Páginas
+
+Un tablero tiene una o más páginas (`Dashboard.pages`); cada widget es de una
+(`position.page_id`). El store solo tiene los widgets de la **página actual**
+(`currentPageId`): filas, `reorderWidgets`, el filtro único, la miniatura y «Generar con IA»
+trabajan sobre ella.
+
+- `switchPage(id)`: cierra el panel, guarda el diseño pendiente (`flushLayoutSave`), guarda
+  la foto de la página que se deja, destruye sus widgets, cambia los filtros de página
+  (`swapPageFilters`) y monta la otra: desde su foto si ya se visitó, o con `loadBoard()`
+  (`/render/?page=`) si no. Ambos caminos pasan por `_applyBoard()` + `mountWidgets()`.
+  `loadBoard` devuelve `null` si mientras cargaba se pidió otra página.
+- Foto de una página (`_pageCache[id]`, `_snapshotPage()`): sus widgets vivos serializados con
+  sus datos (`_lastEntry`), en el formato de `/render/`. Incluye lo editado en la página. No
+  se toma si quedan datos en camino (la selección de filtros ya no coincidiría con lo
+  dibujado). Se descarta toda al cambiar las fuentes (`resetSources` → `clearPageCache`) y la
+  de una página al eliminarla; solo vive en memoria.
+- `addPage()`, `renamePage(id, name)`, `reorderPages(ids)` y `deletePage(id)` guardan la lista
+  entera con `savePages(pages)` (PUT `/api/dashboards/{id}/` con `pages`); el servidor borra
+  los widgets de una página que ya no viene. `deletePage` pide confirmación y no quita la
+  última página.
+- Los widgets nuevos (`addWidget`, `createWidgetFromProposal`) llevan `page_id` de la página
+  actual.
+- Pestañas (`#page-tabs`, componente `pageTabs()` en `board-editor-init.js`): siempre a la
+  vista, también con una sola página (para poder renombrarla), con un «+» al final. Doble clic
+  renombra en el sitio, la pestaña activa tiene un menú con «Renombrar» y «Eliminar» («Eliminar»
+  no aparece en la única página), y se reordenan con
+  SortableJS (al soltar se devuelve la pestaña a su sitio y `reorderPages` guarda el orden;
+  Alpine repinta).
+- «Compartir» y «Vista previa» abren la página actual (`?page=`) con sus filtros.
 
 ### Widget CRUD
 
@@ -315,7 +349,7 @@ Clase abstracta base para todos los widgets. Define el lifecycle, construcción 
 | `palette` | `{icon, category, label, description}` para el rail |
 | `defaults` | `{title, width, height}` |
 | `placement` | `'canvas'` o `'header'` (filtro) |
-| `singleton` | `max_per_dashboard === 1` |
+| `singleton` | `max_per_page === 1` |
 
 ### Lifecycle
 
@@ -592,17 +626,19 @@ los widgets de esa fuente.
 Dos niveles:
 
 1. **Filtros del widget** (`fields.filters`): se guardan con el widget. Se envían en el POST/PUT del widget.
-2. **Filtros del tablero** (`boardFilters`): estado global, compartido por todos los widgets. Se persisten en la URL (`?filters=`) y se envían al endpoint `/render/`.
+2. **Filtros del tablero** (`boardFilters`): los de la caja de filtros de la página actual; cada página tiene la suya y solo filtra sus widgets. Se persisten en la URL (`?page=…&filters=`) y se envían al endpoint `/render/` junto con la página.
 
 `filters.js` extiende el store con:
-- `boardFilters: {}` — `{columna: [valores]}`.
+- `boardFilters: {}` — `{columna: [valores]}` de la página actual.
+- `_pageFilters: {}` — la selección de las demás páginas mientras no se ven.
 - `setBoardFilter(field, values)`: actualiza y despacha `dashboard:filters-changed`.
+- `swapPageFilters(from, to)`: al cambiar de página guarda la selección de una y retoma la de la otra; `dropPageFilters(id)` olvida la de una página eliminada.
 - `getFilterQueryString()`: `filters=<JSON codificado>`.
 - `initBoardFiltersFromURL()`: parsea la URL al cargar.
 
 El evento `dashboard:filters-changed` dispara `store.refreshData()`, que re-fetch `/render/` con los filtros y llama `applyRender` en cada widget.
 
-La barra de carga de la página (`#page-loader`) es el único indicador de carga del tablero, en el editor y en la vista compartida. Está visible mientras queda alguna carga en curso: la carga inicial, cada refresco por filtros, la creación de un widget y el guardado desde el panel. La controla `setPageLoading()` (en `dashboard-store.js` y en `board-view-init.js`), que cuenta las cargas pendientes. `BaseWidget.setLoading()` la activa y además marca el widget con `.tb-widget-loading` (opaco) mientras carga; solo un cambio de estado suma o resta en la cuenta. Guardar el diseño (posición, tamaño) no es una carga y no los marca.
+La barra de carga de la página (`#page-loader`) es el único indicador de carga del tablero, en el editor y en la vista compartida. Está visible mientras queda alguna carga en curso: la carga inicial, cada refresco por filtros, la creación de un widget y el guardado desde el panel. La controla `setPageLoading()` (en `dashboard-store.js` y en `board-view-init.js`), que cuenta las cargas pendientes. Las peticiones de datos de la página (la carga de una página y cada refresco por filtros) ocupan un solo lugar en esa cuenta (`_setRenderLoading`): cada una toma un número de `_renderSeq`, y solo la última lo libera al responder; cambiar de página toma un número nuevo, así que las peticiones en vuelo de la página anterior ni se pintan ni sostienen la barra. Mientras la barra está activa el documento lleva `.is-page-loading` y no se puede cambiar de página: un velo tapa las pestañas marcadas con `data-lock-while-loading` (`#page-tabs`, `#view-tabs`) y `switchPage` / `showPage` no hacen nada (`isPageLoading()`). Así la foto de una página siempre coincide con sus filtros. `BaseWidget.setLoading()` la activa y además marca el widget con `.tb-widget-loading` (opaco) mientras carga; solo un cambio de estado suma o resta en la cuenta. Guardar el diseño (posición, tamaño) no es una carga y no los marca.
 
 ## Drag and drop
 
@@ -791,6 +827,18 @@ con un valor centinela, porque VirtualSelect trata el vacío como «nada elegido
 La excepción es la tabla de columnas de la fuente (`source_picker.html`): sus selects de
 «Tipo» y «Formato», uno por columna de la hoja, son nativos.
 
+## Vista compartida (`board-view-init.js`)
+
+La vista monta una página a la vez con `store.loadPage(id)`: guarda la foto de la página que
+deja (igual que el editor), destruye sus widgets y monta la otra en filas de solo lectura
+(`_mountPage`), desde su foto si ya se visitó o pidiendo `/render/?page=` si no. Las pestañas (`#view-tabs`)
+las pinta el servidor: una por página y, con el envío de correos activado, «Seguimiento de
+correos» al final. La barra aparece si hay más de una página o si está la de correos.
+`board-view-init.js` cambia entre ellas: una página llama a `loadPage` (con sus propios
+filtros), y la de correos oculta el tablero y llama a `window.emailReport.show()` (que expone
+`email-report.js`; `hide()` detiene el sondeo al salir). La página inicial viene de `?page=`
+y `#correos` abre directamente los correos.
+
 ## Envío de correos
 
 El envío de correos está documentado en [`configuracion_correos.md`](configuracion_correos.md).
@@ -811,10 +859,11 @@ Usuario abre /board/{id}/
   ├── board-editor-init.js (DOMContentLoaded)
   │     ├── renderPalette() ← WidgetRegistry.getPaletteEntries()
   │     ├── store.loadSchema() → GET /schema/
-  │     ├── store.loadBoard() → GET /render/
+  │     ├── store.loadBoard() → GET /render/?page=
   │     │     └── BaseWidget.fromServer(w) → instancias
-  │     ├── widget.mount() → DOM
-  │     └── applyRender() → widget.draw(data, style, title)
+  │     └── store.mountWidgets()
+  │           ├── widget.mount() → DOM
+  │           └── applyRender() → widget.draw(data, style, title)
   │
   ├── Usuario edita widget
   │     ├── openDrawer(id) → drawerDraft
@@ -824,7 +873,7 @@ Usuario abre /board/{id}/
   │
   ├── Usuario cambia filtros de tablero
   │     └── setBoardFilter() → dashboard:filters-changed
-  │           └── refreshData() → GET /render/?filters=...
+  │           └── refreshData() → GET /render/?page=...&filters=...
   │                 └── applyRender() en cada widget
   │
   └── Usuario actualiza, edita o reemplaza una fuente (gestor de fuentes)

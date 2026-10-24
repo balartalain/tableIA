@@ -167,10 +167,63 @@
     </div>
   </aside>
 
-  <main id="board-main" class="ui-dot-grid relative flex-1 min-w-0 min-h-0 overflow-hidden">
+  <main id="board-main" class="ui-dot-grid relative flex-1 min-w-0 min-h-0 overflow-hidden flex flex-col">
+    <!-- Pestañas de las páginas, siempre a la vista (también con una sola, para poder
+         renombrarla). Doble clic renombra; se reordenan arrastrando (pageTabs). -->
+    <nav id="page-tabs" x-data="pageTabs()" x-cloak data-lock-while-loading x-show="$store.dashboard.pages.length"
+         role="tablist" aria-label="Páginas del tablero"
+         class="ui-tabs relative z-30 shrink-0 flex-wrap items-end bg-surface px-4">
+      <div x-ref="list" class="flex flex-wrap items-end gap-1">
+        <template x-for="page in $store.dashboard.pages" :key="page.id">
+          <div class="relative flex items-center" :data-page-id="page.id">
+            <input x-show="editingId === page.id" x-model="draft" type="text" maxlength="60"
+                   aria-label="Nombre de la página"
+                   x-on:keydown.enter.prevent="$el.blur()" x-on:keydown.escape.prevent="cancel()"
+                   x-on:blur="commit()"
+                   class="w-36 my-1.5 text-sm border border-accent rounded-sm px-2 py-1 focus:outline-none">
+            <button x-show="editingId !== page.id" type="button" role="tab"
+                    :aria-selected="$store.dashboard.currentPageId === page.id"
+                    x-on:click="$store.dashboard.switchPage(page.id)"
+                    x-on:dblclick="startRename(page)"
+                    title="Doble clic para renombrar"
+                    class="ui-tab whitespace-nowrap">
+              <span x-text="page.name"></span>
+            </button>
+            <!-- Opciones de la página activa -->
+            <div x-show="editingId !== page.id && $store.dashboard.currentPageId === page.id"
+                 class="relative -ml-2 mr-1" x-on:click.outside="menuOpen = false">
+              <button type="button" x-on:click="menuOpen = !menuOpen"
+                      aria-label="Opciones de la página" title="Opciones de la página"
+                      class="w-6 h-6 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-line transition cursor-pointer">
+                <i class="ti ti-dots-vertical text-sm" aria-hidden="true"></i>
+              </button>
+              <div x-show="menuOpen" x-cloak
+                   class="absolute left-0 top-full mt-1 w-40 rounded-lg bg-surface border border-line shadow-xl py-1.5 z-50 text-xs font-medium text-fg">
+                <button type="button" x-on:click="menuOpen = false; startRename(page)"
+                        class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-surface-muted text-left transition cursor-pointer">
+                  <i class="ti ti-pencil text-base text-fg-muted" aria-hidden="true"></i>
+                  <span>Renombrar</span>
+                </button>
+                <button type="button" x-show="$store.dashboard.pages.length > 1"
+                        x-on:click="menuOpen = false; $store.dashboard.deletePage(page.id)"
+                        class="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-danger-bg text-danger text-left transition cursor-pointer">
+                  <i class="ti ti-trash text-base" aria-hidden="true"></i>
+                  <span>Eliminar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <button type="button" x-on:click="$store.dashboard.addPage()"
+              aria-label="Agregar página" title="Agregar página"
+              class="self-center ml-1 w-7 h-7 rounded-full flex items-center justify-center text-fg-muted hover:text-fg hover:bg-line transition cursor-pointer">
+        <i class="ti ti-plus text-sm" aria-hidden="true"></i>
+      </button>
+    </nav>
     <!-- El tablero (filtros y lienzo) toma su tema de tablero-theme.css; regla, filas y
          controles de edición son de la app. -->
-    <div id="board-scroll" class="tablero relative h-full w-full overflow-auto flex flex-col" {% include "sheets_reports/_board_theme_attrs.html" %}>
+    <div id="board-scroll" class="tablero relative flex-1 min-h-0 w-full overflow-auto flex flex-col" {% include "sheets_reports/_board_theme_attrs.html" %}>
       {% include "sheets_reports/board_ruler.html" %}
       <!-- Caja de filtros (widgets con placement 'header'): arriba del grid, bajo la regla.
            En un tablero sin widgets no se muestra: no hay nada que filtrar todavía. -->

@@ -152,6 +152,12 @@ tokens.css (variables `--color-*` y de componente), nunca de un valor suelto.
       from { transform: translateX(-100%); }
       to { transform: translateX(350%); }
     }
+    /* Mientras carga la página no se cambia de pestaña: un velo tapa la barra de pestañas. */
+    .is-page-loading [data-lock-while-loading] { position: relative; }
+    .is-page-loading [data-lock-while-loading]::after {
+      content: ''; position: absolute; inset: 0; z-index: 40; cursor: progress;
+      background: color-mix(in srgb, var(--color-surface) 60%, transparent);
+    }
 
     /* ---------- Selects con buscador (x-vselect, vselect.js) ---------- */
     .vscomp-toggle-button { @apply rounded-md; }

@@ -1,12 +1,14 @@
 (function () {
-  // Selección de la caja de filtros: {columna: [valores]}. Es del que mira el tablero (no se
-  // guarda en el widget): viaja en la URL como ?filters=[{field, op: 'in', value}] — el mismo
-  // formato que valida el backend (WidgetService.parse_board_filters) —, se comparte con el
-  // enlace y define el universo de todos los widgets.
+  // Selección de la caja de filtros de la página actual: {columna: [valores]}. Es del que mira
+  // el tablero (no se guarda en el widget): viaja en la URL como ?page=<id>&filters=[{field,
+  // op: 'in', value}] — el mismo formato que valida el backend (WidgetService.parse_board_filters) —,
+  // se comparte con el enlace y define el universo de los widgets de esa página. Cada página
+  // tiene su caja: la selección de las otras queda en `_pageFilters` mientras no se ven.
   document.addEventListener('alpine:init', () => {
     const store = Alpine.store('dashboard');
 
     store.boardFilters = {};
+    store._pageFilters = {};
 
     store.initBoardFiltersFromURL = function () {
       const raw = new URLSearchParams(window.location.search).get('filters');
@@ -32,14 +34,33 @@
         .map(([field, value]) => ({ field, op: 'in', value }));
     };
 
-    store._applyBoardFilters = function (filters) {
-      this.boardFilters = filters;
+    // La URL refleja la página actual y sus filtros.
+    store._writeFiltersURL = function () {
       const url = new URL(window.location);
       const conditions = this._boardConditions();
       if (conditions.length) url.searchParams.set('filters', JSON.stringify(conditions));
       else url.searchParams.delete('filters');
-      history.replaceState({}, '', url);
+      if (this.currentPageId) url.searchParams.set('page', this.currentPageId);
+      history.replaceState(history.state, '', url);
+    };
+
+    store._applyBoardFilters = function (filters) {
+      this.boardFilters = filters;
+      this._writeFiltersURL();
       window.dispatchEvent(new CustomEvent('dashboard:filters-changed'));
+    };
+
+    // Al cambiar de página: guarda la selección de la que se deja y retoma la de la otra.
+    store.swapPageFilters = function (fromPage, toPage) {
+      if (fromPage) this._pageFilters[fromPage] = this.boardFilters;
+      this.boardFilters = this._pageFilters[toPage] || {};
+      this.currentPageId = toPage;
+      this._writeFiltersURL();
+    };
+
+    // Una página eliminada se lleva su selección.
+    store.dropPageFilters = function (pageId) {
+      delete this._pageFilters[pageId];
     };
 
     // Valores elegidos en un control; una lista vacía quita el filtro de esa columna.

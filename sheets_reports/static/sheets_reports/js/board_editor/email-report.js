@@ -1,4 +1,5 @@
-// Pestaña «Seguimiento de correos» de la vista compartida (board_view.html, solo con el envío activado): en
+// Pestaña «Seguimiento de correos» de la vista compartida (board_view.html, solo con el envío
+// activado; las pestañas las maneja board-view-init.js, que llama a window.emailReport): en
 // qué está el envío, el avance, los enviados por día, el detalle por remitente, los errores
 // por motivo, la tabla de destinatarios y el registro de envíos. Mientras la pestaña está a
 // la vista consulta cada pocos segundos los totales del envío; si cambiaron (el crontab
@@ -19,8 +20,6 @@ const EMAIL_STATE_STYLES = {
 const EMAIL_CHART_HEIGHT = 240;
 
 document.addEventListener('DOMContentLoaded', () => {
-  const tabs = Array.from(document.querySelectorAll('#view-tabs .view-tab'));
-  const panels = { charts: document.getElementById('tab-charts'), emails: document.getElementById('tab-emails') };
   const reportUrl = apiUrl(`/api/dashboard/${window.DASHBOARD_ID}/email-report/`);
   const errorEl = document.getElementById('email-report-error');
   let summary = null;
@@ -220,28 +219,12 @@ document.addEventListener('DOMContentLoaded', () => {
     timer = null;
   };
 
-  const showTab = (name) => {
-    tabs.forEach(tab => {
-      const active = tab.dataset.tab === name;
-      tab.setAttribute('aria-selected', active);
-    });
-    panels.charts.classList.toggle('hidden', name !== 'charts');
-    panels.emails.classList.toggle('hidden', name !== 'emails');
-    history.replaceState(null, '', name === 'emails' ? '#correos' : window.location.pathname + window.location.search);
-    if (name === 'emails') {
-      startPolling();
-    } else {
-      stopPolling();
-      // Los gráficos dibujados con la pestaña oculta toman su ancho al volver.
-      window.dispatchEvent(new Event('resize'));
-    }
-  };
+  // La vista lo muestra u oculta al cambiar de pestaña.
+  window.emailReport = { show: startPolling, hide: stopPolling };
 
-  tabs.forEach(tab => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
   logsEl.addEventListener('toggle', () => {
     if (logsEl.open && tables && !tables.logs) tables.logs = logsTable();
   });
   // Al volver a la página, no espera al siguiente ciclo.
   document.addEventListener('visibilitychange', () => { if (!document.hidden && timer) refresh(); });
-  showTab(window.location.hash === '#correos' ? 'emails' : 'charts');
 });

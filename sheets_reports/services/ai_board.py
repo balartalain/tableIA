@@ -195,7 +195,7 @@ def clean_plan(raw, ctx: SheetContext, existing_types=()) -> dict:
     reales que usa cada widget (su asistente solo ve esas) y `problem` el motivo por el que no
     se puede configurar sin preguntar a la IA ("" si no hay)."""
     allowed = {w.key: w for w in _widgets()}
-    taken = {t for t in existing_types if (allowed.get(t) and allowed[t].max_per_dashboard == 1)}
+    taken = {t for t in existing_types if (allowed.get(t) and allowed[t].max_per_page == 1)}
     planned = []
     for item in (raw.get("items") if isinstance(raw, dict) else None) or []:
         if not isinstance(item, dict):
@@ -203,7 +203,7 @@ def clean_plan(raw, ctx: SheetContext, existing_types=()) -> dict:
         widget = allowed.get(str(item.get("widget_type") or "").strip())
         if not widget or not _text(item.get("request"), MAX_TEXT_CHARS):
             continue
-        if widget.max_per_dashboard == 1:
+        if widget.max_per_page == 1:
             if widget.key in taken:
                 continue
             taken.add(widget.key)
@@ -285,7 +285,7 @@ def propose_board(prompt: str, ctx: SheetContext, existing_types=(), existing_wi
         raise SpecGenerationError("Describe el tablero que quieres.")
     if not ctx.fields:
         raise SpecGenerationError("La hoja no tiene columnas.")
-    singles = [w.key for w in _widgets() if w.max_per_dashboard == 1]
+    singles = [w.key for w in _widgets() if w.max_per_page == 1]
     taken = [k for k in singles if k in set(existing_types)]
 
     existing_text = ""

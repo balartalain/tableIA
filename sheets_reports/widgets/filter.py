@@ -31,7 +31,7 @@ class FilterWidget(BaseWidget):
     # La caja lista los valores de la hoja completa: la selección filtra a los demás widgets,
     # no a sí misma (así siempre se pueden ampliar y quitar filtros).
     board_filtered = False
-    max_per_dashboard = 1
+    max_per_page = 1
 
     capabilities: ClassVar[dict] = {
         # Aquí `dimensions` son las columnas que la caja expone al usuario.

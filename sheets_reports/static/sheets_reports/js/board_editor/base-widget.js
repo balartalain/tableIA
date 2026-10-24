@@ -12,7 +12,7 @@
 
     static FIELD_TITLE = { key: 'title', label: 'Título', type: 'text', tab: 'data' };
 
-    // Lo que el backend declara del tipo: {label, style_schema, capabilities, max_per_dashboard}.
+    // Lo que el backend declara del tipo: {label, style_schema, capabilities, max_per_page}.
     static get manifest() {
       return (window.WIDGET_MANIFEST || {})[this.type] || {};
     }
@@ -37,7 +37,7 @@
     static get supportsSort() { return !!this.capabilities.sort; }
     static get supportsLimit() { return !!this.capabilities.limit; }
     static get supportsFilters() { return !!this.capabilities.filters; }
-    static get singleton() { return this.manifest.max_per_dashboard === 1; }
+    static get singleton() { return this.manifest.max_per_page === 1; }
 
     static placement = 'canvas';
 
@@ -437,7 +437,7 @@
     get hasSpec() {
       return !!this.fields && ((this.fields.dimensions || []).length
         || (this.fields.metrics || []).length
-        || (this.fields.columns || []).length);
+        || (this.fields.columns || []).length) > 0;
     }
 
     buildElement() {
@@ -522,6 +522,7 @@
     // Mientras carga, el widget se pone opaco y la barra superior (#page-loader) se muestra.
     // La barra cuenta las cargas: solo un cambio de estado suma o resta.
     setLoading(isLoading) {
+      isLoading = !!isLoading;  // 1 y true son el mismo estado: si no, la cuenta se descuadra
       if (this._loading !== isLoading && typeof setPageLoading === 'function') setPageLoading(isLoading);
       this._loading = isLoading;
       if (this.el) this.el.classList.toggle('tb-widget-loading', isLoading);

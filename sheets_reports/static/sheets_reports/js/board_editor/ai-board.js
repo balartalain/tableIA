@@ -132,7 +132,7 @@ function aiBoard() {
         const { r, data } = await fetchJsonSafe(apiUrl(`/api/dashboard/${this.store.dashboardId}/board-plan/`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: this.prompt, source: this.source }),
+          body: JSON.stringify({ prompt: this.prompt, source: this.source, page: this.store.currentPageId }),
         });
         if (!r.ok || !data) throw new Error((data && data.error) || `Error ${r.status}`);
         this.items = this._organizePlanItems(data.items || []);

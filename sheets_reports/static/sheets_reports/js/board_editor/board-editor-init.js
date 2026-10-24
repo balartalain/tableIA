@@ -265,6 +265,56 @@ async function generateRealBoardThumbnail() {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
+// Pestañas de las páginas del editor: renombrar en el sitio y reordenar arrastrando. Al soltar,
+// Sortable devuelve la pestaña a su sitio y el store guarda el orden nuevo: Alpine repinta.
+function pageTabs() {
+  return {
+    editingId: null,
+    draft: '',
+    menuOpen: false,
+
+    init() {
+      if (typeof Sortable === 'undefined') return;
+      new Sortable(this.$refs.list, {
+        draggable: '[data-page-id]',
+        filter: 'input',
+        preventOnFilter: false,
+        animation: 150,
+        onEnd: (evt) => {
+          if (evt.oldIndex === evt.newIndex) return;
+          // Los índices «draggable» no cuentan el <template> del x-for; los del DOM, sí.
+          const ids = Alpine.store('dashboard').pages.map(p => p.id);
+          const [moved] = ids.splice(evt.oldDraggableIndex, 1);
+          ids.splice(evt.newDraggableIndex, 0, moved);
+          const list = evt.from;
+          list.insertBefore(evt.item, list.children[evt.oldIndex + (evt.oldIndex > evt.newIndex ? 1 : 0)] || null);
+          Alpine.store('dashboard').reorderPages(ids);
+        },
+      });
+    },
+
+    startRename(page) {
+      this.editingId = page.id;
+      this.draft = page.name;
+      this.$nextTick(() => {
+        const input = this.$el.querySelector(`[data-page-id="${page.id}"] input`);
+        if (input) { input.focus(); input.select(); }
+      });
+    },
+
+    commit() {
+      if (!this.editingId) return;
+      const id = this.editingId;
+      this.editingId = null;
+      Alpine.store('dashboard').renamePage(id, this.draft);
+    },
+
+    cancel() {
+      this.editingId = null;
+    },
+  };
+}
+
 function boardHeaderMenu() {
   return {
     open: false,
@@ -421,13 +471,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     canvasEl.insertAdjacentHTML('beforebegin', `<p class="text-sm text-danger mb-3">${BaseWidget.escapeHTML(e.message)}</p>`);
   }
 
-  // Espera al siguiente rAF para que Alpine haya renderizado las filas .canvas-row en el DOM
-  requestAnimationFrame(() => {
-    store.widgets.forEach(w => containerFor(w).appendChild(w.mount()));
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      store.widgets.forEach(w => w.applyRender(entries[w.id]));
-    }));
-  });
+  store.mountWidgets(entries);
 
   window.addEventListener('dashboard:filters-changed', () => store.refreshData());
 
@@ -575,7 +619,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const existing = WidgetClass.singleton && store.widgets.find(w => w.chart_type === type);
           if (existing) {
             evt.item.remove();
-            showToast(`El tablero ya tiene un widget «${WidgetClass.palette.label}».`);
+            showToast(`La página ya tiene un widget «${WidgetClass.palette.label}».`);
             store.openDrawer(existing.id);
             return;
           }
@@ -622,9 +666,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Enlace de la vista compartida con los filtros elegidos: lo copian «Compartir» y lo abre
   // «Vista previa».
   const shareUrl = () => {
+    // Abre la página que se está editando, con sus filtros.
     const base = `${window.location.origin}${window.SHARE_PATH}`;
-    const qs = store.getFilterQueryString ? store.getFilterQueryString() : '';
-    return qs ? `${base}?${qs}` : base;
+    const params = [store.pages.length > 1 ? `page=${encodeURIComponent(store.currentPageId)}` : '',
+                    store.getFilterQueryString ? store.getFilterQueryString() : ''].filter(Boolean);
+    return params.length ? `${base}?${params.join('&')}` : base;
   };
 
   document.getElementById('share-btn').addEventListener('click', async () => {

@@ -143,7 +143,7 @@ class ViewsTests(TestCase):
         self.assertEqual(r.status_code, 201, r.content)
         widget = Widget.objects.get(id=r.json()["id"])
         self.assertIsNone(widget.source_prompt)
-        self.assertEqual(widget.position, {"order": 3, "w": 12, "h": 400, "row_id": "row_1"})
+        self.assertEqual(widget.position, {"order": 3, "w": 12, "h": 400, "row_id": "row_1", "page_id": "page_1"})
         headers = {ch["header"] for c in r.json()["data"]["columns"] for ch in c.get("children", [])}
         self.assertEqual(headers, {"Ene", "Feb", "Mar"})
 
@@ -174,7 +174,7 @@ class ViewsTests(TestCase):
                                   content_type="application/json")
         self.assertEqual(first.status_code, 201, first.content)
         self.assertEqual(second.status_code, 422)
-        self.assertIn("Solo se puede agregar un widget «Filtros» por tablero.", second.json()["error"])
+        self.assertIn("Solo se puede agregar un widget «Filtros» por página.", second.json()["error"])
 
     # ------------------------------------------------------------- edición
     def test_update_desde_builder_sin_ia(self, _df):
@@ -227,7 +227,7 @@ class ViewsTests(TestCase):
         self.assertEqual(table.style, style)
 
     def test_update_position_only_no_recalcula_datos(self, _df):
-        new_pos = {"order": 0, "w": 8, "h": 400, "row_id": "row_1"}
+        new_pos = {"order": 0, "w": 8, "h": 400, "row_id": "row_1", "page_id": "page_2"}
         r = self.client.put(
             f"/api/widget/{self.widget.id}/",
             json.dumps({"position": new_pos}),
@@ -317,8 +317,8 @@ class ViewsTests(TestCase):
             "sort": True, "limit": False, "filters": True,
             "windows": ["percent_of_total", "percent_of_row", "running_total", "pct_change"],
         })
-        self.assertEqual(manifest["bar"]["max_per_dashboard"], None)
-        self.assertEqual(manifest["filter"]["max_per_dashboard"], 1)
+        self.assertEqual(manifest["bar"]["max_per_page"], None)
+        self.assertEqual(manifest["filter"]["max_per_page"], 1)
         self.assertEqual(manifest["bar"]["style_defaults"]["stacked"], False)
         # La página del editor se arma con lo mismo, sin leer la hoja.
         page = self.client.get(f"/tableros/{self.dashboard.id}/edit/").context["widget_manifest"]

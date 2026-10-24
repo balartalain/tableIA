@@ -197,13 +197,29 @@ Tablero de reportes. Sus datos vienen de una o varias fuentes (`DataSource`).
 | `thumbnail` | `TextField` | Miniatura (data-URL de un SVG) para la galería de plantillas |
 | `theme` | `CharField(30)` | Preset de colores del tablero (`THEME_CHOICES`; hoy solo `institucional`, el default) |
 | `custom_colors` | `JSONField(dict)` | Colores propios: `{"--tb-chart-1": "#rrggbb", …}`; pisan los del preset |
+| `pages` | `JSONField` | `default=default_pages` → `[{"id": "page_1", "name": "Página 1"}]`; las páginas en el orden de sus pestañas |
 | `created_at` | `DateTimeField(auto_now_add=True)` | |
 
 `style_variables` (propiedad) arma el atributo `style` del contenedor del tablero a partir de
 `custom_colors`: solo pasan las claves `--tb-[a-z0-9-]+` con un valor `#rrggbb`; lo demás se
 descarta y no llega al HTML (evita inyectar CSS). `PUT /api/dashboards/{id}/` acepta `theme`
-dentro de `THEME_CHOICES` (otro valor → 400); duplicar o usar una plantilla copia `theme` y
-`custom_colors`.
+dentro de `THEME_CHOICES` (otro valor → 400); duplicar o usar una plantilla copia `theme`,
+`custom_colors` y `pages`.
+
+**Páginas.** Cada widget es de una página (`position.page_id`). `page_of(widget)` da la página
+de un widget (uno sin `page_id`, o con una página que el tablero no tiene, es de la primera) y
+`resolve_page(id)` devuelve `id` si existe o, si no, la primera.
+- `PUT /api/dashboards/{id}/` con `pages` recibe la lista **completa**, en orden: crea,
+  renombra y reordena. Se valida: al menos una, ids `page_\d+` sin repetir y nombres no vacíos
+  de hasta 60 caracteres. Una página que estaba y no viene se borra **con sus widgets**, en
+  la misma transacción.
+- `GET /api/dashboard/{id}/render/?page=` calcula solo los widgets de esa página (sin `page`
+  o con una desconocida, la primera); los `?filters=` son los de su caja de filtros. La
+  respuesta trae `page` y `dashboard.pages`.
+- `max_per_page` (p. ej. la caja de filtros) se cuenta por página.
+- `board_ai_plan` recibe `page` y solo le pasa a la IA los widgets que ya hay en esa página.
+- La vista compartida (`board_view`) pinta una pestaña por página (`show_tabs`: más de una
+  página o el envío de correos activado).
 
 ### 4.1b `DataSource` (`models.py`)
 
@@ -237,15 +253,16 @@ Un widget del tablero. Guarda el contrato plano, no código.
 | `source` | `FK → DataSource` | `null=True`, `SET_NULL`: sin fuente, el render devuelve un error legible |
 | `type` | `CharField(50)` | `choices=widget_type_choices` (función, no lista) |
 | `title` | `CharField(255)` | `default="Nuevo Widget"` |
-| `position` | `JSONField` | `default=default_position` → `{"x":0,"y":0,"w":6,"h":300}` |
+| `position` | `JSONField` | `default=default_position` → `{"order":0,"w":6,"h":300,"row_id":"row_1","page_id":"page_1"}` |
 | `fields` | `JSONField` | `default=dict`; contrato de datos (`WidgetFields.to_dict()`) |
 | `style` | `JSONField` | `default=dict`; contrato de estilo (`WidgetStyle.to_dict()`) |
 | `source_prompt` | `TextField(null=True, blank=True)` | Prompt original si fue generado por IA |
 | `created_at` | `DateTimeField(auto_now_add=True)` | |
 | `updated_at` | `DateTimeField(auto_now=True)` | |
 
-Semántica de `position` (documentada en el `help_text`): `x` = columna inicial (0 = fluido),
-`y` = orden, `w` = columnas 1–12, `h` = alto en px.
+Semántica de `position`: `order` = orden en la página, `w` = columnas 2–12, `h` = alto en px
+(100–3000), `row_id` = fila del lienzo y `page_id` = página del tablero. `clean_position`
+(`widget_service.py`) normaliza lo que llega y descarta otras claves.
 
 - **`widget_type_choices()`**: importa `WIDGETS` en tiempo de ejecución y devuelve
   `[(key, cls.label), ...]`. Los choices salen del registro, no están hardcodeados.
@@ -399,7 +416,7 @@ class BaseWidget(ABC):
 
     # --- reglas planas del tipo ---
     capabilities: ClassVar[dict] = {}
-    max_per_dashboard: ClassVar[Optional[int]] = None
+    max_per_page: ClassVar[Optional[int]] = None
     board_filtered: ClassVar[bool] = True
     ai_enabled: ClassVar[bool] = True
     ai_doc: ClassVar[str] = ""
@@ -500,7 +517,7 @@ que tienen escala analizable: numéricas, ordinales y nominales, §10.5). Un wid
 
 ## 7. Catálogo de tipos de widget
 
-| `key` | Clase | `label` | dimensions | pivots | metrics | columns | sort | limit | filters | trend | windows² | `max_per_dashboard` | `board_filtered` |
+| `key` | Clase | `label` | dimensions | pivots | metrics | columns | sort | limit | filters | trend | windows² | `max_per_page` | `board_filtered` |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `kpi` | `KpiWidget` | Tarjeta KPI | [0,0] | [0,0] | [1,4] | — | ✗ | ✗ | ✓ | ✓ | — | — | ✓ |
 | `bar` | `BarChartWidget` | Gráfico de Barras | [0,1] | [0,1] | [1,5] | — | ✓ | ✗ | ✓ | ✗ | total, acum., var. | — | ✓ |
@@ -664,7 +681,7 @@ style}`. `variables` son las filas: `{field, label, scale, unmatched?}` y, en un
   condiciones, §8.3) → `multi_select` con hasta `MAX_FILTER_VALUES = 100` opciones y flag
   `truncated`.
 - `board_filtered = False` (sus opciones listan la hoja completa, sin recorte) y
-  `max_per_dashboard = 1`.
+  `max_per_page = 1`.
 - `capabilities["dimensions"] = [0, 50]` con `dimensions_label`/`dimensions_hint` propios.
 
 ---

@@ -8,6 +8,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import RequestDataTooBig
+from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -77,7 +78,7 @@ def _widget_manifest() -> dict:
             "style_schema": widget_cls.style_schema,
             "style_defaults": widget_cls.style_defaults(),
             "capabilities": widget_cls.capabilities,
-            "max_per_dashboard": widget_cls.max_per_dashboard,
+            "max_per_page": widget_cls.max_per_page,
             # ¿Ofrece las columnas virtuales de las cuadrículas (`schema.grid_fields`)?
             "grid_fields": widget_cls.grid_fields,
             # Qué ofrece el panel en las métricas: las mismas reglas que valida el servidor.
@@ -115,10 +116,13 @@ def board_new(request):
 def board_view(request, dashboard_id):
     dashboard = get_object_or_404(Dashboard, id=dashboard_id)
     campaign = getattr(dashboard, "email_campaign", None)
+    email_enabled = bool(campaign and campaign.enabled)
     return render(request, "board_view.html", {
         "dashboard": dashboard,
         # Con el envío de correos activado, la vista suma la pestaña «Seguimiento de correos».
-        "email_enabled": bool(campaign and campaign.enabled),
+        "email_enabled": email_enabled,
+        # Una pestaña por página; con una sola página, solo si está la de los correos.
+        "show_tabs": len(dashboard.pages) > 1 or email_enabled,
     })
 
 
@@ -251,7 +255,9 @@ def _columns_errors(columns) -> list[str]:
 @csrf_exempt
 @require_http_methods(["GET", "PUT", "DELETE"])
 def dashboard_detail(request, dashboard_id):
-    """GET / PUT {nombre, theme} / DELETE de un tablero del usuario."""
+    """GET / PUT {nombre, theme, pages} / DELETE de un tablero del usuario. `pages` es la lista
+    completa, en orden: crea, renombra y reordena; una página que no viene se borra con sus
+    widgets."""
     if request.method == "DELETE":
         dashboard = _deletable_dashboard(request, dashboard_id)
         if not dashboard:
@@ -277,8 +283,44 @@ def dashboard_detail(request, dashboard_id):
         if theme not in dict(Dashboard.THEME_CHOICES):
             return _error("Tema de tablero desconocido")
         dashboard.theme = theme
-    dashboard.save()
+    removed_pages = []
+    if "pages" in data:
+        pages, error = _clean_pages(data["pages"])
+        if error:
+            return _error(error)
+        removed_pages = [p for p in dashboard.page_ids if p not in {page["id"] for page in pages}]
+        # Los widgets se reparten con las páginas de antes (uno con página desconocida es de la primera).
+        doomed = [w.id for w in dashboard.widgets.all() if dashboard.page_of(w) in removed_pages]
+        dashboard.pages = pages
+    with transaction.atomic():
+        if removed_pages:
+            Widget.objects.filter(id__in=doomed).delete()
+        dashboard.save()
     return JsonResponse(_serialize_dashboard(dashboard))
+
+
+PAGE_ID_RE = re.compile(r"page_\d+")
+MAX_PAGE_NAME = 60
+
+
+def _clean_pages(value) -> tuple[list[dict], str | None]:
+    """Las páginas de un PUT: ([{id, name}], None) o ([], error)."""
+    if not isinstance(value, list) or not value:
+        return [], "El tablero necesita al menos una página"
+    pages, ids = [], set()
+    for page in value:
+        if not isinstance(page, dict) or not PAGE_ID_RE.fullmatch(str(page.get("id") or "")):
+            return [], "Cada página necesita un id válido"
+        if page["id"] in ids:
+            return [], f"Página repetida: {page['id']}"
+        name = str(page.get("name") or "").strip()
+        if not name:
+            return [], "Cada página necesita un nombre"
+        if len(name) > MAX_PAGE_NAME:
+            return [], f"El nombre de una página no puede pasar de {MAX_PAGE_NAME} caracteres"
+        ids.add(page["id"])
+        pages.append({"id": page["id"], "name": name})
+    return pages, None
 
 
 def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=""):
@@ -290,6 +332,7 @@ def _clone_dashboard(dashboard, owner, name, is_template=False, thumbnail=""):
         thumbnail=thumbnail,
         theme=dashboard.theme,
         custom_colors=dict(dashboard.custom_colors or {}),
+        pages=copy.deepcopy(dashboard.pages),
     )
     copies = {}
     for source in dashboard.sources.all():
@@ -451,6 +494,7 @@ def _serialize_dashboard(dashboard, user=None):
         "id": dashboard.id,
         "nombre": dashboard.nombre,
         "theme": dashboard.theme,
+        "pages": dashboard.pages,
         "is_template": getattr(dashboard, "is_template", False),
         "owner": dashboard.owner.username,
         "sources": [s.label for s in dashboard.sources.all()],
@@ -1203,9 +1247,10 @@ def _board_filters_error(raw) -> str | None:
 @require_http_methods(["GET"])
 def dashboard_render(request, dashboard_id):
     """
-    Datos listos para dibujar todos los widgets del tablero. NUNCA llama a la IA: es puro
-    cálculo sobre las hojas cacheadas, para que el refresco periódico del frontend sea barato.
-    Es de solo lectura y sirve también a la vista compartida (board_view).
+    Datos listos para dibujar los widgets de una página del tablero (`?page=`; sin ella o con
+    una que no existe, la primera). NUNCA llama a la IA: es puro cálculo sobre las hojas
+    cacheadas, para que el refresco periódico del frontend sea barato. Es de solo lectura y
+    sirve también a la vista compartida (board_view). Los `?filters=` son los de esa página.
 
     Cada widget se calcula sobre su fuente; cada fuente se carga una vez. Una fuente que no se
     puede leer, o un widget sin fuente, solo afecta a esos widgets. Un filtro del tablero se
@@ -1216,6 +1261,7 @@ def dashboard_render(request, dashboard_id):
     error = _board_filters_error(raw_filters)
     if error:
         return _error(error)
+    page = dashboard.resolve_page(request.GET.get("page"))
 
     sources = {s.id: s for s in dashboard.sources.all()}
     loaded = {}  # source_id -> (service, filters) o el mensaje de error de la hoja
@@ -1236,6 +1282,8 @@ def dashboard_render(request, dashboard_id):
 
     widgets_data = []
     for widget in dashboard.widgets.all():
+        if dashboard.page_of(widget) != page:
+            continue
         if widget.source_id not in sources:
             rendered = {"error": NO_SOURCE_ERROR}
         else:
@@ -1256,6 +1304,7 @@ def dashboard_render(request, dashboard_id):
     return JsonResponse({
         "dashboard": {**_serialize_dashboard(dashboard),
                       "sources": [{"id": s.id, "label": s.label} for s in sources.values()]},
+        "page": page,
         "widgets": widgets_data,
         "filter_errors": filter_errors,
     })
@@ -1313,10 +1362,10 @@ def _require_source(dashboard, raw_id):
 @require_http_methods(["POST"])
 def board_ai_plan(request, dashboard_id):
     """
-    POST {prompt, source?} → {items: [{widget_type, title, description, fields, style,
+    POST {prompt, source?, page?} → {items: [{widget_type, title, description, fields, style,
     calculated_fields, column_scales}], note}
-    «Generar con IA»: los widgets que la IA propone para el tablero descrito, cada uno con su
-    formulario ya validado contra la hoja. NO crea nada: el editor muestra la lista y crea los
+    «Generar con IA»: los widgets que la IA propone para la página `page` del tablero (la
+    primera si no viene), cada uno con su formulario ya validado contra la hoja. NO crea nada: el editor muestra la lista y crea los
     widgets aceptados con ese formulario.
     """
     dashboard = _owned_dashboard(request, dashboard_id)
@@ -1344,7 +1393,9 @@ def board_ai_plan(request, dashboard_id):
         from sheets_reports.services.ai_board import propose_board
         from sheets_reports.services.ai_spec import SpecGenerationError
         ctx = SheetContext.from_dataframe(df, source.gid, samples=get_field_samples(df))
-        existing_widgets = [{"type": w.type, "title": w.title} for w in dashboard.widgets.all()]
+        page = dashboard.resolve_page(data.get("page"))
+        existing_widgets = [{"type": w.type, "title": w.title} for w in dashboard.widgets.all()
+                            if dashboard.page_of(w) == page]
         existing = [w["type"] for w in existing_widgets]
         plan = propose_board(prompt, ctx, existing_types=existing, existing_widgets=existing_widgets)
     except SpecGenerationError as e:

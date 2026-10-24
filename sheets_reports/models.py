@@ -11,8 +11,15 @@ TB_VARIABLE_RE = re.compile(r"--tb-[a-z0-9-]+")
 HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{6}")
 
 
+FIRST_PAGE_ID = "page_1"
+
+
 def default_position():
-    return {"order": 0, "w": 6, "h": 300, "row_id": "row_1"}
+    return {"order": 0, "w": 6, "h": 300, "row_id": "row_1", "page_id": FIRST_PAGE_ID}
+
+
+def default_pages():
+    return [{"id": FIRST_PAGE_ID, "name": "Página 1"}]
 
 
 class Dashboard(models.Model):
@@ -49,6 +56,11 @@ class Dashboard(models.Model):
         blank=True,
         help_text="Colores propios del tablero: {\"--tb-chart-1\": \"#1d3594\", …}. Pisan los del tema.",
     )
+    pages = models.JSONField(
+        default=default_pages,
+        help_text="Páginas del tablero, en el orden de sus pestañas: [{\"id\": \"page_1\", \"name\": \"Página 1\"}, …]. "
+                  "Cada widget es de una (position.page_id).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -58,6 +70,21 @@ class Dashboard(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    @property
+    def page_ids(self) -> list[str]:
+        return [p["id"] for p in (self.pages or default_pages())]
+
+    def page_of(self, widget) -> str:
+        """La página del widget; uno con una página que el tablero no tiene es de la primera."""
+        page_id = (widget.position or {}).get("page_id")
+        ids = self.page_ids
+        return page_id if page_id in ids else ids[0]
+
+    def resolve_page(self, page_id) -> str:
+        """`page_id` si es una página del tablero; si no, la primera."""
+        ids = self.page_ids
+        return page_id if page_id in ids else ids[0]
 
     @property
     def style_variables(self):

@@ -21,6 +21,12 @@ function setPageLoading(isLoading) {
   pendingLoads = Math.max(0, pendingLoads + (isLoading ? 1 : -1));
   const bar = document.getElementById('page-loader');
   if (bar) bar.classList.toggle('hidden', pendingLoads === 0);
+  // Mientras carga no se cambia de página: las pestañas quedan tapadas (.is-page-loading).
+  document.documentElement.classList.toggle('is-page-loading', pendingLoads > 0);
+}
+
+function isPageLoading() {
+  return pendingLoads > 0;
 }
 
 // `window.apiUrl` lo define base.html con el prefijo de despliegue (SCRIPT_NAME).
@@ -174,6 +180,10 @@ document.addEventListener('alpine:init', () => {
     editingId: null,
     editingType: null,
     dashboardId: window.DASHBOARD_ID,
+    // Páginas del tablero ([{id, name}], en el orden de las pestañas) y la que está montada: el
+    // store solo tiene los widgets de esa página. Arranca con la de la URL (?page=).
+    pages: [],
+    currentPageId: new URLSearchParams(window.location.search).get('page'),
     drawerTab: 'data',
     // Fuentes de datos del tablero ([{id, label}]) y el schema de cada una, pedido al abrir el
     // panel de un widget. `schema` es siempre el de la fuente del widget que se edita.
@@ -232,17 +242,20 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Tras agregar, editar o eliminar fuentes: otras columnas, otros schemas.
+    // Tras agregar, editar o eliminar fuentes: otras columnas, otros schemas y otros datos en
+    // todas las páginas (sus fotos ya no valen).
     resetSources(sources) {
       if (sources) this.sources = sources;
       this.schemas = {};
       this.assistantSuggestions = {};
+      this.clearPageCache();
     },
 
     _renderUrl() {
       const url = apiUrl(`/api/dashboard/${this.dashboardId}/render/`);
-      const qs = this.getFilterQueryString ? this.getFilterQueryString() : '';
-      return qs ? `${url}?${qs}` : url;
+      const params = [this.currentPageId ? `page=${encodeURIComponent(this.currentPageId)}` : '',
+                      this.getFilterQueryString ? this.getFilterQueryString() : ''].filter(Boolean);
+      return params.length ? `${url}?${params.join('&')}` : url;
     },
 
     _reportFilterErrors(data) {
@@ -255,7 +268,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     normalizeWidget(w) {
-      const pos = w.position ? { ...w.position } : { order: 0, w: 6, h: 300, row_id: 'row_1' };
+      const pos = w.position ? { ...w.position } : { order: 0, w: 6, h: 300, row_id: 'row_1', page_id: this.currentPageId };
       delete pos.x;
       delete pos.y;
       return {
@@ -275,16 +288,29 @@ document.addEventListener('alpine:init', () => {
       };
     },
 
+    // Pide la página actual y deja sus widgets en el store. → {id: datos} para mountWidgets, o
+    // null si mientras tanto salió otra petición (se cambió otra vez de página).
     async loadBoard() {
+      const seq = ++this._renderSeq;
+      this._setRenderLoading(true);
       let r, data;
       try {
         ({ r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS));
       } finally {
-        setPageLoading(false);
+        if (seq === this._renderSeq) this._setRenderLoading(false);
       }
+      if (seq !== this._renderSeq) return null;
       if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudo cargar el tablero');
       this._reportFilterErrors(data);
+      return this._applyBoard(data);
+    },
+
+    // Deja en el store los widgets de una respuesta de /render/ (o de la foto de una página,
+    // que no trae `pages`). → {id: datos} para mountWidgets.
+    _applyBoard(data) {
       this.sources = (data.dashboard && data.dashboard.sources) || [];
+      if (data.dashboard && data.dashboard.pages) this.pages = data.dashboard.pages;
+      this.currentPageId = data.page;
       // Instancias reales (mount/applyRender/setLoading), no objetos planos.
       this.widgets = data.widgets
         .map(w => BaseWidget.fromServer(this.normalizeWidget(w)))
@@ -295,14 +321,151 @@ document.addEventListener('alpine:init', () => {
       return Object.fromEntries(data.widgets.map(w => [w.id, w]));
     },
 
-    // Número de la última llamada a refreshData: solo su respuesta se aplica a los widgets.
+    // Monta los widgets de la página en sus contenedores y les pasa sus datos (`entries`, de
+    // loadBoard). Espera al siguiente rAF para que Alpine haya pintado las filas .canvas-row.
+    mountWidgets(entries) {
+      requestAnimationFrame(() => {
+        this.widgets.forEach(w => containerFor(w).appendChild(w.mount()));
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          this.widgets.forEach(w => w.applyRender(entries[w.id]));
+        }));
+      });
+    },
+
+    // ---------------------------------------------------------------- páginas
+    get currentPage() {
+      return this.pages.find(p => p.id === this.currentPageId) || this.pages[0] || null;
+    },
+
+    // Foto de cada página visitada ({page, dashboard: {sources}, widgets}, como /render/): al
+    // volver a ella se monta sin pedirla otra vez. Sus datos no cambian mientras no se ve (sus
+    // filtros son suyos); se descarta si cambian los datos de las fuentes (clearPageCache).
+    _pageCache: {},
+
+    // La foto de la página actual desde sus widgets vivos (con lo editado en ella). Sin foto si
+    // todavía hay datos en camino: la selección de filtros ya no coincidiría con lo dibujado.
+    _snapshotPage() {
+      if (!this.boardLoaded || this._renderLoading || this.widgets.some(w => w._loading)) return null;
+      return {
+        page: this.currentPageId,
+        dashboard: { sources: this.sources },
+        widgets: this.widgets.filter(w => w.id > 0).map(w => ({
+          id: w.id, type: w.type, source_id: w.source_id, title: w.title,
+          position: { ...(w.position || {}) }, fields: w.fields, style: w.style,
+          data: w._lastEntry ? w._lastEntry.data ?? null : null,
+          error: w._lastEntry ? w._lastEntry.error ?? null : null,
+        })),
+      };
+    },
+
+    clearPageCache() {
+      this._pageCache = {};
+    },
+
+    // Cambia la página montada: guarda el diseño pendiente y la foto de esta, la desmonta y
+    // monta la otra desde su foto o pidiéndola, con sus propios filtros.
+    async switchPage(pageId) {
+      if (isPageLoading() || pageId === this.currentPageId || !this.pages.some(p => p.id === pageId)) return;
+      this.closeDrawer();
+      await this.flushLayoutSave();
+      const snapshot = this._snapshotPage();
+      if (snapshot) this._pageCache[this.currentPageId] = snapshot;
+      this.widgets.forEach(w => {
+        w.setLoading(false);
+        w.destroy();
+        if (w.el) w.el.remove();
+      });
+      this.widgets = [];
+      this.boardLoaded = false;
+      if (this.swapPageFilters) this.swapPageFilters(this.currentPageId, pageId);
+      this.currentPageId = pageId;
+      const cached = this._pageCache[pageId];
+      if (cached) {
+        delete this._pageCache[pageId];  // la página vuelve a estar viva: su foto se toma al salir
+        this._renderSeq++;  // las respuestas en vuelo de la página anterior ya no valen
+        this._setRenderLoading(false);
+        this.mountWidgets(this._applyBoard(cached));
+        return;
+      }
+      try {
+        // Toma su propia secuencia: las respuestas en vuelo de la página anterior ya no valen.
+        const entries = await this.loadBoard();
+        // null: mientras cargaba se pidió otra página, que la monta su propio switchPage.
+        if (entries) this.mountWidgets(entries);
+      } catch (e) {
+        if (typeof window.showToast === 'function') window.showToast(e.message);
+      }
+    },
+
+    // Guarda la lista entera de páginas (crear, renombrar, reordenar o quitar). → ok
+    async savePages(pages) {
+      try {
+        const r = await fetch(apiUrl(`/api/dashboards/${this.dashboardId}/`), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pages }),
+        });
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !data) throw new Error((data && data.error) || 'No se pudieron guardar las páginas');
+        this.pages = data.pages;
+        return true;
+      } catch (e) {
+        if (typeof window.showToast === 'function') {
+          window.showToast(e.message === 'Failed to fetch' ? 'No se pudo conectar con el servidor.' : e.message);
+        }
+        return false;
+      }
+    },
+
+    async addPage() {
+      const next = Math.max(0, ...this.pages.map(p => parseInt(p.id.replace(/\D/g, ''), 10) || 0)) + 1;
+      const page = { id: `page_${next}`, name: `Página ${this.pages.length + 1}` };
+      if (await this.savePages([...this.pages, page])) await this.switchPage(page.id);
+    },
+
+    async renamePage(pageId, name) {
+      const clean = String(name || '').trim();
+      const page = this.pages.find(p => p.id === pageId);
+      if (!page || !clean || clean === page.name) return;
+      await this.savePages(this.pages.map(p => (p.id === pageId ? { ...p, name: clean } : p)));
+    },
+
+    async reorderPages(ids) {
+      const byId = Object.fromEntries(this.pages.map(p => [p.id, p]));
+      await this.savePages(ids.map(id => byId[id]).filter(Boolean));
+    },
+
+    // Quita la página con todos sus widgets (el servidor los borra al no verla en la lista).
+    async deletePage(pageId) {
+      const page = this.pages.find(p => p.id === pageId);
+      if (!page || this.pages.length < 2 || isPageLoading()) return;
+      if (!confirm(`¿Eliminar la página «${page.name}» con todos sus widgets? Esta acción no se puede deshacer.`)) return;
+      const rest = this.pages.filter(p => p.id !== pageId);
+      // Primero se sale de la página (guarda su diseño); después se borra.
+      if (pageId === this.currentPageId) await this.switchPage(rest[0].id);
+      if (this.dropPageFilters) this.dropPageFilters(pageId);
+      delete this._pageCache[pageId];
+      await this.savePages(rest);
+    },
+
+    // Número de la última petición de datos de la página (loadBoard o refreshData): solo su
+    // respuesta se aplica a los widgets.
     _renderSeq: 0,
+    // Las peticiones de datos de la página ocupan un solo lugar en la barra de carga: lo
+    // libera la última (la de _renderSeq); las anteriores, o las de otra página, no la tocan.
+    // Arranca ocupado: el HTML trae la barra visible para la carga inicial.
+    _renderLoading: true,
+    _setRenderLoading(on) {
+      if (this._renderLoading === on) return;
+      this._renderLoading = on;
+      setPageLoading(on);
+    },
 
     async refreshData() {
       const seq = ++this._renderSeq;
       const saved = this.widgets.filter(w => w.id > 0 && w.fields);
       saved.forEach(w => w.setLoading(true));
-      setPageLoading(true);
+      this._setRenderLoading(true);
       try {
         const { r, data } = await fetchJsonSafe(this._renderUrl(), {}, RENDER_FETCH_TIMEOUT_MS);
         // Llegó otra petición después (ej. otra opción del filtro): esta ya no vale.
@@ -330,7 +493,7 @@ document.addEventListener('alpine:init', () => {
         if (seq !== this._renderSeq) return;
         saved.forEach(w => { w.setLoading(false); w.renderError('No se pudo conectar con el servidor', { retryable: true }); });
       } finally {
-        setPageLoading(false);
+        if (seq === this._renderSeq) this._setRenderLoading(false);
       }
     },
 
@@ -470,7 +633,7 @@ document.addEventListener('alpine:init', () => {
       const widget = WidgetRegistry.create(type, {
         id: this._nextId--,
         source_id: this.sources.length ? this.sources[0].id : null,
-        position: { order: this.widgets.length, w: defaultW, h: 300, row_id: destRowId },
+        position: { order: this.widgets.length, w: defaultW, h: 300, row_id: destRowId, page_id: this.currentPageId },
         title: manifest.label || 'Nuevo Widget',
         style: { ...(manifest.style_defaults || {}) },
         _dirty: false,
@@ -502,6 +665,7 @@ document.addEventListener('alpine:init', () => {
         position: {
           order: typeof order === 'number' ? order : this.widgets.length,
           w: defaultW, h: WidgetClass.defaults.height || 300, row_id: destRowId,
+          page_id: this.currentPageId,
         },
         title: title || manifest.label || 'Nuevo Widget',
         fields: { ...EMPTY_FIELDS(), ...(fields || {}) },

@@ -36,17 +36,20 @@
 {% block content %}
 
 {% include "sheets_reports/_page_loader.html" %}
-{% if email_enabled %}
-<!-- Con el envío de correos activado: el tablero o el reporte del envío (email-report.js). -->
-<nav id="view-tabs" role="tablist" aria-label="Reportes" class="ui-tabs bg-surface px-6">
-  <button type="button" role="tab" data-tab="charts" aria-controls="tab-charts"
-          class="view-tab ui-tab">
-    <i class="ti ti-layout-dashboard text-base" aria-hidden="true"></i>Tablero
-  </button>
+{% if show_tabs %}
+<!-- Una pestaña por página y, con el envío de correos activado, el reporte del envío
+     (board-view-init.js cambia entre ellas; email-report.js llena la de correos). -->
+<nav id="view-tabs" data-lock-while-loading role="tablist" aria-label="Páginas del tablero" class="ui-tabs flex-wrap bg-surface px-6">
+  {% for page in dashboard.pages %}
+  <button type="button" role="tab" data-page="{{ page.id }}" aria-controls="tab-charts"
+          class="view-tab ui-tab whitespace-nowrap">{{ page.name }}</button>
+  {% endfor %}
+  {% if email_enabled %}
   <button type="button" role="tab" data-tab="emails" aria-controls="tab-emails"
-          class="view-tab ui-tab">
+          class="view-tab ui-tab whitespace-nowrap">
     <i class="ti ti-mail text-base" aria-hidden="true"></i>Seguimiento de correos
   </button>
+  {% endif %}
 </nav>
 {% endif %}
 <!-- El tablero (filtros y lienzo) toma su tema de tablero-theme.css. -->

@@ -189,7 +189,7 @@ class WidgetContractTests(SimpleTestCase):
                 self.assertEqual(entry["label"], widget.label)
                 self.assertEqual(entry["style_schema"], widget.style_schema)
                 self.assertEqual(entry["capabilities"], widget.capabilities)
-                self.assertEqual(entry["max_per_dashboard"], widget.max_per_dashboard)
+                self.assertEqual(entry["max_per_page"], widget.max_per_page)
                 self.assertEqual(entry["panel_options"], panel_options(widget))
 
     def test_el_panel_no_copia_las_reglas_del_servidor(self):

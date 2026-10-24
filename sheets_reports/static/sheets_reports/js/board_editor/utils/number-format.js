@@ -25,11 +25,13 @@ function formatNumber(value, {
     ? { maximumFractionDigits: 2 }
     : { minimumFractionDigits: fixed, maximumFractionDigits: fixed };
   if (compact) Object.assign(options, { notation: 'compact', maximumFractionDigits: fixed ?? 1 });
-  if (signed) options.signDisplay = 'exceptZero';
+  // Un negativo que redondea a cero se ve «0,00», no «-0,00».
+  options.signDisplay = signed ? 'exceptZero' : 'negative';
 
   if (currency) {
     const text = Math.abs(number).toLocaleString(NUMBER_LOCALE, { ...options, signDisplay: 'never' });
-    const sign = number < 0 ? '-' : (signed && number > 0 ? '+' : '');
+    const isZero = !/[1-9]/.test(text);
+    const sign = isZero ? '' : number < 0 ? '-' : (signed && number > 0 ? '+' : '');
     return `${sign}$${text}`;
   }
   const text = number.toLocaleString(NUMBER_LOCALE, options);

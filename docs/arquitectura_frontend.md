@@ -420,11 +420,12 @@ Renderiza: gráfico de dispersión (ApexCharts mixto): una serie `scatter` por g
 ### CorrelationWidget
 
 Renderiza: mapa de calor (ApexCharts) de `payload.matrix`, coloreado con
-`ChartTheme.divergingScale(el, CUTS)`: los cortes de la escala de Evans (`SCALE`), un neutro
-(«muy débil») y un tono por nivel y signo, nueve tramos de −1 a +1. La misma `SCALE` da la
-fuerza en palabras del tooltip, y `window.correlationScale()` devuelve sus niveles con sus
-colores para «Cómo se lee» del panel. El valor escrito en la celda toma el color de texto de su
-tono (`--tb-div-*-on`).
+`ChartTheme.divergingGradient(el)`: color continuo según r, para que valores cercanos tengan
+colores cercanos aunque caigan en niveles distintos. La escala de Evans (`SCALE`) da la fuerza
+en palabras del tooltip, y `window.correlationScale()` devuelve sus niveles con el tono del
+centro de cada uno para «Cómo se lee» del panel. El valor escrito en la celda toma, de los
+colores de texto de la escala (`--tb-div-*-on`), el que más contrasta con el color de esa celda
+(`ChartTheme.textOn`).
 Cada fila es una de `payload.variables`: una variable o una categoría de una nominal (dummy,
 con `value` y `group`). El tooltip nombra el par, la fuerza, la medida (`measures[i][j]`:
 Pearson o Spearman), las filas usadas y qué significa el 0/1 de una dummy, y avisa de las filas
@@ -716,11 +717,13 @@ del `.tablero` que contiene a `el` (o el primero de la página). No hay opciones
   tarjeta, texto, pista.
 - `color(name, el)`: un token suelto, resuelto.
 - `baseOptions(el)`: opciones base de ApexCharts (paleta, fuente, ejes, cuadrícula, leyenda).
-- `sequentialScale(min, max, el)` / `divergingScale(el, cuts?)`: rangos de `colorScale` para
-  mapas de calor. La divergente tiene un neutro y cuatro tonos por signo; sus tonos positivos
+- `sequentialScale(min, max, el)` / `divergingGradient(el, steps?)`: rangos de `colorScale` para
+  mapas de calor. La divergente es continua: pasa gradualmente del neutro (0) a cuatro tonos por
+  signo, puestos en |r| = 0,3 · 0,5 · 0,7 · 0,9 (el centro de cada nivel de Evans); sus tonos positivos
   son los de la secuencial (`--tb-seq-2…5`), así el tono más fuerte de la matriz de correlación
   es el mismo que el de la V de Cramér. La V de Cramér usa los tonos secuenciales con sus
   propios cortes de fuerza (`window.cramerScale()`).
+- `textOn(bg, candidates)`: de varios colores de texto, el de más contraste (WCAG) sobre `bg`.
 - `refresh(el, charts)`: reaplica las opciones a gráficos existentes si cambian las variables.
 
 La miniatura de plantillas (`generateRealBoardThumbnail`) es un SVG que se muestra como

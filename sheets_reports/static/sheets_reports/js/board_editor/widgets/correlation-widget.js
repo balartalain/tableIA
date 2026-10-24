@@ -1,7 +1,8 @@
 (function () {
-  // La fuerza de la relación según |r| (escala de Evans): la misma para el color de las celdas,
-  // el tooltip, «Lo más relacionado» y la leyenda del panel (correlationScale). `min`: desde qué
-  // |r| empieza el nivel. «Muy débil» es el neutro; cada uno de los demás, un tono por signo.
+  // La fuerza de la relación según |r| (escala de Evans): la misma para el tooltip, «Lo más
+  // relacionado», el texto de las celdas y la leyenda del panel (correlationScale). `min`: desde
+  // qué |r| empieza el nivel. «Muy débil» es el neutro; cada uno de los demás, un tono por signo,
+  // que la celda alcanza en el centro del nivel (ChartTheme.divergingGradient).
   const SCALE = [
     { min: 0, label: 'Muy débil' },
     { min: 0.2, label: 'Débil' },
@@ -9,7 +10,6 @@
     { min: 0.6, label: 'Fuerte' },
     { min: 0.8, label: 'Muy fuerte' },
   ];
-  const CUTS = SCALE.slice(1).map(level => level.min);
 
   // Los niveles con sus colores del tablero y el del texto escrito encima.
   function correlationScale(el) {
@@ -25,12 +25,6 @@
     return [...SCALE].reverse().find(l => Math.abs(r) >= l.min) || SCALE[0];
   }
 
-  // Nombre de cada tramo de divergingScale (de −1 a +1), para la leyenda del gráfico.
-  const RANGE_NAMES = [
-    ...SCALE.slice(1).reverse().map(level => `${level.label} (−)`),
-    SCALE[0].label,
-    ...SCALE.slice(1).map(level => `${level.label} (+)`),
-  ];
   // La medida de cada par (`measures`): el método elegido, o Spearman con una ordinal.
   const MEASURE_LABELS = { pearson: 'Pearson', spearman: 'Spearman' };
 
@@ -129,15 +123,16 @@
       });
 
       const theme = this.themeColors();
-      const levels = correlationScale(this.el);
-      const colorRanges = ChartTheme.divergingScale(this.el, CUTS).ranges
-        .map((range, k) => ({ ...range, name: RANGE_NAMES[k] }));
-      // El valor escrito en la celda, legible sobre el tono de su nivel.
+      // Color continuo según r: valores cercanos, colores cercanos (los niveles quedan en palabras).
+      const colorRanges = ChartTheme.divergingGradient(this.el).ranges;
+      // El valor escrito en la celda: de los colores de texto de la escala, el que más contrasta
+      // con el color de esa celda (cambia en el punto del degradado donde se lee mejor).
+      const textColors = [...new Set(correlationScale(this.el).flatMap(l => [l.negativeOn, l.positiveOn]))];
       const labelColor = ({ seriesIndex, dataPointIndex, w }) => {
         const val = w.globals.series[seriesIndex][dataPointIndex];
         if (val == null || Math.abs(val) > 1) return theme.label;
-        const level = levels[SCALE.indexOf(levelOf(val))];
-        return val < 0 ? level.negativeOn : level.positiveOn;
+        const range = colorRanges.find(r => val >= r.from && val <= r.to);
+        return ChartTheme.textOn(range.color, textColors);
       };
 
       const options = {

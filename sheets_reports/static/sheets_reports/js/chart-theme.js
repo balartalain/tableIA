@@ -64,15 +64,56 @@
     }) };
   }
 
-  /* Escala divergente de −1 a +1 (matriz de correlación): el neutro hasta el primer corte y
-     un tono por lado entre cada par de cortes. `cuts`: los cuatro |valor| donde empieza cada
-     tono (por defecto, la escala de Evans). Nueve tramos, de −1 a +1. */
-  function divergingScale(el, cuts) {
-    var d = read(el).diverging, c = cuts || [0.2, 0.4, 0.6, 0.8];
-    var upper = function (i) { return i === c.length - 1 ? 1 : c[i + 1]; };
-    var neg = c.map(function (from, i) { return { from: -upper(i), to: -from, color: d.neg[i] }; }).reverse();
-    var pos = c.map(function (from, i) { return { from: from, to: upper(i), color: d.pos[i] }; });
-    return { ranges: neg.concat([{ from: -c[0], to: c[0], color: d.zero }], pos) };
+  /* Un color CSS cualquiera como [r, g, b] (el canvas lo normaliza a #rrggbb). */
+  var swatch = document.createElement('canvas').getContext('2d');
+  function rgb(c) {
+    swatch.fillStyle = '#000';
+    swatch.fillStyle = c;
+    var hex = swatch.fillStyle;
+    return [1, 3, 5].map(function (i) { return parseInt(hex.slice(i, i + 2), 16); });
+  }
+
+  /* Luminancia relativa (WCAG) de un color CSS. */
+  function luminance(c) {
+    var l = rgb(c).map(function (x) {
+      x /= 255;
+      return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+  }
+
+  /* De los `candidates`, el color de texto con más contraste sobre `bg`. */
+  function textOn(bg, candidates) {
+    var lb = luminance(bg);
+    var contrast = function (c) {
+      var lc = luminance(c);
+      return (Math.max(lb, lc) + 0.05) / (Math.min(lb, lc) + 0.05);
+    };
+    return candidates.reduce(function (best, c) { return contrast(c) > contrast(best) ? c : best; });
+  }
+
+  /* Escala divergente continua de −1 a +1 (matriz de correlación): `steps` rangos angostos
+     cuyo color pasa gradualmente del neutro (0) a los cuatro tonos de cada signo, puestos en
+     |valor| = 0,3 · 0,5 · 0,7 · 0,9 (el centro de cada nivel de Evans); de 0,9 a 1, el más
+     fuerte. Valores cercanos quedan con colores cercanos, sin saltos en los cortes. */
+  function divergingGradient(el, steps) {
+    var d = read(el).diverging, n = steps || 100;
+    var at = [0, 0.3, 0.5, 0.7, 0.9];
+    var zero = rgb(d.zero), neg = d.neg.map(rgb), pos = d.pos.map(rgb);
+    var colorAt = function (v) {
+      var tones = [zero].concat(v < 0 ? neg : pos), a = Math.min(Math.abs(v), at[at.length - 1]);
+      var i = 0;
+      while (a > at[i + 1]) i++;
+      var t = (a - at[i]) / (at[i + 1] - at[i]);
+      var mix = tones[i].map(function (x, k) { return Math.round(x + (tones[i + 1][k] - x) * t); });
+      return '#' + mix.map(function (x) { return x.toString(16).padStart(2, '0'); }).join('');
+    };
+    var ranges = [];
+    for (var k = 0; k < n; k++) {
+      var from = -1 + (2 * k) / n, to = -1 + (2 * (k + 1)) / n;
+      ranges.push({ from: from, to: to, color: colorAt((from + to) / 2) });
+    }
+    return { ranges: ranges };
   }
 
   window.ChartTheme = {
@@ -80,7 +121,8 @@
     color: color,
     baseOptions: baseOptions,
     sequentialScale: sequentialScale,
-    divergingScale: divergingScale,
+    divergingGradient: divergingGradient,
+    textOn: textOn,
     /* Llamar si cambian las variables del tablero en vivo: actualiza los gráficos existentes. */
     refresh: function (el, charts) {
       var o = baseOptions(el);

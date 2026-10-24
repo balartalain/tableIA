@@ -492,7 +492,7 @@ function sourcePicker({ mode = 'create' } = {}) {
         // en la edición (las columnas de igual encabezado).
         if (refresh) this.columns = this._keepEdits(data.columns || []);
         else if (this.mode === 'replace') this.columns = this._keepEdits(data.columns || [], this._editSnapshot.columns);
-        // Las columnas anchas de una cuadrícula llegan excluidas: se usan sus virtuales.
+        // Todas llegan incluidas salvo que el servidor diga lo contrario.
         else this.columns = (data.columns || []).map((c, i) => ({ ...c, alias: c.alias || `col_${i + 1}`, include: c.include ?? true, label: '', format: '' }));
         this.rows = data.rows || 0;
         const doc = this.spreadsheet.name.trim();

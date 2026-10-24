@@ -1034,7 +1034,7 @@ Se puede:
 - Agrupar por una columna real y ver un solo aspecto: la columna real como dimensión, Respuesta como pivote y el filtro Aspecto = «…» (ej. Recinto × Respuesta de «Servicios generales», con «% de la fila»).
 - Filtrar Aspecto o Respuesta (eq, in); contar con el filtro Respuesta in [...] (ej. cuántos respondieron «Satisfecho» o «Muy satisfecho»); AVG de Respuesta si es numérica.
 No se puede (no lo propongas ni lo configures; propón la alternativa y dilo en "note"):
-- Un campo calculado (fórmula) con una virtual: ningún ratio ni % que junte varias respuestas, como «% de satisfechos o completamente satisfechos». Alternativa: la distribución con «% de la fila» (Respuesta como pivote, se ve el % de cada respuesta) o el conteo con el filtro Respuesta in [...].
+- Un campo calculado (fórmula) con una virtual: ningún ratio ni % que junte varias respuestas, como «% de satisfechos o completamente satisfechos». Alternativa: la distribución con «% de la fila» (Respuesta como pivote, se ve el % de cada respuesta) o el conteo con el filtro Respuesta in [...]. Las columnas anchas de la pregunta que estén en la lista tienen una fila por respuesta y una fórmula sí las lee: con ellas se combinan aspectos u opciones de la misma persona (ej. cuántos marcaron dos a la vez).
 - Las virtuales de dos cuadrículas en un mismo widget. Alternativa: un widget por cuadrícula.
 - Las virtuales en dispersión, matriz de correlación, V de Cramér o filtros. Alternativa: tabla dinámica o barras."""
 
@@ -1080,7 +1080,7 @@ def columns_context(ctx: SheetContext, only=None, virtual: bool = True, scales: 
             line += (f" — columna virtual de la cuadrícula «{grid['question']}»: {role} de cada "
                      f"respuesta, una fila por aspecto")
         elif field in members:
-            line += f" — una columna de «{members[field]}», en ancho"
+            line += f" — una columna de «{members[field]}», en ancho (una fila por respuesta; una fórmula la lee)"
         line += samples_note(field, ctx.samples, refs)
         lines.append(line)
     title = ("Columnas de la hoja para este widget (la hoja tiene más: usa solo estas)" if only

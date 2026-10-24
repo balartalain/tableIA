@@ -10,6 +10,7 @@ from django.core.cache import caches
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from sheets_reports.engine.context import SheetContext
+from sheets_reports.engine.formulas import apply_calculated_fields
 from sheets_reports.engine.steps.filter import parse_conditions
 from sheets_reports.models import Widget
 from sheets_reports.services import sheets
@@ -113,7 +114,7 @@ class CheckboxTests(SimpleTestCase):
         # Las de cuadrícula de casillas siguen siendo una sola cuadrícula.
         self.assertNotIn("Actividades [Deporte]", raw.attrs["grids"])
 
-    def test_el_editor_excluye_las_columnas_si_no(self):
+    def test_el_editor_incluye_las_columnas_si_no(self):
         from sheets_reports.views import _sheet_columns
         raw, _ = self.source()
         columns = _sheet_columns(raw)
@@ -124,8 +125,21 @@ class CheckboxTests(SimpleTestCase):
         by_name = {c["name"]: c for c in columns}
         self.assertEqual(by_name["Sabores favoritos · Opción"]["kind"], "CHECKBOX")
         self.assertEqual(by_name["Sabores favoritos · Opción"]["samples"], ["Chocolate", "Vainilla", "Fresa"])
-        self.assertFalse(by_name["Sabores favoritos_Chocolate"]["include"])
+        self.assertTrue(by_name["Sabores favoritos_Chocolate"].get("include", True))
         self.assertEqual(by_name["Sabores favoritos_Chocolate"]["grid_kind"], "CHECKBOX")
+
+    def test_una_formula_combina_opciones_de_la_misma_persona(self):
+        # Las columnas Sí/No tienen una fila por respuesta: «marcó las dos» solo se puede ahí.
+        _, df = self.source()
+        df = apply_calculated_fields(df, [
+            {"name": "Ambos", "formula": 'SUM(IF([Sabores favoritos_Chocolate] = "Sí" AND '
+                                         '[Sabores favoritos_Vainilla] = "Sí", 1, 0))'},
+            {"name": "Alguno", "formula": 'SUM(IF([Sabores favoritos_Chocolate] = "Sí" OR '
+                                          '[Sabores favoritos_Vainilla] = "Sí", 1, 0))'}])
+        out = execute(df, fields(dimensions=[], metrics=[
+            {"field": "Ambos", "agg": "auto", "alias": "ambos"},
+            {"field": "Alguno", "agg": "auto", "alias": "alguno"}]))
+        self.assertEqual(out["data"]["values"], {"ambos": 2, "alguno": 6})
 
     def test_porcentaje_que_marco_cada_opcion(self):
         _, df = self.source()
@@ -287,7 +301,7 @@ class GridSourceTests(TestCase):
         self.addCleanup(mock.patch.stopall)
         self.dashboard, self.source = make_board(self.user, sheet_id="form1", is_form_response=True)
 
-    def test_el_editor_lista_las_virtuales_y_excluye_las_anchas(self):
+    def test_el_editor_lista_las_virtuales_y_las_anchas_incluidas(self):
         r = self.client.get(f"/api/sources/google/spreadsheets/form1/tabs/0/columns/?form=1")
         columns = r.json()["columns"]
         names = [c["name"] for c in columns]
@@ -298,7 +312,7 @@ class GridSourceTests(TestCase):
         self.assertTrue(by_name[ASPECT]["virtual"])
         self.assertEqual(by_name[ASPECT]["samples"], ["Contenido", "Profesor", "Materiales"])
         self.assertEqual(by_name["Nota · Respuesta"]["type"], "number")
-        self.assertFalse(by_name["Evaluación [Contenido]"]["include"])
+        self.assertTrue(by_name["Evaluación [Contenido]"].get("include", True))
         self.assertTrue(by_name["Carrera"].get("include", True))
         # Los alias de las columnas reales no se corren por las virtuales.
         self.assertEqual(by_name["Carrera"]["alias"], "col_2")
@@ -324,7 +338,7 @@ class GridSourceTests(TestCase):
         self.assertEqual((saved["grid"], saved["role"]), ("Evaluación", "aspect"))
         schema = self.client.get(f"/api/sources/{self.source.id}/schema/").json()
         self.assertIn("Aspecto evaluado", schema["all_fields"])
-        self.assertNotIn("Evaluación [Contenido]", schema["all_fields"])
+        self.assertIn("Evaluación [Contenido]", schema["all_fields"])
         self.assertIn({"question": "Evaluación", "kind": "GRID", "aspect": "Aspecto evaluado", "value": VALUE},
                       schema["grid_fields"])
         self.assertTrue(schema["widget_manifest"]["dynamic_table"]["grid_fields"])

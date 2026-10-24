@@ -249,7 +249,7 @@ class TidySourceIntegrationTests(TestCase):
         context = columns_context(SheetContext.from_dataframe(df, "0", samples=get_field_samples(df)))
         self.assertEqual(context.count('["Sí", "No"]'), 1)
         self.assertIn(f'"{column}" (texto, nominal) — una columna de «Sabores favoritos», en ancho '
-                      f'— valores de ejemplo: los de V', context)
+                      f'(una fila por respuesta; una fórmula la lee) — valores de ejemplo: los de V', context)
 
     def test_la_hoja_se_lee_de_google_una_vez_por_version(self):
         with mock.patch.object(sheets, "fetch_sheet_dataframe", return_value=form_df()) as fetch:

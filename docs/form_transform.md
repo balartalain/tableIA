@@ -65,7 +65,9 @@ cada opción; Opción con el filtro Respuesta = Sí, cuántos la marcaron. No es
   - Dispersión, correlación, V de Cramér y filtros no las aceptan (`BaseWidget.grid_fields`).
   - Una fórmula no las lee.
   - Lo que compara aspectos de la misma persona («quienes dieron Malo al Profesor, ¿cómo
-    evaluaron el Contenido?», correlación entre aspectos) necesita las columnas anchas.
+    evaluaron el Contenido?», «cuántos marcaron dos opciones a la vez», correlación entre
+    aspectos) se hace con las columnas anchas, que tienen una fila por respuesta y sí las lee una
+    fórmula.
 - **Filtros del tablero:** los de una virtual se suman a los filtros de los widgets que usan esa
   cuadrícula; a los demás no les aplican.
 
@@ -76,9 +78,8 @@ Opción/Respuesta»; las anchas llevan «En cuadrícula» o «En casillas».
   renombran, excluyen y tipan como cualquier columna.
 - Para dejar fuera un aspecto de los resultados, se filtra en el widget (ej. Aspecto «no está
   en» […]).
-- **Por defecto:** las virtuales entran incluidas y las columnas anchas, excluidas. Una columna
+- **Por defecto:** entran incluidas tanto las virtuales como las columnas anchas. Una columna
   ancha excluida no se ofrece en los widgets ni a la IA, pero sigue alimentando su cuadrícula.
-  Las fuentes que ya existían conservan su configuración.
 
 **En el panel del widget** van en su propio grupo, «Cuadrículas y casillas», solo en los widgets que las
 aceptan. Al elegir «· Aspecto» como dimensión con el pivote vacío, el pivote pasa a ser
@@ -91,7 +92,7 @@ La detección (`services/form_tidy.analyze`) corre sobre el frame **crudo**
 
 | Tipo | Transformación |
 |---|---|
-| `CHECKBOX` | Se expande en columnas binarias `{pregunta}_{valor}`, excluidas por defecto: se usan sus virtuales Opción y Respuesta. |
+| `CHECKBOX` | Se expande en columnas binarias `{pregunta}_{valor}` (Sí/No), que también se cruzan con sus virtuales Opción y Respuesta. |
 | `CHECKBOX_GRID` | Se expande en columnas binarias `{pregunta}_{valor}` por cada aspecto. |
 | `GRID` | Cuadrícula simple de opción única: se conserva como columna ancha. |
 | `FREE_TEXT_WITH_COMMAS` | Texto libre con comas: se conserva como columna ancha. |

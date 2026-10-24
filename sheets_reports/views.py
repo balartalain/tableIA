@@ -513,8 +513,8 @@ def _sheet_columns(df) -> list[dict]:
     ejemplo. La columna de sistema ID se marca de solo lectura. En una hoja de respuestas de
     formulario, cada cuadrícula y cada pregunta de casillas suma sus dos columnas virtuales
     (Aspecto u Opción, y Respuesta; ver engine/steps/grid.py) justo antes de sus columnas
-    anchas, que entran excluidas: en los reportes se usan las virtuales (excluidas, las anchas
-    siguen alimentando la cuadrícula)."""
+    anchas, que también entran incluidas: las virtuales cruzan Aspecto × Respuesta y las anchas
+    (una fila por respuesta) dejan que una fórmula combine aspectos de la misma persona."""
     types = infer_column_types(df)
     grids = sheets.grid_column_entries(df)
     members = sheets.grid_member_columns(df)
@@ -538,7 +538,7 @@ def _sheet_columns(df) -> list[dict]:
             "readonly": is_id_column(col),
         }
         if question:
-            column.update({"grid_member": question, "grid_kind": kinds[question], "include": False})
+            column.update({"grid_member": question, "grid_kind": kinds[question]})
         columns.append(column)
     return columns
 

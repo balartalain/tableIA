@@ -1679,6 +1679,17 @@ def _resolve_columns(data: dict, ctx: SheetContext) -> dict:
         return real.get(_column_key(val_clean), val_clean)
 
     fields, style = map_columns(data.get("fields"), data.get("style"), resolve)
+    # `sort_by` y el orden de tabla también nombran métricas: un alias se queda como está aunque
+    # se parezca a un campo («nps» no es el campo calculado «NPS»).
+    original_fields = data.get("fields") if isinstance(data.get("fields"), dict) else {}
+    original_style = data.get("style") if isinstance(data.get("style"), dict) else {}
+    aliases = {m.get("alias") for m in original_fields.get("metrics") or [] if isinstance(m, dict)}
+    sort_by = original_fields.get("sort_by")
+    if isinstance(sort_by, str) and sort_by.lstrip("-") in aliases:
+        fields["sort_by"] = sort_by
+    if isinstance(original_style.get("columnOrder"), list):
+        style["columnOrder"] = [old if old in aliases else new
+                                for old, new in zip(original_style["columnOrder"], style["columnOrder"])]
     data["fields"] = fields
     if "style" in data:
         data["style"] = style

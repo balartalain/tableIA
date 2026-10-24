@@ -239,27 +239,24 @@ function sourceManager() {
       });
     },
 
-    // Salta horizontalmente a la columna elegida y la resalta temporalmente
+    // Salta horizontalmente a la columna elegida y la resalta un momento (encabezado y celdas),
+    // como Google Sheets. `ifVisible` en true: Tabulator mide la visibilidad sin el scroll
+    // actual y con false no volvía a una de las primeras columnas.
     jumpToColumn(colName) {
       if (!colName || !this._previewTable) return;
       try {
         const colComponent = this._previewTable.getColumn(colName);
         if (colComponent) {
-          const scrollRes = this._previewTable.scrollToColumn(colComponent, 'center', false);
+          const scrollRes = this._previewTable.scrollToColumn(colComponent, 'center', true);
           if (scrollRes && typeof scrollRes.then === 'function') {
             scrollRes.catch(() => {});
           }
+          // Tras el scroll: con el render horizontal virtual las celdas aparecen al llegar.
           setTimeout(() => {
-            const headerEle = colComponent.getElement();
-            if (headerEle) {
-              headerEle.style.transition = 'all 0.3s ease';
-              headerEle.style.backgroundColor = 'var(--color-moss-50)';
-              headerEle.style.boxShadow = 'inset 0 0 0 2px var(--color-moss-500)';
-              setTimeout(() => {
-                headerEle.style.backgroundColor = '';
-                headerEle.style.boxShadow = '';
-              }, 2000);
-            }
+            const elements = [colComponent.getElement(), ...colComponent.getCells().map(c => c.getElement())]
+              .filter(Boolean);
+            elements.forEach(el => el.classList.add('tabulator-col-jump'));
+            setTimeout(() => elements.forEach(el => el.classList.remove('tabulator-col-jump')), 2000);
           }, 100);
         }
       } catch (e) {

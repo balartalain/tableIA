@@ -100,6 +100,15 @@
 .tabulator .tabulator-row.tabulator-selected {
   background: var(--color-accent-soft);
 }
+/* Columna a la que se saltó con «Ir a columna»: resaltada un momento, como en Google Sheets. */
+.tabulator .tabulator-col.tabulator-col-jump,
+.tabulator .tabulator-row .tabulator-cell.tabulator-col-jump {
+  background: var(--color-accent-soft);
+  transition: background-color 0.3s ease;
+}
+.tabulator .tabulator-col.tabulator-col-jump {
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
 
 /* ---------- Footer / paginación ---------- */
 /* Sin padding en el footer: ahí vive también la fila de totales (bottomCalc), y Tabulator

@@ -668,7 +668,7 @@ panel de edición. Se abre desde el menú del tablero › **Ayuda** o desde los 
   - `prev` / `next`.
 - **Ancho**: arrastrando el borde izquierdo (o con las flechas, con el borde enfocado), entre
   320 y 960 px, sin dejar el lienzo por debajo de 360 px; doble clic vuelve a 480. Se recuerda
-  en `localStorage['tableia:help-width']`. Al soltar se dispara `resize` para que los gráficos
+  en `localStorage['dataviz:help-width']`. Al soltar se dispara `resize` para que los gráficos
   vuelvan a medirse.
 - **Con el panel de edición**: abrir la ayuda oculta el panel del widget sin cerrarlo (su
   borrador queda); al cerrarla vuelve tal como estaba. Abrir el panel de otro widget

@@ -35,7 +35,7 @@ function timeAgoLabel(iso) {
 
 // Ancho (px) de la columna «Columna» de la tabla de columnas: lo ajusta el usuario arrastrando
 // el borde del encabezado y se recuerda en este navegador.
-const NAME_COLUMN_STORAGE_KEY = 'tableia:source-name-column-width';
+const NAME_COLUMN_STORAGE_KEY = 'dataviz:source-name-column-width';
 const NAME_COLUMN_WIDTH = { default: 288, min: 160, max: 960, step: 24 };
 
 function storedNameColumnWidth() {
@@ -92,9 +92,9 @@ function sourcePicker({ mode = 'create' } = {}) {
     generatingLabels: false,
     saving: false,
     sheetsError: '',
-    // Login de Google y Google Picker: lo llena la plantilla (window.TABLEIA_GOOGLE) desde la
+    // Login de Google y Google Picker: lo llena la plantilla (window.DATAVIZ_GOOGLE) desde la
     // app google_auth. Sin configurar, el selector sigue usando la cuenta de servicio.
-    google: window.TABLEIA_GOOGLE || { configured: false, connected: false, email: '',
+    google: window.DATAVIZ_GOOGLE || { configured: false, connected: false, email: '',
                                        picker_api_key: '', picker_app_id: '' },
     googleError: '',
     _pickerSdk: null,

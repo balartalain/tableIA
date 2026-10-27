@@ -40,7 +40,7 @@ from sheets_reports.widgets.presentation import AGG_LABELS
 from sheets_reports.widgets.schemas import WidgetForm
 
 logger = logging.getLogger(__name__)
-audit_logger = logging.getLogger("tableia.ai_audit")
+audit_logger = logging.getLogger("dataviz.ai_audit")
 
 GEMINI_TIMEOUT_MS = 120_000
 # Tiempo máximo de una consulta del chat de datos, sin reintento: por debajo de los 120 s con

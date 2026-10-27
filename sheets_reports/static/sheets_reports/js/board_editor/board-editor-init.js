@@ -21,7 +21,7 @@ function containerFor(widget) {
   return rowBody || canvasEl;
 }
 
-const RAIL_STORAGE_KEY = 'tableia:rail-collapsed';
+const RAIL_STORAGE_KEY = 'dataviz:rail-collapsed';
 
 // Texto comparable del buscador: minúsculas y sin acentos.
 function searchText(text) {

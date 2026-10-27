@@ -2,7 +2,7 @@
 // edición, con los tópicos de sheets_reports/help.py. Se navega con enlaces `#help:<slug>` (o
 // `#help:<slug>/<id>`, a una parte del tópico) y con `$store.help.open('<slug>')`; tiene
 // historial (Atrás), buscador y un ancho que el usuario ajusta y se recuerda en este navegador.
-const HELP_WIDTH_STORAGE_KEY = 'tableia:help-width';
+const HELP_WIDTH_STORAGE_KEY = 'dataviz:help-width';
 const HELP_WIDTH = { default: 480, min: 320, max: 960, step: 40 };
 // Lo que el panel deja siempre a la vista del lienzo al ensancharse.
 const HELP_MIN_CANVAS = 360;

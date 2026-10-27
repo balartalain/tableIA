@@ -219,7 +219,7 @@ def _inline_images(html: str) -> tuple[str, list[MIMEImage]]:
                 data = base64.b64decode(re.sub(r"\s", "", match.group(2)), validate=True)
             except (binascii.Error, ValueError):
                 return source
-            cid = f"img{len(cids) + 1}@tableia"
+            cid = f"img{len(cids) + 1}@dataviz"
             part = MIMEImage(data, _subtype=subtype)
             part.add_header("Content-ID", f"<{cid}>")
             part.add_header("Content-Disposition", "inline",

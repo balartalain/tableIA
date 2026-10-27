@@ -1,6 +1,6 @@
 """Ejecuta los Envío de correoss a los que les toca (services/mailing.py). Lo llama el crontab:
 
-    */5 * * * * cd /ruta/TableIA && venv/bin/python manage.py send_campaign_emails
+    */5 * * * * cd /ruta/dataviz && venv/bin/python manage.py send_campaign_emails
 """
 from django.core.management.base import BaseCommand
 

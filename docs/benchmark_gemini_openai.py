@@ -24,8 +24,8 @@ INSTRUCCIONES = (
     "con datos calculados, no inventados."
 )
 
-# Modo --cualitativa: mismas instrucciones que el chat de datos de tableIA
-CHAT_TABLEIA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+# Modo --cualitativa: mismas instrucciones que el chat de datos de dataviz
+CHAT_DATAVIZ = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "..", "sheets_reports", "services", "ai_data_chat.py")
 PREGUNTAS_CUALITATIVAS = [
     # "¿Cuáles son las principales quejas de los estudiantes en los comentarios? Agrúpalas por tema.",
@@ -237,13 +237,13 @@ def benchmark_gemini(uploaded_file, model_name="gemini-2.5-flash", thinking_budg
 
 def leer_system_instruction():
     """SYSTEM_INSTRUCTION de ai_data_chat.py, leído con ast para no importar Django."""
-    with open(CHAT_TABLEIA, encoding="utf-8") as f:
+    with open(CHAT_DATAVIZ, encoding="utf-8") as f:
         arbol = ast.parse(f.read())
     for nodo in arbol.body:
         if isinstance(nodo, ast.Assign) and any(
                 getattr(t, "id", None) == "SYSTEM_INSTRUCTION" for t in nodo.targets):
             return ast.literal_eval(nodo.value)
-    raise ValueError(f"No se encontró SYSTEM_INSTRUCTION en {CHAT_TABLEIA}")
+    raise ValueError(f"No se encontró SYSTEM_INSTRUCTION en {CHAT_DATAVIZ}")
 
 
 def verdad_facilitadores(recintos=("Cibao Oriental (Nagua)", "Santiago")):

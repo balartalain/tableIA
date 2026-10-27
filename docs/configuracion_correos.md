@@ -36,7 +36,7 @@ venv/bin/python manage.py migrate
 El envío lo arranca el crontab; nada se envía desde la web salvo «Enviar prueba».
 
 ```
-*/5 * * * * cd /ruta/TableIA && venv/bin/python manage.py send_campaign_emails
+*/5 * * * * cd /ruta/dataviz && venv/bin/python manage.py send_campaign_emails
 ```
 
 El cron solo **dispara** el envío cuando llega la hora: su frecuencia es cuánto puede

@@ -87,10 +87,10 @@ class MessageTests(SimpleTestCase):
                                        f'<img src="data:image/png;base64,{png}">')
         self.assertEqual(msg.get_content_type(), "multipart/related")
         self.assertNotIn("data:image", html)
-        self.assertEqual(html.count('src="cid:img1@tableia"'), 2)
+        self.assertEqual(html.count('src="cid:img1@dataviz"'), 2)
         self.assertEqual(len(images), 1)  # la misma imagen, una sola vez
         self.assertEqual(images[0].get_content_type(), "image/png")
-        self.assertEqual(images[0]["Content-ID"], "<img1@tableia>")
+        self.assertEqual(images[0]["Content-ID"], "<img1@dataviz>")
         self.assertTrue(images[0]["Content-Disposition"].startswith("inline"))
 
     def test_sin_imagenes_no_hay_adjuntos(self):

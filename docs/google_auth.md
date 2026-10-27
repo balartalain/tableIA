@@ -75,7 +75,7 @@ credencial del usuario **sin cambiar sus firmas ni el resto del código**.
 | `sheets_reports/services/sheets.py` | `_read_attempts()`: token del usuario → token de la cuenta de servicio; `_request_csv()`. |
 | `sheets_reports/services/google_drive.py` | `_preferred_credentials()` (usuario o cuenta de servicio); `tab_status` sigue usando la cuenta de servicio. |
 | `sheets_reports/views.py` | `board_editor` / `board_new` pasan `google_oauth` al template; `_get_user` delega en `google_auth.services.current_app_user`. |
-| `sheets_reports/templates/board_editor.html` | Expone `window.TABLEIA_GOOGLE` con `json_script`. |
+| `sheets_reports/templates/board_editor.html` | Expone `window.DATAVIZ_GOOGLE` con `json_script`. |
 | `sheets_reports/templates/sheets_reports/source_picker.html` | Botón «Conectar con Google» / «Elegir en mi Drive», correo conectado, «Desconectar». |
 | `sheets_reports/static/.../source-picker.js` | `openGooglePicker()` (carga perezosa del SDK y abre el Picker), `onGooglePicked()`, `disconnectGoogle()`, `init()` (auto-abre al volver del consentimiento). |
 | `.env.example` | Variables nuevas documentadas. |

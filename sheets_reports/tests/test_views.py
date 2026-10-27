@@ -455,7 +455,7 @@ class ViewsTests(TestCase):
         self.assertContains(r, "vselect.js")
         self.assertContains(r, "x-vselect")
         self.assertContains(r, 'id="module-rail"')
-        self.assertContains(r, "tableia:rail-collapsed")
+        self.assertContains(r, "dataviz:rail-collapsed")
         # Header del editor: salir, nombre editable, modos y compartir.
         self.assertContains(r, 'aria-label="Salir del editor"')
         self.assertContains(r, 'id="board-title"')

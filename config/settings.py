@@ -90,7 +90,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': dj_database_url.config(
         # Si no encuentra DATABASE_URL en el entorno, usa SQLite local por defecto
-        default=config('DATABASE_URL', default=f"sqlite:///{BASE_DIR / 'db.tableia.sqlite3'}"),
+        default=config('DATABASE_URL', default=f"sqlite:///{BASE_DIR / 'db.dataviz.sqlite3'}"),
         conn_max_age=600,
         ssl_require=False
     )
@@ -195,7 +195,7 @@ GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
 GEMINI_LIMIT_THINKING = config("GEMINI_LIMIT_THINKING", default=True, cast=bool)
 
 # Auditoría de cada spec generado por IA junto al prompt que lo originó (logger
-# "tableia.ai_audit"), para revisar y mejorar el system prompt con el tiempo.
+# "dataviz.ai_audit"), para revisar y mejorar el system prompt con el tiempo.
 AI_AUDIT_LOG_FILE = config("AI_AUDIT_LOG_FILE", default="") or str(BASE_DIR / "ai_audit.log")
 
 LOGGING = {
@@ -214,7 +214,7 @@ LOGGING = {
         },
     },
     "loggers": {
-        "tableia.ai_audit": {"handlers": ["ai_audit_file"], "level": "INFO", "propagate": False},
+        "dataviz.ai_audit": {"handlers": ["ai_audit_file"], "level": "INFO", "propagate": False},
     },
     "root": {"handlers": ["console"], "level": "WARNING"},
 }

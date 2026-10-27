@@ -139,7 +139,7 @@
   <script>
     // Antes de pintar la barra: si quedó contraída, se dibuja contraída desde el primer frame.
     try {
-      if (localStorage.getItem('tableia:rail-collapsed') === '1') document.documentElement.dataset.rail = 'collapsed';
+      if (localStorage.getItem('dataviz:rail-collapsed') === '1') document.documentElement.dataset.rail = 'collapsed';
     } catch (e) {}
   </script>
   <aside id="module-rail" class="relative shrink-0 bg-surface border-r border-line shadow-sm z-20">
@@ -554,7 +554,7 @@
 <script>
   window.WIDGET_MANIFEST = JSON.parse(document.getElementById('widget-manifest').textContent);
   // Login de Google y Google Picker (lo llena la app google_auth en el contexto).
-  window.TABLEIA_GOOGLE = JSON.parse(document.getElementById('google-oauth').textContent);
+  window.DATAVIZ_GOOGLE = JSON.parse(document.getElementById('google-oauth').textContent);
   window.HOME_URL = "{% url 'home' %}";
   window.BOARD_EDITOR_URL = "{% url 'board_editor' dashboard_id=0 %}";
 {% if dashboard %}
